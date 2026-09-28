@@ -110,9 +110,13 @@ tools/              构建期脚本（Python，运行时不需要）
 ## 测试
 
 ```
-npm test          # 128 个
+npm test          # 129 个（没生成 public/articles.json 时是 124 个 + 5 个跳过，一样是绿的）
 npm run build     # tsc -b && vite build
 ```
+
+`src/core/articles.test.ts` 会拿真的 `public/articles.json` 验「每条键都能用自己的文件名查回来」——
+这条是为了防止以后重新抽取时键名和音频文件名对不上、App 静默退化成手动粘。
+那份文件不在仓库里（见上），所以它用 `import.meta.glob` 探测，**没有就整组跳过，不会因为缺数据让测试红**。
 
 ## 还没验证的部分
 
