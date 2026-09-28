@@ -76,10 +76,10 @@ export default function App() {
         void store.toggleChunkPlay()
       } else if (e.key === 'r' || e.key === 'R') {
         void store.toggleRecording()
-      } else if (e.key === 'ArrowDown') {
+      } else if (e.key === 'ArrowDown' || e.key === 'd' || e.key === 'D') {
         e.preventDefault()
         store.next()
-      } else if (e.key === 'ArrowUp') {
+      } else if (e.key === 'ArrowUp' || e.key === 'a' || e.key === 'A') {
         e.preventDefault()
         store.prev()
       } else if (e.key === 'c' || e.key === 'C') {
@@ -247,7 +247,11 @@ export default function App() {
             </div>
 
             <div className="row">
-              <button onClick={() => store.prev()} disabled={s.current === 0} title="上一块，并直接播出来">
+              <button
+                onClick={() => store.prev()}
+                disabled={s.current === 0}
+                title="上一块（A 或 ↑），并像按空格一样直接跑"
+              >
                 ↑ 上一块
               </button>
               <button
@@ -266,7 +270,7 @@ export default function App() {
               <button
                 onClick={() => store.next()}
                 disabled={s.current === s.chunks.length - 1}
-                title="下一块，并直接播出来"
+                title="下一块（D 或 ↓），并像按空格一样直接跑"
               >
                 ↓ 下一块
               </button>
@@ -388,7 +392,9 @@ export default function App() {
             )}
 
             <p className="hint">
-              空格 播放/暂停 · R 录音 · ↑↓ 切块（直接播） · C 对比 · T 改文本 · S 标记正文起点 · [ ] 微调文字偏移（Shift 加大步长）。录音保存在本浏览器里，关掉页面不会丢。
+              空格 播放/暂停 · A/D（或 ↑↓）切块（直接跑）· R 录音 · C 对比 · T 改文本 ·
+              S 标记正文起点 · 选字锚点用 , . 调起点、Shift+, . 调终点 ·
+              [ ] 微调文字偏移（Shift 加大步长）。录音、进度都存本机，关页面不丢。
             </p>
           </main>
         </div>
