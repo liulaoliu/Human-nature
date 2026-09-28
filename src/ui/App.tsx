@@ -447,6 +447,9 @@ function ScriptPanel({
 }) {
   const [draft, setDraft] = useState('')
   const [picking, setPicking] = useState(false)
+  // 清除全部锚定的二步确认：得手打 Delete
+  const [confirmClear, setConfirmClear] = useState(false)
+  const [clearInput, setClearInput] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
   const boxRef = useRef<HTMLDivElement>(null)
 
@@ -630,11 +633,62 @@ function ScriptPanel({
           </span>
         )}
         {manualAnchors > 0 && (
-          <button className="ghost sm" onClick={onClearAnchors}>
+          <button
+            className="ghost sm"
+            onClick={() => {
+              setClearInput('')
+              setConfirmClear(true)
+            }}
+          >
             清除全部锚定（{manualAnchors}）
           </button>
         )}
       </div>
+
+      {confirmClear && (
+        <div className="confirm-mask" role="dialog" aria-modal="true">
+          <div className="confirm-box">
+            <h3>清除全部锚定？</h3>
+            <p>
+              这会删掉这一篇的 <b>全部 {manualAnchors} 个手动锚点</b>，之后回到按时长比例自动估计。
+              <b>无法撤销。</b>
+            </p>
+            <p>
+              确认请输入 <code>Delete</code>：
+            </p>
+            <input
+              autoFocus
+              value={clearInput}
+              placeholder="Delete"
+              spellCheck={false}
+              onChange={(e) => setClearInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') {
+                  setConfirmClear(false)
+                } else if (e.key === 'Enter' && clearInput === 'Delete') {
+                  onClearAnchors()
+                  setConfirmClear(false)
+                }
+              }}
+            />
+            <div className="row confirm-actions">
+              <button
+                className="danger"
+                disabled={clearInput !== 'Delete'}
+                onClick={() => {
+                  onClearAnchors()
+                  setConfirmClear(false)
+                }}
+              >
+                确认清除
+              </button>
+              <button className="ghost" onClick={() => setConfirmClear(false)}>
+                取消
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="foot">
         <button className="ghost sm" onClick={onToggle}>

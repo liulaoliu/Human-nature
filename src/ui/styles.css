@@ -33,8 +33,44 @@ button.primary { background: var(--accent); border-color: var(--accent); color: 
 button.rec { background: #2a1f22; border-color: #56333a; color: #ffb4ae; min-width: 130px; }
 button.rec.on { background: var(--red); border-color: var(--red); color: #fff; }
 button.warn { background: #4a3a1f; border-color: #6d5528; }
+button.danger { background: var(--red); border-color: var(--red); color: #fff; font-weight: 600; }
 button.ghost { background: transparent; }
 button.sm { padding: 3px 8px; font-size: 12px; }
+
+/* 清除全部锚定的二步确认：红色弹层，要手打 Delete */
+.confirm-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(0, 0, 0, 0.55);
+}
+.confirm-box {
+  width: min(440px, 100%);
+  padding: 18px 20px;
+  background: #2a1416;
+  border: 1px solid #7a2f33;
+  border-radius: 10px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+}
+.confirm-box h3 { margin: 0 0 8px; color: #ffb4ae; }
+.confirm-box p { color: #e6c9c6; font-size: 13px; line-height: 1.7; margin: 6px 0; }
+.confirm-box b { color: #ffb4ae; }
+.confirm-box code { color: #ffd479; }
+.confirm-box input {
+  width: 100%;
+  margin-top: 6px;
+  padding: 8px 10px;
+  background: #170b0c;
+  color: #fff;
+  border: 1px solid #7a2f33;
+  border-radius: 6px;
+  font: inherit;
+}
+.confirm-actions { margin-top: 12px; }
 
 input[type="file"] { display: none; }
 .file, .big-btn {
