@@ -165,7 +165,11 @@ export class SessionStore {
       await this.deps.player.load(blob)
       if (gen !== this.generation) return // 已被更新的 load 取代
 
-      const takes = await this.deps.repo.list()
+      // 只取这一篇的录音。块号是从 0 开始的，不筛的话别的文章的录音会串进来
+      // （老记录没有 fileName，会一并被筛掉——那些本来也分不清是哪篇的）
+      const takes = (await this.deps.repo.list()).filter(
+        (t) => t.fileName === fileName,
+      )
       if (gen !== this.generation) return
 
       const chunks = this.derive(
@@ -514,6 +518,7 @@ export class SessionStore {
 
     const record: Take = {
       id: crypto.randomUUID(),
+      fileName: this.state.fileName,
       chunkIndex: this.state.current,
       mimeType: take.mimeType,
       durationSec: take.durationSec,

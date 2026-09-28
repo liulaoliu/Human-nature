@@ -727,3 +727,61 @@ describe('SessionStore 连续跟读', () => {
     await tick(90000)
   })
 })
+
+describe('录音按文章隔离', () => {
+  it('换到另一篇之后，看不到上一篇的录音', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    await store.toggleRecording() // 开录
+    await store.toggleRecording() // 停录，存下一条
+    expect(store.getState().takes).toHaveLength(1)
+    expect(store.getState().takes[0].fileName).toBe('a.mp3')
+
+    await store.load(blob, 'b.mp3')
+    // 块号都从 0 开始，不按文章筛的话这里会显示 a.mp3 第 2 块的录音
+    expect(store.getState().takes).toEqual([])
+    expect(store.takesFor(1)).toEqual([])
+  })
+
+  it('换回来还在', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.toggleRecording()
+    await store.toggleRecording()
+    await store.load(blob, 'b.mp3')
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().takes).toHaveLength(1)
+  })
+
+  it('A/B 对比不会放出别的文章的录音', async () => {
+    const { store, player } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.toggleRecording()
+    await store.toggleRecording()
+    const mineA = store.getState().takes[0]
+
+    await store.load(blob, 'b.mp3')
+    player.calls.length = 0
+    await store.compareAB(false)
+    // b 篇没录过，对比只该有标准音，不该出现 a 篇那条录音
+    expect(player.calls.some((c) => c === `take:${mineA.id}@1`)).toBe(false)
+  })
+
+  it('库里的老记录没有 fileName，会被筛掉（本来也分不清是哪篇的）', async () => {
+    const { store, repo } = makeStore()
+    await store.load(blob, 'a.mp3')
+    // 模拟一条旧版本存下的记录
+    const legacy = {
+      id: 'legacy',
+      chunkIndex: 0,
+      blob: new Blob(['x']),
+      mimeType: 'audio/webm',
+      durationSec: 1,
+      createdAt: 0,
+    } as unknown as Take
+    await repo.save(legacy)
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().takes).toEqual([])
+  })
+})

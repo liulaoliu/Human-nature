@@ -8,6 +8,13 @@ export interface Chunk {
 
 export interface Take {
   id: string
+  /**
+   * 这条录音属于哪个音频文件（`fileName`）。
+   * 必须记：录音原来只按「第几块」存，可不同文章的块号是从 0 开始的，
+   * 练完 A 篇换到 B 篇，B 篇第 3 块就会显示 A 篇第 3 块的录音，
+   * A/B 对比还会放出别人的声音。
+   */
+  fileName: string
   chunkIndex: number
   blob: Blob
   mimeType: string
