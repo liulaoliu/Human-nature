@@ -251,9 +251,9 @@ export default function App() {
               <button
                 onClick={() => store.prev()}
                 disabled={s.current === 0}
-                title="上一块（A 或 ↑），并像按空格一样直接跑"
+                title="上一块（A，或方向键 ↑），并像按空格一样直接跑"
               >
-                ↑ 上一块
+                A ← 上一块
               </button>
               <button
                 className="primary"
@@ -271,9 +271,9 @@ export default function App() {
               <button
                 onClick={() => store.next()}
                 disabled={s.current === s.chunks.length - 1}
-                title="下一块（D 或 ↓），并像按空格一样直接跑"
+                title="下一块（D，或方向键 ↓），并像按空格一样直接跑"
               >
-                ↓ 下一块
+                下一块 → D
               </button>
             </div>
 
