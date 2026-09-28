@@ -568,11 +568,11 @@ export class SessionStore {
   //
   // 打开后，空格键不再只是「播标准音」，而是跑一整轮：
   //   标准音 →（喘口气）→ 录音（按块长自动停）→ 回放刚才那条录音
-  // 手动那条路完全不动：R 还是只管录音，空格在没开这个模式时还是播放/暂停。
+  // 手动那条路：R 开始录音，再按 R 停录并自动回放。
   //
-  // 两个都能提前收：
-  //   · 录音中按空格 = 我读完了，直接回放（不用等自动停）
-  //   · 标准音/回放中按空格 = 中止这一轮
+  // 提前收尾：
+  //   · 录音中按空格或 R = 我读完了，直接回放（不用等自动停）
+  //   · 标准音/回放中按空格 = 中止这一轮；按 R 则中止并开始手动录音
 
   /**
    * 自动录音该录多久 —— 这只是**兜底上限**。
@@ -654,18 +654,14 @@ export class SessionStore {
    */
   private async stopRecordingThenPlayback(): Promise<void> {
     this.clearRecordTimer()
-    await this.stopRecording()
+    const saved = await this.stopRecording()
     if (this.state.cycleStep !== 'rec') {
       this.set({ cycleStep: 'idle' })
       return
     }
     const gen = this.cycleGen
     this.set({ cycleStep: 'playback' })
-    const mine = this.takesFor(this.state.current).at(-1)
-    if (mine) {
-      this.deps.player.pause()
-      await this.deps.player.playTake(mine, this.state.rate)
-    }
+    if (saved) await this.playTake(saved)
     if (gen === this.cycleGen) this.set({ cycleStep: 'idle' })
   }
 
@@ -701,12 +697,13 @@ export class SessionStore {
     }
   }
 
-  async stopRecording(): Promise<void> {
-    if (!this.state.recording) return
+  /** 停止并保存；返回存下的那条（太短被丢掉时返回 null） */
+  async stopRecording(): Promise<Take | null> {
+    if (!this.state.recording) return null
     this.clearRecordTimer()
     this.set({ recording: false, level: 0 })
     const take = await this.deps.recorder.stop()
-    if (take.durationSec < 0.2) return // 手滑了
+    if (take.durationSec < 0.2) return null // 手滑了
 
     const record: Take = {
       id: crypto.randomUUID(),
@@ -725,13 +722,34 @@ export class SessionStore {
     this.set({
       takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],
     })
+    return record
   }
 
+  /** 放一条录音（会先把参考音/上一条停掉） */
+  private playTake(take: Take): Promise<void> {
+    this.deps.player.pause()
+    return this.deps.player.playTake(take, this.state.rate)
+  }
+
+  /**
+   * R 键。
+   *
+   * - 跟读一轮正在录音：R = 我读完了（跟空格在录音时一样）→ 停录 + 回放。
+   * - 手动录音中：R = 停录 + **自动回放**刚录的这条（录完就能听）。
+   * - 其它情况：R = 开始录音（若有一轮跟读在跑，先把它收掉，免得抢麦克风）。
+   */
   async toggleRecording() {
-    // 手动录音是自己一条路，走它就把连续跟读那一轮停掉，免得两边抢麦克风
+    if (this.state.cycleStep === 'rec') {
+      await this.stopRecordingThenPlayback()
+      return
+    }
     if (this.state.cycleStep !== 'idle') this.abortCycle()
-    if (this.state.recording) await this.stopRecording()
-    else await this.startRecording()
+    if (this.state.recording) {
+      const saved = await this.stopRecording()
+      if (saved) await this.playTake(saved)
+    } else {
+      await this.startRecording()
+    }
   }
 
   takesFor(index: number): Take[] {

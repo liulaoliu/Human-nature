@@ -227,7 +227,7 @@ export default function App() {
             />
 
             <div className="row">
-              <label className="check" title="一圈下来：标准音 → 自动录音 → 回放刚才那条。手动录音（R）不受影响">
+              <label className="check" title="一圈下来：标准音 → 自动录音 → 自动回放。手动录音按 R 停录后也会自动回放">
                 <input
                   type="checkbox"
                   checked={s.autoCycle}
@@ -237,7 +237,8 @@ export default function App() {
               </label>
               {s.autoCycle && s.cycleStep === 'rec' && (
                 <span className="lab">
-                  录音中 · 说完停 1.6 秒自动结束（最长 {Math.round(s.autoRecordMs / 1000)} 秒），按空格直接结束
+                  录音中 · 说完停 1.6 秒自动结束（最长 {Math.round(s.autoRecordMs / 1000)} 秒），
+                  按空格或 R 直接结束并回放
                 </span>
               )}
               {s.autoCycle && s.cycleStep === 'ref' && <span className="lab">正在放标准音…</span>}
@@ -351,8 +352,9 @@ export default function App() {
               <button
                 className={s.recording ? 'rec on' : 'rec'}
                 onClick={() => void store.toggleRecording()}
+                title="开始/停止录音；停止后自动回放刚录的这条"
               >
-                {s.recording ? '■ 停止（R）' : '● 录音（R）'}
+                {s.recording ? '■ 停止并回放（R）' : '● 录音（R）'}
               </button>
               <div className="meter">
                 <div className="bar" style={{ width: `${Math.round(s.level * 100)}%` }} />
@@ -392,7 +394,7 @@ export default function App() {
             )}
 
             <p className="hint">
-              空格 播放/暂停 · A/D（或 ↑↓）切块（直接跑）· R 录音 · C 对比 · T 改文本 ·
+              空格 播放/暂停 · A/D（或 ↑↓）切块（直接跑）· R 录音（停了自动回放）· C 对比 · T 改文本 ·
               S 标记正文起点 · 选字锚点用 , . 调起点、Shift+, . 调终点 ·
               [ ] 微调文字偏移（Shift 加大步长）。录音、进度都存本机，关页面不丢。
             </p>

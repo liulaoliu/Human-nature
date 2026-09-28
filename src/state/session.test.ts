@@ -685,8 +685,8 @@ describe('SessionStore 连续跟读', () => {
     expect(recorder.startCount).toBe(0)
   })
 
-  it('手动按 R 录音会把正在跑的那一轮停掉，不让两边抢麦克风', async () => {
-    const { store } = makeStore()
+  it('跟读录音中按 R = 我读完了：停录并回放', async () => {
+    const { store, player } = makeStore()
     await store.load(blob, 'a.mp3')
     await store.setAutoCycle(true)
     void store.runAutoCycle()
@@ -694,12 +694,37 @@ describe('SessionStore 连续跟读', () => {
     await tick(600)
     expect(store.getState().recording).toBe(true)
 
-    // 手动录音这条路上，先把这一轮收掉
+    player.calls.length = 0
+    await store.toggleRecording() // R 提前收尾
+    expect(store.getState().recording).toBe(false)
+    expect(store.getState().takes).toHaveLength(1)
+    const mine = store.getState().takes[0]
+    expect(player.calls).toContain(`take:${mine.id}@1`)
+    expect(store.getState().cycleStep).toBe('idle')
+  })
+
+  it('手动录音停录后自动回放刚录的那条', async () => {
+    const { store, player } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.toggleRecording() // 开录
+    expect(store.getState().recording).toBe(true)
+
+    player.calls.length = 0
+    await store.toggleRecording() // 停录
+    expect(store.getState().recording).toBe(false)
+    const mine = store.getState().takes[0]
+    expect(player.calls).toContain(`take:${mine.id}@1`)
+  })
+
+  it('太短的误触录音既不保存也不回放', async () => {
+    const { store, recorder, player } = makeStore()
+    await store.load(blob, 'a.mp3')
+    recorder.stop = async () => ({ blob: new Blob(), mimeType: 'audio/webm', durationSec: 0.05 })
     await store.toggleRecording()
-    expect(store.getState().cycleStep).toBe('idle')
-    // 收尾不会把用户的手动录音又偷偷停掉再跑对比
-    await tick(4000)
-    expect(store.getState().cycleStep).toBe('idle')
+    player.calls.length = 0
+    await store.toggleRecording()
+    expect(store.getState().takes).toHaveLength(0)
+    expect(player.calls.some((c) => c.startsWith('take:'))).toBe(false)
   })
 
   it('说完停下就自动结束，不用等兜底时长', async () => {
