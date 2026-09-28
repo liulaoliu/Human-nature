@@ -1,10 +1,20 @@
-import type { Chunk } from './ports'
+import type { Chunk, ManualAnchor } from './ports'
 
 export interface AlignedChunk {
   index: number
   text: string
   /** 在全文里的起止词序号 [start, end) */
   wordRange: [number, number]
+  /** 这一块是被手动锚点钉过的（UI 上标出来） */
+  anchored?: boolean
+}
+
+/** 锚点映射到具体块号、并重新定位词序号之后的样子 */
+export interface ResolvedAnchor {
+  atSec: number
+  chunkIndex: number
+  startWord: number
+  endWord: number
 }
 
 /** 句末标点，后面可以跟收尾的括号引号 */
@@ -70,6 +80,152 @@ export function alignTextToChunks(
     const s = i === 0 ? 0 : ends[i - 1]
     return { index: c.index, text: words.slice(s, ends[i]).join(' '), wordRange: [s, ends[i]] }
   })
+}
+
+/**
+ * 把锚点解析成「哪一块、对应原文哪几个词」。
+ *
+ * 两步：
+ * 1. atSec → 块号（按音频时间，所以换切块粒度不失效）
+ * 2. 找词范围：优先在**当前词表**里搜锚点记下的那段原文
+ *    （`text`），搜得到就用它的位置 —— 这样改别处的文字后进度不乱；
+ *    搜不到（那段本身被改了）再退回记下的词序号并夹紧。
+ *
+ * 同一块只留一个锚点；重叠/乱序的靠前的赢。返回的 `chunkIndex` 递增、
+ * 词范围不重叠，喂给对齐逻辑就能保证「拼起来等于原文」。
+ */
+export function resolveAnchors(
+  words: string[],
+  chunks: Chunk[],
+  anchors: ManualAnchor[],
+): ResolvedAnchor[] {
+  const byChunk = new Map<number, ResolvedAnchor>()
+  for (const a of anchors) {
+    const located = locateAnchor(a, words)
+    if (!located) continue
+    const k = chunkIndexAt(chunks, a.atSec)
+    byChunk.set(k, { atSec: a.atSec, chunkIndex: k, startWord: located[0], endWord: located[1] })
+  }
+  const out: ResolvedAnchor[] = []
+  for (const a of [...byChunk.values()].sort((x, y) => x.chunkIndex - y.chunkIndex)) {
+    const prev = out[out.length - 1]
+    if (prev && a.startWord < prev.endWord) continue
+    out.push(a)
+  }
+  return out
+}
+
+/** 在词表里找回锚点记的那段原文；搜不到就退回存下的序号 */
+function locateAnchor(a: ManualAnchor, words: string[]): [number, number] | null {
+  const total = words.length
+  const stored = clampInt(a.startWord, 0, total)
+  const seq = a.text ? a.text.trim().split(/\s+/).filter(Boolean) : []
+  if (seq.length > 0) {
+    const at = findWordSequence(words, seq, stored)
+    if (at >= 0) return [at, at + seq.length]
+  }
+  const end = clampInt(a.endWord, 0, total)
+  return end > stored ? [stored, end] : null
+}
+
+/** 在 words 里找 seq 出现的位置，取离 hint 最近的那个（防止重复短语认错） */
+function findWordSequence(words: string[], seq: string[], hint: number): number {
+  let best = -1
+  let bestDist = Infinity
+  const last = words.length - seq.length
+  for (let i = 0; i <= last; i++) {
+    let ok = true
+    for (let j = 0; j < seq.length; j++) {
+      if (words[i + j] !== seq[j]) {
+        ok = false
+        break
+      }
+    }
+    if (!ok) continue
+    const d = Math.abs(i - hint)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  return best
+}
+
+/**
+ * 带手动锚点的对齐。
+ *
+ * 每个锚点说「音频里 atSec 那一块，读的是原文的某一段」。
+ * 锚点之间（以及首尾）的词按块时长比例摊开 —— 手工钉住的几块是准的，
+ * 没钉的地方仍旧是估的，但**全文一个词不丢不重**。
+ *
+ * 首尾 b[0]/b[N] 一定锚死，所以即使给第 1 块锚一个 startWord>0 也不会丢开头的词。
+ */
+export function alignTextToChunksWithAnchors(
+  text: string,
+  chunks: Chunk[],
+  anchors: ManualAnchor[],
+): AlignedChunk[] {
+  const n = chunks.length
+  if (n === 0) return []
+  const words = text.trim().split(/\s+/).filter(Boolean)
+  const total = words.length
+  if (total === 0 || anchors.length === 0) return alignTextToChunks(text, chunks, 0)
+
+  const clean = resolveAnchors(words, chunks, anchors)
+  if (clean.length === 0) return alignTextToChunks(text, chunks, 0)
+
+  // 已知的块边界（词序号）。锚点把两个相邻边界钉死；
+  // b[0]=0、b[n]=total 一定要最后设：首尾是硬的，锚点碰不到它们
+  // （不然给第 1 块锚一个 startWord>0 会让开头的词没处去，末尾同理）。
+  const fixed = new Map<number, number>()
+  for (const a of clean) {
+    fixed.set(a.chunkIndex, a.startWord)
+    fixed.set(a.chunkIndex + 1, a.endWord)
+  }
+  fixed.set(0, 0)
+  fixed.set(n, total)
+  const points = [...fixed.entries()].sort((x, y) => x[0] - y[0])
+
+  const anchored = new Set(clean.map((a) => a.chunkIndex))
+  const result: AlignedChunk[] = new Array(n)
+  for (let p = 0; p < points.length - 1; p++) {
+    const [i, u] = points[p]
+    const [j, v] = points[p + 1]
+    const subText = words.slice(u, v).join(' ')
+    const sub = alignTextToChunks(subText, chunks.slice(i, j), 0)
+    for (const a of sub) {
+      result[a.index] = {
+        index: a.index,
+        text: a.text,
+        wordRange: [u + a.wordRange[0], u + a.wordRange[1]],
+      }
+    }
+  }
+
+  return chunks.map((c, i) => {
+    const cell = result[i] ?? { index: c.index, text: '', wordRange: [0, 0] as [number, number] }
+    return anchored.has(i) ? { ...cell, anchored: true } : cell
+  })
+}
+
+/** t 落在哪一块（按 start <= t < end）；落在缝里/外面就取最近的那块 */
+function chunkIndexAt(chunks: Chunk[], t: number): number {
+  let best = 0
+  let bestDist = Infinity
+  for (let i = 0; i < chunks.length; i++) {
+    if (t < chunks[i].end) return i
+    const d = Math.abs(chunks[i].start - t)
+    if (d < bestDist) {
+      bestDist = d
+      best = i
+    }
+  }
+  return best
+}
+
+function clampInt(v: number, lo: number, hi: number): number {
+  if (!Number.isFinite(v)) return lo
+  return Math.min(Math.max(Math.round(v), lo), hi)
 }
 
 /** 每个词读完之后，括号还剩几层没闭合 */

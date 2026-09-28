@@ -1,8 +1,11 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
+// 这个插件用 node:fs 写文件，放在 .mjs 里避免把 Node 类型塞进前端 tsconfig
+// @ts-expect-error .mjs 没有类型声明
+import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
 
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), projectStatePlugin()],
   base: './',
   server: {
     // 端口固定死，别让 vite 在占用时自动换到 5174。

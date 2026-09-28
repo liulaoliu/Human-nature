@@ -1,12 +1,20 @@
 import { detectSpeechSpans } from '../core/vad'
-import { alignTextToChunks, type AlignedChunk } from '../core/alignText'
+import {
+  alignTextToChunks,
+  alignTextToChunksWithAnchors,
+  resolveAnchors,
+  type AlignedChunk,
+  type ResolvedAnchor,
+} from '../core/alignText'
 import {
   GRANULARITY_MS,
   type AudioPlayerPort,
   type CalibrationRepoPort,
   type Chunk,
   type Granularity,
+  type ManualAnchor,
   type RecorderPort,
+  type ScriptEditRepoPort,
   type ScriptRepoPort,
   type Take,
   type TakeRepoPort,
@@ -45,6 +53,10 @@ export interface SessionState {
   offsetWords: number
   /** 正文从哪一块开始。音频前面常有文本里没有的引子，标一下就不差这一截了 */
   textStartChunk: number
+  /** 鼠标选字手动锚定了多少块。>0 时 offsetWords/textStartChunk 让位给锚点 */
+  manualAnchors: number
+  /** 手动锚点解析到当前文本后的词范围（UI 用来标开头结尾） */
+  manualRanges: ResolvedAnchor[]
   /** script 按块摊开的结果，长度恒等于 chunks.length */
   aligned: AlignedChunk[]
 }
@@ -72,6 +84,8 @@ const INITIAL: SessionState = {
   scriptLibrary: true,
   offsetWords: 0,
   textStartChunk: 0,
+  manualAnchors: 0,
+  manualRanges: [],
   aligned: [],
 }
 
@@ -81,6 +95,8 @@ export interface SessionDeps {
   repo: TakeRepoPort
   /** 原文库，可选。不给就等于没有自动带文本，只能手动粘 */
   scripts?: ScriptRepoPort
+  /** 手动改过的正文的持久化，可选。不给就只记在内存里，刷新回原文库 */
+  scriptEdits?: ScriptEditRepoPort
   /** 手动校准（文字偏移 / 正文起点）的持久化，可选。不给就只记在内存里 */
   calibration?: CalibrationRepoPort
   /** A/B 两段之间的停顿 */
@@ -128,6 +144,8 @@ export class SessionStore {
   private offsets = new Map<string, number>()
   /** 每篇的正文起始块 */
   private starts = new Map<string, number>()
+  /** 每篇的手动锚点（鼠标选字定下来的） */
+  private anchors = new Map<string, ManualAnchor[]>()
   /** 连续跟读的轮次号：中途改主意时靠它让跑着的那一轮自己退出 */
   private cycleGen = 0
   private recordTimer: ReturnType<typeof setInterval> | null = null
@@ -184,11 +202,12 @@ export class SessionStore {
         if (!takes.includes(t)) void this.deps.repo.remove(t.id)
       }
 
-      // 把上次存的校准（文字偏移 / 正文起点）读回来，刷新页面不丢
+      // 把上次存的校准（文字偏移 / 正文起点 / 手动锚点）读回来，刷新页面不丢
       const saved = this.deps.calibration?.get(fileName)
       if (saved) {
         this.offsets.set(fileName, saved.offsetWords)
         this.starts.set(fileName, saved.textStartChunk)
+        if (saved.anchors) this.anchors.set(fileName, saved.anchors)
       }
 
       const chunks = this.derive(
@@ -201,7 +220,12 @@ export class SessionStore {
       // 然后按文件名从原文库里找这一篇，找到就直接摊到块上。
       const found = await this.deps.scripts?.find(fileName)
       if (gen !== this.generation) return
-      const script = found?.text ?? ''
+      // 手动改过的正文优先于原文库 —— 改了文本、刷新后不该被 json 覆盖回去
+      const edited = this.deps.scriptEdits?.get(fileName)
+      const script = edited ?? found?.text ?? ''
+      const scriptSource: 'auto' | 'manual' | 'none' =
+        edited !== undefined ? 'manual' : script ? 'auto' : 'none'
+      const ranges = this.resolveRanges(script, chunks, fileName)
 
       this.set({
         status: 'ready',
@@ -214,10 +238,12 @@ export class SessionStore {
         playing: false,
         pausedChunk: null,
         script,
-        scriptSource: script ? 'auto' : 'none',
+        scriptSource,
         scriptLibrary: found?.library ?? false,
         offsetWords: this.offsets.get(fileName) ?? 0,
         textStartChunk: this.starts.get(fileName) ?? 0,
+        manualAnchors: ranges.length,
+        manualRanges: ranges,
         aligned: this.align(script, chunks, fileName),
       })
     } catch (e) {
@@ -237,12 +263,11 @@ export class SessionStore {
   setGranularity(g: Granularity) {
     if (g === this.state.granularity || this.state.status !== 'ready') return
     const chunks = this.derive(this.deps.player.samples, this.deps.player.sampleRate, g)
-    this.set({
+    // 锚点按音频时间记，块变了照样能找回是哪一块
+    this.realign({
       granularity: g,
       chunks,
       current: Math.min(this.state.current, Math.max(0, chunks.length - 1)),
-      // 块变了，对齐要跟着重算
-      aligned: this.align(this.state.script, chunks),
     })
   }
 
@@ -250,13 +275,17 @@ export class SessionStore {
     this.set({ rate })
   }
 
-  /** 粘贴/修改原文 */
+  /** 粘贴/修改原文。改完锚点会按记下的文字重新定位，进度不会白标 */
   setScript(script: string) {
-    this.set({
+    this.realign({
       script,
       scriptSource: script.trim() ? 'manual' : 'none',
-      aligned: this.align(script, this.state.chunks),
     })
+    // 存下来，刷新后优先用它（清空 = 删掉，下次回原文库）
+    const fileName = this.state.fileName
+    if (!this.deps.scriptEdits || !fileName) return
+    if (script.trim()) this.deps.scriptEdits.set(fileName, script)
+    else this.deps.scriptEdits.remove(fileName)
   }
 
   clearScript() {
@@ -265,6 +294,9 @@ export class SessionStore {
 
   private align(script: string, chunks: Chunk[], fileName = this.state.fileName): AlignedChunk[] {
     if (!script.trim()) return []
+    // 有手动锚点就以锚点为准（鼠标选字那条路）—— 比估的准，offset/起点让位
+    const anchors = this.anchors.get(fileName) ?? []
+    if (anchors.length > 0) return alignTextToChunksWithAnchors(script, chunks, anchors)
     // 音频前面可能有文本里没有的引子（播报员的开场之类），
     // 那样第一句正文其实出现在第 k 块。标了就从第 k 块开始摊词，
     // 前面的块空着 —— 词一个不丢，而且摊的区间更贴近真实朗读区间。
@@ -278,6 +310,37 @@ export class SessionStore {
     return [...head, ...alignTextToChunks(script, chunks.slice(skip), this.offsets.get(fileName) ?? 0)]
   }
 
+  /** 当前的词表（空格切） */
+  private wordList(script = this.state.script): string[] {
+    return script.trim() ? script.trim().split(/\s+/).filter(Boolean) : []
+  }
+
+  /** 把锚点解析到当前文本/块上，得到「第几块对应哪几个词」 */
+  private resolveRanges(
+    script: string,
+    chunks: Chunk[],
+    fileName = this.state.fileName,
+  ): ResolvedAnchor[] {
+    const anchors = this.anchors.get(fileName) ?? []
+    if (anchors.length === 0 || chunks.length === 0) return []
+    const words = this.wordList(script)
+    if (words.length === 0) return []
+    return resolveAnchors(words, chunks, anchors)
+  }
+
+  /** 改完文本/块/锚点后统一重算：对齐结果 + 锚点范围 + 计数 */
+  private realign(patch: Partial<SessionState> = {}) {
+    const script = patch.script ?? this.state.script
+    const chunks = patch.chunks ?? this.state.chunks
+    const ranges = this.resolveRanges(script, chunks)
+    this.set({
+      ...patch,
+      manualAnchors: ranges.length,
+      manualRanges: ranges,
+      aligned: this.align(script, chunks),
+    })
+  }
+
   /**
    * 把「正文真正的开头」锚到第 k 块。
    * 用法：听到正文第一句是在第 k 块，就切到那一块按一下。
@@ -287,10 +350,7 @@ export class SessionStore {
     const v = n === 0 ? 0 : Math.min(Math.max(Math.round(k), 0), n - 1)
     this.starts.set(this.state.fileName, v)
     this.persistCalibration()
-    this.set({
-      textStartChunk: v,
-      aligned: this.align(this.state.script, this.state.chunks),
-    })
+    this.realign({ textStartChunk: v })
   }
 
   clearTextStart() {
@@ -303,26 +363,116 @@ export class SessionStore {
    * 按篇记住，换走再换回来还在。
    */
   setOffsetWords(n: number) {
-    const total = this.state.script.trim().split(/\s+/).filter(Boolean).length
+    const total = this.wordList().length
     const v = Math.max(-total, Math.min(total, Math.round(n)))
     this.offsets.set(this.state.fileName, v)
     this.persistCalibration()
-    this.set({
-      offsetWords: v,
-      aligned: this.align(this.state.script, this.state.chunks),
-    })
+    this.realign({ offsetWords: v })
   }
 
   nudgeOffsetWords(step: number) {
     this.setOffsetWords(this.state.offsetWords + step)
   }
 
-  /** 把这一篇当前的两个校准值写进持久化（没注入就只留在内存 Map 里） */
+  /**
+   * 鼠标选字定块：把「当前这一块的音频」绑到原文的 [startWord, endWord) 上。
+   * 同时记下这段文字，改文本后靠它在新词表里重新定位。
+   * 同一个时刻只留一个锚点，重选就覆盖；冲突的旧锚点由对齐逻辑处理。
+   */
+  setAnchorWords(startWord: number, endWord: number) {
+    const c = this.chunk()
+    if (!c) return
+    const s = Math.min(startWord, endWord)
+    const e = Math.max(startWord, endWord)
+    if (e <= s) return
+    const words = this.wordList()
+    const fileName = this.state.fileName
+    const kept = (this.anchors.get(fileName) ?? []).filter(
+      (a) => Math.abs(a.atSec - c.start) > 1e-6,
+    )
+    this.anchors.set(fileName, [
+      ...kept,
+      { atSec: c.start, startWord: s, endWord: e, text: words.slice(s, e).join(' ') },
+    ])
+    this.persistCalibration()
+    this.realign()
+  }
+
+  /**
+   * 用快捷键/按钮微调当前块锚点的开头或结尾。
+   * 当前块还没锚定的话，先按现在的对齐结果钉一个，再挪。
+   * 夹在相邻锚点之间，保证词范围仍然有序不重叠。
+   */
+  nudgeAnchor(edge: 'start' | 'end', delta: number) {
+    const c = this.chunk()
+    if (!c) return
+    const words = this.wordList()
+    const total = words.length
+    if (total === 0) return
+
+    const fileName = this.state.fileName
+    const list = [...(this.anchors.get(fileName) ?? [])]
+    if (!list.some((a) => Math.abs(a.atSec - c.start) < 1e-6)) {
+      const wr = this.state.aligned[c.index]?.wordRange
+      if (!wr || wr[1] <= wr[0]) return
+      list.push({ atSec: c.start, startWord: wr[0], endWord: wr[1] })
+    }
+
+    const sorted = list.sort((a, b) => a.atSec - b.atSec)
+    const pos = sorted.findIndex((a) => Math.abs(a.atSec - c.start) < 1e-6)
+    const cur = sorted[pos]
+    const prev = sorted[pos - 1]
+    const next = sorted[pos + 1]
+    let start = cur.startWord
+    let end = cur.endWord
+    if (edge === 'start') {
+      start = Math.max(prev ? prev.endWord : 0, Math.min(start + delta, end - 1))
+    } else {
+      end = Math.min(next ? next.startWord : total, Math.max(end + delta, start + 1))
+    }
+    sorted[pos] = {
+      atSec: cur.atSec,
+      startWord: start,
+      endWord: end,
+      text: words.slice(start, end).join(' '),
+    }
+    this.anchors.set(fileName, sorted)
+    this.persistCalibration()
+    this.realign()
+  }
+
+  /** 去掉当前块的锚点（其余锚点不动） */
+  clearAnchorHere() {
+    const c = this.chunk()
+    if (!c) return
+    const fileName = this.state.fileName
+    const list = this.anchors.get(fileName) ?? []
+    const next = list.filter((a) => Math.abs(a.atSec - c.start) > 1e-6)
+    if (next.length === list.length) return
+    if (next.length > 0) this.anchors.set(fileName, next)
+    else this.anchors.delete(fileName)
+    this.persistCalibration()
+    this.realign()
+  }
+
+  /** 清掉这一篇全部手动锚点，回到自动估计 */
+  clearAnchors() {
+    const fileName = this.state.fileName
+    if (!this.anchors.has(fileName)) return
+    this.anchors.delete(fileName)
+    this.persistCalibration()
+    this.realign()
+  }
+
+  /** 把这一篇当前的校准值写进持久化（没注入就只留在内存 Map 里） */
   private persistCalibration(fileName = this.state.fileName) {
     if (!fileName) return
+    const anchors = this.anchors.get(fileName) ?? []
     this.deps.calibration?.set(fileName, {
       offsetWords: this.offsets.get(fileName) ?? 0,
       textStartChunk: this.starts.get(fileName) ?? 0,
+      // 空锚点不写这个键，保持老记录的形状
+      ...(anchors.length > 0 ? { anchors } : {}),
     })
   }
 

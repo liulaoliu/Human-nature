@@ -88,14 +88,47 @@ export interface ScriptRepoPort {
 }
 
 /**
+ * 用户手动改过的正文（「改文本」那条路）。
+ * 存在原文库之外：有它就用它，没有才回原文库 / 空白。
+ * 数据可能几 KB～几十 KB，但一篇一份、改一次写一次，用 localStorage 够。
+ */
+export interface ScriptEditRepoPort {
+  get(fileName: string): string | undefined
+  set(fileName: string, text: string): void
+  remove(fileName: string): void
+}
+
+/**
+ * 鼠标选字的手动锚点：把「某一块的音频」绑到「原文里的一段词」。
+ *
+ * 记 atSec 而不是块号，是为了换切块粒度后还能找回是哪一块
+ * （块号会变，音频时间不会）。
+ */
+export interface ManualAnchor {
+  /** 锚定时那一块在音频里的起始秒 */
+  atSec: number
+  /** 这段词在原文里的起止词序号 [startWord, endWord) */
+  startWord: number
+  endWord: number
+  /**
+   * 锚定时选中的那段原文（词用空格连）。
+   * 改文本后词序号会整体挪位，靠它在新的词表里重新定位，
+   * 这样「改别处的错字」不会把已标好的进度打乱。
+   */
+  text?: string
+}
+
+/**
  * 手动对齐校准，按音频文件名记。
- * 数据很小（一篇两个整数），所以接口是同步的。
+ * 数据很小（一篇几个数字 + 少量锚点），所以接口是同步的。
  */
 export interface Calibration {
   /** 文本整体平移的词数 */
   offsetWords: number
   /** 正文从第几块开始 */
   textStartChunk: number
+  /** 鼠标选字定下来的锚点。有锚点时上面两个自动估计值让位 */
+  anchors?: ManualAnchor[]
 }
 
 export interface CalibrationRepoPort {

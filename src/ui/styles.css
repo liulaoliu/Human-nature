@@ -124,14 +124,59 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
   line-height: 2;
 }
 .script .full .seg { color: #cfd5df; }
+/* 手动锚定的块给个很淡的底，方便一眼扫到 */
+.script .full .seg.anchored { background: rgba(53, 201, 138, 0.08); }
 .script .full .seg.here {
   color: #fff;
   background: #23324a;
-  border-left: 3px solid var(--accent);
   border-radius: 2px;
   font-weight: 600;
 }
+/* 锚点边界竖线（插在精确词位，span 里没有文字，不影响 textContent） */
+.mark {
+  display: inline-block;
+  vertical-align: -0.12em;
+  height: 1.15em;
+  border-radius: 1px;
+  margin: 0 2px;
+}
+.mark-start { width: 4px; background: var(--green); }      /* 已锚定：起点粗绿线 */
+.mark-end { width: 2px; background: #ff5a52; }             /* 已锚定：终点细红线 */
+.mark-active-start { width: 5px; background: #ffd23f; }    /* 当前块：起点黄粗线 */
+.mark-active-end { width: 5px; background: #5cc8ff; }      /* 当前块：终点天蓝粗线 */
 .script .full .seg.here .none { color: var(--dim); font-weight: 400; }
+.script .full.picking {
+  outline: 1px dashed var(--accent);
+  outline-offset: -2px;
+  cursor: text;
+}
+.script .full-wrap { position: relative; }
+.pick-toggle {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font-size: 12px;
+  color: #cfd5df;
+  background: rgba(28, 31, 38, 0.92);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+.pick-toggle.on { border-color: var(--accent); color: #9ecbff; }
+.pick-toggle input { accent-color: var(--accent); margin: 0; }
+.pick-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--dim);
+}
 .script .foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .script.edit textarea {
   width: 100%;
@@ -153,5 +198,6 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
 .empty p { color: var(--dim); }
 .empty .big-btn { margin: 12px 0 20px; padding: 12px 26px; font-size: 16px; }
 .empty .tip { font-size: 12px; text-align: left; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+.empty-backup { display: flex; justify-content: center; gap: 8px; margin-top: 16px; flex-wrap: wrap; }
 .empty .err { color: #ffb4ae; }
 code { background: #0e1014; padding: 1px 5px; border-radius: 3px; font-size: 12px; }

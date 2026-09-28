@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { alignTextToChunks } from './alignText'
-import type { Chunk } from './ports'
+import { alignTextToChunks, alignTextToChunksWithAnchors, resolveAnchors } from './alignText'
+import type { Chunk, ManualAnchor } from './ports'
 
 const chunks = (...spec: Array<[number, number]>): Chunk[] =>
   spec.map(([start, end], index) => ({ index, start, end }))
@@ -156,5 +156,116 @@ describe('整体平移 offsetWords', () => {
     const big = alignTextToChunks(T, chunks(...CH), 999)
     expect(join(big)).toEqual(T.split(/\s+/).filter(Boolean))
     expect(big[big.length - 1].wordRange[1]).toBe(40)
+  })
+})
+
+describe('alignTextToChunksWithAnchors', () => {
+  const join = (r: { text: string }[]) =>
+    r.map((c) => c.text).join(' ').split(/\s+/).filter(Boolean)
+  const words = Array.from({ length: 40 }, (_, i) => `w${i}`)
+  const T = words.join(' ') + '.'
+  const TOTAL = T.split(/\s+/).filter(Boolean).length
+  const CH = chunks(...Array.from({ length: 10 }, (_, i) => [i, i + 1] as [number, number]))
+
+  it('没有锚点时和纯比例对齐一致', () => {
+    expect(alignTextToChunksWithAnchors(T, CH, [])).toEqual(alignTextToChunks(T, CH, 0))
+  })
+
+  it('中间一块锚定后，那一块刚好是选中的词，拼回来还是原文', () => {
+    const a: ManualAnchor = { atSec: 4.5, startWord: 16, endWord: 20 }
+    const r = alignTextToChunksWithAnchors(T, CH, [a])
+    expect(r[4].wordRange).toEqual([16, 20])
+    expect(join(r)).toEqual(T.split(/\s+/).filter(Boolean))
+  })
+
+  it('多个锚点都生效，中间按比例摊', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [
+      { atSec: 2.5, startWord: 8, endWord: 12 },
+      { atSec: 7.5, startWord: 30, endWord: 34 },
+    ])
+    expect(r[2].wordRange).toEqual([8, 12])
+    expect(r[7].wordRange).toEqual([30, 34])
+    expect(join(r)).toEqual(T.split(/\s+/).filter(Boolean))
+  })
+
+  it('锚点顺带把正文起点定了：前面的块留空', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [{ atSec: 3.5, startWord: 0, endWord: 5 }])
+    expect(r[0].text).toBe('')
+    expect(r[2].text).toBe('')
+    expect(r[3].wordRange).toEqual([0, 5])
+    expect(join(r)).toEqual(T.split(/\s+/).filter(Boolean))
+  })
+
+  it('重叠的锚点靠前的赢，不丢词不重复', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [
+      { atSec: 1.5, startWord: 4, endWord: 12 },
+      { atSec: 2.5, startWord: 8, endWord: 16 },
+    ])
+    expect(r[1].wordRange).toEqual([4, 12])
+    expect(r[2].wordRange[0]).toBeGreaterThanOrEqual(12)
+    expect(join(r)).toEqual(T.split(/\s+/).filter(Boolean))
+  })
+
+  it('按时间认块：换切块粒度后锚点还认得原来那段音频', () => {
+    const coarse = chunks([0, 4], [4, 8], [8, 12])
+    const fine = chunks([0, 2], [2, 4], [4, 6], [6, 8], [8, 10], [10, 12])
+    const a: ManualAnchor = { atSec: 4.5, startWord: 0, endWord: 6 }
+    expect(alignTextToChunksWithAnchors(T, fine, [a])[2].wordRange).toEqual([0, 6])
+    expect(alignTextToChunksWithAnchors(T, coarse, [a])[1].wordRange).toEqual([0, 6])
+  })
+
+  it('词序号单调不出界，末尾收完', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [
+      { atSec: 0.5, startWord: 0, endWord: 3 },
+      { atSec: 9.5, startWord: 35, endWord: TOTAL },
+    ])
+    let prev = 0
+    for (const c of r) {
+      expect(c.wordRange[0]).toBeGreaterThanOrEqual(prev)
+      expect(c.wordRange[1]).toBeGreaterThanOrEqual(c.wordRange[0])
+      prev = c.wordRange[1]
+    }
+    expect(r[r.length - 1].wordRange[1]).toBe(TOTAL)
+    expect(join(r)).toEqual(T.split(/\s+/).filter(Boolean))
+  })
+
+  it('钉过的块带 anchored 标记，没钉的没有', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [{ atSec: 4.5, startWord: 16, endWord: 20 }])
+    expect(r[4].anchored).toBe(true)
+    expect(r[3].anchored).toBeUndefined()
+    expect(r[5].anchored).toBeUndefined()
+  })
+
+  it('改别处的文字后，带 text 的锚点能在新词表里找回原位置', () => {
+    // 原锚点钉在第 5 块，读 w16..w19
+    const anchor: ManualAnchor = {
+      atSec: 4.5,
+      startWord: 16,
+      endWord: 20,
+      text: words.slice(16, 20).join(' '),
+    }
+    // 前面插入 3 个词（相当于删掉了别处一段/补了漏字）
+    const edited = ['x', 'y', 'z', ...words].join(' ') + '.'
+    const r = alignTextToChunksWithAnchors(edited, CH, [anchor])
+    expect(r[4].wordRange).toEqual([19, 23])
+  })
+
+  it('text 在新文本里找不到时退回存下的词序号（夹紧）', () => {
+    const r = alignTextToChunksWithAnchors(T, CH, [
+      { atSec: 4.5, startWord: 16, endWord: 20, text: '这里根本没有这几个词' },
+    ])
+    expect(r[4].wordRange).toEqual([16, 20])
+  })
+
+  it('锚点文字重复出现时，认离原来位置最近的那处', () => {
+    const zz = Array.from({ length: 20 }, () => 'zz')
+    // "aa bb" 在 0 和 22 都出现，存的顺序号是 22，应该认后面那处
+    const dup = ['aa', 'bb', ...zz, 'aa', 'bb', ...zz]
+    const cs = chunks([0, 10], [10, 20], [20, 30], [30, 40], [40, 50], [50, 60])
+    const r = resolveAnchors(dup, cs, [
+      { atSec: 55, startWord: 22, endWord: 24, text: 'aa bb' },
+    ])
+    expect(r[0].startWord).toBe(22)
+    expect(r[0].endWord).toBe(24)
   })
 })

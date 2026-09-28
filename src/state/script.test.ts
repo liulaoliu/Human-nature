@@ -5,6 +5,7 @@ import type {
   Calibration,
   CalibrationRepoPort,
   RecorderPort,
+  ScriptEditRepoPort,
   ScriptRepoPort,
   TakeRepoPort,
 } from '../core/ports'
@@ -57,13 +58,18 @@ class FakeRepo implements TakeRepoPort {
   async clear() {}
 }
 
-function makeStore(scripts?: ScriptRepoPort, calibration?: CalibrationRepoPort) {
+function makeStore(
+  scripts?: ScriptRepoPort,
+  calibration?: CalibrationRepoPort,
+  scriptEdits?: ScriptEditRepoPort,
+) {
   const store = new SessionStore({
     player: new FakePlayer(),
     recorder: new FakeRecorder(),
     repo: new FakeRepo(),
     scripts,
     calibration,
+    scriptEdits,
     abGapMs: 0,
   })
   return { store }
@@ -447,5 +453,196 @@ describe('SessionStore 校准持久化', () => {
     await store.load(blob, 'a.mp3')
     expect(store.getState().offsetWords).toBe(8)
     expect(cal.get('b.mp3')?.offsetWords).toBe(-4)
+  })
+})
+
+describe('SessionStore 鼠标选字锚定', () => {
+  const words = SCRIPT.split(/\s+/).filter(Boolean)
+  const joined = (store: SessionStore) =>
+    store.getState().aligned.map((a) => a.text).join(' ').split(/\s+/).filter(Boolean)
+
+  it('选字后当前块刚好拿到选中的词，拼起来还是原文', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(5, 12)
+    const s = store.getState()
+    expect(s.manualAnchors).toBe(1)
+    expect(s.aligned[1].wordRange).toEqual([5, 12])
+    expect(joined(store)).toEqual(words)
+  })
+
+  it('同一块重选覆盖，不会越堆越多', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(0, 5)
+    store.setAnchorWords(2, 8)
+    expect(store.getState().manualAnchors).toBe(1)
+    expect(store.getState().aligned[1].wordRange).toEqual([2, 8])
+  })
+
+  it('不同块各锚一个，两个锚点共存', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(0, 5)
+    store.select(2)
+    store.setAnchorWords(5, 11)
+    const s = store.getState()
+    expect(s.manualAnchors).toBe(2)
+    expect(s.aligned[1].wordRange).toEqual([0, 5])
+    expect(s.aligned[2].wordRange[0]).toBe(5)
+    expect(joined(store)).toEqual(words)
+  })
+
+  it('清除锚定后回到纯按比例', async () => {
+    const plain = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT })).store
+    await plain.load(blob, 'a.mp3')
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(5, 12)
+    store.clearAnchors()
+    expect(store.getState().manualAnchors).toBe(0)
+    expect(store.getState().aligned).toEqual(plain.getState().aligned)
+  })
+
+  it('锚点落盘，刷新后新建 store 读得回来', async () => {
+    const cal = new FakeCalibration()
+    const first = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), cal).store
+    await first.load(blob, 'a.mp3')
+    first.select(1)
+    first.setAnchorWords(5, 12)
+    // 记下了选中的原文，改文本时才有得比对
+    expect(cal.get('a.mp3')?.anchors?.[0].text).toBe(words.slice(5, 12).join(' '))
+
+    const second = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), cal).store
+    await second.load(blob, 'a.mp3')
+    expect(second.getState().manualAnchors).toBe(1)
+    expect(second.getState().aligned[1].wordRange).toEqual([5, 12])
+  })
+
+  it('nudgeAnchor 调开头/结尾，并同步更新记下的文字', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(5, 12)
+    store.nudgeAnchor('start', 1)
+    expect(store.getState().manualRanges[0].startWord).toBe(6)
+    store.nudgeAnchor('end', -1)
+    expect(store.getState().manualRanges[0].endWord).toBe(11)
+    // 还是「拼起来等于原文」
+    expect(joined(store)).toEqual(words)
+  })
+
+  it('nudgeAnchor 不会让开头越过结尾', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(5, 7)
+    store.nudgeAnchor('start', 99)
+    expect(store.getState().manualRanges[0].startWord).toBe(6)
+    store.nudgeAnchor('end', -99)
+    expect(store.getState().manualRanges[0].endWord).toBe(7)
+  })
+
+  it('当前块没锚定时，nudge 会先按现有对齐钉一个', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    expect(store.getState().manualAnchors).toBe(0)
+    const wr = store.getState().aligned[1].wordRange
+    store.nudgeAnchor('start', 1)
+    const s = store.getState()
+    expect(s.manualAnchors).toBe(1)
+    expect(s.manualRanges[0].chunkIndex).toBe(1)
+    expect(s.manualRanges[0].startWord).toBe(wr[0] + 1)
+  })
+
+  it('clearAnchorHere 只去掉当前块', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(0, 5)
+    store.select(2)
+    store.setAnchorWords(5, 11)
+    store.select(1)
+    store.clearAnchorHere()
+    const s = store.getState()
+    expect(s.manualAnchors).toBe(1)
+    expect(s.manualRanges[0].chunkIndex).toBe(2)
+  })
+
+  it('改文本后锚点按记下的文字重新定位，进度不白标', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    store.setAnchorWords(5, 12)
+    const before = store.getState().manualRanges[0]
+
+    // 在正文最前面补两个词（相当于改掉一处识别错漏）
+    store.setScript('EXTRA WORDS ' + SCRIPT)
+    const after = store.getState().manualRanges[0]
+    expect(after.startWord).toBe(before.startWord + 2)
+    expect(after.endWord).toBe(before.endWord + 2)
+    // 对齐也按新文本算
+    const editedWords = ('EXTRA WORDS ' + SCRIPT).split(/\s+/).filter(Boolean)
+    expect(joined(store)).toEqual(editedWords)
+  })
+})
+
+class FakeScriptEdit implements ScriptEditRepoPort {
+  map = new Map<string, string>()
+  get(fileName: string) {
+    return this.map.get(fileName)
+  }
+  set(fileName: string, text: string) {
+    this.map.set(fileName, text)
+  }
+  remove(fileName: string) {
+    this.map.delete(fileName)
+  }
+}
+
+describe('SessionStore 改文本持久化', () => {
+  it('改过的文本刷新后还在，不会被原文库覆盖', async () => {
+    const edits = new FakeScriptEdit()
+    const lib = new FakeScriptRepo({ 'a.mp3': SCRIPT })
+    const first = makeStore(lib, undefined, edits).store
+    await first.load(blob, 'a.mp3')
+    expect(first.getState().scriptSource).toBe('auto')
+
+    first.setScript('EDITED TEXT ONLY.')
+    expect(edits.get('a.mp3')).toBe('EDITED TEXT ONLY.')
+
+    // 刷新：新 store，共用同一份改动
+    const second = makeStore(lib, undefined, edits).store
+    await second.load(blob, 'a.mp3')
+    expect(second.getState().script).toBe('EDITED TEXT ONLY.')
+    expect(second.getState().scriptSource).toBe('manual')
+  })
+
+  it('清空文本会删掉改动，下次回原文库', async () => {
+    const edits = new FakeScriptEdit()
+    const lib = new FakeScriptRepo({ 'a.mp3': SCRIPT })
+    const store = makeStore(lib, undefined, edits).store
+    await store.load(blob, 'a.mp3')
+    store.setScript('X Y Z.')
+    store.clearScript()
+    expect(edits.get('a.mp3')).toBeUndefined()
+
+    const again = makeStore(lib, undefined, edits).store
+    await again.load(blob, 'a.mp3')
+    expect(again.getState().script).toBe(SCRIPT)
+    expect(again.getState().scriptSource).toBe('auto')
+  })
+
+  it('别人不改文本时，原文库照常自动带上', async () => {
+    const edits = new FakeScriptEdit()
+    const store = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), undefined, edits).store
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().script).toBe(SCRIPT)
+    expect(store.getState().scriptSource).toBe('auto')
   })
 })
