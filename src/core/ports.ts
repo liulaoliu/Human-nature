@@ -86,3 +86,19 @@ export interface ScriptLookup {
 export interface ScriptRepoPort {
   find(fileName: string): Promise<ScriptLookup>
 }
+
+/**
+ * 手动对齐校准，按音频文件名记。
+ * 数据很小（一篇两个整数），所以接口是同步的。
+ */
+export interface Calibration {
+  /** 文本整体平移的词数 */
+  offsetWords: number
+  /** 正文从第几块开始 */
+  textStartChunk: number
+}
+
+export interface CalibrationRepoPort {
+  get(fileName: string): Calibration | undefined
+  set(fileName: string, value: Calibration): void
+}

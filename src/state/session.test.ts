@@ -429,16 +429,37 @@ describe('SessionStore 录音', () => {
     expect(store.getState().takes[0].chunkIndex).toBe(1)
   })
 
-  it('连录三条都保留，取最后一条用于 A/B', async () => {
-    const { store } = makeStore()
+  it('同一块只留最新一条录音，旧的不堆着（复读够用）', async () => {
+    const { store, repo } = makeStore()
     await store.load(blob, 'a.mp3')
+    let last = ''
     for (let i = 0; i < 3; i++) {
       await store.toggleRecording()
       await store.toggleRecording()
+      last = store.getState().takes.at(-1)!.id
     }
     const takes = store.getState().takes
-    expect(takes).toHaveLength(3)
-    expect(new Set(takes.map((t) => t.id)).size).toBe(3)
+    expect(takes).toHaveLength(1)
+    expect(takes[0].id).toBe(last)
+    expect(repo.map.size).toBe(1) // 库里也只留这一条
+  })
+
+  it('加载时每块只留最新一条，清掉老版本堆下来的历史', async () => {
+    const { store, repo } = makeStore()
+    const mk = (id: string, createdAt: number) =>
+      ({
+        id,
+        fileName: 'a.mp3',
+        chunkIndex: 0,
+        blob: new Blob(['x']),
+        mimeType: 'audio/webm',
+        durationSec: 1,
+        createdAt,
+      }) as Take
+    await repo.save(mk('old', 1))
+    await repo.save(mk('new', 2))
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().takes.map((t) => t.id)).toEqual(['new'])
   })
 
   it('过短的误触录音被丢弃', async () => {
@@ -565,7 +586,7 @@ describe('SessionStore 连续跟读', () => {
     expect(recorder.stopCount).toBe(1)
   })
 
-  it('一圈下来：标准音 → 录音 → 自动停 → 对比', async () => {
+  it('一圈下来：标准音 → 录音 → 自动停 → 回放我的', async () => {
     const { store, player } = makeStore()
     await store.load(blob, 'a.mp3')
     await store.setAutoCycle(true)
@@ -590,11 +611,31 @@ describe('SessionStore 连续跟读', () => {
     expect(store.getState().recording).toBe(false)
     expect(store.getState().takes).toHaveLength(1)
 
-    // 第 3 步：对比把标准音和我的都放一遍
+    // 第 3 步：直接回放刚才那条录音，不再回头放标准音
     await tick(0)
     const mine = store.getState().takes[0]
     expect(player.calls).toContain(`take:${mine.id}@1`)
+    expect(player.calls.filter((x) => x.startsWith('ref:'))).toHaveLength(1)
     expect(store.getState().cycleStep).toBe('idle')
+  })
+
+  it('开着连续跟读时，下一块直接跑一整圈（复用空格那条路）', async () => {
+    const { store, player, recorder } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.setAutoCycle(true)
+    recorder.startCount = 0
+    player.calls.length = 0
+
+    store.next()
+    await tick(0)
+
+    expect(store.getState().current).toBe(1)
+    const c = store.getState().chunks[1]
+    expect(player.calls).toContain(`ref:${c.start.toFixed(2)}-${c.end.toFixed(2)}@1`)
+    expect(store.getState().cycleStep).toBe('ref')
+
+    store.abortCycle()
+    await tick(5000)
   })
 
   it('录音中按空格 = 我读完了，不用等自动停', async () => {

@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { SessionStore } from './session'
 import type {
   AudioPlayerPort,
+  Calibration,
+  CalibrationRepoPort,
   RecorderPort,
   ScriptRepoPort,
   TakeRepoPort,
@@ -55,12 +57,13 @@ class FakeRepo implements TakeRepoPort {
   async clear() {}
 }
 
-function makeStore(scripts?: ScriptRepoPort) {
+function makeStore(scripts?: ScriptRepoPort, calibration?: CalibrationRepoPort) {
   const store = new SessionStore({
     player: new FakePlayer(),
     recorder: new FakeRecorder(),
     repo: new FakeRepo(),
     scripts,
+    calibration,
     abGapMs: 0,
   })
   return { store }
@@ -390,5 +393,59 @@ describe('SessionStore 正文起始块', () => {
     store.clearTextStart()
     expect(store.getState().textStartChunk).toBe(0)
     expect(store.getState().aligned[0].text).not.toBe('')
+  })
+})
+
+/** 模拟 localStorage：同一个对象喂给两个 store，等价于「刷新后新建 store」 */
+class FakeCalibration implements CalibrationRepoPort {
+  map = new Map<string, Calibration>()
+  get(fileName: string) {
+    return this.map.get(fileName)
+  }
+  set(fileName: string, value: Calibration) {
+    this.map.set(fileName, value)
+  }
+}
+
+describe('SessionStore 校准持久化', () => {
+  it('文字偏移和正文起点会落盘，刷新后新建 store 也读得回来', async () => {
+    const cal = new FakeCalibration()
+    const first = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), cal).store
+    await first.load(blob, 'a.mp3')
+    first.setOffsetWords(9)
+    first.setTextStartChunk(1)
+    expect(cal.get('a.mp3')).toEqual({ offsetWords: 9, textStartChunk: 1 })
+
+    // 刷新：全新 store，共用同一份存储
+    const second = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), cal).store
+    await second.load(blob, 'a.mp3')
+    expect(second.getState().offsetWords).toBe(9)
+    expect(second.getState().textStartChunk).toBe(1)
+    // 读回来的校准也要真的作用到对齐上，不只是显示
+    expect(second.getState().aligned[0].text).toBe('')
+  })
+
+  it('「全部归零」会把 0 写回去，不只是内存里清一下', async () => {
+    const cal = new FakeCalibration()
+    const store = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }), cal).store
+    await store.load(blob, 'a.mp3')
+    store.setOffsetWords(6)
+    store.clearTextStart()
+    expect(cal.get('a.mp3')).toEqual({ offsetWords: 6, textStartChunk: 0 })
+    store.setOffsetWords(0)
+    expect(cal.get('a.mp3')).toEqual({ offsetWords: 0, textStartChunk: 0 })
+  })
+
+  it('不同篇各记各的，不会串', async () => {
+    const cal = new FakeCalibration()
+    const repo = new FakeScriptRepo({ 'a.mp3': SCRIPT, 'b.mp3': SCRIPT })
+    const store = makeStore(repo, cal).store
+    await store.load(blob, 'a.mp3')
+    store.setOffsetWords(8)
+    await store.load(blob, 'b.mp3')
+    store.setOffsetWords(-4)
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().offsetWords).toBe(8)
+    expect(cal.get('b.mp3')?.offsetWords).toBe(-4)
   })
 })

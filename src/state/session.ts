@@ -3,6 +3,7 @@ import { alignTextToChunks, type AlignedChunk } from '../core/alignText'
 import {
   GRANULARITY_MS,
   type AudioPlayerPort,
+  type CalibrationRepoPort,
   type Chunk,
   type Granularity,
   type RecorderPort,
@@ -26,7 +27,7 @@ export interface SessionState {
   /** 连续跟读开关。关着的时候空格就是播放/暂停，一切照旧 */
   autoCycle: boolean
   /** 这一轮连续跟读走到哪一步了，UI 靠它显示状态 */
-  cycleStep: 'idle' | 'ref' | 'rec' | 'compare'
+  cycleStep: 'idle' | 'ref' | 'rec' | 'playback'
   /** 自动录音会给多久，UI 上告诉用户「最多 N 秒」 */
   autoRecordMs: number
   /** 暂停时停在哪一块、停在哪一秒，用来「接着播」 */
@@ -80,6 +81,8 @@ export interface SessionDeps {
   repo: TakeRepoPort
   /** 原文库，可选。不给就等于没有自动带文本，只能手动粘 */
   scripts?: ScriptRepoPort
+  /** 手动校准（文字偏移 / 正文起点）的持久化，可选。不给就只记在内存里 */
+  calibration?: CalibrationRepoPort
   /** A/B 两段之间的停顿 */
   abGapMs?: number
   /** 连续跟读里「标准音 → 录音」之间的停顿，留出切换状态的时间 */
@@ -167,10 +170,26 @@ export class SessionStore {
 
       // 只取这一篇的录音。块号是从 0 开始的，不筛的话别的文章的录音会串进来
       // （老记录没有 fileName，会一并被筛掉——那些本来也分不清是哪篇的）
-      const takes = (await this.deps.repo.list()).filter(
-        (t) => t.fileName === fileName,
-      )
+      const all = (await this.deps.repo.list()).filter((t) => t.fileName === fileName)
       if (gen !== this.generation) return
+      // 现在每块只存最新一条。老版本可能给同一块堆了好几条，
+      // 这里顺手只留每块最新的，并把多余的从库里清掉。
+      const latest = new Map<number, Take>()
+      for (const t of all) {
+        const prev = latest.get(t.chunkIndex)
+        if (!prev || t.createdAt >= prev.createdAt) latest.set(t.chunkIndex, t)
+      }
+      const takes = [...latest.values()].sort((a, b) => a.createdAt - b.createdAt)
+      for (const t of all) {
+        if (!takes.includes(t)) void this.deps.repo.remove(t.id)
+      }
+
+      // 把上次存的校准（文字偏移 / 正文起点）读回来，刷新页面不丢
+      const saved = this.deps.calibration?.get(fileName)
+      if (saved) {
+        this.offsets.set(fileName, saved.offsetWords)
+        this.starts.set(fileName, saved.textStartChunk)
+      }
 
       const chunks = this.derive(
         this.deps.player.samples,
@@ -267,6 +286,7 @@ export class SessionStore {
     const n = this.state.chunks.length
     const v = n === 0 ? 0 : Math.min(Math.max(Math.round(k), 0), n - 1)
     this.starts.set(this.state.fileName, v)
+    this.persistCalibration()
     this.set({
       textStartChunk: v,
       aligned: this.align(this.state.script, this.state.chunks),
@@ -286,6 +306,7 @@ export class SessionStore {
     const total = this.state.script.trim().split(/\s+/).filter(Boolean).length
     const v = Math.max(-total, Math.min(total, Math.round(n)))
     this.offsets.set(this.state.fileName, v)
+    this.persistCalibration()
     this.set({
       offsetWords: v,
       aligned: this.align(this.state.script, this.state.chunks),
@@ -294,6 +315,15 @@ export class SessionStore {
 
   nudgeOffsetWords(step: number) {
     this.setOffsetWords(this.state.offsetWords + step)
+  }
+
+  /** 把这一篇当前的两个校准值写进持久化（没注入就只留在内存 Map 里） */
+  private persistCalibration(fileName = this.state.fileName) {
+    if (!fileName) return
+    this.deps.calibration?.set(fileName, {
+      offsetWords: this.offsets.get(fileName) ?? 0,
+      textStartChunk: this.starts.get(fileName) ?? 0,
+    })
   }
 
   // ---- 导航 ----
@@ -311,9 +341,9 @@ export class SessionStore {
   }
 
   /**
-   * 切块并直接把这一块播出来。上一块/下一块用它。
-   * 挪过去就该能听到，不用再多按一次空格 —— 跟读的循环是「听→录→比→下一块」，
-   * 中间插一步手动播放就断了。
+   * 切块并直接跑「空格键那一套」。上一块/下一块用它。
+   * 挪过去就当你按了空格：没开连续跟读就是播标准音，开了就跑一整圈。
+   * 这样手动按 ↓ 和按空格是同一个入口，不会有两套行为。
    */
   private async selectAndPlay(index: number): Promise<void> {
     if (index < 0 || index >= this.state.chunks.length) return
@@ -321,7 +351,12 @@ export class SessionStore {
     this.select(index)
     // 录音时不能放参考音，会被麦克风录进去
     if (this.state.recording) return
-    await this.playChunk()
+    // 上一块可能还在播：先停干净，免得空格那条路看到 playing=true 反而去暂停
+    if (this.state.playing) {
+      this.deps.player.pause()
+      this.set({ playing: false })
+    }
+    await this.toggleChunkPlay()
   }
 
   next() {
@@ -382,12 +417,12 @@ export class SessionStore {
   // ---- 连续跟读（可选） ----
   //
   // 打开后，空格键不再只是「播标准音」，而是跑一整轮：
-  //   标准音 →（喘口气）→ 录音（按块长自动停）→ 对比（标准 → 我的）
+  //   标准音 →（喘口气）→ 录音（按块长自动停）→ 回放刚才那条录音
   // 手动那条路完全不动：R 还是只管录音，空格在没开这个模式时还是播放/暂停。
   //
   // 两个都能提前收：
-  //   · 录音中按空格 = 我读完了，直接去对比（不用等自动停）
-  //   · 标准音/对比中按空格 = 中止这一轮
+  //   · 录音中按空格 = 我读完了，直接回放（不用等自动停）
+  //   · 标准音/回放中按空格 = 中止这一轮
 
   /**
    * 自动录音该录多久 —— 这只是**兜底上限**。
@@ -418,8 +453,8 @@ export class SessionStore {
   /** 空格键在连续跟读模式下的行为 */
   async runAutoCycle(): Promise<void> {
     if (this.state.cycleStep === 'rec') {
-      // 录音中按 = 我读完了，去对比
-      await this.stopRecordingThenCompare()
+      // 录音中按 = 我读完了，直接回放刚才那条
+      await this.stopRecordingThenPlayback()
       return
     }
     if (this.state.cycleStep !== 'idle') {
@@ -458,13 +493,16 @@ export class SessionStore {
       const elapsed = now - this.recStartedAt
       if ((this.speechSeen && silentFor > hangover) || elapsed > ms) {
         this.clearRecordTimer()
-        void this.stopRecordingThenCompare()
+        void this.stopRecordingThenPlayback()
       }
     }, 200)
   }
 
-  /** 停了录音、存下来，然后接着对比（连续跟读的第 3 步） */
-  private async stopRecordingThenCompare(): Promise<void> {
+  /**
+   * 停了录音、存下来，然后直接回放刚才那条（连续跟读的第 3 步）。
+   * 只放「我的」，不再回头放标准音 —— 想对照标准音按 C 或再跑一轮。
+   */
+  private async stopRecordingThenPlayback(): Promise<void> {
     this.clearRecordTimer()
     await this.stopRecording()
     if (this.state.cycleStep !== 'rec') {
@@ -472,8 +510,12 @@ export class SessionStore {
       return
     }
     const gen = this.cycleGen
-    this.set({ cycleStep: 'compare' })
-    await this.compareAB(false)
+    this.set({ cycleStep: 'playback' })
+    const mine = this.takesFor(this.state.current).at(-1)
+    if (mine) {
+      this.deps.player.pause()
+      await this.deps.player.playTake(mine, this.state.rate)
+    }
     if (gen === this.cycleGen) this.set({ cycleStep: 'idle' })
   }
 
@@ -525,8 +567,14 @@ export class SessionStore {
       createdAt: Date.now(),
       blob: take.blob,
     }
+    // 旧录音不留：同一块只保留最新的一条，够「复读」用就行，
+    // 不然一遍遍练下来会堆一大堆没用的历史。别的块不动。
+    const stale = this.state.takes.filter((t) => t.chunkIndex === record.chunkIndex)
+    for (const t of stale) await this.deps.repo.remove(t.id)
     await this.deps.repo.save(record)
-    this.set({ takes: [...this.state.takes, record] })
+    this.set({
+      takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],
+    })
   }
 
   async toggleRecording() {

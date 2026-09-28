@@ -4,6 +4,7 @@ import { useSession } from './useSession'
 import { BrowserPlayer, BrowserRecorder } from '../adapters/browserAudio'
 import { createTakeRepo } from '../adapters/takeRepo'
 import { createScriptRepo } from '../adapters/scriptRepo'
+import { createCalibrationRepo } from '../adapters/calibrationRepo'
 import { GRANULARITY_LABEL, type Granularity } from '../core/ports'
 import type { AlignedChunk } from '../core/alignText'
 
@@ -18,6 +19,7 @@ export default function App() {
       recorder: new BrowserRecorder(),
       repo: createTakeRepo(),
       scripts: createScriptRepo(),
+      calibration: createCalibrationRepo(),
     })
   }
   const store = storeRef.current
@@ -139,13 +141,13 @@ export default function App() {
             />
 
             <div className="row">
-              <label className="check" title="一圈下来：标准音 → 自动录音 → 自动对比。手动录音（R）不受影响">
+              <label className="check" title="一圈下来：标准音 → 自动录音 → 回放刚才那条。手动录音（R）不受影响">
                 <input
                   type="checkbox"
                   checked={s.autoCycle}
                   onChange={(e) => void store.setAutoCycle(e.target.checked)}
                 />
-                连续跟读（标准音 → 录音 → 对比）
+                连续跟读（标准音 → 录音 → 回放）
               </label>
               {s.autoCycle && s.cycleStep === 'rec' && (
                 <span className="lab">
@@ -153,8 +155,8 @@ export default function App() {
                 </span>
               )}
               {s.autoCycle && s.cycleStep === 'ref' && <span className="lab">正在放标准音…</span>}
-              {s.autoCycle && s.cycleStep === 'compare' && (
-                <span className="lab">对比中（标准 → 我的）…</span>
+              {s.autoCycle && s.cycleStep === 'playback' && (
+                <span className="lab">回放中（我的录音）…</span>
               )}
             </div>
 
@@ -310,8 +312,9 @@ export default function App() {
 }
 
 /**
- * 原文面板。有文本时显示当前块读到哪儿，前后各带一句上下文。
- * 切分是按时长比例估的，不是逐字对齐，所以别当字幕用。
+ * 原文面板。有文本时整篇摊开，当前块高亮。
+ * 切分是按时长比例估的，不是逐字对齐 —— 所以干脆全给出来，自己对着听，
+ * 别当精确字幕用。
  */
 function ScriptPanel({
   script,
@@ -338,12 +341,24 @@ function ScriptPanel({
 }) {
   const [draft, setDraft] = useState('')
   const ref = useRef<HTMLTextAreaElement>(null)
+  const boxRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!editing) return
     setDraft(script) // 打开时带上已有文本，不用重粘一遍
     ref.current?.focus()
   }, [editing, script])
+
+  // 整篇都摊在上面，换块时把当前那块滚进视野中间，
+  // 不然全显示之后要自己找高亮在哪。
+  useEffect(() => {
+    const box = boxRef.current
+    const el = box?.querySelector<HTMLElement>('.seg.here')
+    if (!box || !el) return
+    const b = box.getBoundingClientRect()
+    const e = el.getBoundingClientRect()
+    box.scrollTop += e.top - b.top - box.clientHeight / 3
+  }, [current, aligned])
 
   if (editing) {
     return (
@@ -391,30 +406,35 @@ function ScriptPanel({
     )
   }
 
-  const here = aligned[current]
-  const before = aligned.slice(0, current).map((a) => a.text).join(' ')
-  const after = aligned.slice(current + 1).map((a) => a.text).join(' ')
-
+  // 全文摊开、当前块高亮。分块和音频本来就有几个词的出入，
+  // 与其只给一块看还看得将信将疑，不如全给出来自己对着听。
   return (
     <div className="script">
-      <div className="ctx before">{before}</div>
-      <div className="here">
-        {here?.text || (
-          <i>
-            {current < textStartChunk
-              ? `（这块在正文之前 —— 正文从第 ${textStartChunk + 1} 块开始）`
-              : '（这块没分到词）'}
-          </i>
-        )}
+      <div className="full" ref={boxRef}>
+        {aligned.map((a) => {
+          const here = a.index === current
+          return (
+            <span key={a.index} className={here ? 'seg here' : 'seg'}>
+              {a.text ? (
+                `${a.text} `
+              ) : here ? (
+                <i className="none">
+                  {current < textStartChunk
+                    ? `（这块在正文之前 —— 正文从第 ${textStartChunk + 1} 块开始）`
+                    : '（这块没分到词）'}
+                </i>
+              ) : null}
+            </span>
+          )
+        })}
       </div>
-      <div className="ctx after">{after}</div>
       <div className="foot">
         <button className="ghost sm" onClick={onToggle}>
           改文本
         </button>
         <span className="lab">
           {scriptSource === 'auto' ? '原文库自动带上的 · ' : ''}
-          按时长比例估的，可能差几个词
+          全文都显示在这，高亮按比例估的，可能差几个词
           {offsetWords !== 0 ? ` · 已平移 ${offsetWords > 0 ? '+' : ''}${offsetWords} 词` : ''}
         </span>
       </div>
