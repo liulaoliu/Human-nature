@@ -150,11 +150,16 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
   outline-offset: -2px;
   cursor: text;
 }
-.script .full-wrap { position: relative; }
+/* 开关放在文本框上面右侧，不浮在文字上挡字 */
+.script-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  min-height: 24px;
+}
+.script-head .lab { margin-right: auto; }
 .pick-toggle {
-  position: absolute;
-  top: 8px;
-  right: 8px;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -169,14 +174,6 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
 }
 .pick-toggle.on { border-color: var(--accent); color: #9ecbff; }
 .pick-toggle input { accent-color: var(--accent); margin: 0; }
-.pick-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--dim);
-}
 .script .foot { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .script.edit textarea {
   width: 100%;

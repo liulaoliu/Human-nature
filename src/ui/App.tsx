@@ -536,51 +536,12 @@ function ScriptPanel({
   // 标记按锚点的精确词位插，不画在整段两端 —— 相邻锚点把段边界盖住时也不会“看着不动”。
   return (
     <div className="script">
-      <div className="full-wrap">
-        <div className={picking ? 'full picking' : 'full'} ref={boxRef}>
-          {aligned.map((a) => {
-            const here = a.index === current
-            const cls = ['seg']
-            if (here) cls.push('here')
-            if (a.anchored) cls.push('anchored')
-
-            const marks: Mark[] = []
-            if (here) {
-              // 当前块：起点黄粗线、终点天蓝粗线（没锚定就用当前对齐的位置）
-              const r = anchorByChunk.get(a.index)
-              const start = r ? r.startWord : a.wordRange[0]
-              const end = r ? r.endWord : a.wordRange[1]
-              marks.push({ at: start, cls: 'mark-active-start' })
-              marks.push({ at: end, cls: 'mark-active-end' })
-            } else if (a.anchored) {
-              // 其他已锚定的块：起点绿粗线、终点红细线
-              const r = anchorByChunk.get(a.index)
-              if (r) {
-                marks.push({ at: r.startWord, cls: 'mark-start' })
-                marks.push({ at: r.endWord, cls: 'mark-end' })
-              }
-            }
-
-            return (
-              <span
-                key={a.index}
-                className={cls.join(' ')}
-                data-s={a.wordRange[0]}
-                data-e={a.wordRange[1]}
-              >
-                {a.text ? (
-                  <SegBody a={a} marks={marks} />
-                ) : here ? (
-                  <i className="none">
-                    {current < textStartChunk
-                      ? `（这块在正文之前 —— 正文从第 ${textStartChunk + 1} 块开始）`
-                      : '（这块没分到词）'}
-                  </i>
-                ) : null}
-              </span>
-            )
-          })}
-        </div>
+      <div className="script-head">
+        <span className="lab">
+          {picking
+            ? `选中第 ${current + 1} 块听到的文字（从第一个词拖到最后一个词）`
+            : ''}
+        </span>
         <label
           className={picking ? 'pick-toggle on' : 'pick-toggle'}
           title="打开后，用鼠标选中你听到的那段文字，就把第 N 块绑到它上面"
@@ -593,12 +554,50 @@ function ScriptPanel({
           选字定块
         </label>
       </div>
+      <div className={picking ? 'full picking' : 'full'} ref={boxRef}>
+        {aligned.map((a) => {
+          const here = a.index === current
+          const cls = ['seg']
+          if (here) cls.push('here')
+          if (a.anchored) cls.push('anchored')
 
-      {picking && (
-        <div className="pick-hint">
-          放第 {current + 1} 块 → 鼠标从这句的第一个词拖到最后一个词 → 松开就绑到第 {current + 1} 块
-        </div>
-      )}
+          const marks: Mark[] = []
+          if (here) {
+            // 当前块：起点黄粗线、终点天蓝粗线（没锚定就用当前对齐的位置）
+            const r = anchorByChunk.get(a.index)
+            const start = r ? r.startWord : a.wordRange[0]
+            const end = r ? r.endWord : a.wordRange[1]
+            marks.push({ at: start, cls: 'mark-active-start' })
+            marks.push({ at: end, cls: 'mark-active-end' })
+          } else if (a.anchored) {
+            // 其他已锚定的块：起点绿粗线、终点红细线
+            const r = anchorByChunk.get(a.index)
+            if (r) {
+              marks.push({ at: r.startWord, cls: 'mark-start' })
+              marks.push({ at: r.endWord, cls: 'mark-end' })
+            }
+          }
+
+          return (
+            <span
+              key={a.index}
+              className={cls.join(' ')}
+              data-s={a.wordRange[0]}
+              data-e={a.wordRange[1]}
+            >
+              {a.text ? (
+                <SegBody a={a} marks={marks} />
+              ) : here ? (
+                <i className="none">
+                  {current < textStartChunk
+                    ? `（这块在正文之前 —— 正文从第 ${textStartChunk + 1} 块开始）`
+                    : '（这块没分到词）'}
+                </i>
+              ) : null}
+            </span>
+          )
+        })}
+      </div>
 
       <div className="row anchor-row">
         {hereRange ? (
