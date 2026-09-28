@@ -1,0 +1,15 @@
+# 依赖和构建产物
+node_modules/
+dist/
+tsconfig.tsbuildinfo
+
+# 抽取脚本的产物：从杂志 PDF 抽出来的正文，属于版权内容，不进仓库
+# （需要时本地跑 tools/extract-articles.py 生成）
+public/articles.json
+
+# Python
+__pycache__/
+*.pyc
+
+# 临时文件：时长表、诊断脚本输出
+*.tsv

@@ -1,0 +1,8 @@
+# 行尾统一成 LF：这个仓库会在 Windows 上开发，但代码本身不该被 CRLF 污染
+* text=auto eol=lf
+
+# 二进制
+*.mp3 binary
+*.png binary
+*.jpg binary
+*.pdf binary
