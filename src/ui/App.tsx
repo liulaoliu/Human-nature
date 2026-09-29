@@ -225,6 +225,12 @@ export default function App() {
   const current = s.chunks[s.current]
   const myTakes = current ? s.takes.filter((t) => t.chunkIndex === current.index) : []
 
+  // 每次渲染算一次（不是每行一次）：块数 × 录音数 的 O(n·m) 挪到 O(n+m)
+  const takeCountByChunk = new Map<number, number>()
+  for (const t of s.takes) takeCountByChunk.set(t.chunkIndex, (takeCountByChunk.get(t.chunkIndex) ?? 0) + 1)
+  // 撕开时间取到 20ms 精度做成 Set，行内查表；原来每行都 some() 全量扫
+  const splitTimes = new Set(s.splitPoints.map((t) => Math.round(t * 50)))
+
   if (s.status === 'empty') {
     return (
       <div className="app">
@@ -307,8 +313,10 @@ export default function App() {
         <div className="body">
           <ol className="list" ref={listRef}>
             {s.chunks.map((c) => {
-              const n = s.takes.filter((t) => t.chunkIndex === c.index).length
-              const cut = s.splitPoints.some((t) => Math.abs(t - c.start) < 0.02)
+              // 计数和 ✂ 都在 map 外面先算好：原来每行都 filter 全部录音、
+              // 扫全部撕开点，一篇 250 块 × 250 条录音 = 每帧几万次（录音时 25fps）
+              const n = takeCountByChunk.get(c.index) ?? 0
+              const cut = splitTimes.has(Math.round(c.start * 50))
               return (
                 <li key={c.index}>
                   <button

@@ -151,6 +151,13 @@ const VOICE_MARGIN = 0.008
 /** 每次开录时给噪声底的初值；随后只取「见过的最低电平」（单调不增） */
 const NOISE_FLOOR_INIT = 0.005
 
+/**
+ * 电平送进 state 的最小间隔（毫秒）。
+ * 电平表每帧回调一次（~60/s），不节流就是 60fps 整页重渲染；
+ * 25fps 看电平表照样跟手。
+ */
+const LEVEL_PUSH_MS = 40
+
 /** 兜底：静音检测要是失灵（麦没声、底噪太高），最多录这么久 */
 function recordCapMs(chunkSec: number): number {
   return Math.min(90000, Math.max(4000, Math.round(chunkSec * 2000 + 3000)))
@@ -185,10 +192,16 @@ export class SessionStore {
   private noiseFloor = NOISE_FLOOR_INIT
   /** 这次录音见过的最高电平，用完判断「麦克风是不是太小声」 */
   private recPeak = 0
+  /**
+   * 电平上报的节流：电平表每帧都回调（~60/s），直接进 state 就是 60fps 的整页重渲染。
+   * 判定「说完没有」用**原始值**（不受节流影响），只有给 UI 看的 level 才节流到 ~25/s。
+   */
+  private lastLevelPush = 0
+  private pendingLevel = 0
+  private levelTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(private deps: SessionDeps) {
     this.deps.recorder.onLevel((v) => {
-      // 顺便拿它判断「说完没有」：连续跟读靠这个自动结束录音
       if (this.state.recording) {
         if (v > this.recPeak) this.recPeak = v
         // 噪声底只取「见过的最低电平」，单调不增 —— 连续朗读时也不会被自己的语音抬高
@@ -199,8 +212,42 @@ export class SessionStore {
           this.lastVoiceAt = Date.now()
         }
       }
-      this.set({ level: v })
+      this.publishLevel(v)
     })
+  }
+
+  /**
+   * 把电平送进 state，但最多每 40ms 一次。
+   * 20fps 足够看清电平表在动，却把整页重渲染从每秒 60 次压到 25 次。
+   * 收尾时（停录）会把最后那个值补上去。
+   */
+  private publishLevel(v: number) {
+    const now = Date.now()
+    const since = now - this.lastLevelPush
+    if (since >= LEVEL_PUSH_MS) {
+      this.lastLevelPush = now
+      this.pendingLevel = v
+      this.set({ level: v })
+      return
+    }
+    // 这一拍不发，但把最新值记下，交给尾帧发出去
+    this.pendingLevel = v
+    if (this.levelTimer === null) {
+      this.levelTimer = setTimeout(() => {
+        this.levelTimer = null
+        this.lastLevelPush = Date.now()
+        this.set({ level: this.pendingLevel })
+      }, LEVEL_PUSH_MS - since)
+    }
+  }
+
+  /** 立刻把待发值发出去（停录时用，免得电平表停在旧数字） */
+  private flushLevel() {
+    if (this.levelTimer !== null) {
+      clearTimeout(this.levelTimer)
+      this.levelTimer = null
+    }
+    this.set({ level: this.pendingLevel })
   }
 
   getState = (): SessionState => this.state
@@ -966,6 +1013,7 @@ export class SessionStore {
       await this.deps.recorder.start()
       this.noiseFloor = NOISE_FLOOR_INIT
       this.recPeak = 0
+      this.lastLevelPush = 0 // 让第一帧电平立刻进 state
       this.set({ recording: true })
     } catch (e) {
       this.set({ error: e instanceof Error ? e.message : String(e) })
@@ -977,7 +1025,9 @@ export class SessionStore {
     if (!this.state.recording) return null
     const c = this.chunk()
     this.clearRecordTimer()
+    this.pendingLevel = 0
     this.set({ recording: false, level: 0 })
+    this.flushLevel() // 清掉可能还挂着的节流定时器
     const take = await this.deps.recorder.stop()
     if (take.durationSec < 0.2) return null // 手滑了
 

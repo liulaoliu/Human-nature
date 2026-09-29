@@ -257,6 +257,51 @@ describe('SessionStore 播放', () => {
     expect(player.calls).toEqual([`ref:${c.start.toFixed(2)}-${c.end.toFixed(2)}@0.75`])
   })
 
+  it('电平进 state 有节流，但判定「说完没有」仍用原始值', async () => {
+    vi.useFakeTimers()
+    try {
+      const { store, recorder } = makeStore()
+      await store.load(blob, 'a.mp3')
+      await store.setAutoCycle(true)
+      void store.runAutoCycle()
+      await vi.advanceTimersByTimeAsync(0) // 放标准音
+      await vi.advanceTimersByTimeAsync(600) // 空档后开录
+      expect(store.getState().recording).toBe(true)
+
+      // 每 1ms 一帧 ≈ 1000fps，远超节流间隔：30 帧电平只该发出 1~2 次
+      for (let i = 0; i < 30; i++) {
+        recorder.emitLevel(0.5)
+        vi.advanceTimersByTime(1)
+      }
+      expect(store.getState().level).toBe(0.5) // 有值进 state（表要动）
+      expect(store.getState().recording).toBe(true)
+
+      // 关键：判定走的是原始值。静 3 秒（>2.5 秒 hangover，<4 秒兜底上限）
+      // 就该自动收工 —— 若电平被节流到没记上「说过了」，这里不会停，只能等兜底。
+      recorder.emitLevel(0)
+      await vi.advanceTimersByTimeAsync(3000)
+      expect(store.getState().recording).toBe(false)
+      expect(store.getState().takes).toHaveLength(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('停录会把电平收干净（不留挂起的节流定时器）', async () => {
+    vi.useFakeTimers()
+    try {
+      const { store, recorder } = makeStore()
+      await store.load(blob, 'a.mp3')
+      await store.startRecording()
+      recorder.emitLevel(0.4)
+      vi.advanceTimersByTime(5) // 制造一个待发的节流帧
+      await store.stopRecording()
+      expect(store.getState().level).toBe(0)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('回放放大倍数会转给播放器', async () => {
     const { store, player } = makeStore()
     await store.load(blob, 'a.mp3')
