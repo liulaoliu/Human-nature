@@ -649,7 +649,40 @@ export class SessionStore {
 
     this.splitAnchorAt(c, at)
     this.persistCalibration()
-    this.rederive()
+    this.rederiveFromEdits()
+  }
+
+  /**
+   * 把一次手动切分（撕/合）应用到**现有**块上，不重跑 VAD。
+   *
+   * 之前每次都 `detect()` 重跑一遍：长 Briefing 约 350ms，连着撕十几刀就是好几秒等待，
+   * 而这些刀口都是毫秒级的交互，延迟直接顶在手上。
+   *
+   * `applyChunkEdits` 对已经存在的边界是幂等的（切点正好落在已有边界上时，
+   * 两侧都不满足最小片段、不产生新切点），所以在「已经切好的块」上重复套用安全。
+   */
+  private applyEditsToCurrent(): Chunk[] {
+    return applyChunkEdits(
+      this.state.chunks,
+      this.splits.get(this.state.fileName) ?? [],
+      this.merges.get(this.state.fileName) ?? [],
+    )
+  }
+
+  /**
+   * 「撕开」之后的重算：块 = 现有块 + 刀口，然后重跑对齐。
+   *
+   * 只在**新增刀口**时能用这个快路径。**合并/撤销不行**：把一条 split 从列表里
+   * 删掉，并不会让已经切开的两半重新合上（`applyChunkEdits` 只负责加切点、
+   * 和删「起点等于某时间」的边界，而撤销之后那条边界已经不在切点列表里了）。
+   * 所以 merge/reset 仍走完整重算 —— 它们是低频的纠错操作，代价可以接受。
+   */
+  private rederiveFromEdits(): void {
+    const chunks = this.applyEditsToCurrent()
+    this.realign({
+      chunks,
+      current: Math.min(this.state.current, Math.max(0, chunks.length - 1)),
+    })
   }
 
   /** 把当前块和下一块合并（等于删掉两条之间的边界）。可以拿来撤销一次撕开 */
@@ -675,10 +708,10 @@ export class SessionStore {
 
     this.rejoinAnchorAcross(boundary)
     this.persistCalibration()
-    this.rederive()
+    this.rederive() // 撤销要真正合上两半，必须从 VAD 结果重算（见 rederiveFromEdits）
   }
 
-  /** 清掉这一篇全部手动撕/合，回到纯 VAD 切块 */
+  /** 清掉这一篇全部手动撕/合，回到纯 VAD 切块（这个必须重跑 VAD：要把刀口全丢掉） */
   resetChunkEdits() {
     const fileName = this.state.fileName
     if (!this.splits.has(fileName) && !this.merges.has(fileName)) return

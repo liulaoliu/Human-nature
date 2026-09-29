@@ -627,6 +627,20 @@ describe('SessionStore 手动撕开 / 合并块', () => {
     expect(store.getState().splitPoints).toHaveLength(1)
   })
 
+  it('连续撕多刀，块数累加（走快路径也不丢之前的刀口）', async () => {
+    const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
+    await store.load(blob, 'a.mp3')
+    const c0 = store.getState().chunks[0]
+    const n = store.getState().chunks.length
+    // 在第一块里连撕两刀
+    store.splitCurrentChunk(c0.start + (c0.end - c0.start) / 3)
+    store.splitCurrentChunk(c0.start + (2 * (c0.end - c0.start)) / 3)
+    const after = store.getState().chunks
+    expect(after).toHaveLength(n + 2)
+    expect(store.getState().chunkEditCount).toBe(2)
+    expect(joined(store)).toEqual(SCRIPT.split(/\s+/).filter(Boolean))
+  })
+
   it('撕开后「拼起来等于原文」不受影响', async () => {
     const { store } = makeStore(new FakeScriptRepo({ 'a.mp3': SCRIPT }))
     await store.load(blob, 'a.mp3')
