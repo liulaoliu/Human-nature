@@ -15,7 +15,14 @@ export interface Take {
    * A/B 对比还会放出别人的声音。
    */
   fileName: string
+  /**
+   * 当时是第几块。**块号会变**（换切块档位、手动撕开都会重排），
+   * 所以只作为老记录的兜底 —— 现在按 `startSec` 找块，见 `core/takeChunk.ts`。
+   */
   chunkIndex: number
+  /** 录这段时参考音的时间区间（秒）。有了它，撕开/换档位后录音不会串块 */
+  startSec?: number
+  endSec?: number
   blob: Blob
   mimeType: string
   durationSec: number

@@ -508,6 +508,75 @@ describe('SessionStore 录音', () => {
     expect(player.calls).toEqual(['pause'])
   })
 
+  it('录音记下参考音的时间区间', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    const c = store.getState().chunks[1]
+    store.select(1)
+    await store.toggleRecording()
+    await store.toggleRecording()
+    const t = store.getState().takes[0]
+    expect(t.startSec).toBeCloseTo(c.start, 6)
+    expect(t.endSec).toBeCloseTo(c.end, 6)
+  })
+
+  it('撕开前面的块后，录音按时间留在原来那一块（不串块）', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.select(2)
+    await store.toggleRecording()
+    await store.toggleRecording()
+    expect(store.getState().takes[0].chunkIndex).toBe(2)
+
+    const c0 = store.getState().chunks[0]
+    store.select(0)
+    store.splitCurrentChunk((c0.start + c0.end) / 2)
+
+    expect(store.getState().chunks).toHaveLength(4) // 块号整体后移
+    expect(store.getState().takes[0].chunkIndex).toBe(3) // 靠时间落回正确位置
+    expect(store.takesFor(2)).toHaveLength(0)
+    expect(store.takesFor(3)).toHaveLength(1)
+  })
+
+  it('换切块档位后录音按时间重新落块', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.select(2)
+    await store.toggleRecording()
+    await store.toggleRecording()
+    store.setGranularity('long') // 0.6s 的间隔被并掉 → 只剩一块
+    const s = store.getState()
+    expect(s.chunks).toHaveLength(1)
+    expect(s.takes[0].chunkIndex).toBe(0)
+  })
+
+  it('刷新（重新 load）后仍按时间挂回正确的块', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.select(2)
+    await store.toggleRecording()
+    await store.toggleRecording()
+    store.setGranularity('long')
+    await store.load(blob, 'a.mp3') // 重新从库里读一遍
+    expect(store.getState().takes).toHaveLength(1)
+    expect(store.getState().takes[0].chunkIndex).toBe(0)
+  })
+
+  it('老记录没有时间时沿用块号', async () => {
+    const { store, repo } = makeStore()
+    await repo.save({
+      id: 'legacy',
+      fileName: 'a.mp3',
+      chunkIndex: 2,
+      blob: new Blob(['x']),
+      mimeType: 'audio/webm',
+      durationSec: 1,
+      createdAt: 1,
+    })
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().takes[0].chunkIndex).toBe(2)
+  })
+
   it('删除录音后列表同步减少', async () => {
     const { store } = makeStore()
     await store.load(blob, 'a.mp3')

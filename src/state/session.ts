@@ -1,5 +1,6 @@
 import { detectSpeechSpans } from '../core/vad'
 import { applyChunkEdits, MIN_PIECE_SEC } from '../core/chunkEdits'
+import { resolveTakeChunk } from '../core/takeChunk'
 import {
   alignTextToChunks,
   alignTextToChunksWithAnchors,
@@ -227,17 +228,6 @@ export class SessionStore {
       // （老记录没有 fileName，会一并被筛掉——那些本来也分不清是哪篇的）
       const all = (await this.deps.repo.list()).filter((t) => t.fileName === fileName)
       if (gen !== this.generation) return
-      // 现在每块只存最新一条。老版本可能给同一块堆了好几条，
-      // 这里顺手只留每块最新的，并把多余的从库里清掉。
-      const latest = new Map<number, Take>()
-      for (const t of all) {
-        const prev = latest.get(t.chunkIndex)
-        if (!prev || t.createdAt >= prev.createdAt) latest.set(t.chunkIndex, t)
-      }
-      const takes = [...latest.values()].sort((a, b) => a.createdAt - b.createdAt)
-      for (const t of all) {
-        if (!takes.includes(t)) void this.deps.repo.remove(t.id)
-      }
 
       // 把上次存的校准（文字偏移 / 正文起点 / 手动锚点 / 手动撕合）读回来，刷新页面不丢
       const saved = this.deps.calibration?.get(fileName)
@@ -255,6 +245,12 @@ export class SessionStore {
         this.state.granularity,
         fileName,
       )
+
+      // 录音挂到「现在」的块上：块号会变（切块档位、手动撕开），按音频时间找块
+      const takes = this.pickLatestPerChunk(this.remapTakes(all, chunks))
+      for (const t of all) {
+        if (!takes.some((k) => k.id === t.id)) void this.deps.repo.remove(t.id)
+      }
 
       // 换文件意味着换文章，旧的原文留着只会误导，先清掉，
       // 然后按文件名从原文库里找这一篇，找到就直接摊到块上。
@@ -398,12 +394,33 @@ export class SessionStore {
     const ranges = this.resolveRanges(script, chunks)
     this.set({
       ...patch,
+      // 块变了（切块档位/撕开/合并），录音要按时间重新落到正确的块上
+      takes: patch.takes ?? this.remapTakes(this.state.takes, chunks),
       manualAnchors: ranges.length,
       manualRanges: ranges,
       chunkEditCount: this.editCount(),
       splitPoints: this.splits.get(this.state.fileName) ?? [],
       aligned: this.align(script, chunks),
     })
+  }
+
+  /** 把录音的块号按「现在」的块重算（块号会变，音频时间不会） */
+  private remapTakes(takes: Take[], chunks: Chunk[]): Take[] {
+    if (takes.length === 0) return takes
+    return takes.map((t) => {
+      const idx = resolveTakeChunk(t, chunks)
+      return t.chunkIndex === idx ? t : { ...t, chunkIndex: idx }
+    })
+  }
+
+  /** 每块只留最新一条。老版本给同一块堆了好几条时，多余的会在 load 时清掉 */
+  private pickLatestPerChunk(takes: Take[]): Take[] {
+    const latest = new Map<number, Take>()
+    for (const t of takes) {
+      const prev = latest.get(t.chunkIndex)
+      if (!prev || t.createdAt >= prev.createdAt) latest.set(t.chunkIndex, t)
+    }
+    return [...latest.values()].sort((a, b) => a.createdAt - b.createdAt)
   }
 
   /** 这一篇手动撕/合了几处 */
@@ -958,6 +975,7 @@ export class SessionStore {
   /** 停止并保存；返回存下的那条（太短被丢掉时返回 null） */
   async stopRecording(): Promise<Take | null> {
     if (!this.state.recording) return null
+    const c = this.chunk()
     this.clearRecordTimer()
     this.set({ recording: false, level: 0 })
     const take = await this.deps.recorder.stop()
@@ -970,6 +988,9 @@ export class SessionStore {
       id: crypto.randomUUID(),
       fileName: this.state.fileName,
       chunkIndex: this.state.current,
+      // 记下参考音的时间区间：块号会变（切块档位/手动撕开），时间不会
+      startSec: c?.start,
+      endSec: c?.end,
       mimeType: take.mimeType,
       durationSec: take.durationSec,
       createdAt: Date.now(),
