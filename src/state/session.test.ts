@@ -1007,6 +1007,23 @@ describe('录音按文章隔离', () => {
     expect(store.getState().takes).toHaveLength(1)
   })
 
+  it('换到另一篇不会删掉上一篇的录音（清理只碰本篇）', async () => {
+    const { store, repo } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.select(1)
+    await store.toggleRecording()
+    await store.toggleRecording()
+    const aTake = store.getState().takes[0]
+    expect(repo.map.has(aTake.id)).toBe(true)
+
+    // 加载 b 时会去重 + 清理多余记录（同一块只留最新一条）
+    await store.load(blob, 'b.mp3')
+    // a 的那条必须还在库里 —— listByFile 之后清理范围只能是本篇
+    expect(repo.map.has(aTake.id)).toBe(true)
+    expect([...repo.map.values()].filter((t) => t.fileName === 'a.mp3')).toHaveLength(1)
+    expect(store.getState().takes).toEqual([])
+  })
+
   it('A/B 对比不会放出别的文章的录音', async () => {
     const { store, player } = makeStore()
     await store.load(blob, 'a.mp3')
