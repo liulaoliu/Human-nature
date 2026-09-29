@@ -1,9 +1,16 @@
 import type { AudioPlayerPort, MicOptions, RecorderPort, Take } from '../core/ports'
 import { applyGain, matchGain, peakSafeGain, speechRms } from '../core/loudness'
 import { floatToWav } from '../core/wav'
+import { Lru } from '../core/lru'
 
 /** 提前 20ms 停，否则下一块的第一个字会被吃掉 */
 const END_EPSILON = 0.02
+
+/**
+ * 归一化 WAV 缓存留几条。每条几百 KB，练一整篇就是几十条；
+ * 而实际同时只用到「当前块 + 对比里的那一条」，8 条足够覆盖来回切换。
+ */
+const TAKE_BLOB_CACHE_MAX = 8
 
 export class BrowserPlayer implements AudioPlayerPort {
   private el: HTMLAudioElement
@@ -19,8 +26,8 @@ export class BrowserPlayer implements AudioPlayerPort {
   private _refLevel = 0
   /** 录音回放的额外放大倍数（在响度对齐之后再乘） */
   private takeBoost = 1
-  /** 按增益缩放后重编码的 WAV（按 take id 缓存），回放用它 */
-  private takeBlobs = new Map<string, Blob>()
+  /** 按增益缩放后重编码的 WAV（LRU，换增益/换文件时作废），回放用它 */
+  private takeBlobs = new Lru<string, Blob>(TAKE_BLOB_CACHE_MAX)
 
   constructor() {
     this.el = new Audio()
@@ -122,8 +129,11 @@ export class BrowserPlayer implements AudioPlayerPort {
   }
 
   /**
-   * 把一条录音按增益缩放、重编码成 WAV（按 id 缓存）。
+   * 把一条录音按增益缩放、重编码成 WAV。
    * 增益 = 对齐标准音响度所需，再受「峰值不超过 0.99」约束，所以不会削波。
+   *
+   * 结果进 LRU 缓存：每条 WAV 几百 KB，练一整篇（几十块）就是几十 MB，
+   * 而实际同时只会用到最近几条。
    */
   private async normalizedTake(take: Take): Promise<Blob> {
     const cached = this.takeBlobs.get(take.id)
