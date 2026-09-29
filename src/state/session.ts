@@ -271,9 +271,9 @@ export class SessionStore {
       await this.deps.player.load(blob)
       if (gen !== this.generation) return // 已被更新的 load 取代
 
-      // 只取这一篇的录音。块号是从 0 开始的，不筛的话别的文章的录音会串进来
-      // （老记录没有 fileName，会一并被筛掉——那些本来也分不清是哪篇的）
-      const all = (await this.deps.repo.list()).filter((t) => t.fileName === fileName)
+      // 只取这一篇的录音（IndexedDB 走 fileName 索引，不把别的文章的 blob 读进来）。
+      // 老记录没有 fileName，取不出来——那些本来也分不清是哪篇的。
+      const all = await this.deps.repo.listByFile(fileName)
       if (gen !== this.generation) return
 
       // 把上次存的校准（文字偏移 / 正文起点 / 手动锚点 / 手动撕合）读回来，刷新页面不丢

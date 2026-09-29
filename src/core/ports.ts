@@ -93,7 +93,11 @@ export interface MicOptions {
 /** 录音持久化。切块结果不存，每次打开重跑 VAD 即可（100ms）。 */
 export interface TakeRepoPort {
   save(take: Take): Promise<void>
-  list(): Promise<Take[]>
+  /**
+   * 取**某一篇**的录音。实现方最好走索引（IndexedDB 建了 fileName 索引）：
+   * 一次只练一篇，把所有文章的 blob 都读进内存再过滤是白费力气。
+   */
+  listByFile(fileName: string): Promise<Take[]>
   remove(id: string): Promise<void>
   clear(): Promise<void>
 }

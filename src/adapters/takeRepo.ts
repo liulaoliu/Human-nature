@@ -1,10 +1,19 @@
 import type { Take, TakeRepoPort } from '../core/ports'
 
 const DB_NAME = 'shadowing'
-const DB_VERSION = 1
+/** 2 = 加上 fileName 索引（1 → 2 是纯增量，老数据不动） */
+const DB_VERSION = 2
 const STORE = 'takes'
+const FILE_INDEX = 'fileName'
 
-/** 录音持久化。切块结果不存——每次打开重跑 VAD 只要 100ms。 */
+/**
+ * 录音持久化。切块结果不存——每次打开重跑 VAD 只要 100ms。
+ *
+ * store 上建了 `fileName` 索引：一次只练一篇，开文件时只取这一篇的录音。
+ * 原来用 `getAll()` 再在内存里 filter，多练几篇之后一次开文件就把所有文章的
+ * 录音 blob 全搬进内存了（几十 MB）。没有 `fileName` 的老记录不在索引里，
+ * 取不出来——和之前的 filter 一样，本来也分不清是哪篇的。
+ */
 export class IdbTakeRepo implements TakeRepoPort {
   private db: Promise<IDBDatabase> | null = null
 
@@ -13,8 +22,14 @@ export class IdbTakeRepo implements TakeRepoPort {
       this.db = new Promise((resolve, reject) => {
         const req = indexedDB.open(DB_NAME, DB_VERSION)
         req.onupgradeneeded = () => {
-          if (!req.result.objectStoreNames.contains(STORE)) {
-            req.result.createObjectStore(STORE, { keyPath: 'id' })
+          const tx = req.transaction
+          if (!tx) return
+          const store = req.result.objectStoreNames.contains(STORE)
+            ? tx.objectStore(STORE)
+            : req.result.createObjectStore(STORE, { keyPath: 'id' })
+          // 升级老库时补索引；已经是新版就别动
+          if (!store.indexNames.contains(FILE_INDEX)) {
+            store.createIndex(FILE_INDEX, 'fileName', { unique: false })
           }
         }
         req.onsuccess = () => resolve(req.result)
@@ -42,8 +57,12 @@ export class IdbTakeRepo implements TakeRepoPort {
     return this.write((s) => s.put(take))
   }
 
-  list(): Promise<Take[]> {
-    return this.tx<Take[]>('readonly', (s) => s.getAll() as IDBRequest<Take[]>)
+  /** 只取某一篇的录音（走 fileName 索引） */
+  listByFile(fileName: string): Promise<Take[]> {
+    return this.tx<Take[]>(
+      'readonly',
+      (s) => s.index(FILE_INDEX).getAll(fileName) as IDBRequest<Take[]>,
+    )
   }
 
   remove(id: string): Promise<void> {
@@ -61,8 +80,10 @@ export class MemoryTakeRepo implements TakeRepoPort {
   async save(t: Take) {
     this.map.set(t.id, t)
   }
-  async list() {
-    return [...this.map.values()].sort((a, b) => a.createdAt - b.createdAt)
+  async listByFile(fileName: string) {
+    return [...this.map.values()]
+      .filter((t) => t.fileName === fileName)
+      .sort((a, b) => a.createdAt - b.createdAt)
   }
   async remove(id: string) {
     this.map.delete(id)

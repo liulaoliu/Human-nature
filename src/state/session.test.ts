@@ -114,8 +114,9 @@ class FakeRepo implements TakeRepoPort {
   async save(t: Take) {
     this.map.set(t.id, t)
   }
-  async list() {
-    return [...this.map.values()]
+  /** 真实现走 fileName 索引，假的也照这个语义筛 */
+  async listByFile(fileName: string) {
+    return [...this.map.values()].filter((t) => t.fileName === fileName)
   }
   async remove(id: string) {
     this.map.delete(id)

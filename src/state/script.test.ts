@@ -52,7 +52,7 @@ class FakeRecorder implements RecorderPort {
 
 class FakeRepo implements TakeRepoPort {
   async save() {}
-  async list() {
+  async listByFile() {
     return []
   }
   async remove() {}
