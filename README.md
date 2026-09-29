@@ -37,6 +37,10 @@ npm install
 npm run dev
 ```
 
+或者**双击 `dev.cmd`**：它打开 Windows Terminal 并在里面跑 `npm run dev`
+（找不到 Windows Terminal 就退回普通命令窗口）。所以 `dev.cmd` 里全用英文——
+`.cmd` 中途 `chcp 65001` 会让 `cmd.exe` 解析错位，中文注释/输出会变乱码。
+
 打开终端里给的 `http://localhost:5173`，选一个 mp3。
 
 **必须走 `http://localhost`，不要双击 `dist/index.html`。** 浏览器的 `file://` 页面拿不到麦克风权限，
