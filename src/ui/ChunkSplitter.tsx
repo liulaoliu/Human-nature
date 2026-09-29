@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { findQuietestSec } from '../core/chunkEdits'
 import type { Chunk } from '../core/ports'
 
@@ -18,6 +18,52 @@ import type { Chunk } from '../core/ports'
 const PREVIEW_OPTIONS = [1, 2, 5, 0] as const // 0 = 到块尾
 const MIN_VIEW_SEC = 0.2
 const CANVAS_H = 120
+
+interface Columns {
+  lo: Float32Array
+  hi: Float32Array
+  peak: number
+}
+
+/**
+ * 把可视区间降采样成「每像素的 min/max」。用 useMemo 缓存，
+ * 只在视图/宽度/音频变了时重扫一次。
+ */
+function useColumns(
+  samples: Float32Array,
+  sampleRate: number,
+  viewStart: number,
+  viewLen: number,
+  width: number,
+): Columns | null {
+  return useMemo(() => {
+    if (samples.length === 0 || sampleRate <= 0) return null
+    const a = Math.max(0, Math.floor(viewStart * sampleRate))
+    const b = Math.min(samples.length, Math.ceil((viewStart + viewLen) * sampleRate))
+    if (b <= a) return null
+
+    const lo = new Float32Array(width)
+    const hi = new Float32Array(width)
+    const perPx = Math.max(1, Math.floor((b - a) / width))
+    let peak = 0
+    for (let x = 0; x < width; x++) {
+      const from = a + x * perPx
+      const to = Math.min(b, from + perPx)
+      let l = 0
+      let h = 0
+      for (let i = from; i < to; i++) {
+        const v = samples[i]
+        if (v < l) l = v
+        if (v > h) h = v
+      }
+      lo[x] = l
+      hi[x] = h
+      const abs = Math.max(Math.abs(l), Math.abs(h))
+      if (abs > peak) peak = abs
+    }
+    return { lo, hi, peak }
+  }, [samples, sampleRate, viewStart, viewLen, width])
+}
 
 export function ChunkSplitter({
   samples,
@@ -112,8 +158,12 @@ export function ChunkSplitter({
     [chunk.start, chunk.end, chunkLen],
   )
 
-  const timeAtRatio = (r: number) => viewStart + Math.min(1, Math.max(0, r)) * viewLen
-  const ratioAtTime = (t: number) => (t - viewStart) / viewLen
+  // 这两个要稳定引用：draw 依赖它们，放进 deps 才不会每次渲染都重画
+  const timeAtRatio = useCallback(
+    (r: number) => viewStart + Math.min(1, Math.max(0, r)) * viewLen,
+    [viewStart, viewLen],
+  )
+  const ratioAtTime = useCallback((t: number) => (t - viewStart) / viewLen, [viewStart, viewLen])
 
   // ---- 播放 ----
   const stop = useCallback(() => {
@@ -172,13 +222,19 @@ export function ChunkSplitter({
     [],
   )
 
+  // 波形本身：只在「视图/宽度/音频」变了时重扫。播放头/进度线在 draw 里叠加。
+  const cols = useColumns(samples, sampleRate, viewStart, viewLen, width)
+
   // ---- 绘制 ----
   const draw = useCallback(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const dpr = window.devicePixelRatio || 1
-    canvas.width = Math.round(width * dpr)
-    canvas.height = Math.round(CANVAS_H * dpr)
+    // buffer 只在尺寸真的变了时才重设：重设会清空画布内容。
+    const bufW = Math.round(width * dpr)
+    const bufH = Math.round(CANVAS_H * dpr)
+    if (canvas.width !== bufW) canvas.width = bufW
+    if (canvas.height !== bufH) canvas.height = bufH
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
@@ -187,22 +243,16 @@ export function ChunkSplitter({
     ctx.fillStyle = '#0e1014'
     ctx.fillRect(0, 0, width, CANVAS_H)
 
-    if (samples.length === 0 || sampleRate <= 0) {
+    // 每像素的 min/max 来自 useColumns：只在视图/宽度变了时重扫。
+    // 播放时 progress 每帧变、视图不动 —— 直接重扫的话每帧要扫可视范围内的
+    // 全部采样（缩放到整块时 ~100 万次），而波形本身一次都没变。
+    if (!cols) {
       ctx.fillStyle = '#8b93a1'
       ctx.font = '12px system-ui'
       ctx.fillText('这段没有可用的采样', 10, CANVAS_H / 2)
       return
     }
-
-    const a = Math.max(0, Math.floor(viewStart * sampleRate))
-    const b = Math.min(samples.length, Math.ceil((viewStart + viewLen) * sampleRate))
-    const perPx = Math.max(1, Math.floor((b - a) / width))
-
-    let peak = 0
-    for (let i = a; i < b; i++) {
-      const v = Math.abs(samples[i])
-      if (v > peak) peak = v
-    }
+    const { lo, hi, peak } = cols
     const gain = peak > 0 ? 0.92 / peak : 1
 
     const mid = CANVAS_H / 2
@@ -213,17 +263,8 @@ export function ChunkSplitter({
 
     ctx.fillStyle = '#4a9eff'
     for (let x = 0; x < width; x++) {
-      const from = a + x * perPx
-      const to = Math.min(b, from + perPx)
-      let lo = 0
-      let hi = 0
-      for (let i = from; i < to; i++) {
-        const v = samples[i]
-        if (v < lo) lo = v
-        if (v > hi) hi = v
-      }
-      const y1 = mid - hi * gain * (mid - 5)
-      const y2 = mid - lo * gain * (mid - 5)
+      const y1 = mid - hi[x] * gain * (mid - 5)
+      const y2 = mid - lo[x] * gain * (mid - 5)
       ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1))
     }
 
@@ -267,7 +308,7 @@ export function ChunkSplitter({
     const tw = ctx.measureText(label).width
     const lx = Math.min(width - tw - 4, Math.max(4, headX + 6))
     ctx.fillText(label, lx, 16)
-  }, [samples, sampleRate, viewStart, viewLen, width, head, progress, playing, chunk.start])
+  }, [cols, width, head, progress, playing, chunk.start, ratioAtTime])
 
   useEffect(() => {
     draw()
