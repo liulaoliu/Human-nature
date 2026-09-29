@@ -1,6 +1,10 @@
 # 行尾统一成 LF：这个仓库会在 Windows 上开发，但代码本身不该被 CRLF 污染
 * text=auto eol=lf
 
+# 批处理必须是 CRLF：cmd.exe 解析带 goto/标签的 .cmd 时，LF-only 会出错
+*.cmd text eol=crlf
+*.bat text eol=crlf
+
 # 二进制
 *.mp3 binary
 *.png binary
