@@ -14,7 +14,7 @@ import {
   saveToProject,
 } from '../adapters/stateBackup'
 import { parseBackup } from '../core/stateBackup'
-import { GRANULARITY_LABEL, type Granularity } from '../core/ports'
+import { GRANULARITY_LABEL, type Granularity, type Take } from '../core/ports'
 import type { AlignedChunk, ResolvedAnchor } from '../core/alignText'
 import { wordRangeFromText } from '../core/pickWords'
 
@@ -632,12 +632,7 @@ export default function App() {
                 {myTakes.map((t, i) => (
                   <li key={t.id}>
                     <span>第 {i + 1} 条 · {t.durationSec.toFixed(1)}s</span>
-                    <a
-                      href={URL.createObjectURL(t.blob)}
-                      download={`${s.current + 1}-${i + 1}.${extOf(t.mimeType)}`}
-                    >
-                      导出
-                    </a>
+                    <TakeExport take={t} fileName={`${s.current + 1}-${i + 1}.${extOf(t.mimeType)}`} />
                     <button className="ghost sm" onClick={() => void store.removeTake(t.id)}>
                       删
                     </button>
@@ -1126,6 +1121,28 @@ function BackupBar({
         }}
       />
     </>
+  )
+}
+
+/**
+ * 导出一条录音的下载链接。
+ *
+ * object URL 只能手动 revoke。之前这个 `<a href={URL.createObjectURL(...)}>` 直接写在
+ * 渲染里，于是**每次重渲染都新建一个 URL 且从不释放**——而录音时电平表在 60fps 触发
+ * 整页重渲染，一次跟读能漏出几百个。改成每个 take 只建一个，换录音/卸载时释放。
+ */
+function TakeExport({ take, fileName }: { take: Take; fileName: string }) {
+  const [url, setUrl] = useState('')
+  useEffect(() => {
+    const u = URL.createObjectURL(take.blob)
+    setUrl(u)
+    return () => URL.revokeObjectURL(u)
+  }, [take.blob])
+  if (!url) return <span className="pending">导出</span>
+  return (
+    <a href={url} download={fileName}>
+      导出
+    </a>
   )
 }
 

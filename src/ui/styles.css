@@ -148,6 +148,8 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
 .takes { list-style: none; padding: 0; margin: 16px 0 0; border-top: 1px solid var(--line); }
 .takes li { display: flex; align-items: center; gap: 12px; padding: 7px 0; border-bottom: 1px solid #22252c; }
 .takes a { color: var(--accent); font-size: 12px; }
+/* 导出链接的 object URL 还没建好时的占位，避免列表宽度跳一下 */
+.takes .pending { color: var(--dim); font-size: 12px; }
 
 /* 原文面板：整篇摊开，当前块高亮，不再只显示一块 */
 .script { margin-bottom: 16px; }
