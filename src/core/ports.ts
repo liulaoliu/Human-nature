@@ -43,6 +43,11 @@ export interface AudioPlayerPort {
   playWhole(rate: number): Promise<void>
   /** 播放一条跟读录音（用独立元素，不动参考音频的位置） */
   playTake(take: Take, rate: number): Promise<void>
+  /**
+   * 可选：录音回放的额外放大倍数（1 = 不变，2 = 放大 100%）。
+   * 加在「对齐标准音响度」之后，所以是相对标准音的额外增益。
+   */
+  setTakeBoost?(mult: number): void
   pause(): void
   /** 参考音当前播到哪儿（秒）。暂停/播完后停在最后的位置，用来做「接着播」 */
   readonly position: number
@@ -58,7 +63,24 @@ export interface RecorderPort {
   stop(): Promise<{ blob: Blob; mimeType: string; durationSec: number }>
   /** 0..1，输入电平 */
   onLevel(cb: (v: number) => void): void
+  /**
+   * 采集参数：选哪个设备、要不要浏览器那套降噪。
+   * 可选 —— 单测里的假录音器不实现也能跑，真实录音器在 start 前会读它。
+   */
+  configure?(opts: MicOptions): void
   release(): void
+}
+
+/** 麦克风采集参数 */
+export interface MicOptions {
+  /**
+   * 原声优先：关掉浏览器的降噪 / 回声消除 / 自动增益。
+   * Chrome 的降噪很激进，人声会被削得发闷（像隔着一层）；练发音听的就是音色，
+   * 所以默认走原声。嘈杂环境可以退回降噪那一档。
+   */
+  raw?: boolean
+  /** 选定的输入设备。不填用系统默认 */
+  deviceId?: string
 }
 
 /** 录音持久化。切块结果不存，每次打开重跑 VAD 即可（100ms）。 */
@@ -129,6 +151,13 @@ export interface Calibration {
   textStartChunk: number
   /** 鼠标选字定下来的锚点。有锚点时上面两个自动估计值让位 */
   anchors?: ManualAnchor[]
+  /**
+   * 手动撕开的时间点（秒）。VAD 切出的大块在这里再切一刀。
+   * 和锚点一样按音频时间记，换切块粒度后仍认。见 `core/chunkEdits.ts`。
+   */
+  splits?: number[]
+  /** 手动合并：把「起点是这个时间」的那一块并进上一块（秒） */
+  merges?: number[]
 }
 
 export interface CalibrationRepoPort {

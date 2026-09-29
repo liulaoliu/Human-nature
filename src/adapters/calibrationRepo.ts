@@ -3,11 +3,12 @@ import type { Calibration, CalibrationRepoPort } from '../core/ports'
 const KEY = 'shadowing.calibration.v1'
 
 /**
- * 文本对齐校准的持久化。
+ * 文本对齐校准 + 手动切块的持久化。
  *
- * 只存「文件名 → {平移词数, 起始块}」，一篇就两个整数，用 localStorage 足够，
+ * 存「文件名 → {平移词数, 起始块, 选字锚点, 撕合时间}」，一篇几个数字加一小撮锚点，
+ * 用 localStorage 足够，
  * 不值得为它上 IndexedDB，更不值得引 SQLite（浏览器里要 WASM 运行时 + 异步存储，
- * 为了两个整数代价太大）。
+ * 为了这几个数字代价太大）。
  *
  * localStorage 和 IndexedDB 一样按「来源」隔离，vite 端口是锁死的（见 vite.config.ts），
  * 所以刷新、重开都在同一条记录上。

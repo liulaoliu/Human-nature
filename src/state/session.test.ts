@@ -13,6 +13,8 @@ class FakePlayer implements AudioPlayerPort {
   position = 0
   /** 让 playRange 挂住不返回，模拟「正在播」（测暂停/续播用） */
   holdPlayback = false
+  /** 录音回放的额外放大倍数（store.setTakeBoost 应转到这里） */
+  takeBoost = 1
   private pending: (() => void) | null = null
   private paused = false
   private loaded = false
@@ -51,6 +53,10 @@ class FakePlayer implements AudioPlayerPort {
 
   async playTake(take: Take, rate: number) {
     this.calls.push(`take:${take.id}@${rate}`)
+  }
+
+  setTakeBoost(mult: number) {
+    this.takeBoost = mult
   }
 
   pause() {
@@ -249,6 +255,13 @@ describe('SessionStore 播放', () => {
     await store.playChunk()
     const c = store.getState().chunks[0]
     expect(player.calls).toEqual([`ref:${c.start.toFixed(2)}-${c.end.toFixed(2)}@0.75`])
+  })
+
+  it('回放放大倍数会转给播放器', async () => {
+    const { store, player } = makeStore()
+    await store.load(blob, 'a.mp3')
+    store.setTakeBoost(3)
+    expect(player.takeBoost).toBe(3)
   })
 
   it('没有块时播放不炸', async () => {
@@ -504,6 +517,34 @@ describe('SessionStore 录音', () => {
     await store.removeTake(id)
     expect(store.getState().takes).toHaveLength(0)
   })
+
+  it('录音峰值太低会提示麦克风电平低，正常峰值不提示', async () => {
+    const { store, recorder } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.toggleRecording()
+    recorder.emitLevel(0.01)
+    await store.toggleRecording()
+    expect(store.getState().lowMic).toBe(true)
+    store.dismissLowMic()
+    expect(store.getState().lowMic).toBe(false)
+
+    await store.toggleRecording()
+    recorder.emitLevel(0.4)
+    await store.toggleRecording()
+    expect(store.getState().lowMic).toBe(false)
+  })
+
+  it('「说完静音多久算结束」可调，且被夹在合理范围', async () => {
+    const { store } = makeStore()
+    await store.load(blob, 'a.mp3')
+    expect(store.getState().hangoverMs).toBe(2500)
+    store.setHangoverMs(1000)
+    expect(store.getState().hangoverMs).toBe(1000)
+    store.setHangoverMs(99999)
+    expect(store.getState().hangoverMs).toBe(15000)
+    store.setHangoverMs(1)
+    expect(store.getState().hangoverMs).toBe(800)
+  })
 })
 
 describe('SessionStore A/B 对比', () => {
@@ -739,7 +780,38 @@ describe('SessionStore 连续跟读', () => {
     recorder.emitLevel(0.5) // 说了一句
     await tick(500)
     expect(store.getState().recording).toBe(true) // 静半秒还不够
-    await tick(1500) // 累计两秒静音
+    await tick(2200) // 累计 2.7 秒 > 2.5 秒默认
+    expect(store.getState().recording).toBe(false)
+    expect(store.getState().takes).toHaveLength(1)
+  })
+
+  it('小声说话也算「在说」：电平低但高于底噪，不会被提前掐断', async () => {
+    const { store, recorder } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.setAutoCycle(true)
+    void store.runAutoCycle()
+    await tick(0)
+    await tick(600)
+    expect(store.getState().recording).toBe(true)
+
+    // 0.03 是「小声音」：固定阈值时代（0.06）会被当成静音，两秒后就误停
+    for (let i = 0; i < 15; i++) {
+      recorder.emitLevel(0.03)
+      await tick(200)
+    }
+    expect(store.getState().recording).toBe(true) // 3 秒了还在录
+    store.abortCycle()
+  })
+
+  it('小声说完停下，照样会收工（自适应阈值不会永不触发）', async () => {
+    const { store, recorder } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.setAutoCycle(true)
+    void store.runAutoCycle()
+    await tick(0)
+    await tick(600)
+    recorder.emitLevel(0.03)
+    await tick(2700)
     expect(store.getState().recording).toBe(false)
     expect(store.getState().takes).toHaveLength(1)
   })

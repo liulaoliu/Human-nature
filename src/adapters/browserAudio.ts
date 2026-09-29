@@ -1,4 +1,6 @@
-import type { AudioPlayerPort, RecorderPort, Take } from '../core/ports'
+import type { AudioPlayerPort, MicOptions, RecorderPort, Take } from '../core/ports'
+import { applyGain, matchGain, peakSafeGain, speechRms } from '../core/loudness'
+import { floatToWav } from '../core/wav'
 
 /** 提前 20ms 停，否则下一块的第一个字会被吃掉 */
 const END_EPSILON = 0.02
@@ -13,6 +15,12 @@ export class BrowserPlayer implements AudioPlayerPort {
   private _samples: Float32Array = new Float32Array(0)
   private _sampleRate = 0
   private _duration = 0
+  /** 参考音的响度基准，用来把「我的录音」回放调到一样响 */
+  private _refLevel = 0
+  /** 录音回放的额外放大倍数（在响度对齐之后再乘） */
+  private takeBoost = 1
+  /** 按增益缩放后重编码的 WAV（按 take id 缓存），回放用它 */
+  private takeBlobs = new Map<string, Blob>()
 
   constructor() {
     this.el = new Audio()
@@ -41,6 +49,7 @@ export class BrowserPlayer implements AudioPlayerPort {
       this._samples = toMono(buf)
       this._sampleRate = buf.sampleRate
       this._duration = buf.duration
+      this._refLevel = speechRms(this._samples, this._sampleRate)
     } finally {
       void ctx.close()
     }
@@ -83,10 +92,20 @@ export class BrowserPlayer implements AudioPlayerPort {
     })
   }
 
-  playTake(take: Take, rate: number): Promise<void> {
+  setTakeBoost(mult: number): void {
+    const v = Math.min(4, Math.max(0.5, mult))
+    if (v === this.takeBoost) return
+    this.takeBoost = v
+    this.takeBlobs.clear() // 增益变了，缓存的重编码要作废
+  }
+
+  async playTake(take: Take, rate: number): Promise<void> {
     this.pause()
+    // 先把「我的录音」缩放到和标准音一样响，重编码成 WAV 再播。
+    // 解码/编码失败就退回原文件，至少能出声。
+    const blob = await this.normalizedTake(take)
     if (this.takeUrl) URL.revokeObjectURL(this.takeUrl)
-    this.takeUrl = URL.createObjectURL(take.blob)
+    this.takeUrl = URL.createObjectURL(blob)
     this.takeEl.src = this.takeUrl
     this.takeEl.playbackRate = rate
     setPreservesPitch(this.takeEl)
@@ -100,6 +119,35 @@ export class BrowserPlayer implements AudioPlayerPort {
         this.endPending = null
       }
     })
+  }
+
+  /**
+   * 把一条录音按增益缩放、重编码成 WAV（按 id 缓存）。
+   * 增益 = 对齐标准音响度所需，再受「峰值不超过 0.99」约束，所以不会削波。
+   */
+  private async normalizedTake(take: Take): Promise<Blob> {
+    const cached = this.takeBlobs.get(take.id)
+    if (cached) return cached
+    try {
+      const ctx = new AudioContext()
+      let buf: AudioBuffer
+      try {
+        buf = await ctx.decodeAudioData(await take.blob.arrayBuffer())
+      } finally {
+        void ctx.close()
+      }
+      const channels: Float32Array[] = []
+      for (let c = 0; c < buf.numberOfChannels; c++) channels.push(buf.getChannelData(c))
+      const wanted =
+        (this._refLevel > 0 ? matchGain(this._refLevel, speechRms(toMono(buf), buf.sampleRate)) : 1) *
+        this.takeBoost
+      const gain = peakSafeGain(channels, wanted)
+      const wav = floatToWav(channels.map((ch) => applyGain(ch, gain)), buf.sampleRate)
+      this.takeBlobs.set(take.id, wav)
+      return wav
+    } catch {
+      return take.blob
+    }
   }
 
   pause(): void {
@@ -120,6 +168,8 @@ export class BrowserPlayer implements AudioPlayerPort {
     this._samples = new Float32Array(0)
     this._sampleRate = 0
     this._duration = 0
+    this._refLevel = 0
+    this.takeBlobs.clear()
   }
 }
 
@@ -155,6 +205,22 @@ export function pickRecordingMime(): string {
   return ''
 }
 
+/**
+ * 列出可用的麦克风。首次授权前 label 多半是空的，所以拿不到名字时给个序号占位。
+ * 换麦是排查「发闷」最快的一步：蓝牙耳麦只有窄带，换有线/USB 麦立刻不一样。
+ */
+export async function listAudioInputs(): Promise<Array<{ deviceId: string; label: string }>> {
+  if (!navigator.mediaDevices?.enumerateDevices) return []
+  try {
+    const devices = await navigator.mediaDevices.enumerateDevices()
+    return devices
+      .filter((d) => d.kind === 'audioinput')
+      .map((d, i) => ({ deviceId: d.deviceId, label: d.label || `麦克风 ${i + 1}` }))
+  } catch {
+    return []
+  }
+}
+
 export class BrowserRecorder implements RecorderPort {
   private stream: MediaStream | null = null
   private rec: MediaRecorder | null = null
@@ -165,9 +231,14 @@ export class BrowserRecorder implements RecorderPort {
   private raf = 0
   private startedAt = 0
   private levelCb: ((v: number) => void) | null = null
+  private opts: MicOptions = {}
 
   onLevel(cb: (v: number) => void): void {
     this.levelCb = cb
+  }
+
+  configure(opts: MicOptions): void {
+    this.opts = { ...this.opts, ...opts }
   }
 
   async start(): Promise<void> {
@@ -178,9 +249,16 @@ export class BrowserRecorder implements RecorderPort {
           : '这个浏览器不支持录音',
       )
     }
-    this.stream = await navigator.mediaDevices.getUserMedia({
-      audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
-    })
+    // 「原声」只关掉浏览器那套降噪/回声消除（Chrome 的 noiseSuppression 会把高频泛音
+    // 削掉，录出来发闷、像隔一层）。**自动增益始终开**：它只管音量、不改音色，
+    // 关掉的话小声音会被「说完了」判定误伤，回放也明显偏小。
+    const audio: MediaTrackConstraints = {
+      echoCancellation: !this.opts.raw,
+      noiseSuppression: !this.opts.raw,
+      autoGainControl: true,
+    }
+    if (this.opts.deviceId) audio.deviceId = { exact: this.opts.deviceId }
+    this.stream = await navigator.mediaDevices.getUserMedia({ audio })
 
     const mime = pickRecordingMime()
     this.rec = new MediaRecorder(this.stream, mime ? { mimeType: mime } : undefined)

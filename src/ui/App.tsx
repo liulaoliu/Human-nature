@@ -1,7 +1,8 @@
 import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import { SessionStore } from '../state/session'
 import { useSession } from './useSession'
-import { BrowserPlayer, BrowserRecorder } from '../adapters/browserAudio'
+import { BrowserPlayer, BrowserRecorder, listAudioInputs } from '../adapters/browserAudio'
+import { ChunkSplitter } from './ChunkSplitter'
 import { createTakeRepo } from '../adapters/takeRepo'
 import { createScriptRepo } from '../adapters/scriptRepo'
 import { createScriptEditRepo } from '../adapters/scriptEditRepo'
@@ -20,6 +21,66 @@ import { wordRangeFromText } from '../core/pickWords'
 const RATES = [0.5, 0.75, 1, 1.5, 2]
 const GRANS: Granularity[] = ['short', 'normal', 'long']
 
+/** 原文显示模式：整篇 / 聚焦（当前块大字，邻近压暗）/ 单块 */
+type ViewMode = 'full' | 'focus' | 'block'
+const VIEW_ORDER: ViewMode[] = ['full', 'focus', 'block']
+const VIEW_LABEL: Record<ViewMode, string> = { full: '全文', focus: '聚焦', block: '单块' }
+
+const VIEW_KEY = 'shadowing.ui.viewMode'
+const MIC_RAW_KEY = 'shadowing.ui.micRaw'
+const MIC_DEV_KEY = 'shadowing.ui.micDevice'
+const HANGOVER_KEY = 'shadowing.ui.hangoverMs'
+const TAKE_BOOST_KEY = 'shadowing.ui.takeBoost'
+
+function readViewMode(): ViewMode {
+  try {
+    const v = localStorage.getItem(VIEW_KEY)
+    return v === 'focus' || v === 'block' ? v : 'full'
+  } catch {
+    return 'full'
+  }
+}
+/** 默认「原声优先」——发闷多半就是浏览器降噪干的 */
+function readMicRaw(): boolean {
+  try {
+    return localStorage.getItem(MIC_RAW_KEY) !== '0'
+  } catch {
+    return true
+  }
+}
+function readMicDevice(): string {
+  try {
+    return localStorage.getItem(MIC_DEV_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+/** 「说完静音多久算结束」，默认 2.5 秒（读得慢/有停顿的人够用） */
+function readHangover(): number {
+  try {
+    const v = Number(localStorage.getItem(HANGOVER_KEY))
+    return Number.isFinite(v) && v >= 800 ? v : 2500
+  } catch {
+    return 2500
+  }
+}
+/** 录音回放额外放大倍数，默认 2（= 放大 100%） */
+function readTakeBoost(): number {
+  try {
+    const v = Number(localStorage.getItem(TAKE_BOOST_KEY))
+    return Number.isFinite(v) && v >= 0.5 ? v : 2
+  } catch {
+    return 2
+  }
+}
+function storeUi(key: string, value: string) {
+  try {
+    localStorage.setItem(key, value)
+  } catch {
+    // 隐私模式存不了就算了，不影响用
+  }
+}
+
 export default function App() {
   const storeRef = useRef<SessionStore | null>(null)
   if (!storeRef.current) {
@@ -36,10 +97,60 @@ export default function App() {
   const s = useSession(store)
   const [editing, setEditing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const listRef = useRef<HTMLOListElement>(null)
+  const prevChunkCount = useRef(0)
+  const [viewMode, setViewMode] = useState<ViewMode>(readViewMode)
+  const [splitOpen, setSplitOpen] = useState(false)
+  const [micRaw, setMicRaw] = useState<boolean>(readMicRaw)
+  const [micDevice, setMicDevice] = useState<string>(readMicDevice)
+  const [hangoverMs, setHangoverMs] = useState<number>(readHangover)
+  const [takeBoost, setTakeBoost] = useState<number>(readTakeBoost)
+  const [inputs, setInputs] = useState<Array<{ deviceId: string; label: string }>>([])
+
+  // UI 偏好（显示模式 / 麦克风）存本机，刷新还在
+  useEffect(() => storeUi(VIEW_KEY, viewMode), [viewMode])
+  useEffect(() => storeUi(MIC_RAW_KEY, micRaw ? '1' : '0'), [micRaw])
+  useEffect(() => storeUi(MIC_DEV_KEY, micDevice), [micDevice])
+  // 「说完静音多久算结束」交给 store（连续跟读跑那一轮时读它）
+  useEffect(() => {
+    store.setHangoverMs(hangoverMs)
+    storeUi(HANGOVER_KEY, String(hangoverMs))
+  }, [store, hangoverMs])
+  // 录音回放的额外放大倍数
+  useEffect(() => {
+    store.setTakeBoost(takeBoost)
+    storeUi(TAKE_BOOST_KEY, String(takeBoost))
+  }, [store, takeBoost])
+  // 采集参数要在录音前交给录音器
+  useEffect(() => {
+    store.setMicOptions({ raw: micRaw, deviceId: micDevice || undefined })
+  }, [store, micRaw, micDevice])
+  // 首次授权前 label 可能为空，拿到一次权限后（试录/录音）再刷新
+  useEffect(() => {
+    void listAudioInputs().then(setInputs)
+  }, [])
+
+  // 左侧块列表自动滚到当前块；刚撕开新增了一块时，滚到那块，让它一眼能看见
+  useEffect(() => {
+    if (s.status !== 'ready') return
+    const ol = listRef.current
+    const grew = prevChunkCount.current > 0 && s.chunks.length > prevChunkCount.current
+    prevChunkCount.current = s.chunks.length
+    if (!ol || ol.children.length === 0) return
+    const idx = grew ? Math.min(s.current + 1, s.chunks.length - 1) : s.current
+    const el = ol.children[idx] as HTMLElement | undefined
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [s.status, s.current, s.chunks.length])
 
   const exportBackup = () => {
     downloadBackup(currentBackup())
     setNotice('已下载备份 json')
+  }
+
+  /** 试录几秒马上回放，用来现场对比设备/音质；顺带把设备名刷新出来 */
+  const runTestMic = async () => {
+    await store.testMic(2500)
+    setInputs(await listAudioInputs())
   }
 
   const saveToProjectFile = async () => {
@@ -71,6 +182,8 @@ export default function App() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) return
+      // 撕块面板开着时，空格/方向键/回车归它管（面板自己用捕获阶段处理）
+      if (splitOpen && (e.key === ' ' || e.key.startsWith('Arrow') || e.key === 'Enter')) return
       if (e.key === ' ') {
         e.preventDefault()
         void store.toggleChunkPlay()
@@ -86,6 +199,11 @@ export default function App() {
         void store.compareAB(false)
       } else if (e.key === 't' || e.key === 'T') {
         setEditing((v) => !v)
+      } else if (e.key === 'v' || e.key === 'V') {
+        // 原文显示模式：全文 → 聚焦 → 单块
+        setViewMode((v) => VIEW_ORDER[(VIEW_ORDER.indexOf(v) + 1) % VIEW_ORDER.length])
+      } else if (e.key === 'x' || e.key === 'X') {
+        setSplitOpen((v) => !v)
       } else if (e.key === 's' || e.key === 'S') {
         store.setTextStartChunk(store.getState().current)
       } else if (e.code === 'Comma' || e.key === ',' || e.key === '<') {
@@ -102,7 +220,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [store])
+  }, [store, splitOpen])
 
   const current = s.chunks[s.current]
   const myTakes = current ? s.takes.filter((t) => t.chunkIndex === current.index) : []
@@ -166,6 +284,16 @@ export default function App() {
         </div>
       )}
 
+      {s.lowMic && (
+        <div className="banner">
+          麦克风电平很低（录音峰值 &lt; 0.03），录出来会又小又难判定。去系统「声音 → 输入」把这个麦的
+          音量 / 增强调大，或在下拉里换一个设备端点（同名设备常有好几个）再试。
+          <button className="ghost sm" onClick={() => store.dismissLowMic()}>
+            知道了
+          </button>
+        </div>
+      )}
+
       {s.status === 'loading' && <div className="banner">解码中…</div>}
       {s.status === 'error' && <div className="banner err">打不开：{s.error}</div>}
       {s.error && s.status === 'ready' && (
@@ -177,9 +305,10 @@ export default function App() {
 
       {s.status === 'ready' && (
         <div className="body">
-          <ol className="list">
+          <ol className="list" ref={listRef}>
             {s.chunks.map((c) => {
               const n = s.takes.filter((t) => t.chunkIndex === c.index).length
+              const cut = s.splitPoints.some((t) => Math.abs(t - c.start) < 0.02)
               return (
                 <li key={c.index}>
                   <button
@@ -188,7 +317,14 @@ export default function App() {
                   >
                     <span className="i">{c.index + 1}</span>
                     <span className="t">{fmt(c.start)}</span>
-                    <span className="d">{n > 0 ? <b title={`${n} 条录音`}>●{n}</b> : null}</span>
+                    <span className="d">
+                      {cut && (
+                        <span className="cut" title="手动撕开的新边界">
+                          ✂
+                        </span>
+                      )}
+                      {n > 0 ? <b title={`${n} 条录音`}>●{n}</b> : null}
+                    </span>
                   </button>
                 </li>
               )
@@ -215,6 +351,8 @@ export default function App() {
               aligned={s.aligned}
               current={s.current}
               editing={editing}
+              viewMode={viewMode}
+              onViewMode={setViewMode}
               onToggle={() => setEditing((v) => !v)}
               onSubmit={(text) => {
                 store.setScript(text)
@@ -235,10 +373,26 @@ export default function App() {
                 />
                 连续跟读（标准音 → 录音 → 回放）
               </label>
+              {s.autoCycle && (
+                <>
+                  <span className="lab">说完静音</span>
+                  <select
+                    value={String(hangoverMs)}
+                    onChange={(e) => setHangoverMs(Number(e.target.value))}
+                    title="连续跟读里，说完之后静多久算「读完」并自动进回放。读得慢、句中有停顿就调长"
+                  >
+                    <option value="1600">1.6s</option>
+                    <option value="2500">2.5s</option>
+                    <option value="4000">4s</option>
+                    <option value="6000">6s</option>
+                  </select>
+                  <span className="lab">算读完</span>
+                </>
+              )}
               {s.autoCycle && s.cycleStep === 'rec' && (
                 <span className="lab">
-                  录音中 · 说完停 1.6 秒自动结束（最长 {Math.round(s.autoRecordMs / 1000)} 秒），
-                  按空格或 R 直接结束并回放
+                  录音中 · 说完停 {(s.hangoverMs / 1000).toFixed(1)} 秒自动结束（最长{' '}
+                  {Math.round(s.autoRecordMs / 1000)} 秒），按空格或 R 直接结束并回放
                 </span>
               )}
               {s.autoCycle && s.cycleStep === 'ref' && <span className="lab">正在放标准音…</span>}
@@ -298,7 +452,49 @@ export default function App() {
                   {GRANULARITY_LABEL[g]}
                 </button>
               ))}
+              <button
+                className={splitOpen ? 'chip on' : 'chip'}
+                onClick={() => setSplitOpen((v) => !v)}
+                title="打开波形，把这一大块手动撕成两段（X）"
+              >
+                撕开 / 微调（X）
+              </button>
+              {s.chunkEditCount > 0 && <span className="off">已手动切 {s.chunkEditCount} 处</span>}
             </div>
+
+            {splitOpen && current && (
+              <ChunkSplitter
+                samples={store.audioSamples().samples}
+                sampleRate={store.audioSamples().sampleRate}
+                chunk={current}
+                editCount={s.chunkEditCount}
+                canMergeNext={s.current < s.chunks.length - 1}
+                onAudition={(a, b) => store.auditionRange(a, b)}
+                onStop={() => store.stopPreview()}
+                getPosition={() => store.playbackPosition()}
+                onSplit={(t) => {
+                  const before = store.getState().chunks.length
+                  const at = store.getState().current
+                  store.splitCurrentChunk(t)
+                  const after = store.getState().chunks.length
+                  if (after > before) {
+                    setNotice(
+                      `已撕开第 ${at + 1} 块：左侧列表新增了第 ${at + 2} 块（带 ✂ 标记）· 已存本机`,
+                    )
+                  }
+                }}
+                onMergeNext={() => {
+                  const before = store.getState().chunks.length
+                  store.mergeCurrentWithNext()
+                  if (store.getState().chunks.length < before) setNotice('已合并相邻两块 · 已存本机')
+                }}
+                onReset={() => {
+                  store.resetChunkEdits()
+                  setNotice('已清除本篇的手动切分 · 已存本机')
+                }}
+                onClose={() => setSplitOpen(false)}
+              />
+            )}
 
             {s.script.trim() && s.manualAnchors === 0 && (
               <div className="row">
@@ -359,6 +555,63 @@ export default function App() {
               <div className="meter">
                 <div className="bar" style={{ width: `${Math.round(s.level * 100)}%` }} />
               </div>
+              <span className="lv" title="当前输入电平（峰值）。说话时应明显高于安静时的数">
+                {s.level.toFixed(2)}
+              </span>
+            </div>
+
+            <div className="row mic">
+              <span className="lab">麦克风</span>
+              <select
+                value={micDevice}
+                onChange={(e) => setMicDevice(e.target.value)}
+                title="换一个输入设备试试——蓝牙耳麦只有窄带，天生发闷"
+              >
+                <option value="">系统默认</option>
+                {inputs.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>
+                    {d.label}
+                  </option>
+                ))}
+              </select>
+              <span className="lab">音质</span>
+              <button
+                className={micRaw ? 'chip on' : 'chip'}
+                onClick={() => setMicRaw(true)}
+                title="关掉浏览器的降噪 / 回声消除，保真优先（发闷通常就是降噪干的）；自动增益保留，保证音量"
+              >
+                原声
+              </button>
+              <button
+                className={!micRaw ? 'chip on' : 'chip'}
+                onClick={() => setMicRaw(false)}
+                title="打开浏览器那套降噪，嘈杂环境用"
+              >
+                降噪
+              </button>
+              <button
+                className="ghost sm"
+                onClick={() => void runTestMic()}
+                disabled={s.recording}
+                title="录 2.5 秒马上回放，用来对比不同设备/音质。不会占当前块的录音"
+              >
+                试录 2.5 秒
+              </button>
+              <span className="lab">回放放大</span>
+              <select
+                value={String(takeBoost)}
+                onChange={(e) => setTakeBoost(Number(e.target.value))}
+                title="录音回放的额外音量（在「对齐标准音」之上再乘）。觉得还是小就往大调；太大可能削波"
+              >
+                <option value="1">不放大</option>
+                <option value="1.5">+50%</option>
+                <option value="2">+100%</option>
+                <option value="3">+200%</option>
+                <option value="4">+300%</option>
+              </select>
+              <span className="lab">
+                {micRaw ? '原声（推荐）' : '降噪'} · 蓝牙麦换有线常有奇效
+              </span>
             </div>
 
             <div className="row">
@@ -395,6 +648,7 @@ export default function App() {
 
             <p className="hint">
               空格 播放/暂停 · A/D（或 ↑↓）切块（直接跑）· R 录音（停了自动回放）· C 对比 · T 改文本 ·
+              V 原文显示模式 · X 撕开/微调当前块（面板里点波形试听、Enter 在播放头撕开） ·
               S 标记正文起点 · 选字锚点用 , . 调起点、Shift+, . 调终点 ·
               [ ] 微调文字偏移（Shift 加大步长）。录音、进度都存本机，关页面不丢。
             </p>
@@ -421,6 +675,8 @@ function ScriptPanel({
   aligned,
   current,
   editing,
+  viewMode,
+  onViewMode,
   onToggle,
   onSubmit,
   onPickWords,
@@ -438,6 +694,8 @@ function ScriptPanel({
   aligned: AlignedChunk[]
   current: number
   editing: boolean
+  viewMode: ViewMode
+  onViewMode: (v: ViewMode) => void
   onToggle: () => void
   onSubmit: (text: string) => void
   onPickWords: (startWord: number, endWord: number) => void
@@ -545,6 +803,13 @@ function ScriptPanel({
             ? `选中第 ${current + 1} 块听到的文字（从第一个词拖到最后一个词）`
             : ''}
         </span>
+        <button
+          className="chip sm"
+          onClick={() => onViewMode(VIEW_ORDER[(VIEW_ORDER.indexOf(viewMode) + 1) % VIEW_ORDER.length])}
+          title="原文显示模式：全文 → 聚焦（当前块大字、邻近压暗）→ 单块（只看当前）。快捷键 V"
+        >
+          显示：{VIEW_LABEL[viewMode]}（V）
+        </button>
         <label
           className={picking ? 'pick-toggle on' : 'pick-toggle'}
           title="打开后，用鼠标选中你听到的那段文字，就把第 N 块绑到它上面"
@@ -552,16 +817,22 @@ function ScriptPanel({
           <input
             type="checkbox"
             checked={picking}
-            onChange={(e) => setPicking(e.target.checked)}
+            onChange={(e) => {
+              setPicking(e.target.checked)
+              // 单块/聚焦把别的段藏了就没法跨段拖选，选字时先回到全文
+              if (e.target.checked) onViewMode('full')
+            }}
           />
           选字定块
         </label>
       </div>
-      <div className={picking ? 'full picking' : 'full'} ref={boxRef}>
+      <div className={picking ? `full picking mode-${viewMode}` : `full mode-${viewMode}`} ref={boxRef}>
         {aligned.map((a) => {
           const here = a.index === current
+          const near = Math.abs(a.index - current) === 1
           const cls = ['seg']
           if (here) cls.push('here')
+          if (near) cls.push('near')
           if (a.anchored) cls.push('anchored')
 
           const marks: Mark[] = []
