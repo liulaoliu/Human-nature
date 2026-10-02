@@ -159,6 +159,8 @@ export default function ReaderApp() {
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
   const [savedId, setSavedId] = useState<string | null>(null)
+  /** 有内容改动、需要（首次则建立记录）自动保存 */
+  const [pendingSave, setPendingSave] = useState(false)
   const [sourceText, setSourceText] = useState('')
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState('')
@@ -1100,6 +1102,7 @@ export default function ReaderApp() {
     setDoc({ paragraphs: next.paragraphs, sentences })
     setSourceText(cleaned)
     setEditing(false)
+    setPendingSave(true)
     flash('已应用修改（已粘回的分析按句保留）')
   }, [draft, doc, flash])
 
@@ -1111,6 +1114,13 @@ export default function ReaderApp() {
     const t = window.setTimeout(() => void saveCurrent(), 900)
     return () => window.clearTimeout(t)
   }, [doc, savedId, saveCurrent])
+
+  // 应用结果 / 编辑正文后：没有保存记录就立即建一条，之后照旧自动存
+  useEffect(() => {
+    if (!pendingSave || !doc) return
+    setPendingSave(false)
+    void saveCurrent()
+  }, [pendingSave, doc, saveCurrent])
 
   // 启动后恢复「上次打开的文章」
   const restored = useRef(false)
@@ -1440,6 +1450,8 @@ export default function ReaderApp() {
       setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
     }
     persist(next)
+    // 有句子级结果（翻译/语法/搭配）或落到句子上 → 正文有改动，自动保存
+    if (result.sentences?.length || (lastTask && sentence)) setPendingSave(true)
     setPasted('')
     flash(result.words?.length ? `已填入 ${result.words.length} 个词条` : '已应用')
   }, [pasted, library, lastTask, sentence, persist, flash])
