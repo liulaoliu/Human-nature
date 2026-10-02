@@ -1,4 +1,4 @@
-import type { AnalysisResult, Sentence, WordAnalysis } from '../types/document'
+import type { AnalysisResult, Sentence, SentenceAnalysis, WordAnalysis } from '../types/document'
 
 /**
  * 精读模块：一键提示词生成 + 粘回解析。
@@ -125,7 +125,17 @@ export function parseLookupTable(raw: string): WordAnalysis[] {
 
 function normalizeJson(value: unknown): AnalysisResult {
   if (Array.isArray(value)) {
-    return { words: value.filter((v): v is WordAnalysis => !!v && typeof v === 'object' && 'word' in v) }
+    const words = value.filter((v): v is WordAnalysis => !!v && typeof v === 'object' && 'word' in v)
+    const sents = value.filter(
+      (v): v is { sentenceId?: string; id?: string; translation?: string } =>
+        !!v && typeof v === 'object' && ('sentenceId' in v || ('id' in v && 'translation' in v)),
+    )
+    if (sents.length) {
+      return {
+        sentences: sents.map((s) => ({ sentenceId: s.sentenceId ?? s.id ?? '', translation: s.translation })),
+      }
+    }
+    return { words }
   }
   if (value && typeof value === 'object') {
     const obj = value as { words?: unknown; sentences?: unknown; word?: unknown }
@@ -149,6 +159,8 @@ export function parseAnalysis(raw: string): AnalysisResult {
       // 落到表格解析
     }
   }
+  const sentences = parseTranslationTable(text)
+  if (sentences.length) return { sentences }
   const words = parseLookupTable(text)
   if (words.length) return { words }
   return {}
@@ -203,4 +215,27 @@ export function buildCleanupPrompt(raw: string): string {
 ${FENCE}
 ${raw.trim()}
 ${FENCE}`
+}
+
+/** 解析「id | 译文」逐句翻译表。 */
+export function parseTranslationTable(raw: string): SentenceAnalysis[] {
+  const out: SentenceAnalysis[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim()
+    if (!t || /^[|\-\s:]+$/.test(t)) continue
+    const i = t.search(/[|｜]/)
+    if (i < 0) continue
+    const id = t.slice(0, i).replace(/[`*\s]/g, '')
+    const translation = t.slice(i + 1).replace(/^[|｜\s]+/, '').trim()
+    if (/^s\d+$/i.test(id) && translation) out.push({ sentenceId: id, translation })
+  }
+  return out
+}
+
+/**
+ * 全文翻译提示词：按句子 id 逐句翻译，id 原样返回，位置天然对齐。
+ */
+export function buildTranslateAllPrompt(sentences: { id: string; text: string }[]): string {
+  const list = sentences.map((s) => `${s.id} | ${s.text}`).join('\n')
+  return `${HEADER}\n下面是按顺序编号的英文句子。请逐句翻译成地道、通顺的中文，**每个 id 输出一行**，格式固定：\nid | 中文翻译\n要求：id 原样照抄、顺序不变、不合并也不拆分句子；只输出这些行，不要解释、不要加标题。\n${list}`
 }

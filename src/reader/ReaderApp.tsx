@@ -22,6 +22,7 @@ import {
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildPrompt,
+  buildTranslateAllPrompt,
   parseAnalysis,
   type AnalysisTask,
 } from '../core/analyzer'
@@ -196,6 +197,15 @@ export default function ReaderApp() {
   const [articleBook, setArticleBook] = useState('')
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
+  /** 译文显示：只看原文 / 原文+译文 / 只看译文 */
+  const [translateView, setTranslateView] = useState<'off' | 'below' | 'only'>(() => {
+    try {
+      const v = localStorage.getItem('reader:translateView')
+      return v === 'below' || v === 'only' ? v : 'off'
+    } catch {
+      return 'off'
+    }
+  })
   const [pdfRange, setPdfRange] = useState('')
   const [importing, setImporting] = useState('')
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
@@ -395,6 +405,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [newLimit])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:translateView', translateView)
+    } catch {
+      // 忽略
+    }
+  }, [translateView])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -1348,6 +1365,22 @@ export default function ReaderApp() {
     [library.items, flash],
   )
 
+  /** 全文翻译：按句子 id 逐句翻译，位置天然对齐。 */
+  const copyTranslateAll = useCallback(async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    const prompt = buildTranslateAllPrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text })))
+    setLastTask('translate')
+    try {
+      await navigator.clipboard.writeText(prompt)
+      flash('已复制全文翻译提示词；把结果贴回「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [doc, flash])
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
@@ -1550,6 +1583,22 @@ export default function ReaderApp() {
             <button className={vocabMode ? 'primary' : ''} onClick={toggleVocabMode} title="选词模式（W）：默认选单个词；按住 Alt 拖动选词组">
               选词模式{vocabMode ? ' · 开' : ''}
             </button>
+          )}
+          {doc && !editing && (
+            <button onClick={() => void copyTranslateAll()} title="生成按句 id 的全文翻译提示词；粘回「应用结果」后逐句对齐">
+              全文翻译
+            </button>
+          )}
+          {doc && !editing && (
+            <select
+              value={translateView}
+              onChange={(e) => setTranslateView(e.target.value as 'off' | 'below' | 'only')}
+              title="译文显示：只看原文 / 原文+译文 / 只看译文"
+            >
+              <option value="off">只看原文</option>
+              <option value="below">原文+译文</option>
+              <option value="only">只看译文</option>
+            </select>
           )}
           {doc && !editing && (
             <button onClick={enterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
@@ -1856,40 +1905,77 @@ export default function ReaderApp() {
             ) : (
               <>
                 <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
-                <article className="article" ref={articleRef}>
+                <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
                   {vocabMode && lastPicked && bubblePos && (
                     <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
                       {lastPicked.word}
                     </div>
                   )}
-                  {doc.paragraphs.map((p) => (
-                    <p className="para" key={p.id}>
-                      {p.sentenceIds.map((sid) => {
-                        const s = doc.sentences.find((x) => x.id === sid)
-                        if (!s) return null
-                        return (
-                          <span
-                            key={sid}
-                            data-sid={sid}
-                            className={
-                              'sent' +
-                              (selectedId === sid ? ' sel' : '') +
-                              (peekSid === sid && selectedId !== sid ? ' peek' : '') +
-                              (vocabSidSet.has(sid) ? ' has-vocab' : '')
-                            }
-                            onClick={() => setSelectedId(sid)}
-                          >
-                            {sentenceNodes(
-                              s.text,
-                              useExact && exactRange?.sid === sid ? exactRange : null,
-                              libraryLemmas,
-                              focusEntry,
-                            )}{' '}
-                          </span>
-                        )
-                      })}
-                    </p>
-                  ))}
+                  {translateView === 'off'
+                    ? doc.paragraphs.map((p) => (
+                        <p className="para" key={p.id}>
+                          {p.sentenceIds.map((sid) => {
+                            const s = doc.sentences.find((x) => x.id === sid)
+                            if (!s) return null
+                            return (
+                              <span
+                                key={sid}
+                                data-sid={sid}
+                                className={
+                                  'sent' +
+                                  (selectedId === sid ? ' sel' : '') +
+                                  (peekSid === sid && selectedId !== sid ? ' peek' : '') +
+                                  (vocabSidSet.has(sid) ? ' has-vocab' : '')
+                                }
+                                onClick={() => setSelectedId(sid)}
+                              >
+                                {sentenceNodes(
+                                  s.text,
+                                  useExact && exactRange?.sid === sid ? exactRange : null,
+                                  libraryLemmas,
+                                  focusEntry,
+                                )}{' '}
+                              </span>
+                            )
+                          })}
+                        </p>
+                      ))
+                    : doc.paragraphs.map((p) => (
+                        <div className="tr-para" key={p.id}>
+                          {p.sentenceIds.map((sid) => {
+                            const s = doc.sentences.find((x) => x.id === sid)
+                            if (!s) return null
+                            return (
+                              <div
+                                key={sid}
+                                className={
+                                  'tr-sent' +
+                                  (selectedId === sid ? ' sel' : '') +
+                                  (peekSid === sid && selectedId !== sid ? ' peek' : '')
+                                }
+                              >
+                                {translateView === 'below' && (
+                                  <span className="sent" data-sid={sid} onClick={() => setSelectedId(sid)}>
+                                    {sentenceNodes(
+                                      s.text,
+                                      useExact && exactRange?.sid === sid ? exactRange : null,
+                                      libraryLemmas,
+                                      focusEntry,
+                                    )}
+                                  </span>
+                                )}
+                                <div
+                                  className="tr-text"
+                                  data-sid={sid}
+                                  onClick={() => setSelectedId(sid)}
+                                >
+                                  {s.translation ?? '（未翻译）'}
+                                </div>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      ))}
                 </article>
               </>
             )}

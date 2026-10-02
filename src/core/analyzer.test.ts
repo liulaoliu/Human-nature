@@ -4,8 +4,10 @@ import {
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildPrompt,
+  buildTranslateAllPrompt,
   parseAnalysis,
   parseLookupTable,
+  parseTranslationTable,
   parseWordList,
 } from './analyzer'
 import { defaultReviewState } from '../types/document'
@@ -176,5 +178,30 @@ describe('parseLookupTable 兼容 Markdown 表格', () => {
   it('音标塞在单词同一格也能拆出来（音标格为空时）', () => {
     const words = parseLookupTable('run /rʌn/ | | v. | 跑')
     expect(words[0]).toMatchObject({ word: 'run', phonetic: '/rʌn/', meaning: '跑' })
+  })
+})
+
+describe('全文翻译', () => {
+  it('提示词带 id 和句子，要求按 id 逐行输出', () => {
+    const p = buildTranslateAllPrompt([
+      { id: 's001', text: 'He left.' },
+      { id: 's002', text: 'She stayed.' },
+    ])
+    expect(p).toContain('s001 | He left.')
+    expect(p).toContain('s002 | She stayed.')
+    expect(p).toContain('每个 id 输出一行')
+  })
+  it('解析 id | 译文 表', () => {
+    expect(parseTranslationTable('s001 | 他走了。\ns002 | 她留下了。')).toEqual([
+      { sentenceId: 's001', translation: '他走了。' },
+      { sentenceId: 's002', translation: '她留下了。' },
+    ])
+  })
+  it('parseAnalysis 认翻译表', () => {
+    expect(parseAnalysis('s001 | 他走了。').sentences?.[0]).toEqual({ sentenceId: 's001', translation: '他走了。' })
+  })
+  it('parseAnalysis 认 JSON 句子数组', () => {
+    const r = parseAnalysis('[{"id":"s001","translation":"他走了。"}]')
+    expect(r.sentences?.[0].sentenceId).toBe('s001')
   })
 })
