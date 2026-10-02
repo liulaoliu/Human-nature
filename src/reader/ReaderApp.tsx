@@ -197,13 +197,20 @@ export default function ReaderApp() {
   const [articleBook, setArticleBook] = useState('')
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
-  /** 译文显示：只看原文 / 原文+译文 / 只看译文 */
-  const [translateView, setTranslateView] = useState<'off' | 'below' | 'only'>(() => {
+  /** 译文显示：只看原文 / 只看译文（同一版式，逐句换文字） */
+  const [translateView, setTranslateView] = useState<'off' | 'only'>(() => {
     try {
-      const v = localStorage.getItem('reader:translateView')
-      return v === 'below' || v === 'only' ? v : 'off'
+      return localStorage.getItem('reader:translateView') === 'only' ? 'only' : 'off'
     } catch {
       return 'off'
+    }
+  })
+  /** 选中句子后自动 TTS 朗读 */
+  const [autoSpeak, setAutoSpeak] = useState(() => {
+    try {
+      return localStorage.getItem('reader:autoSpeak') === '1'
+    } catch {
+      return false
     }
   })
   const [pdfRange, setPdfRange] = useState('')
@@ -288,6 +295,7 @@ export default function ReaderApp() {
   const articleRef = useRef<HTMLElement | null>(null)
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
+  const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     const r = createVocabRepo()
@@ -412,6 +420,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [translateView])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:autoSpeak', autoSpeak ? '1' : '0')
+    } catch {
+      // 忽略
+    }
+  }, [autoSpeak])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -819,6 +834,15 @@ export default function ReaderApp() {
     }
     setBubblePos({ top: el.offsetTop - 4, left: el.offsetLeft })
   }, [lastPicked, doc, fontSize, bold, serif])
+
+  // 选中句子后自动朗读（可选）
+  useEffect(() => {
+    if (!autoSpeak || !selectedId || !doc) return
+    if (lastSpokenRef.current === selectedId) return
+    lastSpokenRef.current = selectedId
+    const s = doc.sentences.find((x) => x.id === selectedId)
+    if (s && s.text.trim()) speak(s.text)
+  }, [selectedId, autoSpeak, doc, speak])
 
   const remember = useCallback((key: string | null, id: string | null) => {
     try {
@@ -1592,13 +1616,22 @@ export default function ReaderApp() {
           {doc && !editing && (
             <select
               value={translateView}
-              onChange={(e) => setTranslateView(e.target.value as 'off' | 'below' | 'only')}
-              title="译文显示：只看原文 / 原文+译文 / 只看译文"
+              onChange={(e) => setTranslateView(e.target.value as 'off' | 'only')}
+              title="逐句显示原文或译文（版式不变）"
             >
               <option value="off">只看原文</option>
-              <option value="below">原文+译文</option>
               <option value="only">只看译文</option>
             </select>
+          )}
+          {doc && !editing && (
+            <label className="check-inline" title="点句子后自动朗读原文">
+              <input
+                type="checkbox"
+                checked={autoSpeak}
+                onChange={(e) => setAutoSpeak(e.target.checked)}
+              />
+              选中朗读
+            </label>
           )}
           {doc && !editing && (
             <button onClick={enterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
@@ -1916,7 +1949,7 @@ export default function ReaderApp() {
             ) : (
               <>
                 <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
-                <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
+                <article className="article" ref={articleRef}>
                   {vocabMode && lastPicked && bubblePos && (
                     <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
                       {lastPicked.word}
@@ -1928,34 +1961,25 @@ export default function ReaderApp() {
                         const s = doc.sentences.find((x) => x.id === sid)
                         if (!s) return null
                         return (
-                          <span key={sid} className="s-pair">
-                            <span
-                              data-sid={sid}
-                              className={
-                                'sent' +
-                                (selectedId === sid ? ' sel' : '') +
-                                (peekSid === sid && selectedId !== sid ? ' peek' : '') +
-                                (vocabSidSet.has(sid) ? ' has-vocab' : '')
-                              }
-                              onClick={() => setSelectedId(sid)}
-                            >
-                              {sentenceNodes(
-                                s.text,
-                                useExact && exactRange?.sid === sid ? exactRange : null,
-                                libraryLemmas,
-                                focusEntry,
-                              )}{' '}
-                            </span>
-                            {translateView !== 'off' && (s.translation || translateView === 'only') && (
-                              <span
-                                data-sid={sid}
-                                className={'tr-block' + (selectedId === sid ? ' sel' : '')}
-                                onClick={() => setSelectedId(sid)}
-                                title="点这里等价于选中这句"
-                              >
-                                {s.translation ?? '（未翻译）'}
-                              </span>
-                            )}
+                          <span
+                            key={sid}
+                            data-sid={sid}
+                            className={
+                              'sent' +
+                              (selectedId === sid ? ' sel' : '') +
+                              (peekSid === sid && selectedId !== sid ? ' peek' : '') +
+                              (vocabSidSet.has(sid) ? ' has-vocab' : '')
+                            }
+                            onClick={() => setSelectedId(sid)}
+                          >
+                            {translateView === 'only'
+                              ? s.translation ?? '（未翻译）'
+                              : sentenceNodes(
+                                  s.text,
+                                  useExact && exactRange?.sid === sid ? exactRange : null,
+                                  libraryLemmas,
+                                  focusEntry,
+                                )}{' '}
                           </span>
                         )
                       })}
@@ -1969,6 +1993,28 @@ export default function ReaderApp() {
       </main>
 
       <aside className="reader-side" ref={sideRef}>
+        <div className="picked sent-info">
+          <div className="picked-head">
+            <span className="tag">当前句</span>
+            <span className="muted">{selectedId ?? ''}</span>
+          </div>
+          {sentence ? (
+            <>
+              <div className="sent-en">{sentence.text}</div>
+              <div className="sent-zh">{sentence.translation ?? '（未翻译）'}</div>
+              <div className="tasks">
+                <button className="sm" onClick={() => speak(sentence.text)} title="朗读本句原文">
+                  🔊 朗读
+                </button>
+                <button className="sm" onClick={() => void copyTranslateAll()} title="生成本篇全文翻译提示词">
+                  全文翻译
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="muted">点正文里的一句话</div>
+          )}
+        </div>
         {batch.length > 0 && (
           <div className="picked batch">
             <div className="picked-head">

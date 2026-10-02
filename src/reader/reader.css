@@ -373,24 +373,10 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stats-article .ellipsis { min-width: 0; }
 
-/* 全文翻译：保持段落流，原文一行、译文另起一行在下面 */
-.s-pair { display: contents; }
-.tr-block {
-  display: block;
-  color: #b7bfcc;
-  font-size: 0.86em;
-  line-height: 1.7;
-  margin: 1px 0 8px 2px;
-  cursor: pointer;
-}
-.tr-block.sel {
-  background: rgba(242, 181, 68, 0.32);
-  border-radius: 4px;
-  box-shadow: inset 0 0 0 1px rgba(242, 181, 68, 0.6);
-}
-/* 只看译文：隐藏英文，段落流不变 */
-.article.tr-only .sent { display: none; }
-.article.tr-only .tr-block { font-size: var(--read); color: #d3d8e2; margin: 0 0 12px; }
+/* 右侧「当前句」：选中句的原文 + 译文 */
+.sent-info .sent-en { font-size: 14px; line-height: 1.6; }
+.sent-info .sent-zh { color: #c8ced9; font-size: 14px; line-height: 1.6; margin-top: 4px; }
+.sent-info .tasks { margin-top: 8px; }
 
 /* 点音标发音 */
 .ph, .cell-phon, .study-phon { cursor: pointer; }
