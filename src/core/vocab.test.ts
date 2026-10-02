@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyWordAnalysis,
+  buildStudyQueue,
   createLibrary,
+  dedupeLibrary,
   dueItems,
   editItem,
   filterItems,
@@ -261,5 +263,27 @@ describe('lemmaOf 短语', () => {
   it('含空格的短语不做词形还原，保持原样（小写）', () => {
     expect(lemmaOf('human rights')).toBe('human rights')
     expect(lemmaOf('Climate Change')).toBe('climate change')
+  })
+})
+
+describe('dedupeLibrary / buildStudyQueue', () => {
+  it('同 lemma 合并，字段互补', () => {
+    const a = item({ id: 'vocab:run', lemma: 'run', word: 'run', phonetic: '/rʌn/', status: 'unqueried' })
+    const b = item({ id: 'vocab:run2', lemma: 'run', word: 'running', meaning: '跑', usage: ['run out'] })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items).toHaveLength(1)
+    expect(lib.items[0]).toMatchObject({ phonetic: '/rʌn/', meaning: '跑' })
+    expect(lib.items[0].usage).toEqual(['run out'])
+  })
+  it('不同 lemma 不动', () => {
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [item({ id: 'a', lemma: 'a' }), item({ id: 'b', lemma: 'b' })] })
+    expect(lib.items).toHaveLength(2)
+  })
+  it('学习队列：到期 → 新词 → 其它', () => {
+    const now = new Date('2026-10-02T00:00:00Z')
+    const due = item({ id: 'd', lemma: 'due', reviewState: { ease: 2.5, due: '2026-09-01T00:00:00Z', interval: 1, repetitions: 2 } })
+    const fresh = item({ id: 'f', lemma: 'fresh', reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 } })
+    const later = item({ id: 'l', lemma: 'later', reviewState: { ease: 2.5, due: '2027-01-01T00:00:00Z', interval: 5, repetitions: 3 } })
+    expect(buildStudyQueue([later, fresh, due], now).map((x) => x.lemma)).toEqual(['due', 'fresh', 'later'])
   })
 })

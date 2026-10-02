@@ -53,7 +53,7 @@ export function buildPrompt(input: BuildPromptInput): string {
       return `${HEADER}\n从下面段落里提取超出四六级/雅思范围的高频生词，只输出词形，用逗号分隔，不要重复，不要解释。\n段落：\n${quoted(text)}`
     case 'lookup': {
       const words = (input.words?.length ? input.words : [text]).join(', ')
-      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；没把握的字段留空，不要编造。\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
+      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；确实没把握的才留空，不要编造。\n示例：\nrunning | /ˈrʌnɪŋ/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
     }
   }
 }
@@ -94,10 +94,23 @@ export function parseLookupTable(raw: string): WordAnalysis[] {
     if (!trimmed || /^[|\-\s:]+$/.test(trimmed)) continue
     const low = trimmed.toLowerCase()
     if (HEADER_WORDS.some((h) => low.includes(h))) continue
+    const hadLead = /^[|｜]/.test(trimmed)
+    const hadTrail = /[|｜]$/.test(trimmed)
     const cols = trimmed.split(/[|｜]/).map((c) => c.trim())
+    // Markdown 表格「前后带竖线」时，各去掉首/尾那一个空列（中间的空字段保留）
+    if (hadLead && cols[0] === '') cols.shift()
+    if (hadTrail && cols[cols.length - 1] === '') cols.pop()
     if (cols.length < 2) continue
-    const [word, phonetic, partOfSpeech, meaning, usage, example] = cols
+    let [word, phonetic, partOfSpeech, meaning, usage, example] = cols
     if (!word) continue
+    // 只有音标格为空时，才从单词格里拆音标（"run /rʌn/" 或 "run [rʌn]"），避免误伤
+    if (!phonetic) {
+      const m = word.match(/^(.+?)\s+(\/.+)$/) ?? word.match(/^(.+?)\s+(\[.+\])$/)
+      if (m) {
+        word = m[1].trim()
+        phonetic = m[2].trim()
+      }
+    }
     words.push({
       word,
       phonetic: phonetic || undefined,
@@ -171,7 +184,7 @@ export function buildBatchLookupPrompt(entries: { word: string; context?: string
   const lines = unique
     .map((e) => (e.context ? `- ${e.word}  （上下文：${e.context}）` : `- ${e.word}`))
     .join('\n')
-  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；没把握的字段留空，不要编造。\n单词与上下文：\n${lines}`
+  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；确实没把握的才留空，不要编造。\n示例：\nrunning | /ˈrʌnɪŋ/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。\n单词与上下文：\n${lines}`
 }
 
 /**

@@ -36,6 +36,7 @@ describe('buildPrompt', () => {
     const p = buildPrompt({ task: 'lookup', text: 'He runs.', words: ['running', 'runs'] })
     expect(p).toContain('running, runs')
     expect(p).toContain('单词 | 音标 | 词性 | 中文含义')
+    expect(p).toContain('国际音标')
     expect(p).toContain('He runs.')
   })
   it('提取生词要求逗号分隔', () => {
@@ -139,6 +140,7 @@ describe('buildBatchLookupPrompt', () => {
     expect(p).toContain('They abandon the plan.')
     expect(p).toContain('mitigate')
     expect(p).toContain('单词 | 音标 | 词性 | 中文含义')
+    expect(p).toContain('国际音标')
   })
 })
 
@@ -156,5 +158,22 @@ describe('buildBatchLookupPrompt 去重', () => {
   it('同一个词（忽略大小写）只列一次', () => {
     const p = buildBatchLookupPrompt([{ word: 'run' }, { word: 'Run' }])
     expect(p.match(/- run/gi)?.length).toBe(1)
+  })
+})
+
+describe('parseLookupTable 兼容 Markdown 表格', () => {
+  it('带前后竖线 | 的表格也要能解析（AI 常这么输出）', () => {
+    const md = [
+      '| 单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句 |',
+      '| --- | --- | --- | --- | --- | --- |',
+      '| running | /ˈrʌnɪŋ/ | v. | 跑步 | run out | I run. — 我跑。 |',
+    ].join('\n')
+    const words = parseLookupTable(md)
+    expect(words).toHaveLength(1)
+    expect(words[0]).toMatchObject({ word: 'running', phonetic: '/ˈrʌnɪŋ/', partOfSpeech: 'v.', meaning: '跑步' })
+  })
+  it('音标塞在单词同一格也能拆出来（音标格为空时）', () => {
+    const words = parseLookupTable('run /rʌn/ | | v. | 跑')
+    expect(words[0]).toMatchObject({ word: 'run', phonetic: '/rʌn/', meaning: '跑' })
   })
 })

@@ -418,3 +418,51 @@ export function isDue(item: VocabItem, now: Date = new Date()): boolean {
 export function dueItems(items: VocabItem[], now: Date = new Date()): VocabItem[] {
   return sortItems(items.filter((it) => isDue(it, now)), 'due')
 }
+
+/** 合并两个同 lemma 的词条（信息互补；不丢字段）。 */
+function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
+  const rank: Record<VocabStatus, number> = { unqueried: 0, queried: 1, edited: 2, mastered: 3 }
+  const stronger = rank[a.status] >= rank[b.status] ? a : b
+  return {
+    ...a,
+    phonetic: a.phonetic ?? b.phonetic,
+    partOfSpeech: a.partOfSpeech ?? b.partOfSpeech,
+    meaning: a.meaning ?? b.meaning,
+    usage: mergeUnique(a.usage, b.usage),
+    examples: mergeExamples(a.examples, b.examples),
+    tags: [...new Set([...a.tags, ...b.tags])],
+    note: a.note || b.note,
+    source: a.source ?? b.source,
+    status: stronger.status,
+    reviewState: stronger.reviewState,
+    createdAt: a.createdAt < b.createdAt ? a.createdAt : b.createdAt,
+    updatedAt: a.updatedAt > b.updatedAt ? a.updatedAt : b.updatedAt,
+  }
+}
+
+/**
+ * 整库按 lemma 去重（合并）。加载/导入后跑一道，
+ * 保证即使旧数据或词形还原边角也不会出现两个同根词。
+ */
+export function dedupeLibrary(library: VocabLibrary): VocabLibrary {
+  const byLemma = new Map<string, VocabItem>()
+  for (const it of library.items) {
+    const prev = byLemma.get(it.lemma)
+    byLemma.set(it.lemma, prev ? mergeItem(prev, it) : it)
+  }
+  return { ...library, items: [...byLemma.values()] }
+}
+
+/**
+ * 背单词的出场顺序：先到期的，再没学过的，最后其它（都按到期/创建时间）。
+ */
+export function buildStudyQueue(items: VocabItem[], now: Date = new Date()): VocabItem[] {
+  const isDue = (it: VocabItem) => it.reviewState.due !== null && new Date(it.reviewState.due) <= now
+  const byDue = (a: VocabItem, b: VocabItem) =>
+    (a.reviewState.due ?? '').localeCompare(b.reviewState.due ?? '') ||
+    a.createdAt.localeCompare(b.createdAt)
+  const due = items.filter(isDue).sort(byDue)
+  const fresh = items.filter((it) => it.reviewState.repetitions === 0 && !isDue(it))
+  const rest = items.filter((it) => it.reviewState.repetitions > 0 && !isDue(it)).sort(byDue)
+  return [...due, ...fresh, ...rest]
+}

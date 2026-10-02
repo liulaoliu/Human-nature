@@ -5,7 +5,9 @@ import { carryAnalysis, segment } from '../core/segmenter'
 import { snapSelection, wordSpans } from '../core/wordSelect'
 import {
   applyWordAnalysis,
+  buildStudyQueue,
   createLibrary,
+  dedupeLibrary,
   editItem,
   groupItems,
   lemmaOf,
@@ -13,6 +15,7 @@ import {
   removeItem,
   reviewItem,
   sortItems,
+  type ReviewGrade,
 } from '../core/vocab'
 import {
   applyToSentence,
@@ -27,7 +30,7 @@ import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
 import type { VocabRepoPort } from '../core/ports'
-import type { Paragraph, Sentence, VocabLibrary } from '../types/document'
+import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import './reader.css'
 
 interface Doc {
@@ -71,14 +74,33 @@ function fmtDur(sec: number): string {
  * 把一句话渲染成"词 span + 标点文本"，落在 active 词区间内的词包上 `.hl`（圆角高亮）。
  * 用 wordSpans 切，保证和 snapSelection 的词序号一致。
  */
-function sentenceNodes(text: string, active: { start: number; end: number } | null): ReactNode[] {
+function sentenceNodes(
+  text: string,
+  active: { start: number; end: number } | null,
+  lemmas: Set<string>,
+  onWord: (word: string) => void,
+): ReactNode[] {
   const spans = wordSpans(text)
   const out: ReactNode[] = []
   let pos = 0
   spans.forEach((w, i) => {
     if (w.start > pos) out.push(text.slice(pos, w.start))
     const on = active !== null && i >= active.start && i < active.end
-    out.push(on ? <span key={`w${i}`} className="hl">{w.text}</span> : w.text)
+    if (on) {
+      out.push(<span key={`w${i}`} className="hl">{w.text}</span>)
+    } else {
+      const key = w.text.toLowerCase()
+      const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
+      out.push(
+        isVocab ? (
+          <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
+            {w.text}
+          </span>
+        ) : (
+          w.text
+        ),
+      )
+    }
     pos = w.end
   })
   if (pos < text.length) out.push(text.slice(pos))
@@ -166,6 +188,40 @@ export default function ReaderApp() {
   const [importing, setImporting] = useState('')
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
   const [peekSid, setPeekSid] = useState<string | null>(null)
+  /** 生词本视图：卡片 / 密排表格 */
+  const [vocabView, setVocabView] = useState<'card' | 'table'>(() => {
+    try {
+      return localStorage.getItem('reader:vocabView') === 'table' ? 'table' : 'card'
+    } catch {
+      return 'card'
+    }
+  })
+  /** 生词本里被高亮/滚到的词条（点正文生词时用） */
+  const [focusLemma, setFocusLemma] = useState<string | null>(null)
+  /** 待确认删除的词条 id（两步防误触） */
+  const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  /** 背单词模式：本轮队列 / 当前序号 / 是否已翻面 */
+  const [studyQueue, setStudyQueue] = useState<VocabItem[] | null>(null)
+  const [studyIndex, setStudyIndex] = useState(0)
+  const [studyRevealed, setStudyRevealed] = useState(false)
+  /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
+  const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered'>(() => {
+    try {
+      const v = localStorage.getItem('reader:studyScope')
+      return v === 'all' || v === 'article' ? v : 'unmastered'
+    } catch {
+      return 'unmastered'
+    }
+  })
+  const [studySpelling, setStudySpelling] = useState(() => {
+    try {
+      return localStorage.getItem('reader:studySpelling') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [studyInput, setStudyInput] = useState('')
+  const [studyChecked, setStudyChecked] = useState(false)
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
@@ -188,11 +244,20 @@ export default function ReaderApp() {
   const vocabAccumRef = useRef(0)
   const sessionPickedRef = useRef(0)
   const articleRef = useRef<HTMLElement | null>(null)
+  const sideRef = useRef<HTMLElement | null>(null)
+  const confirmTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     const r = createVocabRepo()
     repo.current = r
-    r.load().then(setLibrary).catch(() => {})
+    r.load()
+      .then((lib) => {
+        // 加载时合并去重，保证不会出现两个同根词
+        const fixed = dedupeLibrary(lib)
+        setLibrary(fixed)
+        if (fixed.items.length !== lib.items.length) r.save(fixed).catch(() => {})
+      })
+      .catch(() => {})
     // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
     try {
       void navigator.storage?.persist?.()
@@ -270,6 +335,27 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [serif])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:vocabView', vocabView)
+    } catch {
+      // 忽略
+    }
+  }, [vocabView])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:studyScope', studyScope)
+    } catch {
+      // 忽略
+    }
+  }, [studyScope])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:studySpelling', studySpelling ? '1' : '0')
+    } catch {
+      // 忽略
+    }
+  }, [studySpelling])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -280,6 +366,92 @@ export default function ReaderApp() {
     setLibrary(lib)
     repo.current?.save(lib).catch(() => {})
   }, [])
+
+  /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
+  const askDelete = useCallback(
+    (id: string) => {
+      if (confirmDel === id) {
+        persist(removeItem(library, id))
+        setConfirmDel(null)
+        if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
+        return
+      }
+      setConfirmDel(id)
+      if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = window.setTimeout(() => setConfirmDel(null), 3000)
+    },
+    [confirmDel, library, persist],
+  )
+
+  /** 背单词候选池（按范围过滤：全部 / 本篇 / 未掌握）。 */
+  const studyPool = useMemo(() => {
+    if (studyScope === 'all') return library.items
+    if (studyScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
+    return library.items.filter(
+      (it) =>
+        it.source?.fileName === articleKey ||
+        (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
+    )
+  }, [library.items, studyScope, articleKey, doc])
+
+  /** 开始背单词：先到期，再没学过的，最后其它。 */
+  const startStudy = useCallback(() => {
+    const q = buildStudyQueue(studyPool)
+    if (!q.length) {
+      flash('这个范围里没有词')
+      return
+    }
+    setStudyQueue(q)
+    setStudyIndex(0)
+    setStudyRevealed(false)
+    setStudyInput('')
+    setStudyChecked(false)
+  }, [studyPool, flash])
+
+  const gradeStudy = useCallback(
+    (grade: ReviewGrade) => {
+      if (!studyQueue) return
+      const cur = studyQueue[studyIndex]
+      if (cur) persist(reviewItem(library, cur.id, grade))
+      setStudyRevealed(false)
+      setStudyInput('')
+      setStudyChecked(false)
+      setStudyIndex((i) => i + 1)
+    },
+    [studyQueue, studyIndex, library, persist],
+  )
+
+  const closeStudy = useCallback(() => setStudyQueue(null), [])
+
+  // 背单词快捷键：空格/回车 翻面/判卷/记得，1/2/3/4 评分，Esc 退出
+  useEffect(() => {
+    if (!studyQueue) return
+    const onKey = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const canGrade = studySpelling ? studyChecked : studyRevealed
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault()
+        if (studyIndex >= studyQueue.length) return
+        if (!canGrade) {
+          if (studySpelling) setStudyChecked(true)
+          else setStudyRevealed(true)
+          return
+        }
+        gradeStudy('good')
+      } else if (e.key === '1') {
+        if (canGrade) gradeStudy('again')
+      } else if (e.key === '2') {
+        if (canGrade) gradeStudy('hard')
+      } else if (e.key === '3') {
+        if (canGrade) gradeStudy('good')
+      } else if (e.key === '4') {
+        if (canGrade) gradeStudy('easy')
+      } else if (e.key === 'Escape') closeStudy()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [studyQueue, studyIndex, studyRevealed, studySpelling, studyChecked, gradeStudy, closeStudy])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -384,34 +556,111 @@ export default function ReaderApp() {
     return { todayPicked: byDay.get(todayKey) ?? 0, streak }
   }, [sessions])
 
-  /** 有生词的句子 id（生词本里记了来源句 + 待选清单），按正文顺序。 */
+  /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
+  const libraryLemmas = useMemo(() => {
+    const s = new Set<string>()
+    for (const it of library.items) {
+      s.add(it.word.toLowerCase())
+      s.add(it.lemma)
+    }
+    return s
+  }, [library.items])
+
+  /** 未掌握的词（a/d 只在这些句子里跳）。 */
+  const activeLemmas = useMemo(() => {
+    const s = new Set<string>()
+    for (const it of library.items) {
+      if (it.status === 'mastered') continue
+      s.add(it.word.toLowerCase())
+      s.add(it.lemma)
+    }
+    return s
+  }, [library.items])
+
+  /**
+   * 有生词的句子 id，按正文顺序。
+   * 直接看「这句话里有没有生词（按 lemma）」——和正文里的琥珀下划线一致，
+   * 不依赖词条记的 source（更直观，a/d 不会因为没记来源就找不到）。
+   */
   const vocabSids = useMemo(() => {
     if (!doc) return []
-    const ids = new Set<string>()
-    // 只算**当前这篇**的来源句（句子 id 是每篇各自从 s001 编的，跨篇会撞）；
-    // 已掌握的跳过，A/D 只跳还没掌握的
-    for (const it of library.items) {
-      if (
-        it.source?.sentenceId &&
-        it.source.fileName === articleKey &&
-        it.status !== 'mastered'
-      ) {
-        ids.add(it.source.sentenceId)
-      }
-    }
-    for (const b of batch) if (b.sentenceId) ids.add(b.sentenceId)
-    return doc.sentences.filter((s) => ids.has(s.id)).map((s) => s.id)
-  }, [doc, library.items, batch, articleKey])
+    const batchSids = new Set<string>()
+    for (const b of batch) if (b.sentenceId) batchSids.add(b.sentenceId)
+    return doc.sentences
+      .filter(
+        (s) =>
+          batchSids.has(s.id) ||
+          wordSpans(s.text).some(
+            (w) => activeLemmas.has(w.text.toLowerCase()) || activeLemmas.has(lemmaOf(w.text)),
+          ),
+      )
+      .map((s) => s.id)
+  }, [doc, activeLemmas, batch])
   const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
 
-  /** A/D：跳到上/下一句有生词的句子，临时高亮并滚到中间。 */
-  const navigateVocab = useCallback(
-    (dir: 1 | -1) => {
-      if (!vocabSids.length) return
-      const cur = peekSid ?? selectedId
-      let idx = cur ? vocabSids.indexOf(cur) : -1
-      idx = idx < 0 ? (dir === 1 ? 0 : vocabSids.length - 1) : (idx + dir + vocabSids.length) % vocabSids.length
-      const sid = vocabSids[idx]
+  /** 浏览器 TTS 读单词。 */
+  const speak = useCallback((text: string) => {
+    try {
+      if (typeof speechSynthesis === 'undefined') return
+      const u = new SpeechSynthesisUtterance(text)
+      u.lang = 'en-US'
+      speechSynthesis.cancel()
+      speechSynthesis.speak(u)
+    } catch {
+      // 忽略
+    }
+  }, [])
+
+  /** 点正文里的生词 → 高亮并滚到生词本对应词条。 */
+  const focusEntry = useCallback((word: string) => {
+    const key = lemmaOf(word)
+    setFocusLemma(key)
+    window.requestAnimationFrame(() => {
+      sideRef.current
+        ?.querySelector(`[data-lemma="${CSS.escape(key)}"]`)
+        ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+    })
+  }, [])
+
+  /** 点生词本词条 → 回原文定位（优先用来源句，没有就在当前正文里搜；找到后回填来源）。 */
+  const jumpToSource = useCallback(
+    (item: VocabItem) => {
+      if (!doc) return
+      let sid =
+        item.source?.fileName === articleKey && item.source.sentenceId ? item.source.sentenceId : null
+      if (sid && !doc.sentences.some((s) => s.id === sid)) sid = null
+      let hit = sid ? doc.sentences.find((s) => s.id === sid) : undefined
+      if (!hit) {
+        hit = doc.sentences.find((s) =>
+          wordSpans(s.text).some(
+            (w) => w.text.toLowerCase() === item.word.toLowerCase() || lemmaOf(w.text) === item.lemma,
+          ),
+        )
+        sid = hit?.id ?? null
+      }
+      if (!hit || !sid) {
+        flash('当前这篇里找不到这个词')
+        return
+      }
+      // 回填来源，下次直接跳、也让 A/D 与来源更准
+      if (!item.source || item.source.sentenceId !== sid) {
+        persist({
+          ...library,
+          items: library.items.map((it) =>
+            it.id === item.id
+              ? {
+                  ...it,
+                  source: {
+                    articleId: articleTitle || articleKey || '手动粘贴',
+                    fileName: articleKey,
+                    sentenceId: sid,
+                    sentenceText: hit!.text,
+                  },
+                }
+              : it,
+          ),
+        })
+      }
       setPeekSid(sid)
       window.requestAnimationFrame(() => {
         articleRef.current
@@ -419,7 +668,26 @@ export default function ReaderApp() {
           ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
       })
     },
-    [vocabSids, peekSid, selectedId],
+    [doc, articleKey, articleTitle, library, persist, flash],
+  )
+
+  /** A/D：在所有句子间上/下移动，临时浮动高亮作为提示并滚到中间（选词模式游标）。 */
+  const navigateVocab = useCallback(
+    (dir: 1 | -1) => {
+      if (!doc || !doc.sentences.length) return
+      const sids = doc.sentences.map((s) => s.id)
+      const cur = peekSid ?? selectedId
+      let idx = cur ? sids.indexOf(cur) : -1
+      idx = idx < 0 ? (dir === 1 ? 0 : sids.length - 1) : (idx + dir + sids.length) % sids.length
+      const sid = sids[idx]
+      setPeekSid(sid)
+      window.requestAnimationFrame(() => {
+        articleRef.current
+          ?.querySelector(`[data-sid="${sid}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+    },
+    [doc, peekSid, selectedId],
   )
   toggleVocabRef.current = toggleVocabMode
   navVocabRef.current = navigateVocab
@@ -953,6 +1221,28 @@ export default function ReaderApp() {
     }
   }, [batch, flash])
 
+  /** 从生词本里挑出缺音标的词，生成查词提示词（补齐用）。 */
+  const copyMissingPhonetic = useCallback(
+    async (only: 'missing' | 'all') => {
+      const todo = only === 'missing' ? library.items.filter((it) => !it.phonetic) : library.items
+      if (!todo.length) {
+        flash(only === 'missing' ? '生词都有音标了' : '生词本是空的')
+        return
+      }
+      const prompt = buildBatchLookupPrompt(
+        todo.map((it) => ({ word: it.word, context: it.source?.sentenceText })),
+      )
+      setLastTask('lookup')
+      try {
+        await navigator.clipboard.writeText(prompt)
+        flash(`已复制 ${todo.length} 个词，去 AI 粘贴后把结果贴回「应用结果」`)
+      } catch {
+        flash('复制失败：浏览器需要 localhost 或 https')
+      }
+    },
+    [library.items, flash],
+  )
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
@@ -1096,6 +1386,7 @@ export default function ReaderApp() {
   }, [library.items, flash])
 
   const list = sortItems(library.items, 'updatedAt')
+  const studyCard = studyQueue && studyIndex < studyQueue.length ? studyQueue[studyIndex] : null
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}`}>
@@ -1203,7 +1494,150 @@ export default function ReaderApp() {
           <p className="muted">没取到 articles.json（要 http://localhost 打开且文件存在）。可直接把正文粘在下面。</p>
         )}
 
-        {(composing || !doc) && (
+        {studyQueue && (
+          <div className="study">
+            <div className="bar study-bar">
+              <button onClick={closeStudy}>结束（Esc）</button>
+              <select
+                value={studyScope}
+                onChange={(e) => setStudyScope(e.target.value as 'all' | 'article' | 'unmastered')}
+                title="背词范围（下一轮生效）"
+              >
+                <option value="unmastered">未掌握</option>
+                <option value="article">本篇</option>
+                <option value="all">全部</option>
+              </select>
+              <label className="check-inline" title="看中文拼英文">
+                <input
+                  type="checkbox"
+                  checked={studySpelling}
+                  onChange={(e) => {
+                    setStudySpelling(e.target.checked)
+                    setStudyChecked(false)
+                    setStudyInput('')
+                  }}
+                />
+                拼写
+              </label>
+              <span className="muted">
+                {Math.min(studyIndex + 1, studyQueue.length)} / {studyQueue.length}
+              </span>
+            </div>
+            {studyCard
+              ? (() => {
+                  const spellingFront = studySpelling && !studyChecked
+                  const canGrade = studySpelling ? studyChecked : studyRevealed
+                  const correct = studyInput.trim().toLowerCase() === studyCard.word.trim().toLowerCase()
+                  return (
+                    <>
+                      <div
+                        className="study-card"
+                        onClick={spellingFront ? undefined : () => setStudyRevealed(true)}
+                      >
+                        {spellingFront ? (
+                          <div className="study-prompt">
+                            <div className="study-meaning">
+                              {studyCard.partOfSpeech && (
+                                <span className="cell-pos">{studyCard.partOfSpeech} </span>
+                              )}
+                              {studyCard.meaning ?? '（无释义）'}
+                            </div>
+                            <input
+                              className="study-input"
+                              autoFocus
+                              placeholder="拼出这个英文单词，回车检查"
+                              value={studyInput}
+                              onChange={(e) => setStudyInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault()
+                                  setStudyChecked(true)
+                                }
+                              }}
+                            />
+                          </div>
+                        ) : (
+                          <>
+                            <div className="study-word">
+                              {studyCard.word}
+                              <button
+                                className="speak"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  speak(studyCard.word)
+                                }}
+                                title="朗读"
+                              >
+                                🔊
+                              </button>
+                            </div>
+                            {studyCard.phonetic && <div className="study-phon">{studyCard.phonetic}</div>}
+                            {studySpelling && studyChecked && (
+                              <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
+                                {correct ? '✔ 正确' : `✘ 你写的是「${studyInput || '（空）'}」`}
+                              </div>
+                            )}
+                            {(studyRevealed || (studySpelling && studyChecked)) && (
+                              <div className="study-back">
+                                <div className="study-meaning">
+                                  {studyCard.partOfSpeech && (
+                                    <span className="cell-pos">{studyCard.partOfSpeech} </span>
+                                  )}
+                                  {studyCard.meaning ?? '（无释义）'}
+                                </div>
+                                {studyCard.usage.length > 0 && (
+                                  <div className="mu">{studyCard.usage.join('；')}</div>
+                                )}
+                                {studyCard.examples.slice(0, 1).map((ex, i) => (
+                                  <div className="ex" key={i}>
+                                    {ex.text}
+                                    {ex.translation ? ` — ${ex.translation}` : ''}
+                                  </div>
+                                ))}
+                                {studyCard.source?.sentenceText && (
+                                  <div className="muted src">来源：{studyCard.source.sentenceText}</div>
+                                )}
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                      {canGrade ? (
+                        <div className="bar study-actions">
+                          <button onClick={() => gradeStudy('again')}>忘记 (1)</button>
+                          <button onClick={() => gradeStudy('hard')}>困难 (2)</button>
+                          <button className="primary" onClick={() => gradeStudy('good')}>
+                            记得 (3)
+                          </button>
+                          <button onClick={() => gradeStudy('easy')}>简单 (4)</button>
+                        </div>
+                      ) : spellingFront ? (
+                        <button className="primary" onClick={() => setStudyChecked(true)}>
+                          检查（回车）
+                        </button>
+                      ) : (
+                        <button className="primary" onClick={() => setStudyRevealed(true)}>
+                          显示释义（空格）
+                        </button>
+                      )}
+                    </>
+                  )
+                })()
+              : (
+              <div className="study-done">
+                <p>本轮完成，共 {studyQueue.length} 个词。</p>
+                <div className="bar">
+                  <button className="primary" onClick={startStudy}>
+                    再来一轮
+                  </button>
+                  <button onClick={closeStudy}>回到阅读</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!studyQueue && (composing || !doc) && (
           <div className="composer">
             <div className="bar">
               <input
@@ -1275,7 +1709,7 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {doc && !composing && (
+        {!studyQueue && doc && !composing && (
           <>
             <h1>{articleTitle || (articleKey ? articleKey : '手动粘贴')}</h1>
             {editing ? (
@@ -1317,6 +1751,8 @@ export default function ReaderApp() {
                             {sentenceNodes(
                               s.text,
                               useExact && exactRange?.sid === sid ? exactRange : null,
+                              libraryLemmas,
+                              focusEntry,
                             )}{' '}
                           </span>
                         )
@@ -1330,7 +1766,7 @@ export default function ReaderApp() {
         )}
       </main>
 
-      <aside className="reader-side">
+      <aside className="reader-side" ref={sideRef}>
         {batch.length > 0 && (
           <div className="picked batch">
             <div className="picked-head">
@@ -1396,8 +1832,30 @@ export default function ReaderApp() {
           应用结果
         </button>
 
-        <div className="section-title">生词本（{library.items.length}）</div>
+        <div className="section-title">
+          生词本（{library.items.length}）
+          <span className="view-toggle">
+            <button className={vocabView === 'card' ? 'primary' : ''} onClick={() => setVocabView('card')}>
+              卡片
+            </button>
+            <button
+              className={vocabView === 'table' ? 'primary' : ''}
+              onClick={() => setVocabView('table')}
+              title="像书本词汇表一样密排"
+            >
+              表格
+            </button>
+          </span>
+        </div>
         <div className="bar">
+          <button
+            className="primary"
+            onClick={startStudy}
+            disabled={!library.items.length}
+            title="卡片式背单词：先到期、再新词；空格翻面，1/2/3/4 评分，Esc 退出"
+          >
+            背单词
+          </button>
           <button onClick={exportAnki} disabled={!library.items.length}>
             导出 Anki CSV
           </button>
@@ -1406,6 +1864,20 @@ export default function ReaderApp() {
           </button>
           <button onClick={printWords} disabled={!library.items.length}>
             A4 打印
+          </button>
+          <button
+            onClick={() => void copyMissingPhonetic('missing')}
+            disabled={!library.items.length}
+            title="给生词本里没有音标的词生成查词提示词；粘回结果即可补齐"
+          >
+            补查音标
+          </button>
+          <button
+            onClick={() => void copyMissingPhonetic('all')}
+            disabled={!library.items.length}
+            title="给全部生词重新生成查词提示词"
+          >
+            全部重查
           </button>
         </div>
         <div className="bar">
@@ -1425,42 +1897,96 @@ export default function ReaderApp() {
           </label>
         </div>
 
-        {list.map((it) => (
-          <div className="entry" key={it.id}>
-            <div className="w">
-              {it.word} {it.phonetic && <span className="ph">{it.phonetic}</span>}
-            </div>
-            {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
-            {it.meaning && <div className="mu">{it.meaning}</div>}
-            {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
-            {it.examples.slice(0, 1).map((ex, i) => (
-              <div className="ex" key={i}>
-                {ex.text}
-                {ex.translation ? ` — ${ex.translation}` : ''}
+        {vocabView === 'table' ? (
+          <table className="vtable">
+            <thead>
+              <tr>
+                <th>单词</th>
+                <th>含义</th>
+                <th>用法</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((it) => (
+                <tr
+                  key={it.id}
+                  data-lemma={it.lemma}
+                  className={it.lemma === focusLemma ? 'focus' : ''}
+                  onClick={() => jumpToSource(it)}
+                  title={it.examples[0]?.text ?? ''}
+                >
+                  <td className="cell-word">
+                    {it.word}
+                    {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
+                  </td>
+                  <td className="cell-meaning">
+                    {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
+                    {it.meaning ?? ''}
+                  </td>
+                  <td className="cell-usage">{it.usage.join('；')}</td>
+                  <td className="cell-act">
+                    <button
+                      className={confirmDel === it.id ? 'danger' : ''}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        askDelete(it.id)
+                      }}
+                      title={confirmDel === it.id ? '再点一次确认删除' : '删除（需两步确认）'}
+                    >
+                      {confirmDel === it.id ? '确认' : '×'}
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          list.map((it) => (
+            <div
+              className={'entry' + (it.lemma === focusLemma ? ' focus' : '')}
+              key={it.id}
+              data-lemma={it.lemma}
+            >
+              <div className="w" onClick={() => jumpToSource(it)} title="回到原文这句">
+                {it.word} {it.phonetic && <span className="ph">{it.phonetic}</span>}
               </div>
-            ))}
-            <div className="muted">
-              状态：{it.status}
-              {it.source ? ` · ${it.source.articleId}` : ''}
+              {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
+              {it.meaning && <div className="mu">{it.meaning}</div>}
+              {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
+              {it.examples.slice(0, 1).map((ex, i) => (
+                <div className="ex" key={i}>
+                  {ex.text}
+                  {ex.translation ? ` — ${ex.translation}` : ''}
+                </div>
+              ))}
+              <div className="muted">
+                状态：{it.status}
+                {it.source ? ` · ${it.source.articleId}` : ''}
+              </div>
+              <div className="row">
+                <button onClick={() => persist(reviewItem(library, it.id, 'again'))}>重来</button>
+                <button onClick={() => persist(reviewItem(library, it.id, 'good'))}>记得</button>
+                <button onClick={() => persist(reviewItem(library, it.id, 'easy'))}>简单</button>
+                <button
+                  onClick={() => {
+                    const m = window.prompt('修改含义', it.meaning ?? '')
+                    if (m !== null) persist(editItem(library, it.id, { meaning: m }))
+                  }}
+                >
+                  改释义
+                </button>
+                <button
+                  className={confirmDel === it.id ? 'danger' : ''}
+                  onClick={() => askDelete(it.id)}
+                  title="两步确认，防误触"
+                >
+                  {confirmDel === it.id ? '确认删除' : '删除'}
+                </button>
+              </div>
             </div>
-            <div className="row">
-              <button onClick={() => persist(reviewItem(library, it.id, 'again'))}>重来</button>
-              <button onClick={() => persist(reviewItem(library, it.id, 'good'))}>记得</button>
-              <button onClick={() => persist(reviewItem(library, it.id, 'easy'))}>简单</button>
-              <button
-                onClick={() => {
-                  const m = window.prompt('修改含义', it.meaning ?? '')
-                  if (m !== null) persist(editItem(library, it.id, { meaning: m }))
-                }}
-              >
-                改释义
-              </button>
-              <button onClick={() => persist(removeItem(library, it.id))} title="从这个生词本删除">
-                删除
-              </button>
-            </div>
-          </div>
-        ))}
+          ))
+        )}
       </aside>
 
       {toast && <div className="toast">{toast}</div>}
