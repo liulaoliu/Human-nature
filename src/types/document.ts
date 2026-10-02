@@ -53,6 +53,8 @@ export interface ReviewState {
   interval: number
   /** 已复习次数 */
   repetitions: number
+  /** 出错（评「忘记」）次数。老数据没有，按 0 算 */
+  lapses?: number
 }
 
 /** 单个句子，精读与复读的共同最小单元。 */

@@ -184,6 +184,12 @@ export default function ReaderApp() {
   })
   const [composing, setComposing] = useState(false)
   const [newTitle, setNewTitle] = useState('')
+  /** 新建/导入时可选的书名（epub 自动用文件名） */
+  const [newBook, setNewBook] = useState('')
+  /** 当前打开文章所属的书 */
+  const [articleBook, setArticleBook] = useState('')
+  /** 每日统计面板是否展开 */
+  const [statsOpen, setStatsOpen] = useState(false)
   const [pdfRange, setPdfRange] = useState('')
   const [importing, setImporting] = useState('')
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
@@ -205,10 +211,10 @@ export default function ReaderApp() {
   const [studyIndex, setStudyIndex] = useState(0)
   const [studyRevealed, setStudyRevealed] = useState(false)
   /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
-  const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered'>(() => {
+  const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered' | 'lapses'>(() => {
     try {
       const v = localStorage.getItem('reader:studyScope')
-      return v === 'all' || v === 'article' ? v : 'unmastered'
+      return v === 'all' || v === 'article' || v === 'lapses' ? v : 'unmastered'
     } catch {
       return 'unmastered'
     }
@@ -386,6 +392,7 @@ export default function ReaderApp() {
   /** 背单词候选池（按范围过滤：全部 / 本篇 / 未掌握）。 */
   const studyPool = useMemo(() => {
     if (studyScope === 'all') return library.items
+    if (studyScope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
     if (studyScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
     return library.items.filter(
       (it) =>
@@ -555,6 +562,37 @@ export default function ReaderApp() {
     }
     return { todayPicked: byDay.get(todayKey) ?? 0, streak }
   }, [sessions])
+
+  /** 最近 7 天每天选了多少词（统计面板用）。 */
+  const last7 = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const byDay = new Map<string, number>()
+    for (const s of sessions) {
+      const k = key(new Date(s.at))
+      byDay.set(k, (byDay.get(k) ?? 0) + s.picked)
+    }
+    const out: { key: string; label: string; picked: number }[] = []
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const k = key(d)
+      out.push({ key: k, label: String(d.getDate()), picked: byDay.get(k) ?? 0 })
+    }
+    return out
+  }, [sessions])
+
+  /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */
+  const savedGroups = useMemo(() => {
+    const map = new Map<string, SavedArticle[]>()
+    for (const a of saved) {
+      const b = a.book || '单篇'
+      const arr = map.get(b)
+      if (arr) arr.push(a)
+      else map.set(b, [a])
+    }
+    return [...map.entries()]
+  }, [saved])
 
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
@@ -733,6 +771,7 @@ export default function ReaderApp() {
       resetSelection()
       setArticleKey(key)
       setArticleTitle(title)
+      setArticleBook('')
       setSavedId(id)
     },
     [resetSelection],
@@ -747,6 +786,7 @@ export default function ReaderApp() {
       resetSelection()
       setArticleKey(a.sourceKey)
       setArticleTitle(a.title)
+      setArticleBook(a.book ?? '')
       setSavedId(a.id)
       remember(a.sourceKey, a.id)
     },
@@ -783,6 +823,7 @@ export default function ReaderApp() {
     const article: SavedArticle = {
       id,
       title: title || '未命名',
+      book: articleBook || undefined,
       sourceKey: articleKey,
       text: sourceText,
       paragraphs: doc.paragraphs,
@@ -793,9 +834,10 @@ export default function ReaderApp() {
     setSaved((await articles.current?.list()) ?? [])
     setSavedId(id)
     setArticleTitle(article.title)
+    setArticleBook(article.book ?? '')
     remember(articleKey, id)
     flash('已保存到本机')
-  }, [doc, savedId, articleKey, articleTitle, sourceText, remember, flash])
+  }, [doc, savedId, articleKey, articleTitle, articleBook, sourceText, remember, flash])
 
   const deleteSaved = useCallback(async () => {
     if (!savedId) return
@@ -814,6 +856,7 @@ export default function ReaderApp() {
     const article: SavedArticle = {
       id: `saved:${Date.now()}`,
       title,
+      book: newBook.trim() || undefined,
       sourceKey: null,
       text: cleaned,
       paragraphs: seg.paragraphs,
@@ -826,8 +869,9 @@ export default function ReaderApp() {
     setComposing(false)
     setManual('')
     setNewTitle('')
+    setNewBook('')
     flash('已新建文章')
-  }, [manual, newTitle, loadSaved, flash])
+  }, [manual, newTitle, newBook, loadSaved, flash])
 
   /** 从 .txt/.md 导入：一个文件=一篇；多选就是多篇。 */
   /** 复制清洗提示词：让 AI 去掉复制文本的多余换行、粘连和错误。next 是拿到结果后该做什么。 */
@@ -870,6 +914,7 @@ export default function ReaderApp() {
         await articles.current?.save({
           id: `saved:${now}:${i}`,
           title: list[i].name.replace(/\.[^.]+$/, '') || `第 ${i + 1} 篇`,
+          book: newBook.trim() || undefined,
           sourceKey: null,
           text: cleaned,
           paragraphs: seg.paragraphs,
@@ -880,7 +925,7 @@ export default function ReaderApp() {
       setSaved((await articles.current?.list()) ?? [])
       flash(`已导入 ${list.length} 篇`)
     },
-    [flash],
+    [newBook, flash],
   )
 
   /** 浏览器内解析 PDF → 填入 composer，人工确认后创建。 */
@@ -922,6 +967,7 @@ export default function ReaderApp() {
           await articles.current?.save({
             id: `saved:${now}:${i}`,
             title: `${book} · ${chapters[i].title || `第 ${i + 1} 章`}`,
+            book,
             sourceKey: null,
             text: cleaned,
             paragraphs: seg.paragraphs,
@@ -1415,15 +1461,18 @@ export default function ReaderApp() {
                   ))}
                 </optgroup>
               )}
-              {saved.length > 0 && (
-                <optgroup label={`已保存（${saved.length}）`}>
-                  {saved.map((a) => (
+              {savedGroups.map(([book, list]) => (
+                <optgroup
+                  key={book}
+                  label={book === '单篇' ? `已保存（${list.length}）` : `📖 ${book}（${list.length}）`}
+                >
+                  {list.map((a) => (
                     <option key={a.id} value={`s:${a.id}`}>
-                      {a.title}
+                      {book === '单篇' ? a.title : a.title.replace(`${book} · `, '')}
                     </option>
                   ))}
                 </optgroup>
-              )}
+              ))}
             </select>
           )}
           <button onClick={() => void saveCurrent()} disabled={!doc} title="把这篇（含粘回的翻译/语法）存到本机，刷新后还在">
@@ -1500,10 +1549,11 @@ export default function ReaderApp() {
               <button onClick={closeStudy}>结束（Esc）</button>
               <select
                 value={studyScope}
-                onChange={(e) => setStudyScope(e.target.value as 'all' | 'article' | 'unmastered')}
+                onChange={(e) => setStudyScope(e.target.value as 'all' | 'article' | 'unmastered' | 'lapses')}
                 title="背词范围（下一轮生效）"
               >
                 <option value="unmastered">未掌握</option>
+                <option value="lapses">错词</option>
                 <option value="article">本篇</option>
                 <option value="all">全部</option>
               </select>
@@ -1645,6 +1695,12 @@ export default function ReaderApp() {
                 placeholder="文章标题（可留空）"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
+              />
+              <input
+                className="title-input book-input"
+                placeholder="书名（可选，用于分组）"
+                value={newBook}
+                onChange={(e) => setNewBook(e.target.value)}
               />
               <label className="filebtn" title="读入本地 .txt / .md，可多选（每个文件一篇）">
                 选择文件
@@ -1879,6 +1935,9 @@ export default function ReaderApp() {
           >
             全部重查
           </button>
+          <button onClick={() => setStatsOpen((v) => !v)} title="每日选词统计">
+            统计
+          </button>
         </div>
         <div className="bar">
           <button onClick={exportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
@@ -1896,6 +1955,25 @@ export default function ReaderApp() {
             />
           </label>
         </div>
+
+        {statsOpen && (
+          <div className="stats">
+            <div className="muted">
+              累计 {totals.picked} 词 / {fmtDur(totals.seconds)} · 今日 {dayStats.todayPicked} · 连续{' '}
+              {dayStats.streak} 天
+            </div>
+            <div className="stats-bars">
+              {last7.map((d) => (
+                <div className="stats-day" key={d.key} title={`${d.key}：${d.picked} 词`}>
+                  <div className="stats-col">
+                    <div className="stats-bar" style={{ height: `${Math.min(100, d.picked * 8)}%` }} />
+                  </div>
+                  <div className="stats-label">{d.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {vocabView === 'table' ? (
           <table className="vtable">
@@ -1962,6 +2040,7 @@ export default function ReaderApp() {
               ))}
               <div className="muted">
                 状态：{it.status}
+                {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
                 {it.source ? ` · ${it.source.articleId}` : ''}
               </div>
               <div className="row">

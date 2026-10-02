@@ -234,6 +234,8 @@ export function applyWordAnalysis(
     const locked = cur.status === 'edited' || cur.status === 'mastered'
     const merged: VocabItem = {
       ...cur,
+      // 查询结果里的「原形」优先显示（手动改过的不动）
+      word: locked ? cur.word : wa.word || cur.word,
       phonetic: cur.phonetic ?? wa.phonetic ?? null,
       partOfSpeech: cur.partOfSpeech ?? wa.partOfSpeech ?? null,
       meaning: locked && cur.meaning ? cur.meaning : wa.meaning ?? cur.meaning,
@@ -381,10 +383,12 @@ function addDays(d: Date, days: number): Date {
 export function review(state: ReviewState, grade: ReviewGrade, now: Date = new Date()): ReviewState {
   const q = QUALITY[grade]
   let { ease, interval, repetitions } = state
+  let lapses = state.lapses ?? 0
   if (q < 3) {
     repetitions = 0
     interval = 1
     ease = Math.max(1.3, ease - 0.2)
+    lapses += 1
   } else {
     repetitions += 1
     if (repetitions === 1) interval = 1
@@ -392,7 +396,7 @@ export function review(state: ReviewState, grade: ReviewGrade, now: Date = new D
     else interval = Math.round(interval * ease)
     ease = Math.max(1.3, ease + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02)))
   }
-  return { ease, interval, repetitions, due: addDays(now, interval).toISOString() }
+  return { ease, interval, repetitions, due: addDays(now, interval).toISOString(), lapses }
 }
 
 /** 推进某个词条的复习状态。 */

@@ -287,3 +287,14 @@ describe('dedupeLibrary / buildStudyQueue', () => {
     expect(buildStudyQueue([later, fresh, due], now).map((x) => x.lemma)).toEqual(['due', 'fresh', 'later'])
   })
 })
+
+describe('出错加权（lapses）', () => {
+  it('评「忘记」累计 lapses，其它评分保持', () => {
+    const base = { ease: 2.5, due: null, interval: 1, repetitions: 1, lapses: 2 }
+    expect(review(base, 'again').lapses).toBe(3)
+    expect(review(base, 'good').lapses).toBe(2)
+  })
+  it('老数据没有 lapses 时按 0 起算', () => {
+    expect(review({ ease: 2.5, due: null, interval: 1, repetitions: 1 }, 'again').lapses).toBe(1)
+  })
+})

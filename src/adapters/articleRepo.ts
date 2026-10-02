@@ -12,6 +12,8 @@ import type { Paragraph, Sentence } from '../types/document'
 export interface SavedArticle {
   id: string
   title: string
+  /** 所属的书（EPUB 导入自动填书名；手动可选） */
+  book?: string
   /** 对应 articles.json 的键；手动粘贴的为 null */
   sourceKey: string | null
   /** 清洗后的正文；编辑模式与重新切句用 */

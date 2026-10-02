@@ -37,6 +37,7 @@ describe('buildPrompt', () => {
     expect(p).toContain('running, runs')
     expect(p).toContain('单词 | 音标 | 词性 | 中文含义')
     expect(p).toContain('国际音标')
+    expect(p).toContain('原形')
     expect(p).toContain('He runs.')
   })
   it('提取生词要求逗号分隔', () => {

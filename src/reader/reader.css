@@ -355,3 +355,14 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   cursor: pointer;
 }
 .speak:hover { background: var(--panel); }
+
+/* 新建文章：书名输入框窄一点 */
+.book-input { flex: 0 1 180px; min-width: 140px; }
+
+/* 每日选词统计 */
+.stats { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.stats-bars { display: flex; gap: 6px; align-items: flex-end; height: 72px; margin-top: 8px; }
+.stats-day { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.stats-col { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.stats-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.stats-label { font-size: 11px; color: var(--dim); margin-top: 3px; }
