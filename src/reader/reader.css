@@ -1,0 +1,207 @@
+/* 配色与跟读页 (src/ui/styles.css) 保持一致，避免精读页太亮 */
+:root {
+  --bg: #14161a;
+  --panel: #1c1f26;
+  --panel-2: #20242c;
+  --line: #2a2e37;
+  --fg: #e6e8ec;
+  --dim: #8b93a1;
+  --accent: #4a9eff;
+  --red: #ff5a52;
+  --green: #35c98a;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 15px/1.5 system-ui, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+/* 文本选中：琥珀色，比默认灰蓝好看；圆角靠下面的 .hl（原生选区不支持圆角） */
+::selection { background: #f2b544; color: #1a1205; }
+::-moz-selection { background: #f2b544; color: #1a1205; }
+
+/* 正文里隐藏浏览器原生选区：我们自己的 .hl 已在实时显示选中范围，
+   原生那个直角矩形是多余的。输入框 / 右栏仍保留原生高亮。
+   文字颜色设成深色：拖动时原生选区会覆盖 .hl 的文字颜色，设深色才和松手后一致。 */
+.article ::selection { background: transparent; color: #1a1205; }
+.article ::-moz-selection { background: transparent; color: #1a1205; }
+
+button, select, textarea, input {
+  font: inherit;
+  color: var(--fg);
+}
+button, select {
+  background: #262a33;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 11px;
+  cursor: pointer;
+}
+button:hover:not(:disabled) { background: #2f343f; }
+button:disabled { opacity: 0.35; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #06121f; font-weight: 600; }
+select:hover { background: #2f343f; }
+textarea {
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px;
+  color: var(--fg);
+  resize: vertical;
+  width: 100%;
+  min-height: 44px;
+}
+textarea::placeholder { color: #5c6472; }
+
+a { color: var(--accent); }
+.navlink {
+  display: inline-block;
+  padding: 6px 11px;
+  border-radius: 6px;
+  background: #262a33;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  text-decoration: none;
+  font-size: 13px;
+}
+.navlink:hover { background: #2f343f; }
+.navlink.accent { background: var(--accent); border-color: var(--accent); color: #06121f; font-weight: 600; }
+
+.reader {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 470px);
+  height: 100vh;
+  --read: 18px;
+  --read-weight: 400;
+}
+.reader.size-sm { --read: 16px; }
+.reader.size-md { --read: 18px; }
+.reader.size-lg { --read: 20.5px; }
+.reader.size-xl { --read: 23px; }
+.reader.weight-bold { --read-weight: 600; }
+
+.reader-main { overflow: auto; padding: 24px 34px; }
+.reader-side { border-left: 1px solid var(--line); overflow: auto; padding: 16px; background: var(--panel); }
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+.bar .check-inline { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 13px; cursor: pointer; }
+.bar .check-inline input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+.article { max-width: none; }
+.article h1 { font-size: 25px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
+.meta { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+.para {
+  margin: 0 0 18px;
+  font-size: var(--read);
+  font-weight: var(--read-weight);
+  line-height: 1.95;
+  letter-spacing: 0.1px;
+}
+.reader.font-serif .para { font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif; }
+.sent { border-radius: 5px; cursor: pointer; padding: 1px 2px; }
+.sent:hover { background: rgba(242, 181, 68, 0.12); }
+.sent.sel { background: rgba(242, 181, 68, 0.16); box-shadow: inset 0 0 0 1px rgba(242, 181, 68, 0.45); }
+/* 选中的词/词组：自定义高亮，可圆角、跨行也圆角。
+   注意不要加横向 padding——会把词撑宽、导致换行跳动。 */
+.hl {
+  background: #f2b544;
+  color: #1a1205;
+  border-radius: 5px;
+  padding: 1px 0;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.word { font-weight: 600; color: var(--accent); }
+.muted { color: var(--dim); font-size: 13px; }
+
+.picked {
+  padding: 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  margin-bottom: 10px;
+}
+.tasks { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.section-title { font-weight: 700; font-size: 16px; margin: 20px 0 8px; }
+
+.entry {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 9px;
+}
+.entry .w { font-weight: 700; font-size: 16px; }
+.entry .ph { color: var(--dim); font-weight: 400; font-size: 14px; }
+.entry .mu { color: #c8ced9; font-size: 14.5px; }
+.entry .ex { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.entry .row { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
+.entry .row button { padding: 3px 8px; font-size: 12.5px; }
+
+.toast {
+  position: fixed;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  background: #262a33;
+  border: 1px solid var(--line);
+  color: var(--fg);
+  padding: 8px 15px;
+  border-radius: 20px;
+  font-size: 13px;
+  z-index: 9;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* 选中区：固定高度 + 单行省略，避免长短选区把布局撑来撑去 */
+.picked-head { display: flex; gap: 8px; align-items: baseline; }
+.picked-head .word { flex: 1 1 auto; min-width: 0; }
+.word.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.tag {
+  flex: 0 0 auto;
+  font-size: 11px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: #2a2e37;
+  color: var(--dim);
+  border: 1px solid var(--line);
+}
+.tag.exact { background: rgba(74, 158, 255, 0.2); color: var(--accent); border-color: rgba(74, 158, 255, 0.4); }
+.picked .hint { margin-top: 6px; }
+
+/* 应用结果框固定大小，不允许拖动改变 */
+textarea.paste { height: 110px; resize: none; }
+textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
+
+/* 选词模式的待选词 */
+.chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
+.chipx { padding: 2px 9px; font-size: 12px; border-radius: 999px; }
+
+/* 新建 / 导入文章 */
+.title-input {
+  flex: 1 1 240px;
+  min-width: 160px;
+  padding: 7px 10px;
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--fg);
+}
+.title-input::placeholder { color: #5c6472; }
+.filebtn {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 11px;
+  border: 1px solid var(--line);
+  background: #262a33;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+}
+.filebtn:hover { background: #2f343f; }
+.filebtn input { display: none; }
+.range-input { flex: 0 1 200px; min-width: 150px; }

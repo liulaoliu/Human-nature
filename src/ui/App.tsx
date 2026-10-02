@@ -279,6 +279,9 @@ export default function App() {
           onImport={(f) => void importBackup(f)}
           onSaveProject={() => void saveToProjectFile()}
         />
+        <a className="navlink accent" href="./reader.html" title="打开 Economist 精读 / 生词本">
+          精读 / 生词本 →
+        </a>
       </header>
 
       {notice && (

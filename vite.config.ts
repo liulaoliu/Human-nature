@@ -7,6 +7,11 @@ import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
 export default defineConfig({
   plugins: [react(), projectStatePlugin()],
   base: './',
+  build: {
+    rollupOptions: {
+      input: ['index.html', 'reader.html'],
+    },
+  },
   server: {
     // 端口固定死，别让 vite 在占用时自动换到 5174。
     // 录音存在 IndexedDB 里，而 IndexedDB（连同麦克风授权）是**按来源**隔离的——

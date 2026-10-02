@@ -1,5 +1,7 @@
 /** Model 层的边界。框架无关，测试时全部注入假实现。 */
 
+import type { VocabLibrary } from '../types/document'
+
 export interface Chunk {
   index: number
   start: number // 秒
@@ -174,4 +176,17 @@ export interface Calibration {
 export interface CalibrationRepoPort {
   get(fileName: string): Calibration | undefined
   set(fileName: string, value: Calibration): void
+}
+
+/**
+ * 词库持久化。
+ *
+ * 词条带音标/含义/用法/例句，localStorage 几篇就爆，所以走 IndexedDB。
+ * 整库当一个记录存（词条数量是百级，不是海量），读写简单、天然事务。
+ * 用独立的库（`shadowing-vocab`），不和录音那个库混版本号。
+ */
+export interface VocabRepoPort {
+  load(): Promise<VocabLibrary>
+  save(library: VocabLibrary): Promise<void>
+  clear(): Promise<void>
 }

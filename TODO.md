@@ -1,5 +1,28 @@
 # TODO
 
+## 精读 / 生词本（新功能，本轮）
+
+**状态：核心 + 页面已做，真机待验**
+
+已做：
+
+- 数据模型 `src/types/document.ts`
+- 清洗 `core/cleaner.ts`、切分 `core/segmenter.ts`、词库 `core/vocab.ts`、提示词 `core/analyzer.ts`、
+  近似对齐 `core/aligner.ts`、导出 `core/exports.ts`（各带测试，全库 355 通过）
+- IndexedDB 词库 `adapters/vocabRepo.ts`（独立库 `shadowing-vocab`，不动录音库）
+- 精读页 `reader.html` / `src/reader/ReaderApp.tsx`：阅读 / 划词标生词 / 一键提示词 / 粘回 / A4 打印 / Anki CSV / SRS
+- 抽取清洗：`tools/extract-articles.py` 加了软连字符与断词修复（2016 输出逐字节不变）；
+  `tools/clean-articles.py` 就地清了现有库的 30 篇软连字符
+
+待办：
+
+- [ ] 用**带音频目录**的完整流程重跑 `extract-articles.py`，彻底修 2021 的粘连
+      （现有库里的 `soundingout`、`Mississip pi's` 是旧的坏数据，就地清洗救不回来）
+- [ ] 起点截断（开头半句话）仍要按版面几何定起点，未修
+- [ ] 词库备份还没接进现有「导出备份」，现在用精读页的「导出 JSON」
+- [ ] 真机验证 `reader.html`：划词、复制提示词、粘回、A4 打印、Anki 导入
+- [ ] 句子级近似时间轴只在单测里验过，未在真实音频上校准
+
 ## 2021-06-12 那期：已写出 30 篇，3 篇开头待修
 
 素材（本地，不进仓库）：2021-06-12 那期的 PDF（86 页）+ 配套 74 个 mp3。

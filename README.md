@@ -46,6 +46,39 @@ npm run dev
 **必须走 `http://localhost`，不要双击 `dist/index.html`。** 浏览器的 `file://` 页面拿不到麦克风权限，
 `public/articles.json` 也读不到（`fetch` 被拦）。构建产物要用 `npm run preview` 打开。
 
+## 精读 / 生词本（新，`reader.html`）
+
+跟读之外多了一个独立的精读页：**`http://localhost:5173/reader.html`**（跟读页是 `/index.html`，两边各有链接互跳）。
+
+能做的事：
+
+- **读**：从 `public/articles.json` 选一篇，或直接把正文粘进去；自动清洗（软连字符/ligature/断词）并切句。
+- **标**：划选单词 → 「加入生词」。按词形（lemma）去重，`running`/`runs`/`ran` 归一条，自动记下来源文章和原句。
+- **查（不接 API）**：选中句子或单词 → 点「翻译 / 查词 / 语法 / 搭配 / 提取生词 / 概述」→ 提示词自动复制 →
+  去 `chat.deepseek.com` 粘贴 → 把结果贴回右栏 → 「应用结果」解析成词条/翻译。
+- **用**：**导出 Anki CSV**（Front/Back/Tags）、**导出 JSON**、**A4 打印**（浏览器打印→另存为 PDF）。
+- **新建 / 导入**：顶栏「＋ 新建文章」——粘正文，或导入本地文件：
+  - `.txt` / `.md`：**可多选**，每个文件一篇；
+  - **`.pdf`**：浏览器内用 pdf.js 抽文本（可选页码范围 `14-16`），抽完进编辑器人工确认再创建；
+    适合单篇 PDF、书、规整文档。**整期 Economist 的分篇仍走离线 `tools/extract-articles.py`**（靠字体+版面）。
+    离线没抽到的篇目，也可以用这个方式自己补进来。
+  - **`.epub`**：按章拆成多篇，标题形如「书名 · 章节」，一次全部存入「已保存」。
+  - 创建即存入「已保存」。
+- **备份**：右栏「导出全部（备份）」把**词库 + 已保存的文章**打包成一个 JSON；「导入备份」还原（兼容全部备份 / 词库 JSON / 文章数组 / 单篇）。
+- **存**：正文连同粘回的翻译/语法一起存 IndexedDB（独立库 `shadowing-reader`）。
+  「保存这篇」后**边改边自动存**；刷新或下次打开会**自动恢复上次那篇**。
+  选择框分「内置（articles.json）」和「已保存」两组，同一篇保存过就优先用保存版。
+- **排版**：顶栏可调**字号**（小/中/大/特大）、**加粗**、**衬线字体**，都记在本机。
+- **复习**：词条上有「重来 / 记得 / 简单」，按 SM-2 变体排期；也可以导出到 Anki 让 Anki 排。
+
+**选择**：单击 = 整句；拖动 = 按整词吸附；Ctrl 点 = 单个词。顶栏「选词模式」（快捷键 `W`）下点/划直接把词攒进「待选」，可一键**复制查词提示词**或**导出 CSV**。
+
+词库存 IndexedDB（独立库 `shadowing-vocab`，不动录音库）。注意：现有「导出备份」只覆盖 localStorage，
+**词库和保存的文章要分别用「导出 JSON」/「保存这篇」自己留底**。
+
+数据模型、模块拆解和开发路线见 [`docs/新特性开发要求.md`](docs/新特性开发要求.md)。
+
+
 ## 备份 / 换电脑
 
 进度（文字偏移、正文起点、选字锚点、`T` 改过的正文）都在浏览器 localStorage 里，
@@ -230,6 +263,19 @@ src/
     ChunkSplitter.tsx 当前块波形 + 刀口编辑器（手动撕开）
     styles.css
     useSession.ts
+  types/
+    document.ts       精读/词库的中间层数据模型（唯一真相来源）
+  reader/           精读页（独立入口 reader.html）
+    main.tsx
+    ReaderApp.tsx     阅读 + 划词标生词 + 一键提示词 + 导出
+    reader.css
+  core/             精读新增：
+    cleaner.ts        清洗 PDF 伪影（软连字符/ligature/断词）
+    segmenter.ts      切句（Intl.Segmenter + 缩写修补）
+    analyzer.ts       一键提示词生成 + 粘回解析
+    aligner.ts        句子级音频近似投影（复用 alignText.ts）
+    vocab.ts          词库逻辑（去重/来源/筛选/分组/SRS）
+    exports.ts        Anki CSV / JSON / A4 打印
 tools/              构建期脚本（Python，运行时不需要）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案

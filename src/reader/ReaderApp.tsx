@@ -1,0 +1,1237 @@
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import { styleOf, type ArticleBook } from '../core/matchArticle'
+import { cleanText } from '../core/cleaner'
+import { carryAnalysis, segment } from '../core/segmenter'
+import { snapSelection, wordSpans } from '../core/wordSelect'
+import {
+  applyWordAnalysis,
+  createLibrary,
+  editItem,
+  groupItems,
+  lemmaOf,
+  markWord,
+  reviewItem,
+  sortItems,
+} from '../core/vocab'
+import {
+  applyToSentence,
+  buildBatchLookupPrompt,
+  buildCleanupPrompt,
+  buildPrompt,
+  parseAnalysis,
+  type AnalysisTask,
+} from '../core/analyzer'
+import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV } from '../core/exports'
+import { createVocabRepo } from '../adapters/vocabRepo'
+import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
+import { extractEpub, extractPdfText } from './importers'
+import type { VocabRepoPort } from '../core/ports'
+import type { Paragraph, Sentence, VocabLibrary } from '../types/document'
+import './reader.css'
+
+interface Doc {
+  paragraphs: Paragraph[]
+  sentences: Sentence[]
+}
+
+/** 老记录没存 text 时，从段落/句子还原正文。 */
+function reconstructText(a: SavedArticle): string {
+  const byId = new Map(a.sentences.map((s) => [s.id, s]))
+  return a.paragraphs
+    .map((p) => p.sentenceIds.map((id) => byId.get(id)?.text ?? '').join(' '))
+    .join('\n\n')
+}
+
+/** 顺着节点往上找它所在的句子 span（用 class="sent" 认）。 */
+function sentSpanOf(node: Node | null): HTMLElement | null {
+  let el: Node | null = node instanceof Element ? node : node?.parentNode ?? null
+  while (el && !(el instanceof HTMLElement && el.classList.contains('sent'))) el = el.parentNode
+  return el instanceof HTMLElement ? el : null
+}
+
+/** 按期次给内置文章分组。文件名写法区分两代（见 matchArticle.styleOf）。 */
+const EDITION_LABEL: Record<ReturnType<typeof styleOf>, string> = {
+  spaced: '2016-09-10',
+  dashed: '2021-06-12',
+  other: '其它',
+}
+function editionOf(key: string): string {
+  return EDITION_LABEL[styleOf(key)]
+}
+
+/**
+ * 把一句话渲染成"词 span + 标点文本"，落在 active 词区间内的词包上 `.hl`（圆角高亮）。
+ * 用 wordSpans 切，保证和 snapSelection 的词序号一致。
+ */
+function sentenceNodes(text: string, active: { start: number; end: number } | null): ReactNode[] {
+  const spans = wordSpans(text)
+  const out: ReactNode[] = []
+  let pos = 0
+  spans.forEach((w, i) => {
+    if (w.start > pos) out.push(text.slice(pos, w.start))
+    const on = active !== null && i >= active.start && i < active.end
+    out.push(on ? <span key={`w${i}`} className="hl">{w.text}</span> : w.text)
+    pos = w.end
+  })
+  if (pos < text.length) out.push(text.slice(pos))
+  return out
+}
+
+/** container/offset 相对 root 起点、按字符算的偏移量。 */
+function offsetIn(root: HTMLElement, container: Node, offset: number): number | null {
+  if (!root.contains(container)) return null
+  const r = document.createRange()
+  r.selectNodeContents(root)
+  r.setEnd(container, offset)
+  return r.toString().length
+}
+
+const TASKS: { task: AnalysisTask; label: string }[] = [
+  { task: 'translate', label: '翻译' },
+  { task: 'lookup', label: '查词' },
+  { task: 'grammar', label: '语法' },
+  { task: 'collocations', label: '搭配' },
+  { task: 'extract_vocab', label: '提取生词' },
+  { task: 'summarize', label: '概述' },
+]
+
+/** 「选词模式」里攒的待选生词。 */
+interface BatchItem {
+  word: string
+  sentence: string
+  sentenceId: string | null
+}
+
+export default function ReaderApp() {
+  const [book, setBook] = useState<ArticleBook | null>(null)
+  const [bookError, setBookError] = useState(false)
+  const [articleKey, setArticleKey] = useState<string | null>(null)
+  const [manual, setManual] = useState('')
+  const [doc, setDoc] = useState<Doc | null>(null)
+  const [selectedId, setSelectedId] = useState<string | null>(null)
+  /** 鼠标精确选中的片段（划选 / 双击选词），可能为空 */
+  const [exact, setExact] = useState('')
+  /** 是否用精确片段：按住 Ctrl（Mac ⌘）划选时为真，默认用整句 */
+  const [useExact, setUseExact] = useState(false)
+  /** 精确片段落在哪个句子的第几个词（渲染圆角高亮用） */
+  const [exactRange, setExactRange] = useState<{ sid: string; start: number; end: number } | null>(null)
+  const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
+  const [pasted, setPasted] = useState('')
+  const [lastTask, setLastTask] = useState<AnalysisTask | null>(null)
+  const [toast, setToast] = useState('')
+  const [articleTitle, setArticleTitle] = useState('')
+  const [saved, setSaved] = useState<SavedArticle[]>([])
+  const [savedId, setSavedId] = useState<string | null>(null)
+  const [sourceText, setSourceText] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  /** 是否按住 Ctrl / ⌘（决定「整句」还是「按词吸附」） */
+  const [ctrlHeld, setCtrlHeld] = useState(false)
+  const [edition, setEdition] = useState('全部')
+  /** 阅读字号 / 字重，存本机 */
+  const [fontSize, setFontSize] = useState(() => {
+    try {
+      return localStorage.getItem('reader:size') ?? 'md'
+    } catch {
+      return 'md'
+    }
+  })
+  const [bold, setBold] = useState(() => {
+    try {
+      return localStorage.getItem('reader:bold') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [serif, setSerif] = useState(() => {
+    try {
+      return localStorage.getItem('reader:serif') === '1'
+    } catch {
+      return false
+    }
+  })
+  const [composing, setComposing] = useState(false)
+  const [newTitle, setNewTitle] = useState('')
+  const [pdfRange, setPdfRange] = useState('')
+  const [importing, setImporting] = useState('')
+  /** 选词模式：点/划直接选生词，攒一批后一键导出 */
+  const [vocabMode, setVocabMode] = useState(false)
+  const [batch, setBatch] = useState<BatchItem[]>([])
+  const applyingDom = useRef(false)
+  const repo = useRef<VocabRepoPort | null>(null)
+  const articles = useRef<ArticleRepoPort | null>(null)
+
+  useEffect(() => {
+    const r = createVocabRepo()
+    repo.current = r
+    r.load().then(setLibrary).catch(() => {})
+    const ar = createArticleRepo()
+    articles.current = ar
+    ar.list().then(setSaved).catch(() => {})
+    fetch(`${import.meta.env.BASE_URL}articles.json`)
+      .then((x) => (x.ok ? x.json() : Promise.reject(new Error(String(x.status)))))
+      .then((b: ArticleBook) => setBook(b))
+      .catch(() => setBookError(true))
+  }, [])
+
+  // 跟踪 Ctrl / ⌘ 按住状态（选择逻辑靠它切换「整句 / 按词吸附」）
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(true)
+    }
+    const up = (e: KeyboardEvent) => {
+      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(false)
+    }
+    const blur = () => setCtrlHeld(false)
+    window.addEventListener('keydown', down)
+    window.addEventListener('keyup', up)
+    window.addEventListener('blur', blur)
+    return () => {
+      window.removeEventListener('keydown', down)
+      window.removeEventListener('keyup', up)
+      window.removeEventListener('blur', blur)
+    }
+  }, [])
+
+  // 键盘 W 切换「选词模式」（在输入框里打字时不触发）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (e.key === 'w' || e.key === 'W') setVocabMode((v) => !v)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:size', fontSize)
+    } catch {
+      // 忽略
+    }
+  }, [fontSize])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:bold', bold ? '1' : '0')
+    } catch {
+      // 忽略
+    }
+  }, [bold])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:serif', serif ? '1' : '0')
+    } catch {
+      // 忽略
+    }
+  }, [serif])
+
+  const flash = useCallback((message: string) => {
+    setToast(message)
+    window.setTimeout(() => setToast(''), 1900)
+  }, [])
+
+  const persist = useCallback((lib: VocabLibrary) => {
+    setLibrary(lib)
+    repo.current?.save(lib).catch(() => {})
+  }, [])
+
+  /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
+  const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
+    setBatch((prev) => {
+      const next = [...prev]
+      for (const w of words) {
+        const key = lemmaOf(w)
+        const i = next.findIndex((x) => lemmaOf(x.word) === key)
+        if (i >= 0) next.splice(i, 1)
+        else next.push({ word: w, sentence, sentenceId })
+      }
+      return next
+    })
+  }, [])
+
+  const remember = useCallback((key: string | null, id: string | null) => {
+    try {
+      localStorage.setItem('reader:last', JSON.stringify({ key, id }))
+    } catch {
+      // 隐私模式忽略
+    }
+  }, [])
+
+  const resetSelection = useCallback(() => {
+    setSelectedId(null)
+    setExact('')
+    setUseExact(false)
+    setExactRange(null)
+    setBatch([])
+  }, [])
+
+  const loadText = useCallback(
+    (key: string | null, text: string, title: string, id: string | null) => {
+      const cleaned = cleanText(text)
+      setDoc(segment(cleaned))
+      setSourceText(cleaned)
+      setEditing(false)
+      resetSelection()
+      setArticleKey(key)
+      setArticleTitle(title)
+      setSavedId(id)
+    },
+    [resetSelection],
+  )
+
+  /** 打开一篇已保存的文章（保留上次粘回的翻译/语法）。 */
+  const loadSaved = useCallback(
+    (a: SavedArticle) => {
+      setDoc({ paragraphs: a.paragraphs, sentences: a.sentences })
+      setSourceText(a.text || reconstructText(a))
+      setEditing(false)
+      resetSelection()
+      setArticleKey(a.sourceKey)
+      setArticleTitle(a.title)
+      setSavedId(a.id)
+      remember(a.sourceKey, a.id)
+    },
+    [resetSelection, remember],
+  )
+
+  /** 从内置原文库打开：保存过就优先用保存的版本（含改动）。 */
+  const loadFromBook = useCallback(
+    (key: string) => {
+      const existing = saved.find((a) => a.sourceKey === key)
+      if (existing) {
+        loadSaved(existing)
+        return
+      }
+      const text = book?.[key]?.text
+      if (text == null) return
+      loadText(key, text, book?.[key]?.title ?? key, null)
+      remember(key, null)
+    },
+    [saved, book, loadSaved, loadText, remember],
+  )
+
+  /** 把当前这篇文章（含粘回的翻译/语法）存到本机。 */
+  const saveCurrent = useCallback(async () => {
+    if (!doc) {
+      flash('先打开或粘一篇文章')
+      return
+    }
+    const id = savedId ?? (articleKey ? `saved:${articleKey}` : `saved:${Date.now()}`)
+    let title = articleTitle
+    if (!savedId && !title) {
+      title = window.prompt('给这篇文章起个名字', articleKey ?? '未命名') || '未命名'
+    }
+    const article: SavedArticle = {
+      id,
+      title: title || '未命名',
+      sourceKey: articleKey,
+      text: sourceText,
+      paragraphs: doc.paragraphs,
+      sentences: doc.sentences,
+      updatedAt: new Date().toISOString(),
+    }
+    await articles.current?.save(article)
+    setSaved((await articles.current?.list()) ?? [])
+    setSavedId(id)
+    setArticleTitle(article.title)
+    remember(articleKey, id)
+    flash('已保存到本机')
+  }, [doc, savedId, articleKey, articleTitle, sourceText, remember, flash])
+
+  const deleteSaved = useCallback(async () => {
+    if (!savedId) return
+    await articles.current?.remove(savedId)
+    setSaved((await articles.current?.list()) ?? [])
+    setSavedId(null)
+    flash('已删除保存；正文还在，可重新保存')
+  }, [savedId, flash])
+
+  /** 新建一篇文章：清洗 + 切句 + 直接存进「已保存」。 */
+  const createArticle = useCallback(async () => {
+    if (!manual.trim()) return
+    const title = newTitle.trim() || '未命名'
+    const cleaned = cleanText(manual)
+    const seg = segment(cleaned)
+    const article: SavedArticle = {
+      id: `saved:${Date.now()}`,
+      title,
+      sourceKey: null,
+      text: cleaned,
+      paragraphs: seg.paragraphs,
+      sentences: seg.sentences,
+      updatedAt: new Date().toISOString(),
+    }
+    await articles.current?.save(article)
+    setSaved((await articles.current?.list()) ?? [])
+    loadSaved(article)
+    setComposing(false)
+    setManual('')
+    setNewTitle('')
+    flash('已新建文章')
+  }, [manual, newTitle, loadSaved, flash])
+
+  /** 从 .txt/.md 导入：一个文件=一篇；多选就是多篇。 */
+  /** 复制清洗提示词：让 AI 去掉复制文本的多余换行、粘连和错误。 */
+  const copyCleanupPrompt = useCallback(async () => {
+    if (!manual.trim()) return
+    try {
+      await navigator.clipboard.writeText(buildCleanupPrompt(manual))
+      flash('已复制；去 AI 粘贴，把结果贴回这个框再「创建文章」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [manual, flash])
+
+  const onImportFiles = useCallback(
+    async (files: FileList | null) => {
+      const list = Array.from(files ?? [])
+      if (!list.length) return
+      const read = (f: File) =>
+        new Promise<string>((resolve, reject) => {
+          const r = new FileReader()
+          r.onload = () => resolve(String(r.result ?? ''))
+          r.onerror = () => reject(r.error)
+          r.readAsText(f)
+        })
+      const texts = await Promise.all(list.map(read))
+      if (list.length === 1) {
+        setManual(texts[0])
+        setNewTitle(list[0].name.replace(/\.[^.]+$/, ''))
+        setComposing(true)
+        flash('已读入，确认后点「创建文章」')
+        return
+      }
+      const now = Date.now()
+      for (let i = 0; i < list.length; i++) {
+        const cleaned = cleanText(texts[i])
+        const seg = segment(cleaned)
+        await articles.current?.save({
+          id: `saved:${now}:${i}`,
+          title: list[i].name.replace(/\.[^.]+$/, '') || `第 ${i + 1} 篇`,
+          sourceKey: null,
+          text: cleaned,
+          paragraphs: seg.paragraphs,
+          sentences: seg.sentences,
+          updatedAt: new Date().toISOString(),
+        })
+      }
+      setSaved((await articles.current?.list()) ?? [])
+      flash(`已导入 ${list.length} 篇`)
+    },
+    [flash],
+  )
+
+  /** 浏览器内解析 PDF → 填入 composer，人工确认后创建。 */
+  const onPickPdf = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file) return
+      setImporting('正在解析 PDF…')
+      try {
+        const text = await extractPdfText(file, pdfRange)
+        setManual(text)
+        setNewTitle(file.name.replace(/\.[^.]+$/, ''))
+        setComposing(true)
+        flash('PDF 已解析，检查正文后点「创建文章」')
+      } catch {
+        flash('PDF 解析失败（可能是扫描件，没有文字层）')
+      } finally {
+        setImporting('')
+      }
+    },
+    [pdfRange, flash],
+  )
+
+  /** 浏览器内解析 EPUB：按章拆成多篇，标题形如「书名 · 章节」。 */
+  const onPickEpub = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file) return
+      setImporting('正在解析 EPUB…')
+      try {
+        const chapters = await extractEpub(file)
+        if (!chapters.length) {
+          flash('EPUB 里没读到文本')
+          return
+        }
+        const book = file.name.replace(/\.[^.]+$/, '')
+        const now = Date.now()
+        for (let i = 0; i < chapters.length; i++) {
+          const cleaned = cleanText(chapters[i].text)
+          const seg = segment(cleaned)
+          await articles.current?.save({
+            id: `saved:${now}:${i}`,
+            title: `${book} · ${chapters[i].title || `第 ${i + 1} 章`}`,
+            sourceKey: null,
+            text: cleaned,
+            paragraphs: seg.paragraphs,
+            sentences: seg.sentences,
+            updatedAt: new Date().toISOString(),
+          })
+        }
+        setSaved((await articles.current?.list()) ?? [])
+        flash(`已导入《${book}》共 ${chapters.length} 章`)
+      } catch {
+        flash('EPUB 解析失败')
+      } finally {
+        setImporting('')
+      }
+    },
+    [flash],
+  )
+  const enterEdit = useCallback(() => {
+    if (!doc) return
+    setDraft(sourceText)
+    setEditing(true)
+  }, [doc, sourceText])
+
+  /** 完成编辑：重新切句，并按句文把已粘回的分析搬过来。 */
+  const applyEdit = useCallback(() => {
+    const cleaned = cleanText(draft)
+    const next = segment(cleaned)
+    const sentences = carryAnalysis(doc?.sentences ?? [], next.sentences)
+    setDoc({ paragraphs: next.paragraphs, sentences })
+    setSourceText(cleaned)
+    setEditing(false)
+    flash('已应用修改（已粘回的分析按句保留）')
+  }, [draft, doc, flash])
+
+  const cancelEdit = useCallback(() => setEditing(false), [])
+
+  // 已保存的文章，改动后自动落盘（翻译/语法粘回后不丢）
+  useEffect(() => {
+    if (!savedId || !doc) return
+    const t = window.setTimeout(() => void saveCurrent(), 900)
+    return () => window.clearTimeout(t)
+  }, [doc, savedId, saveCurrent])
+
+  // 启动后恢复「上次打开的文章」
+  const restored = useRef(false)
+  useEffect(() => {
+    if (restored.current) return
+    if (!book && saved.length === 0) return
+    let last: { key: string | null; id: string | null } | null = null
+    try {
+      last = JSON.parse(localStorage.getItem('reader:last') ?? 'null')
+    } catch {
+      last = null
+    }
+    restored.current = true
+    if (!last) return
+    if (last.id) {
+      const a = saved.find((x) => x.id === last.id)
+      if (a) {
+        loadSaved(a)
+        return
+      }
+    }
+    if (last.key && book?.[last.key]) loadFromBook(last.key)
+  }, [book, saved, loadSaved, loadFromBook])
+
+  const currentValue = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
+  const onPick = useCallback(
+    (value: string) => {
+      if (value.startsWith('b:')) loadFromBook(value.slice(2))
+      else if (value.startsWith('s:')) {
+        const a = saved.find((x) => x.id === value.slice(2))
+        if (a) loadSaved(a)
+      }
+    },
+    [loadFromBook, loadSaved, saved],
+  )
+
+  const bookKeys = useMemo(() => (book ? Object.keys(book).sort() : []), [book])
+  const editions = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const k of bookKeys) {
+      const e = editionOf(k)
+      m.set(e, (m.get(e) ?? 0) + 1)
+    }
+    return [...m.entries()]
+  }, [bookKeys])
+  const shownKeys = useMemo(
+    () => bookKeys.filter((k) => edition === '全部' || editionOf(k) === edition),
+    [bookKeys, edition],
+  )
+
+  /** 让原生选区消失（改用我们的圆角 .hl 高亮）。 */
+  const clearDomSelection = useCallback(() => {
+    const sel = window.getSelection()
+    if (!sel) return
+    applyingDom.current = true
+    sel.removeAllRanges()
+    window.requestAnimationFrame(() => {
+      applyingDom.current = false
+    })
+  }, [])
+
+  /** 字符区间 [start,end) 覆盖了这句话的第几到第几个词。 */
+  const wordIndexRange = useCallback((text: string, start: number, end: number) => {
+    const spans = wordSpans(text)
+    const first = spans.findIndex((w) => w.end > start)
+    if (first < 0) return null
+    let last = first
+    for (let i = spans.length - 1; i >= 0; i--) {
+      if (spans[i].start < end) {
+        last = i
+        break
+      }
+    }
+    return { start: first, end: last + 1 }
+  }, [])
+
+  /**
+   * 读取当前选区。
+   *   - Ctrl：只选**一个词**
+   *   - 不按 Ctrl + 单击：**整句**
+   *   - 不按 Ctrl + 拖动：按**整词吸附**
+   * finalize=true（松手）时清掉原生选区，改用能加圆角的 .hl。
+   */
+  const applySelection = useCallback(
+    (ctrl: boolean, finalize: boolean) => {
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      const range = sel.getRangeAt(0)
+      const span = sentSpanOf(range.startContainer) ?? sentSpanOf(range.endContainer)
+      if (!span) return
+      const sid = span.dataset.sid ?? null
+      if (sid) setSelectedId(sid)
+
+      const text = span.textContent ?? ''
+      const a = offsetIn(span, range.startContainer, range.startOffset)
+      const b = offsetIn(span, range.endContainer, range.endOffset)
+      if (a == null || b == null) return
+      const sentenceText = text.trim()
+
+      const setRange = (s: number, e: number) => {
+        const r = wordIndexRange(text, s, e)
+        setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
+      }
+
+      // 选词模式：点=一个词，拖=范围内所有词，都进「待选」清单
+      if (vocabMode) {
+        const snapped = snapSelection(text, a, range.collapsed ? a : b)
+        if (!snapped) return
+        setExact(snapped.text)
+        setUseExact(true)
+        setRange(snapped.start, snapped.end)
+        if (finalize) {
+          const words = wordSpans(text)
+            .filter((w) => w.start >= snapped.start && w.end <= snapped.end)
+            .map((w) => w.text)
+          addToBatch(words, sentenceText, sid)
+          clearDomSelection()
+        }
+        return
+      }
+
+      if (ctrl) {
+        const word = snapSelection(text, a, a)
+        if (!word) return
+        setExact(word.text)
+        setUseExact(true)
+        setRange(word.start, word.end)
+        if (finalize) clearDomSelection()
+        return
+      }
+
+      if (range.collapsed) {
+        // 只是点了一下：整句
+        setExact('')
+        setUseExact(false)
+        setExactRange(null)
+        return
+      }
+
+      const snapped = snapSelection(text, a, b)
+      if (!snapped) return
+      setExact(snapped.text)
+      setUseExact(true)
+      setRange(snapped.start, snapped.end)
+      if (finalize) clearDomSelection()
+    },
+    [vocabMode, addToBatch, clearDomSelection, wordIndexRange],
+  )
+
+  // 拖动过程中实时更新（不改 DOM，避免和拖选打架）；松手时才清原生选区、显示圆角高亮
+  useEffect(() => {
+    if (editing) return
+    const handler = () => {
+      if (applyingDom.current) return
+      const sel = window.getSelection()
+      if (!sel || sel.rangeCount === 0) return
+      applySelection(ctrlHeld, false)
+    }
+    document.addEventListener('selectionchange', handler)
+    return () => document.removeEventListener('selectionchange', handler)
+  }, [editing, ctrlHeld, applySelection])
+
+  const onMouseUp = useCallback(
+    (e: MouseEvent<HTMLElement>) => {
+      if (editing) return
+      applySelection(e.ctrlKey || e.metaKey, true)
+    },
+    [editing, applySelection],
+  )
+
+  /** 选区所在的句子 —— 默认的操作对象。 */
+  const sentence = useMemo(() => {
+    if (!doc) return null
+    if (selectedId) {
+      const s = doc.sentences.find((x) => x.id === selectedId)
+      if (s) return s
+    }
+    if (exact) return doc.sentences.find((x) => x.text.includes(exact)) ?? null
+    return null
+  }, [doc, selectedId, exact])
+
+  /** 实际用于提示词/复制的文本：默认整句；按 Ctrl 划选时用更短的精确片段。 */
+  const target = useExact && exact ? exact : sentence?.text || exact
+
+  const mark = useCallback(() => {
+    if (!exact) {
+      flash('先划一个单词（按住 Ctrl 可精确选词组）')
+      return
+    }
+    const result = markWord(library, {
+      word: exact,
+      articleId: articleKey ?? '手动粘贴',
+      fileName: articleKey,
+      sentenceId: sentence?.id ?? null,
+      sentenceText: sentence?.text ?? '',
+    })
+    persist(result.library)
+    flash(result.created ? `已加入：${result.item.word}` : `已合并：${result.item.word}`)
+  }, [exact, library, articleKey, sentence, persist, flash])
+
+  const copyPrompt = useCallback(
+    async (task: AnalysisTask) => {
+      const text = useExact && exact ? exact : sentence?.text || exact
+      if (!text) {
+        flash('先划一段文字或点一句')
+        return
+      }
+      setLastTask(task)
+      const prompt = buildPrompt({
+        task,
+        text,
+        words: task === 'lookup' && exact && !exact.includes(' ') ? [exact] : undefined,
+      })
+      try {
+        await navigator.clipboard.writeText(prompt)
+        flash('提示词已复制，去 chat.deepseek.com 粘贴')
+      } catch {
+        flash('复制失败：浏览器需要 localhost 或 https')
+      }
+    },
+    [exact, useExact, sentence, flash],
+  )
+
+  /** 待选词一次性加入生词本。 */
+  const commitBatch = useCallback(() => {
+    if (!batch.length) return
+    let lib = library
+    for (const b of batch) {
+      lib = markWord(lib, {
+        word: b.word,
+        articleId: articleKey ?? '手动粘贴',
+        fileName: articleKey,
+        sentenceId: b.sentenceId,
+        sentenceText: b.sentence,
+      }).library
+    }
+    persist(lib)
+    flash(`已加入 ${batch.length} 个生词`)
+    setBatch([])
+  }, [batch, library, articleKey, persist, flash])
+
+  /** 待选词一键生成批量查词提示词，复制到网页版 DeepSeek。 */
+  const copyBatchPrompt = useCallback(async () => {
+    if (!batch.length) return
+    const prompt = buildBatchLookupPrompt(batch.map((b) => ({ word: b.word, context: b.sentence })))
+    setLastTask('lookup')
+    try {
+      await navigator.clipboard.writeText(prompt)
+      flash(`已复制 ${batch.length} 个词的查词提示词`)
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [batch, flash])
+
+  const applyPaste = useCallback(() => {
+    const raw = pasted.trim()
+    if (!raw) return
+    const result = parseAnalysis(raw)
+    let next = library
+    if (result.words?.length) next = applyWordAnalysis(next, result.words)
+    if (result.sentences?.length) {
+      const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
+      setDoc((d) =>
+        d
+          ? {
+              ...d,
+              sentences: d.sentences.map((s) => {
+                const a = map.get(s.id)
+                if (!a) return s
+                return {
+                  ...s,
+                  translation: a.translation ?? s.translation,
+                  grammarNote: a.grammarNote ?? s.grammarNote,
+                  collocations: a.collocations
+                    ? [...new Set([...s.collocations, ...a.collocations])]
+                    : s.collocations,
+                  vocab: a.vocab ? [...new Set([...s.vocab, ...a.vocab])] : s.vocab,
+                }
+              }),
+            }
+          : d,
+      )
+    }
+    if (!result.words?.length && !result.sentences?.length && lastTask && sentence) {
+      const updated = applyToSentence(sentence, lastTask, raw)
+      setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
+    }
+    persist(next)
+    setPasted('')
+    flash(result.words?.length ? `已填入 ${result.words.length} 个词条` : '已应用')
+  }, [pasted, library, lastTask, sentence, persist, flash])
+
+  const download = useCallback(
+    (name: string, content: string, mime: string) => {
+      const url = URL.createObjectURL(new Blob([content], { type: mime }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = name
+      a.click()
+      URL.revokeObjectURL(url)
+    },
+    [],
+  )
+
+  const exportAnki = useCallback(
+    () => download('vocab-anki.csv', toAnkiCSV(sortItems(library.items, 'word')), 'text/csv;charset=utf-8'),
+    [library.items, download],
+  )
+  const exportJson = useCallback(
+    () => download('vocab.json', exportLibraryJSON(library), 'application/json'),
+    [library, download],
+  )
+  const exportBatch = useCallback(
+    () =>
+      download(
+        'picked-words.csv',
+        toWordsCSV(batch.map((b) => ({ word: b.word, context: b.sentence }))),
+        'text/csv;charset=utf-8',
+      ),
+    [batch, download],
+  )
+
+  /** 导出全部：词库 + 已保存的文章，一个 JSON 换电脑用。 */
+  const exportAll = useCallback(() => {
+    const backup = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      library,
+      articles: saved,
+    }
+    const day = new Date().toISOString().slice(0, 10)
+    download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
+  }, [library, saved, download])
+
+  /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
+  const onImportBackup = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file) return
+      try {
+        const data: unknown = JSON.parse(await file.text())
+        let imported: SavedArticle[] = []
+        let importedLib: VocabLibrary | null = null
+        if (Array.isArray(data)) {
+          if (data.length && data[0] && typeof data[0] === 'object' && 'sentences' in data[0]) {
+            imported = data as SavedArticle[]
+          } else if (data.length && data[0] && typeof data[0] === 'object' && 'lemma' in data[0]) {
+            importedLib = { schemaVersion: 1, items: data as VocabLibrary['items'] }
+          }
+        } else if (data && typeof data === 'object') {
+          const obj = data as Record<string, unknown>
+          if (Array.isArray(obj.articles)) imported = obj.articles as SavedArticle[]
+          if (obj.library && typeof obj.library === 'object' && Array.isArray((obj.library as VocabLibrary).items)) {
+            importedLib = obj.library as VocabLibrary
+          } else if (Array.isArray(obj.items)) {
+            importedLib = data as VocabLibrary
+          }
+          if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
+        }
+        for (const a of imported) {
+          if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
+            await articles.current?.save(a)
+          }
+        }
+        if (importedLib) persist(importedLib)
+        setSaved((await articles.current?.list()) ?? [])
+        flash(`导入完成：文章 ${imported.length} 篇${importedLib ? `，生词 ${importedLib.items.length} 个` : ''}`)
+      } catch {
+        flash('导入失败：不是有效的 JSON 备份')
+      }
+    },
+    [persist, flash],
+  )
+  const printWords = useCallback(() => {
+    const html = renderPrintHTML({
+      title: '我的生词本',
+      groups: groupItems(sortItems(library.items, 'word'), 'alphabet'),
+    })
+    const win = window.open('', '_blank')
+    if (!win) {
+      flash('弹窗被拦截，允许后重试')
+      return
+    }
+    win.document.write(html)
+    win.document.close()
+  }, [library.items, flash])
+
+  const list = sortItems(library.items, 'updatedAt')
+
+  return (
+    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}`}>
+      <main className="reader-main" onMouseUp={onMouseUp}>
+        <div className="bar">
+          <strong>Economist 精读</strong>
+          {book && editions.length > 1 && (
+            <select value={edition} onChange={(e) => setEdition(e.target.value)} title="按期次筛选内置文章">
+              <option value="全部">全部期次（{bookKeys.length}）</option>
+              {editions.map(([label, n]) => (
+                <option key={label} value={label}>
+                  {label}（{n}）
+                </option>
+              ))}
+            </select>
+          )}
+          {(book || saved.length > 0) && (
+            <select value={currentValue} onChange={(e) => onPick(e.target.value)}>
+              <option value="">选择文章…</option>
+              {book && (
+                <optgroup label={`内置（${shownKeys.length}）`}>
+                  {shownKeys.map((k) => (
+                    <option key={k} value={`b:${k}`}>
+                      {k}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+              {saved.length > 0 && (
+                <optgroup label={`已保存（${saved.length}）`}>
+                  {saved.map((a) => (
+                    <option key={a.id} value={`s:${a.id}`}>
+                      {a.title}
+                    </option>
+                  ))}
+                </optgroup>
+              )}
+            </select>
+          )}
+          <button onClick={() => void saveCurrent()} disabled={!doc} title="把这篇（含粘回的翻译/语法）存到本机，刷新后还在">
+            保存这篇
+          </button>
+          {!editing && (
+            <button onClick={() => setComposing((v) => !v)} title="新建 / 导入一篇文章（可多选 .txt / .md）">
+              ＋ 新建文章
+            </button>
+          )}
+          {doc && !editing && (
+            <button className={vocabMode ? 'primary' : ''} onClick={() => setVocabMode((v) => !v)} title="选词模式（W）：点 / 划直接选生词，攒一批后一键导出">
+              选词模式{vocabMode ? ' · 开' : ''}
+            </button>
+          )}
+          {doc && !editing && (
+            <button onClick={enterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
+              编辑正文
+            </button>
+          )}
+          {editing && (
+            <>
+              <button className="primary" onClick={applyEdit}>
+                完成
+              </button>
+              <button onClick={cancelEdit}>取消</button>
+            </>
+          )}
+          {savedId && (
+            <button onClick={() => void deleteSaved()} title="从本机删除这篇的保存（正文仍可重新保存）">
+              删除保存
+            </button>
+          )}
+          <span className="muted">{library.items.length} 个生词</span>
+          <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} title="正文字号">
+            <option value="sm">字号 小</option>
+            <option value="md">字号 中</option>
+            <option value="lg">字号 大</option>
+            <option value="xl">字号 特大</option>
+          </select>
+          <label className="check-inline" title="正文加粗">
+            <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} />
+            加粗
+          </label>
+          <label className="check-inline" title="正文用衬线字体（更像书）">
+            <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
+            衬线
+          </label>
+          <a className="navlink" href="./index.html" title="回到跟读练习">
+            ← 跟读练习
+          </a>
+        </div>
+
+        {bookError && !book && (
+          <p className="muted">没取到 articles.json（要 http://localhost 打开且文件存在）。可直接把正文粘在下面。</p>
+        )}
+
+        {(composing || !doc) && (
+          <div className="composer">
+            <div className="bar">
+              <input
+                className="title-input"
+                placeholder="文章标题（可留空）"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+              />
+              <label className="filebtn" title="读入本地 .txt / .md，可多选（每个文件一篇）">
+                选择文件
+                <input
+                  type="file"
+                  accept=".txt,.md,.markdown,text/plain"
+                  multiple
+                  onChange={(e) => {
+                    void onImportFiles(e.target.files)
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              <input
+                className="title-input range-input"
+                placeholder="页码范围 14-16（留空=整本）"
+                value={pdfRange}
+                onChange={(e) => setPdfRange(e.target.value)}
+                title="只抽这几页；留空抽整本"
+              />
+              <label className="filebtn" title="浏览器内解析 PDF 文本（扫描件无文字层则读不出）">
+                选择 PDF
+                <input
+                  type="file"
+                  accept=".pdf,application/pdf"
+                  onChange={(e) => {
+                    void onPickPdf(e.target.files?.[0])
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              <label className="filebtn" title="解析 EPUB，按章拆成多篇保存">
+                选择 EPUB
+                <input
+                  type="file"
+                  accept=".epub,application/epub+zip"
+                  onChange={(e) => {
+                    void onPickEpub(e.target.files?.[0])
+                    e.target.value = ''
+                  }}
+                />
+              </label>
+              <button
+                onClick={() => void copyCleanupPrompt()}
+                disabled={!manual.trim()}
+                title="复制一段提示词：让 AI 去掉这段复制文本的多余换行、粘连和错误"
+              >
+                生成清洗提示词
+              </button>
+              <button className="primary" onClick={() => void createArticle()} disabled={!manual.trim()}>
+                创建文章
+              </button>
+              {composing && <button onClick={() => setComposing(false)}>取消</button>}
+              {importing && <span className="muted">{importing}</span>}
+            </div>
+            <textarea
+              className="manual"
+              placeholder="把英文正文粘在这里（或点「选择文件」导入），再点「创建文章」"
+              value={manual}
+              onChange={(e) => setManual(e.target.value)}
+            />
+          </div>
+        )}
+
+        {doc && !composing && (
+          <>
+            <h1>{articleTitle || (articleKey ? articleKey : '手动粘贴')}</h1>
+            {editing ? (
+              <>
+                <div className="meta">编辑正文：改完点「完成」重新切句；已粘回的翻译/语法按句文保留。</div>
+                <textarea
+                  className="manual"
+                  value={draft}
+                  onChange={(e) => setDraft(e.target.value)}
+                  autoFocus
+                />
+              </>
+            ) : (
+              <>
+                <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
+                <article className="article">
+                  {doc.paragraphs.map((p) => (
+                    <p className="para" key={p.id}>
+                      {p.sentenceIds.map((sid) => {
+                        const s = doc.sentences.find((x) => x.id === sid)
+                        if (!s) return null
+                        return (
+                          <span
+                            key={sid}
+                            data-sid={sid}
+                            className={
+                              'sent' +
+                              (selectedId === sid && !(useExact && exactRange?.sid === sid) ? ' sel' : '')
+                            }
+                            onClick={() => setSelectedId(sid)}
+                          >
+                            {sentenceNodes(
+                              s.text,
+                              useExact && exactRange?.sid === sid ? exactRange : null,
+                            )}{' '}
+                          </span>
+                        )
+                      })}
+                    </p>
+                  ))}
+                </article>
+              </>
+            )}
+          </>
+        )}
+      </main>
+
+      <aside className="reader-side">
+        {batch.length > 0 && (
+          <div className="picked batch">
+            <div className="picked-head">
+              <span className="tag exact">待选 {batch.length}</span>
+              <span className="muted">点正文里的词可加 / 减</span>
+            </div>
+            <div className="chips">
+              {batch.map((b) => (
+                <button
+                  key={b.word}
+                  className="chipx"
+                  onClick={() => addToBatch([b.word], b.sentence, b.sentenceId)}
+                  title="点击移除"
+                >
+                  {b.word} ×
+                </button>
+              ))}
+            </div>
+            <div className="tasks">
+              <button className="primary" onClick={commitBatch}>
+                加入生词本
+              </button>
+              <button onClick={() => void copyBatchPrompt()}>复制查词提示词</button>
+              <button onClick={exportBatch}>导出 CSV</button>
+              <button onClick={() => setBatch([])}>清空</button>
+            </div>
+          </div>
+        )}
+        <div className="picked">
+          <div className="picked-head">
+            <span className={'tag' + (useExact ? ' exact' : '')}>{useExact ? '精确片段' : '整句'}</span>
+            <span className="word ellipsis" title={target}>
+              {target || '（在正文里划选，或点一句）'}
+            </span>
+          </div>
+          <div className="muted hint">单击=整句；拖动=按整词吸附；按住 Ctrl 点=单个词。</div>
+          <div className="tasks">
+            <button className="primary" onClick={mark} disabled={!exact}>
+              加入生词
+            </button>
+            {TASKS.map((t) => (
+              <button key={t.task} onClick={() => copyPrompt(t.task)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+          <div className="muted">
+            {lastTask ? `上一个任务：${lastTask}` : '点任务 → 复制提示词 → 去 chat.deepseek.com'}
+          </div>
+        </div>
+
+        <textarea
+          className="paste"
+          placeholder="把 DeepSeek 的结果粘回这里，再点「应用结果」"
+          value={pasted}
+          onChange={(e) => setPasted(e.target.value)}
+        />
+        <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
+          应用结果
+        </button>
+
+        <div className="section-title">生词本（{library.items.length}）</div>
+        <div className="bar">
+          <button onClick={exportAnki} disabled={!library.items.length}>
+            导出 Anki CSV
+          </button>
+          <button onClick={exportJson} disabled={!library.items.length}>
+            导出 JSON
+          </button>
+          <button onClick={printWords} disabled={!library.items.length}>
+            A4 打印
+          </button>
+        </div>
+        <div className="bar">
+          <button onClick={exportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
+            导出全部（备份）
+          </button>
+          <label className="filebtn" title="导入之前的备份 JSON（文章 + 生词）">
+            导入备份
+            <input
+              type="file"
+              accept=".json,application/json"
+              onChange={(e) => {
+                void onImportBackup(e.target.files?.[0])
+                e.target.value = ''
+              }}
+            />
+          </label>
+        </div>
+
+        {list.map((it) => (
+          <div className="entry" key={it.id}>
+            <div className="w">
+              {it.word} {it.phonetic && <span className="ph">{it.phonetic}</span>}
+            </div>
+            {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
+            {it.meaning && <div className="mu">{it.meaning}</div>}
+            {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
+            {it.examples.slice(0, 1).map((ex, i) => (
+              <div className="ex" key={i}>
+                {ex.text}
+                {ex.translation ? ` — ${ex.translation}` : ''}
+              </div>
+            ))}
+            <div className="muted">
+              状态：{it.status}
+              {it.source ? ` · ${it.source.articleId}` : ''}
+            </div>
+            <div className="row">
+              <button onClick={() => persist(reviewItem(library, it.id, 'again'))}>重来</button>
+              <button onClick={() => persist(reviewItem(library, it.id, 'good'))}>记得</button>
+              <button onClick={() => persist(reviewItem(library, it.id, 'easy'))}>简单</button>
+              <button
+                onClick={() => {
+                  const m = window.prompt('修改含义', it.meaning ?? '')
+                  if (m !== null) persist(editItem(library, it.id, { meaning: m }))
+                }}
+              >
+                改释义
+              </button>
+            </div>
+          </div>
+        ))}
+      </aside>
+
+      {toast && <div className="toast">{toast}</div>}
+    </div>
+  )
+}

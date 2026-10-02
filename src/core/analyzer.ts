@@ -1,0 +1,186 @@
+import type { AnalysisResult, Sentence, WordAnalysis } from '../types/document'
+
+/**
+ * 精读模块：一键提示词生成 + 粘回解析。
+ *
+ * 不默认直连 API（浏览器里放密钥会泄露）。流程是：
+ *   选中文字 → buildPrompt() 生成提示词 → 复制到网页版 DeepSeek
+ *   → 把返回文本贴回来 → parseAnalysis() / applyToSentence() 落到数据上。
+ *
+ * 解析结果用统一的 AnalysisResult，将来接 API 也不用改模型。
+ */
+
+export type AnalysisTask =
+  | 'translate'
+  | 'lookup'
+  | 'grammar'
+  | 'collocations'
+  | 'extract_vocab'
+  | 'summarize'
+
+export interface BuildPromptInput {
+  task: AnalysisTask
+  /** 选中的原文（句子/段落），作为上下文或翻译对象 */
+  text: string
+  /** lookup 任务要查的词；不填就用 text 自己 */
+  words?: string[]
+}
+
+const FENCE = '"""'
+
+function quoted(text: string): string {
+  return `${FENCE}\n${text.trim()}\n${FENCE}`
+}
+
+const HEADER = '你是英语精读助手。只输出结果，不要解释。'
+
+/** 查词表格的字段顺序，解析时按这个顺序取。 */
+export const LOOKUP_FIELDS = ['word', 'phonetic', 'partOfSpeech', 'meaning', 'usage', 'example']
+
+/** 生成可直接粘贴到网页版 DeepSeek 的提示词。 */
+export function buildPrompt(input: BuildPromptInput): string {
+  const text = input.text.trim()
+  switch (input.task) {
+    case 'translate':
+      return `${HEADER}\n把下面的英文翻译成地道、通顺的中文，只输出译文。\n原文：\n${quoted(text)}`
+    case 'grammar':
+      return `${HEADER}\n分析下面句子的结构：先给主干，再列修饰成分，再标出从句类型，最后点出难点。只输出分析，不要翻译。\n句子：\n${quoted(text)}`
+    case 'collocations':
+      return `${HEADER}\n从下面句子里挑出值得学习的动词搭配、介词搭配和地道表达，每条一行，用「 — 」分隔搭配和中文意思。只输出列表。\n句子：\n${quoted(text)}`
+    case 'summarize':
+      return `${HEADER}\n用中文总结下面这段的要点，最多 3 条，每条一行。只输出总结。\n段落：\n${quoted(text)}`
+    case 'extract_vocab':
+      return `${HEADER}\n从下面段落里提取超出四六级/雅思范围的高频生词，只输出词形，用逗号分隔，不要重复，不要解释。\n段落：\n${quoted(text)}`
+    case 'lookup': {
+      const words = (input.words?.length ? input.words : [text]).join(', ')
+      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；没把握的字段留空，不要编造。\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
+    }
+  }
+}
+
+/** 把一行里用各种分隔符隔开的条目拆出来。 */
+function splitList(raw: string): string[] {
+  return raw
+    .split(/[\n;；、]+/)
+    .map((s) => s.replace(/^[-*•\d.、\s]+/, '').trim())
+    .filter(Boolean)
+}
+
+/** 提取词形列表：逗号/顿号/换行都能拆，去重。 */
+export function parseWordList(raw: string): string[] {
+  const out: string[] = []
+  for (const part of raw.split(/[,，、;；\n]+/)) {
+    const w = part.replace(/^[\s\-*•\d.]+/, '').replace(/[.。!！?？"“”]+$/, '').trim()
+    if (w && !out.includes(w)) out.push(w)
+  }
+  return out
+}
+
+function parseExample(raw: string): { text: string; translation?: string } {
+  const parts = raw.split(/\s+[—–-]\s+/)
+  if (parts.length >= 2) {
+    return { text: parts[0].trim(), translation: parts.slice(1).join(' — ').trim() }
+  }
+  return { text: raw.trim() }
+}
+
+const HEADER_WORDS = ['单词', 'word', 'phonetic', '音标']
+
+/** 解析查词表格（`word | phonetic | pos | meaning | usage | example`）。 */
+export function parseLookupTable(raw: string): WordAnalysis[] {
+  const words: WordAnalysis[] = []
+  for (const line of raw.split('\n')) {
+    const trimmed = line.trim()
+    if (!trimmed || /^[|\-\s:]+$/.test(trimmed)) continue
+    const low = trimmed.toLowerCase()
+    if (HEADER_WORDS.some((h) => low.includes(h))) continue
+    const cols = trimmed.split(/[|｜]/).map((c) => c.trim())
+    if (cols.length < 2) continue
+    const [word, phonetic, partOfSpeech, meaning, usage, example] = cols
+    if (!word) continue
+    words.push({
+      word,
+      phonetic: phonetic || undefined,
+      partOfSpeech: partOfSpeech || undefined,
+      meaning: meaning || undefined,
+      usage: usage ? splitList(usage) : undefined,
+      examples: example ? [parseExample(example)] : undefined,
+    })
+  }
+  return words
+}
+
+function normalizeJson(value: unknown): AnalysisResult {
+  if (Array.isArray(value)) {
+    return { words: value.filter((v): v is WordAnalysis => !!v && typeof v === 'object' && 'word' in v) }
+  }
+  if (value && typeof value === 'object') {
+    const obj = value as { words?: unknown; sentences?: unknown; word?: unknown }
+    if (obj.word) return { words: [obj as WordAnalysis] }
+    const out: AnalysisResult = {}
+    if (Array.isArray(obj.words)) out.words = obj.words as WordAnalysis[]
+    if (Array.isArray(obj.sentences)) out.sentences = obj.sentences as AnalysisResult['sentences']
+    return out
+  }
+  return {}
+}
+
+/** 解析粘回来的结果：先试 JSON，再试查词表格，都不中返回空。 */
+export function parseAnalysis(raw: string): AnalysisResult {
+  const text = raw.trim()
+  if (!text) return {}
+  if (text.startsWith('{') || text.startsWith('[')) {
+    try {
+      return normalizeJson(JSON.parse(text))
+    } catch {
+      // 落到表格解析
+    }
+  }
+  const words = parseLookupTable(text)
+  if (words.length) return { words }
+  return {}
+}
+
+/** 把自由文本结果落到某一句上（翻译 / 语法 / 搭配 / 生词）。 */
+export function applyToSentence(sentence: Sentence, task: AnalysisTask, raw: string): Sentence {
+  const text = raw.trim()
+  if (!text) return sentence
+  if (task === 'translate') return { ...sentence, translation: text }
+  if (task === 'grammar') return { ...sentence, grammarNote: text }
+  if (task === 'collocations') {
+    return { ...sentence, collocations: [...new Set([...sentence.collocations, ...splitList(text)])] }
+  }
+  if (task === 'extract_vocab') {
+    return { ...sentence, vocab: [...new Set([...sentence.vocab, ...parseWordList(text)])] }
+  }
+  return sentence
+}
+
+/**
+ * 批量查词提示词：一次把多个生词（各自带上下文句）交给 DeepSeek。
+ * 用在「选词模式」里攒了一批词，一键复制。
+ */
+export function buildBatchLookupPrompt(entries: { word: string; context?: string }[]): string {
+  const lines = entries
+    .map((e) => (e.context ? `- ${e.word}  （上下文：${e.context}）` : `- ${e.word}`))
+    .join('\n')
+  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；没把握的字段留空，不要编造。\n单词与上下文：\n${lines}`
+}
+
+/**
+ * 清洗提示词：把从 PDF / 网页复制来的原始文本交给 AI，去掉多余换行与粘连、修错。
+ * 用「新建文章」里的一键复制，粘到网页版 AI，再把结果贴回来。
+ */
+export function buildCleanupPrompt(raw: string): string {
+  return `下面是我从 PDF / 网页复制来的英文文本，可能存在：
+- 不该有的换行（一句话被硬拆成好几行）
+- 单词粘连（例如 offthe、BarackObama、tookpart）
+- 拼写、标点等明显错误
+
+请去掉不必要的换行、修复粘连和错误，保持原意和原有措辞，给我修复后的文本。只输出修复后的文本，不要解释，不要加标题。
+
+原文：
+${FENCE}
+${raw.trim()}
+${FENCE}`
+}

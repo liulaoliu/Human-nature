@@ -37,6 +37,10 @@ LIG_TBL = str.maketrans({
     "ﬄ": "ffl", "ﬅ": "st", "ﬆ": "st",
 })
 
+# 软连字符（U+00AD）。2021 那期用它断词，2016 没有；处理不当会抽出
+# "af fordable" / "Mississip pi's" / "soundingout" 这类断裂。
+SOFT_HYPHEN = "\u00ad"
+
 # 目录里的栏目名，用来把「缩进的栏目名」和「上一条的续行」区分开
 SECTIONS = {
     "the world this week", "leaders", "letters", "briefing", "asia", "china",
@@ -187,6 +191,15 @@ def clean(s):
     return s.translate(LIG_TBL)
 
 
+def cleanup_text(text):
+    """
+    输出前的最后一道：去掉残留软连字符、不换行空格，压掉多余空白。
+    2021 的软连字符多数在 page_lines 里已处理，这里兜住极少数漏网的。
+    """
+    text = text.replace(SOFT_HYPHEN, "").replace("\u00a0", " ")
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def ITALIC_MARK(font):
     """
     字体名里表示斜体的记号。两代不一样：
@@ -230,21 +243,37 @@ def page_lines(page):
             # 阈值要压得低：正文是两端对齐的，词间距被拉开，但字母之间仍然很紧，
             # 0.13 倍字号会把 "at 10.5%" 粘成 "at10.5%"。
             thresh = max(0.6, size * 0.085)
-            words, cur, prev = [], chars[0][1], chars[0][0]
-            for bb, ch in chars[1:]:
-                if bb[0] - prev[2] > thresh:
+            # 软连字符（U+00AD）是「可选断点」：去掉它，并强制把下一个字符接到当前词上。
+            # 2021 用它断词时还会带出一个正好触发断词的横向空隙，不强制接上就会抽出
+            # "af fordable"、"Mississip pi's" 这种。2016 没有软连字符，这条不影响它。
+            words, cur, prev_x1, force_join = [], "", None, False
+            for idx, (bb, ch) in enumerate(chars):
+                if ch == SOFT_HYPHEN:
+                    # 下一个字符离得远 = 断词（去掉、接上）；紧挨 = 实义连字符（补 '-'）。
+                    # "af­ fordable" → affordable；"off­again" → off-again。
+                    nxt = chars[idx + 1] if idx + 1 < len(chars) else None
+                    if nxt is None or nxt[0][0] - bb[2] > thresh:
+                        pass                     # 断词：不补字符
+                    else:
+                        cur += "-"
+                    force_join = True
+                    continue
+                if cur and not force_join and bb[0] - prev_x1 > thresh:
                     words.append(cur)
-                    cur = ch
-                else:
-                    cur += ch
-                prev = bb
-            words.append(cur)
+                    cur = ""
+                cur += ch
+                force_join = False
+                prev_x1 = bb[2]
+            hyph_end = force_join          # 行尾是软连字符，下一行的词要接上
+            if cur:
+                words.append(cur)
 
             lines.append({
                 "x0": l["bbox"][0], "y0": l["bbox"][1],
                 "words": [clean(w) for w in words],
                 "text": " ".join(words),
                 "font": font, "size": size,
+                "hyph": hyph_end,
             })
 
     # 分栏：x 聚类，栏内保持 y 序
@@ -619,6 +648,7 @@ def slice_text(stream, at, end, drop=()):
     started = False
     prev_y = None
     glue = False                     # 上一个词还没断开（首字下沉要粘住下一行）
+    prev_hyph = False                # 上一行尾是软连字符，本行首词要接上
     for l in stream[at:end]:
         ws = l["words"]
         if not ws:
@@ -648,6 +678,10 @@ def slice_text(stream, at, end, drop=()):
         elif dropcap and prev_y is not None and l["y0"] - prev_y < 3.5:
             words[-1] = words[-1] + ws[0]
             words.extend(ws[1:])
+        elif prev_hyph and ws and re.match(r"^[a-z]", ws[0]):
+            # 上一行尾是软连字符：直接接上，不补连字符（软连字符表示断词，不是实义连字符）
+            words[-1] = words[-1] + ws[0]
+            words.extend(ws[1:])
         elif words[-1].endswith("-") and re.match(r"^[a-z]", ws[0]):
             words[-1] = words[-1][:-1] + ws[0]
             words.extend(ws[1:])
@@ -656,6 +690,7 @@ def slice_text(stream, at, end, drop=()):
         if dropcap:
             glue = True             # 大字单独一行，下一行紧跟着，粘住
         prev_y = l["y0"]
+        prev_hyph = l.get("hyph", False)
 
     # 开头：图表的编号（「2 wages account for 12% of GDP…」）排在正文栏里，
     # 但它不是文章开头，念出来是「二 wages account…」这种莫名其妙的东西。
@@ -665,7 +700,7 @@ def slice_text(stream, at, end, drop=()):
     # 数字」处理，靠上下文保证不会误删正常词。
     if words and re.fullmatch(r"\d{1,2}", words[-1]):
         words.pop()
-    return " ".join(words)
+    return cleanup_text(" ".join(words))
 
 
 # ------------------------------------------------------------------ 主流程
