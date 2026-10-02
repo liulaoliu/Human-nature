@@ -736,6 +736,13 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 滚到某一句（优先滚可见的那个—「只看译文」时英文是隐藏的）。 */
+  const scrollToSid = useCallback((sid: string) => {
+    const nodes = articleRef.current?.querySelectorAll(`[data-sid="${CSS.escape(sid)}"]`)
+    const el = nodes ? ([...nodes] as HTMLElement[]).find((e) => e.offsetParent !== null) : undefined
+    el?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+  }, [])
+
   /** 点生词本词条 → 回原文定位（优先用来源句，没有就在当前正文里搜；找到后回填来源）。 */
   const jumpToSource = useCallback(
     (item: VocabItem) => {
@@ -776,13 +783,9 @@ export default function ReaderApp() {
         })
       }
       setPeekSid(sid)
-      window.requestAnimationFrame(() => {
-        articleRef.current
-          ?.querySelector(`[data-sid="${sid}"]`)
-          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      })
+      window.requestAnimationFrame(() => scrollToSid(sid))
     },
-    [doc, articleKey, articleTitle, library, persist, flash],
+    [doc, articleKey, articleTitle, library, persist, flash, scrollToSid],
   )
 
   /** A/D：在所有句子间上/下移动，临时浮动高亮作为提示并滚到中间（选词模式游标）。 */
@@ -795,13 +798,9 @@ export default function ReaderApp() {
       idx = idx < 0 ? (dir === 1 ? 0 : sids.length - 1) : (idx + dir + sids.length) % sids.length
       const sid = sids[idx]
       setPeekSid(sid)
-      window.requestAnimationFrame(() => {
-        articleRef.current
-          ?.querySelector(`[data-sid="${sid}"]`)
-          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      })
+      window.requestAnimationFrame(() => scrollToSid(sid))
     },
-    [doc, peekSid, selectedId],
+    [doc, peekSid, selectedId, scrollToSid],
   )
   toggleVocabRef.current = toggleVocabMode
   navVocabRef.current = navigateVocab
@@ -812,7 +811,8 @@ export default function ReaderApp() {
       setBubblePos(null)
       return
     }
-    const el = articleRef.current?.querySelector(`[data-sid="${lastPicked.sid}"]`) as HTMLElement | null
+    const nodes = articleRef.current?.querySelectorAll(`[data-sid="${CSS.escape(lastPicked.sid)}"]`)
+    const el = nodes ? ([...nodes] as HTMLElement[]).find((e) => e.offsetParent !== null) : undefined
     if (!el) {
       setBubblePos(null)
       return
@@ -1922,71 +1922,45 @@ export default function ReaderApp() {
                       {lastPicked.word}
                     </div>
                   )}
-                  {translateView === 'off'
-                    ? doc.paragraphs.map((p) => (
-                        <p className="para" key={p.id}>
-                          {p.sentenceIds.map((sid) => {
-                            const s = doc.sentences.find((x) => x.id === sid)
-                            if (!s) return null
-                            return (
+                  {doc.paragraphs.map((p) => (
+                    <p className="para" key={p.id}>
+                      {p.sentenceIds.map((sid) => {
+                        const s = doc.sentences.find((x) => x.id === sid)
+                        if (!s) return null
+                        return (
+                          <span key={sid}>
+                            <span
+                              data-sid={sid}
+                              className={
+                                'sent' +
+                                (selectedId === sid ? ' sel' : '') +
+                                (peekSid === sid && selectedId !== sid ? ' peek' : '') +
+                                (vocabSidSet.has(sid) ? ' has-vocab' : '')
+                              }
+                              onClick={() => setSelectedId(sid)}
+                            >
+                              {sentenceNodes(
+                                s.text,
+                                useExact && exactRange?.sid === sid ? exactRange : null,
+                                libraryLemmas,
+                                focusEntry,
+                              )}{' '}
+                            </span>
+                            {translateView !== 'off' && (
                               <span
-                                key={sid}
                                 data-sid={sid}
-                                className={
-                                  'sent' +
-                                  (selectedId === sid ? ' sel' : '') +
-                                  (peekSid === sid && selectedId !== sid ? ' peek' : '') +
-                                  (vocabSidSet.has(sid) ? ' has-vocab' : '')
-                                }
+                                className={'tr-inline' + (selectedId === sid ? ' sel' : '')}
                                 onClick={() => setSelectedId(sid)}
+                                title="点这里等价于选中这句"
                               >
-                                {sentenceNodes(
-                                  s.text,
-                                  useExact && exactRange?.sid === sid ? exactRange : null,
-                                  libraryLemmas,
-                                  focusEntry,
-                                )}{' '}
+                                {s.translation ?? '（未翻译）'}
                               </span>
-                            )
-                          })}
-                        </p>
-                      ))
-                    : doc.paragraphs.map((p) => (
-                        <div className="tr-para" key={p.id}>
-                          {p.sentenceIds.map((sid) => {
-                            const s = doc.sentences.find((x) => x.id === sid)
-                            if (!s) return null
-                            return (
-                              <div
-                                key={sid}
-                                className={
-                                  'tr-sent' +
-                                  (selectedId === sid ? ' sel' : '') +
-                                  (peekSid === sid && selectedId !== sid ? ' peek' : '')
-                                }
-                              >
-                                {translateView === 'below' && (
-                                  <span className="sent" data-sid={sid} onClick={() => setSelectedId(sid)}>
-                                    {sentenceNodes(
-                                      s.text,
-                                      useExact && exactRange?.sid === sid ? exactRange : null,
-                                      libraryLemmas,
-                                      focusEntry,
-                                    )}
-                                  </span>
-                                )}
-                                <div
-                                  className="tr-text"
-                                  data-sid={sid}
-                                  onClick={() => setSelectedId(sid)}
-                                >
-                                  {s.translation ?? '（未翻译）'}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      ))}
+                            )}
+                          </span>
+                        )
+                      })}
+                    </p>
+                  ))}
                 </article>
               </>
             )}
