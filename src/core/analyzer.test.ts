@@ -41,6 +41,7 @@ describe('buildPrompt', () => {
     expect(p).toContain('国际音标')
     expect(p).toContain('原形')
     expect(p).toContain('exciting')
+    expect(p).toContain('dulling')
     expect(p).toContain('He runs.')
   })
   it('提取生词要求逗号分隔', () => {
