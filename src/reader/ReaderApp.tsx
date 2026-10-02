@@ -1745,7 +1745,18 @@ export default function ReaderApp() {
                                 🔊
                               </button>
                             </div>
-                            {studyCard.phonetic && <div className="study-phon">{studyCard.phonetic}</div>}
+                            {studyCard.phonetic && (
+                              <div
+                                className="study-phon"
+                                title="点读发音"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  speak(studyCard.word)
+                                }}
+                              >
+                                {studyCard.phonetic}
+                              </div>
+                            )}
                             {studySpelling && studyChecked && (
                               <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
                                 {correct ? '✔ 正确' : `✘ 你写的是「${studyInput || '（空）'}」`}
@@ -2176,7 +2187,18 @@ export default function ReaderApp() {
                 >
                   <td className="cell-word">
                     {it.word}
-                    {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
+                    {it.phonetic && (
+                      <span
+                        className="cell-phon"
+                        title="点读发音"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          speak(it.word)
+                        }}
+                      >
+                        {it.phonetic}
+                      </span>
+                    )}
                   </td>
                   <td className="cell-meaning">
                     {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
@@ -2207,7 +2229,19 @@ export default function ReaderApp() {
               data-lemma={it.lemma}
             >
               <div className="w" onClick={() => jumpToSource(it)} title="回到原文这句">
-                {it.word} {it.phonetic && <span className="ph">{it.phonetic}</span>}
+                {it.word}{' '}
+                {it.phonetic && (
+                  <span
+                    className="ph"
+                    title="点读发音"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      speak(it.word)
+                    }}
+                  >
+                    {it.phonetic}
+                  </span>
+                )}
               </div>
               {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
               {it.meaning && <div className="mu">{it.meaning}</div>}

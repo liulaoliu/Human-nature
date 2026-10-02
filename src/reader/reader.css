@@ -382,3 +382,7 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .tr-text { color: #cdd3dd; font-size: calc(var(--read) * 0.82); line-height: 1.75; margin-top: 3px; cursor: pointer; }
 .tr-sent.sel .tr-text { color: #eef1f5; }
 .article.tr-only .tr-text { font-size: var(--read); margin-top: 0; }
+
+/* 点音标发音 */
+.ph, .cell-phon, .study-phon { cursor: pointer; }
+.ph:hover, .cell-phon:hover, .study-phon:hover { color: var(--accent); text-decoration: underline; }
