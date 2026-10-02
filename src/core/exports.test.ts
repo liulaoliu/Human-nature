@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  dedupeByLemma,
   exportDocumentJSON,
   exportLibraryJSON,
   importDocumentJSON,
@@ -99,5 +100,34 @@ describe('toWordsCSV', () => {
     expect(csv.split('\n')[0]).toBe('Word,Context')
     expect(csv).toContain('"I run, fast."')
     expect(csv.split('\n')[2]).toBe('go,')
+  })
+})
+
+describe('输出去重', () => {
+  it('dedupeByLemma 按 lemma 去重且保序', () => {
+    const out = dedupeByLemma([
+      vocab(),
+      vocab({ id: 'b', word: 'go', lemma: 'go' }),
+      vocab({ id: 'c', word: 'ran', lemma: 'run' }),
+    ])
+    expect(out.map((x) => x.lemma)).toEqual(['run', 'go'])
+  })
+  it('toAnkiCSV 去重', () => {
+    const csv = toAnkiCSV([vocab(), vocab({ id: 'x', word: 'run', lemma: 'run' })], { header: false })
+    expect(csv.split('\n')).toHaveLength(1)
+  })
+  it('toWordsCSV 按词去重（忽略大小写）', () => {
+    const csv = toWordsCSV([{ word: 'Run' }, { word: 'run' }])
+    expect(csv.split('\n')).toHaveLength(2)
+  })
+  it('renderPrintHTML 跨分组去重', () => {
+    const html = renderPrintHTML({
+      title: 'x',
+      groups: [
+        { key: 'A', items: [vocab()] },
+        { key: 'B', items: [vocab({ id: 'y', lemma: 'run', word: 'run' })] },
+      ],
+    })
+    expect(html.match(/class="word">run/g)?.length).toBe(1)
   })
 })

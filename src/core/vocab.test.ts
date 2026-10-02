@@ -256,3 +256,10 @@ describe('复习排期（SM-2 变体）', () => {
     expect(dueItems([future, due], NOW).map((x) => x.lemma)).toEqual(['due'])
   })
 })
+
+describe('lemmaOf 短语', () => {
+  it('含空格的短语不做词形还原，保持原样（小写）', () => {
+    expect(lemmaOf('human rights')).toBe('human rights')
+    expect(lemmaOf('Climate Change')).toBe('climate change')
+  })
+})

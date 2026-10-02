@@ -151,3 +151,10 @@ describe('buildCleanupPrompt', () => {
     expect(p).toContain('Hong Kong held elections for')
   })
 })
+
+describe('buildBatchLookupPrompt 去重', () => {
+  it('同一个词（忽略大小写）只列一次', () => {
+    const p = buildBatchLookupPrompt([{ word: 'run' }, { word: 'Run' }])
+    expect(p.match(/- run/gi)?.length).toBe(1)
+  })
+})

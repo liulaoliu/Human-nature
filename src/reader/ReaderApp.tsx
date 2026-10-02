@@ -10,6 +10,7 @@ import {
   groupItems,
   lemmaOf,
   markWord,
+  removeItem,
   reviewItem,
   sortItems,
 } from '../core/vocab'
@@ -57,6 +58,13 @@ const EDITION_LABEL: Record<ReturnType<typeof styleOf>, string> = {
 }
 function editionOf(key: string): string {
   return EDITION_LABEL[styleOf(key)]
+}
+
+/** 秒 → `m:ss` 或 `h:mm`（用于选词模式计时与统计） */
+function fmtDur(sec: number): string {
+  const m = Math.floor(sec / 60)
+  if (m < 60) return `${m}:${String(sec % 60).padStart(2, '0')}`
+  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
 }
 
 /**
@@ -127,6 +135,8 @@ export default function ReaderApp() {
   const [draft, setDraft] = useState('')
   /** 是否按住 Ctrl / ⌘（决定「整句」还是「按词吸附」） */
   const [ctrlHeld, setCtrlHeld] = useState(false)
+  /** 是否按住 Alt（选词模式下：Alt+拖动选词组，否则只选一个词） */
+  const [altHeld, setAltHeld] = useState(false)
   const [edition, setEdition] = useState('全部')
   /** 阅读字号 / 字重，存本机 */
   const [fontSize, setFontSize] = useState(() => {
@@ -154,17 +164,41 @@ export default function ReaderApp() {
   const [newTitle, setNewTitle] = useState('')
   const [pdfRange, setPdfRange] = useState('')
   const [importing, setImporting] = useState('')
+  /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
+  const [peekSid, setPeekSid] = useState<string | null>(null)
+  /** 选词模式：最近选中的词 + 气泡位置 */
+  const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
+  const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
+  /** 选词模式计时（秒）与历史统计 */
+  const [vocabSeconds, setVocabSeconds] = useState(0)
+  const [sessions, setSessions] = useState<{ at: string; seconds: number; picked: number }[]>(() => {
+    try {
+      return JSON.parse(localStorage.getItem('reader:vocabStats') ?? '[]')
+    } catch {
+      return []
+    }
+  })
   /** 选词模式：点/划直接选生词，攒一批后一键导出 */
   const [vocabMode, setVocabMode] = useState(false)
   const [batch, setBatch] = useState<BatchItem[]>([])
   const applyingDom = useRef(false)
   const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
+  const vocabStartRef = useRef<number | null>(null)
+  const vocabAccumRef = useRef(0)
+  const sessionPickedRef = useRef(0)
+  const articleRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     const r = createVocabRepo()
     repo.current = r
     r.load().then(setLibrary).catch(() => {})
+    // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
+    try {
+      void navigator.storage?.persist?.()
+    } catch {
+      // 老浏览器忽略
+    }
     const ar = createArticleRepo()
     articles.current = ar
     ar.list().then(setSaved).catch(() => {})
@@ -178,11 +212,16 @@ export default function ReaderApp() {
   useEffect(() => {
     const down = (e: KeyboardEvent) => {
       if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(true)
+      if (e.key === 'Alt') setAltHeld(true)
     }
     const up = (e: KeyboardEvent) => {
       if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(false)
+      if (e.key === 'Alt') setAltHeld(false)
     }
-    const blur = () => setCtrlHeld(false)
+    const blur = () => {
+      setCtrlHeld(false)
+      setAltHeld(false)
+    }
     window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', blur)
@@ -193,13 +232,18 @@ export default function ReaderApp() {
     }
   }, [])
 
-  // 键盘 W 切换「选词模式」（在输入框里打字时不触发）
+  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发）
+  const toggleVocabRef = useRef<() => void>(() => {})
+  const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      if (e.key === 'w' || e.key === 'W') setVocabMode((v) => !v)
+      const k = e.key.toLowerCase()
+      if (k === 'w') toggleVocabRef.current()
+      else if (k === 'a') navVocabRef.current(-1)
+      else if (k === 'd') navVocabRef.current(1)
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -251,6 +295,149 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
+  const recordSession = useCallback((seconds: number, picked: number) => {
+    if (seconds < 1 && picked === 0) return
+    setSessions((prev) => {
+      const next = [...prev, { at: new Date().toISOString(), seconds, picked }].slice(-500)
+      try {
+        localStorage.setItem('reader:vocabStats', JSON.stringify(next))
+      } catch {
+        // 忽略
+      }
+      return next
+    })
+  }, [])
+
+  /** 开关选词模式：开时开始计时，关时记一次会话。 */
+  const toggleVocabMode = useCallback(() => {
+    if (vocabMode) {
+      const start = vocabStartRef.current
+      const seconds = Math.round(vocabAccumRef.current + (start ? (Date.now() - start) / 1000 : 0))
+      recordSession(seconds, sessionPickedRef.current)
+      vocabStartRef.current = null
+      vocabAccumRef.current = 0
+      setVocabMode(false)
+    } else {
+      vocabStartRef.current = Date.now()
+      vocabAccumRef.current = 0
+      sessionPickedRef.current = 0
+      setVocabSeconds(0)
+      setVocabMode(true)
+    }
+  }, [vocabMode, recordSession])
+
+  // 计时：选词模式打开时每秒刷新
+  useEffect(() => {
+    if (!vocabMode) return
+    const id = window.setInterval(() => {
+      const start = vocabStartRef.current
+      setVocabSeconds(Math.round(vocabAccumRef.current + (start ? (Date.now() - start) / 1000 : 0)))
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [vocabMode])
+
+  // 切走标签页就暂停计时（只算真正盯着读的时间）
+  useEffect(() => {
+    if (!vocabMode) return
+    const onVis = () => {
+      if (document.hidden) {
+        if (vocabStartRef.current) {
+          vocabAccumRef.current += (Date.now() - vocabStartRef.current) / 1000
+          vocabStartRef.current = null
+        }
+      } else if (!vocabStartRef.current) {
+        vocabStartRef.current = Date.now()
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => document.removeEventListener('visibilitychange', onVis)
+  }, [vocabMode])
+
+  const totals = useMemo(
+    () =>
+      sessions.reduce(
+        (a, s) => ({ seconds: a.seconds + s.seconds, picked: a.picked + s.picked }),
+        { seconds: 0, picked: 0 },
+      ),
+    [sessions],
+  )
+
+  /** 按天统计：今天选了多少 + 连续打卡天数。 */
+  const dayStats = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const byDay = new Map<string, number>()
+    for (const s of sessions) {
+      const k = key(new Date(s.at))
+      byDay.set(k, (byDay.get(k) ?? 0) + s.picked)
+    }
+    const now = new Date()
+    const todayKey = key(now)
+    const cursor = new Date(now)
+    if (!byDay.has(todayKey)) cursor.setDate(cursor.getDate() - 1)
+    let streak = 0
+    while (byDay.has(key(cursor))) {
+      streak += 1
+      cursor.setDate(cursor.getDate() - 1)
+    }
+    return { todayPicked: byDay.get(todayKey) ?? 0, streak }
+  }, [sessions])
+
+  /** 有生词的句子 id（生词本里记了来源句 + 待选清单），按正文顺序。 */
+  const vocabSids = useMemo(() => {
+    if (!doc) return []
+    const ids = new Set<string>()
+    // 只算**当前这篇**的来源句（句子 id 是每篇各自从 s001 编的，跨篇会撞）；
+    // 已掌握的跳过，A/D 只跳还没掌握的
+    for (const it of library.items) {
+      if (
+        it.source?.sentenceId &&
+        it.source.fileName === articleKey &&
+        it.status !== 'mastered'
+      ) {
+        ids.add(it.source.sentenceId)
+      }
+    }
+    for (const b of batch) if (b.sentenceId) ids.add(b.sentenceId)
+    return doc.sentences.filter((s) => ids.has(s.id)).map((s) => s.id)
+  }, [doc, library.items, batch, articleKey])
+  const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
+
+  /** A/D：跳到上/下一句有生词的句子，临时高亮并滚到中间。 */
+  const navigateVocab = useCallback(
+    (dir: 1 | -1) => {
+      if (!vocabSids.length) return
+      const cur = peekSid ?? selectedId
+      let idx = cur ? vocabSids.indexOf(cur) : -1
+      idx = idx < 0 ? (dir === 1 ? 0 : vocabSids.length - 1) : (idx + dir + vocabSids.length) % vocabSids.length
+      const sid = vocabSids[idx]
+      setPeekSid(sid)
+      window.requestAnimationFrame(() => {
+        articleRef.current
+          ?.querySelector(`[data-sid="${sid}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      })
+    },
+    [vocabSids, peekSid, selectedId],
+  )
+  toggleVocabRef.current = toggleVocabMode
+  navVocabRef.current = navigateVocab
+
+  // 最近选中的词 → 气泡位置（贴在所在句上方）
+  useEffect(() => {
+    if (!lastPicked) {
+      setBubblePos(null)
+      return
+    }
+    const el = articleRef.current?.querySelector(`[data-sid="${lastPicked.sid}"]`) as HTMLElement | null
+    if (!el) {
+      setBubblePos(null)
+      return
+    }
+    setBubblePos({ top: el.offsetTop - 4, left: el.offsetLeft })
+  }, [lastPicked, doc, fontSize, bold, serif])
+
   const remember = useCallback((key: string | null, id: string | null) => {
     try {
       localStorage.setItem('reader:last', JSON.stringify({ key, id }))
@@ -265,6 +452,8 @@ export default function ReaderApp() {
     setUseExact(false)
     setExactRange(null)
     setBatch([])
+    setPeekSid(null)
+    setLastPicked(null)
   }, [])
 
   const loadText = useCallback(
@@ -373,16 +562,19 @@ export default function ReaderApp() {
   }, [manual, newTitle, loadSaved, flash])
 
   /** 从 .txt/.md 导入：一个文件=一篇；多选就是多篇。 */
-  /** 复制清洗提示词：让 AI 去掉复制文本的多余换行、粘连和错误。 */
-  const copyCleanupPrompt = useCallback(async () => {
-    if (!manual.trim()) return
-    try {
-      await navigator.clipboard.writeText(buildCleanupPrompt(manual))
-      flash('已复制；去 AI 粘贴，把结果贴回这个框再「创建文章」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [manual, flash])
+  /** 复制清洗提示词：让 AI 去掉复制文本的多余换行、粘连和错误。next 是拿到结果后该做什么。 */
+  const copyCleanupPrompt = useCallback(
+    async (text: string, next: string) => {
+      if (!text.trim()) return
+      try {
+        await navigator.clipboard.writeText(buildCleanupPrompt(text))
+        flash(`已复制；去 AI 粘贴，把结果贴回来再${next}`)
+      } catch {
+        flash('复制失败：浏览器需要 localhost 或 https')
+      }
+    },
+    [flash],
+  )
 
   const onImportFiles = useCallback(
     async (files: FileList | null) => {
@@ -596,6 +788,7 @@ export default function ReaderApp() {
       if (!span) return
       const sid = span.dataset.sid ?? null
       if (sid) setSelectedId(sid)
+      setPeekSid(null)
 
       const text = span.textContent ?? ''
       const a = offsetIn(span, range.startContainer, range.startOffset)
@@ -610,16 +803,18 @@ export default function ReaderApp() {
 
       // 选词模式：点=一个词，拖=范围内所有词，都进「待选」清单
       if (vocabMode) {
-        const snapped = snapSelection(text, a, range.collapsed ? a : b)
+        // 默认只选一个词；按住 Alt 拖动才按整段词组
+        const end = altHeld && !range.collapsed ? b : a
+        const snapped = snapSelection(text, a, end)
         if (!snapped) return
         setExact(snapped.text)
         setUseExact(true)
         setRange(snapped.start, snapped.end)
         if (finalize) {
-          const words = wordSpans(text)
-            .filter((w) => w.start >= snapped.start && w.end <= snapped.end)
-            .map((w) => w.text)
-          addToBatch(words, sentenceText, sid)
+          const already = batch.some((b) => lemmaOf(b.word) === lemmaOf(snapped.text))
+          addToBatch([snapped.text], sentenceText, sid)
+          if (!already) sessionPickedRef.current += 1
+          if (sid) setLastPicked({ word: snapped.text, sid })
           clearDomSelection()
         }
         return
@@ -650,7 +845,7 @@ export default function ReaderApp() {
       setRange(snapped.start, snapped.end)
       if (finalize) clearDomSelection()
     },
-    [vocabMode, addToBatch, clearDomSelection, wordIndexRange],
+    [vocabMode, altHeld, batch, addToBatch, clearDomSelection, wordIndexRange],
   )
 
   // 拖动过程中实时更新（不改 DOM，避免和拖选打架）；松手时才清原生选区、显示圆角高亮
@@ -833,10 +1028,11 @@ export default function ReaderApp() {
       exportedAt: new Date().toISOString(),
       library,
       articles: saved,
+      stats: sessions,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, download])
+  }, [library, saved, sessions, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -859,6 +1055,15 @@ export default function ReaderApp() {
             importedLib = obj.library as VocabLibrary
           } else if (Array.isArray(obj.items)) {
             importedLib = data as VocabLibrary
+          }
+          if (Array.isArray(obj.stats)) {
+            const stats = obj.stats as { at: string; seconds: number; picked: number }[]
+            setSessions(stats)
+            try {
+              localStorage.setItem('reader:vocabStats', JSON.stringify(stats))
+            } catch {
+              // 忽略
+            }
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }
@@ -939,7 +1144,7 @@ export default function ReaderApp() {
             </button>
           )}
           {doc && !editing && (
-            <button className={vocabMode ? 'primary' : ''} onClick={() => setVocabMode((v) => !v)} title="选词模式（W）：点 / 划直接选生词，攒一批后一键导出">
+            <button className={vocabMode ? 'primary' : ''} onClick={toggleVocabMode} title="选词模式（W）：默认选单个词；按住 Alt 拖动选词组">
               选词模式{vocabMode ? ' · 开' : ''}
             </button>
           )}
@@ -948,8 +1153,21 @@ export default function ReaderApp() {
               编辑正文
             </button>
           )}
+          {vocabMode && (
+            <span className="muted timer" title="选词模式计时；今日/连续/累计统计记在本机">
+              ⏱ {fmtDur(vocabSeconds)} · 本轮 {sessionPickedRef.current} · 今日 {dayStats.todayPicked} ·🔥
+              {dayStats.streak} · 累计 {totals.picked} 词 / {fmtDur(totals.seconds)}
+            </span>
+          )}
           {editing && (
             <>
+              <button
+                onClick={() => void copyCleanupPrompt(draft, '「完成」')}
+                disabled={!draft.trim()}
+                title="复制一段提示词：让 AI 去掉这段文本的多余换行、粘连和错误，再把结果贴回编辑框"
+              >
+                生成清洗提示词
+              </button>
               <button className="primary" onClick={applyEdit}>
                 完成
               </button>
@@ -1036,7 +1254,7 @@ export default function ReaderApp() {
                 />
               </label>
               <button
-                onClick={() => void copyCleanupPrompt()}
+                onClick={() => void copyCleanupPrompt(manual, '「创建文章」')}
                 disabled={!manual.trim()}
                 title="复制一段提示词：让 AI 去掉这段复制文本的多余换行、粘连和错误"
               >
@@ -1073,7 +1291,12 @@ export default function ReaderApp() {
             ) : (
               <>
                 <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
-                <article className="article">
+                <article className="article" ref={articleRef}>
+                  {vocabMode && lastPicked && bubblePos && (
+                    <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
+                      {lastPicked.word}
+                    </div>
+                  )}
                   {doc.paragraphs.map((p) => (
                     <p className="para" key={p.id}>
                       {p.sentenceIds.map((sid) => {
@@ -1085,7 +1308,9 @@ export default function ReaderApp() {
                             data-sid={sid}
                             className={
                               'sent' +
-                              (selectedId === sid && !(useExact && exactRange?.sid === sid) ? ' sel' : '')
+                              (selectedId === sid ? ' sel' : '') +
+                              (peekSid === sid && selectedId !== sid ? ' peek' : '') +
+                              (vocabSidSet.has(sid) ? ' has-vocab' : '')
                             }
                             onClick={() => setSelectedId(sid)}
                           >
@@ -1141,7 +1366,11 @@ export default function ReaderApp() {
               {target || '（在正文里划选，或点一句）'}
             </span>
           </div>
-          <div className="muted hint">单击=整句；拖动=按整词吸附；按住 Ctrl 点=单个词。</div>
+          <div className="muted hint">
+            {vocabMode
+              ? '选词模式：点 / 拖 = 一个词；按住 Alt 拖动 = 词组。'
+              : '单击=整句；拖动=按整词吸附；按住 Ctrl 点=单个词。'}
+          </div>
           <div className="tasks">
             <button className="primary" onClick={mark} disabled={!exact}>
               加入生词
@@ -1225,6 +1454,9 @@ export default function ReaderApp() {
                 }}
               >
                 改释义
+              </button>
+              <button onClick={() => persist(removeItem(library, it.id))} title="从这个生词本删除">
+                删除
               </button>
             </div>
           </div>

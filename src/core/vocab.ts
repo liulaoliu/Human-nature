@@ -60,6 +60,8 @@ export function normalizeWord(raw: string): string {
 export function lemmaOf(raw: string): string {
   const w = normalizeWord(raw)
   if (!w) return ''
+  // 短语（含空格）不做词形还原，原样作为去重键
+  if (w.includes(' ')) return w
   if (IRREGULAR[w]) return IRREGULAR[w]
   let s = w.replace(/'s$/, '')
   if (s.length <= 2) return s

@@ -104,7 +104,10 @@ a { color: var(--accent); }
 .reader.font-serif .para { font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif; }
 .sent { border-radius: 5px; cursor: pointer; padding: 1px 2px; }
 .sent:hover { background: rgba(242, 181, 68, 0.12); }
-.sent.sel { background: rgba(242, 181, 68, 0.16); box-shadow: inset 0 0 0 1px rgba(242, 181, 68, 0.45); }
+.sent.sel {
+  background: rgba(242, 181, 68, 0.42);
+  box-shadow: inset 0 0 0 1.5px rgba(242, 181, 68, 0.8);
+}
 /* 选中的词/词组：自定义高亮，可圆角、跨行也圆角。
    注意不要加横向 padding——会把词撑宽、导致换行跳动。 */
 .hl {
@@ -205,3 +208,36 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .filebtn:hover { background: #2f343f; }
 .filebtn input { display: none; }
 .range-input { flex: 0 1 200px; min-width: 150px; }
+
+/* 正文容器做定位上下文（气泡用） */
+.article { position: relative; }
+
+/* 选词模式：最近选中的词，浮在当前句上方 */
+.bubble {
+  position: absolute;
+  transform: translateY(-115%);
+  background: #f2b544;
+  color: #1a1205;
+  padding: 2px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45);
+  z-index: 2;
+}
+
+/* a/d 跳到的「有生词的句子」：临时高亮，颜色比选中的琥珀冷一点，便于区分 */
+.sent.peek {
+  background: rgba(74, 158, 255, 0.3);
+  box-shadow: inset 0 0 0 1.5px rgba(74, 158, 255, 0.8);
+}
+.timer { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* 有生词的句子：虚线下划线（不挤动排版），全篇一眼看到分布 */
+.sent.has-vocab {
+  text-decoration: underline dotted rgba(242, 181, 68, 0.7);
+  text-underline-offset: 3px;
+  text-decoration-thickness: 2px;
+}

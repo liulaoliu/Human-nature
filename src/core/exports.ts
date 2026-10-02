@@ -13,6 +13,18 @@ function csvField(value: string): string {
   return /[",\n\r]/.test(value) ? `"${value.replace(/"/g, '""')}"` : value
 }
 
+/** 按 lemma 去重（输出前的保险，避免同一词重复出现在卡片/打印里）。 */
+export function dedupeByLemma(items: VocabItem[]): VocabItem[] {
+  const seen = new Set<string>()
+  const out: VocabItem[] = []
+  for (const it of items) {
+    if (seen.has(it.lemma)) continue
+    seen.add(it.lemma)
+    out.push(it)
+  }
+  return out
+}
+
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, '&amp;')
@@ -33,7 +45,7 @@ function ankiTag(value: string): string {
 export function toAnkiCSV(items: VocabItem[], opts?: { header?: boolean }): string {
   const rows: string[] = []
   if (opts?.header ?? true) rows.push(['Front', 'Back', 'Tags'].map(csvField).join(','))
-  for (const it of items) {
+  for (const it of dedupeByLemma(items)) {
     const front = [it.word, it.phonetic].filter(Boolean).join(' ')
     const back: string[] = []
     if (it.partOfSpeech) back.push(it.partOfSpeech)
@@ -81,9 +93,15 @@ export function importDocumentJSON(raw: string): EconomistDocument {
  * 在浏览器里打开后「打印 → 另存为 PDF」即可。
  */
 export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }): string {
+  const seen = new Set<string>()
   const groups = input.groups
     .map((g) => {
       const items = g.items
+        .filter((it) => {
+          if (seen.has(it.lemma)) return false
+          seen.add(it.lemma)
+          return true
+        })
         .map((it) => {
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
@@ -139,6 +157,12 @@ ${groups}
 /** 导出「待选生词」CSV（两列：Word, Context）。 */
 export function toWordsCSV(entries: { word: string; context?: string }[]): string {
   const rows = ['Word,Context']
-  for (const e of entries) rows.push([e.word, e.context ?? ''].map(csvField).join(','))
+  const seen = new Set<string>()
+  for (const e of entries) {
+    const key = e.word.trim().toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    rows.push([e.word, e.context ?? ''].map(csvField).join(','))
+  }
   return rows.join('\n')
 }

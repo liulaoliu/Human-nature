@@ -161,7 +161,14 @@ export function applyToSentence(sentence: Sentence, task: AnalysisTask, raw: str
  * 用在「选词模式」里攒了一批词，一键复制。
  */
 export function buildBatchLookupPrompt(entries: { word: string; context?: string }[]): string {
-  const lines = entries
+  const seen = new Set<string>()
+  const unique = entries.filter((e) => {
+    const k = e.word.trim().toLowerCase()
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+  const lines = unique
     .map((e) => (e.context ? `- ${e.word}  （上下文：${e.context}）` : `- ${e.word}`))
     .join('\n')
   return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；没把握的字段留空，不要编造。\n单词与上下文：\n${lines}`
