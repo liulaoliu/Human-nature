@@ -1928,7 +1928,7 @@ export default function ReaderApp() {
                         const s = doc.sentences.find((x) => x.id === sid)
                         if (!s) return null
                         return (
-                          <span key={sid}>
+                          <span key={sid} className="s-pair">
                             <span
                               data-sid={sid}
                               className={
@@ -1946,10 +1946,10 @@ export default function ReaderApp() {
                                 focusEntry,
                               )}{' '}
                             </span>
-                            {translateView !== 'off' && (
+                            {translateView !== 'off' && (s.translation || translateView === 'only') && (
                               <span
                                 data-sid={sid}
-                                className={'tr-inline' + (selectedId === sid ? ' sel' : '')}
+                                className={'tr-block' + (selectedId === sid ? ' sel' : '')}
                                 onClick={() => setSelectedId(sid)}
                                 title="点这里等价于选中这句"
                               >
