@@ -8,6 +8,7 @@ import {
   renderPrintHTML,
   toAnkiCSV,
   toWordsCSV,
+  toWrongWordsCSV,
 } from './exports'
 import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import type { EconomistDocument, VocabItem, VocabLibrary } from '../types/document'
@@ -129,5 +130,18 @@ describe('输出去重', () => {
       ],
     })
     expect(html.match(/class="word">run/g)?.length).toBe(1)
+  })
+})
+
+describe('toWrongWordsCSV', () => {
+  it('只导出出错过的词，含次数', () => {
+    const csv = toWrongWordsCSV([
+      vocab({ reviewState: { ease: 2.5, due: null, interval: 1, repetitions: 1, lapses: 3 } }),
+      vocab({ id: 'b', lemma: 'go', word: 'go', reviewState: { ease: 2.5, due: null, interval: 1, repetitions: 1, lapses: 0 } }),
+    ])
+    const lines = csv.split('\n')
+    expect(lines).toHaveLength(2)
+    expect(lines[1]).toContain('run')
+    expect(lines[1]).toContain('3')
   })
 })

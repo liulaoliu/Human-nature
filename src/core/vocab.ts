@@ -458,15 +458,23 @@ export function dedupeLibrary(library: VocabLibrary): VocabLibrary {
 }
 
 /**
- * 背单词的出场顺序：先到期的，再没学过的，最后其它（都按到期/创建时间）。
+ * 背单词的出场顺序：先到期的，再没学过的，最后其它。
+ * opts.newLimit / newToday 用来限制「每天新词量」。
  */
-export function buildStudyQueue(items: VocabItem[], now: Date = new Date()): VocabItem[] {
+export function buildStudyQueue(
+  items: VocabItem[],
+  now: Date = new Date(),
+  opts: { newLimit?: number; newToday?: number } = {},
+): VocabItem[] {
   const isDue = (it: VocabItem) => it.reviewState.due !== null && new Date(it.reviewState.due) <= now
   const byDue = (a: VocabItem, b: VocabItem) =>
     (a.reviewState.due ?? '').localeCompare(b.reviewState.due ?? '') ||
     a.createdAt.localeCompare(b.createdAt)
   const due = items.filter(isDue).sort(byDue)
-  const fresh = items.filter((it) => it.reviewState.repetitions === 0 && !isDue(it))
+  const freshAll = items.filter((it) => it.reviewState.repetitions === 0 && !isDue(it))
+  const remaining =
+    opts.newLimit && opts.newLimit > 0 ? Math.max(0, opts.newLimit - (opts.newToday ?? 0)) : Infinity
+  const fresh = freshAll.slice(0, remaining)
   const rest = items.filter((it) => it.reviewState.repetitions > 0 && !isDue(it)).sort(byDue)
   return [...due, ...fresh, ...rest]
 }

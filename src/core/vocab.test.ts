@@ -298,3 +298,18 @@ describe('出错加权（lapses）', () => {
     expect(review({ ease: 2.5, due: null, interval: 1, repetitions: 1 }, 'again').lapses).toBe(1)
   })
 })
+
+describe('每日新词配额', () => {
+  const now = new Date('2026-10-02T00:00:00Z')
+  const fresh = (n: number) =>
+    item({ id: `f${n}`, lemma: `f${n}`, reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 } })
+  it('限制新词数量', () => {
+    expect(buildStudyQueue([fresh(1), fresh(2), fresh(3)], now, { newLimit: 2, newToday: 0 })).toHaveLength(2)
+  })
+  it('当天额度用完就不出新词', () => {
+    expect(buildStudyQueue([fresh(1), fresh(2)], now, { newLimit: 2, newToday: 2 })).toHaveLength(0)
+  })
+  it('不限时不裁剪', () => {
+    expect(buildStudyQueue([fresh(1), fresh(2), fresh(3)], now, { newLimit: 0 })).toHaveLength(3)
+  })
+})

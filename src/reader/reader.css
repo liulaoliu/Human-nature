@@ -366,3 +366,9 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .stats-col { flex: 1; width: 100%; display: flex; align-items: flex-end; }
 .stats-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
 .stats-label { font-size: 11px; color: var(--dim); margin-top: 3px; }
+
+/* 统计：按文章看产出 */
+.stats-articles { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.stats-article { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; line-height: 1.7; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats-article .ellipsis { min-width: 0; }

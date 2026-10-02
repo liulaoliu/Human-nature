@@ -166,3 +166,16 @@ export function toWordsCSV(entries: { word: string; context?: string }[]): strin
   }
   return rows.join('\n')
 }
+
+/** 导出错词本 CSV（词 / 出错次数 / 含义 / 来源句）。 */
+export function toWrongWordsCSV(items: VocabItem[]): string {
+  const rows = ['Word,Lapses,Meaning,Context']
+  for (const it of dedupeByLemma(items).filter((x) => (x.reviewState.lapses ?? 0) > 0)) {
+    rows.push(
+      [it.word, String(it.reviewState.lapses ?? 0), it.meaning ?? '', it.source?.sentenceText ?? '']
+        .map(csvField)
+        .join(','),
+    )
+  }
+  return rows.join('\n')
+}

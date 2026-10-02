@@ -25,7 +25,7 @@ import {
   parseAnalysis,
   type AnalysisTask,
 } from '../core/analyzer'
-import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV } from '../core/exports'
+import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -68,6 +68,12 @@ function fmtDur(sec: number): string {
   const m = Math.floor(sec / 60)
   if (m < 60) return `${m}:${String(sec % 60).padStart(2, '0')}`
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
+}
+
+/** 本机时区的日期键 YYYY-MM-DD */
+function localDayKey(d: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
 }
 
 /**
@@ -228,6 +234,26 @@ export default function ReaderApp() {
   })
   const [studyInput, setStudyInput] = useState('')
   const [studyChecked, setStudyChecked] = useState(false)
+  /** 每天引入新词的上限（0=不限）与今天已引入 */
+  const [newLimit, setNewLimit] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:newLimit') ?? '20')
+      return Number.isFinite(n) && n >= 0 ? n : 20
+    } catch {
+      return 20
+    }
+  })
+  const [newToday, setNewToday] = useState(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:newToday') ?? 'null') as {
+        day: string
+        count: number
+      } | null
+      return raw && raw.day === localDayKey() ? raw.count : 0
+    } catch {
+      return 0
+    }
+  })
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
@@ -362,6 +388,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [studySpelling])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:newLimit', String(newLimit))
+    } catch {
+      // 忽略
+    }
+  }, [newLimit])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -401,9 +434,9 @@ export default function ReaderApp() {
     )
   }, [library.items, studyScope, articleKey, doc])
 
-  /** 开始背单词：先到期，再没学过的，最后其它。 */
+  /** 开始背单词：先到期，再没学过的（受每日新词配额限制），最后其它。 */
   const startStudy = useCallback(() => {
-    const q = buildStudyQueue(studyPool)
+    const q = buildStudyQueue(studyPool, new Date(), { newLimit, newToday })
     if (!q.length) {
       flash('这个范围里没有词')
       return
@@ -413,19 +446,35 @@ export default function ReaderApp() {
     setStudyRevealed(false)
     setStudyInput('')
     setStudyChecked(false)
-  }, [studyPool, flash])
+  }, [studyPool, newLimit, newToday, flash])
+
+  /** 记录今天新引入了一个词（用于每日配额）。 */
+  const bumpNewToday = useCallback(() => {
+    setNewToday((prev) => {
+      const next = prev + 1
+      try {
+        localStorage.setItem('reader:newToday', JSON.stringify({ day: localDayKey(), count: next }))
+      } catch {
+        // 忽略
+      }
+      return next
+    })
+  }, [])
 
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
       const cur = studyQueue[studyIndex]
-      if (cur) persist(reviewItem(library, cur.id, grade))
+      if (cur) {
+        persist(reviewItem(library, cur.id, grade))
+        if (cur.reviewState.repetitions === 0) bumpNewToday()
+      }
       setStudyRevealed(false)
       setStudyInput('')
       setStudyChecked(false)
       setStudyIndex((i) => i + 1)
     },
-    [studyQueue, studyIndex, library, persist],
+    [studyQueue, studyIndex, library, persist, bumpNewToday],
   )
 
   const closeStudy = useCallback(() => setStudyQueue(null), [])
@@ -593,6 +642,16 @@ export default function ReaderApp() {
     }
     return [...map.entries()]
   }, [saved])
+
+  /** 按文章统计生词产出（Top 10）。 */
+  const byArticle = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const it of library.items) {
+      const k = it.source?.articleId || '未标来源'
+      m.set(k, (m.get(k) ?? 0) + 1)
+    }
+    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+  }, [library.items])
 
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
@@ -1356,6 +1415,10 @@ export default function ReaderApp() {
       ),
     [batch, download],
   )
+  const exportWrong = useCallback(
+    () => download('wrong-words.csv', toWrongWordsCSV(library.items), 'text/csv;charset=utf-8'),
+    [library.items, download],
+  )
 
   /** 导出全部：词库 + 已保存的文章，一个 JSON 换电脑用。 */
   const exportAll = useCallback(() => {
@@ -1557,6 +1620,17 @@ export default function ReaderApp() {
                 <option value="article">本篇</option>
                 <option value="all">全部</option>
               </select>
+              <select
+                value={String(newLimit)}
+                onChange={(e) => setNewLimit(Number(e.target.value))}
+                title="每天最多引入多少新词（下一轮生效）"
+              >
+                <option value="0">新词不限</option>
+                <option value="10">新词 10/天</option>
+                <option value="20">新词 20/天</option>
+                <option value="30">新词 30/天</option>
+                <option value="50">新词 50/天</option>
+              </select>
               <label className="check-inline" title="看中文拼英文">
                 <input
                   type="checkbox"
@@ -1571,6 +1645,7 @@ export default function ReaderApp() {
               </label>
               <span className="muted">
                 {Math.min(studyIndex + 1, studyQueue.length)} / {studyQueue.length}
+                {newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
               </span>
             </div>
             {studyCard
@@ -1938,6 +2013,13 @@ export default function ReaderApp() {
           <button onClick={() => setStatsOpen((v) => !v)} title="每日选词统计">
             统计
           </button>
+          <button
+            onClick={exportWrong}
+            disabled={!library.items.some((it) => (it.reviewState.lapses ?? 0) > 0)}
+            title="导出出错过的词（Word, Lapses, Meaning, Context）"
+          >
+            导出错词
+          </button>
         </div>
         <div className="bar">
           <button onClick={exportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
@@ -1972,6 +2054,18 @@ export default function ReaderApp() {
                 </div>
               ))}
             </div>
+            {byArticle.length > 0 && (
+              <div className="stats-articles">
+                {byArticle.map(([name, n]) => (
+                  <div className="stats-article" key={name}>
+                    <span className="muted ellipsis" title={name}>
+                      {name}
+                    </span>
+                    <b>{n}</b>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
