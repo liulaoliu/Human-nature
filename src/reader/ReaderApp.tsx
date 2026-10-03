@@ -50,7 +50,6 @@ import {
   formatAnswerInput,
   isCorrect,
   isQuizKind,
-  makeDictationQuestion,
   makeQuestion,
   maskAnswer,
   QUIZ_KIND_LABEL,
@@ -58,6 +57,7 @@ import {
   type QuizKind,
   type QuizQuestion,
 } from '../core/quiz'
+import { diffWords, dictationWrongWords, type DiffToken } from '../core/dictation'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -500,6 +500,12 @@ export default function ReaderApp() {
   const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
   const [quickIndex, setQuickIndex] = useState(0)
   const [quickRevealed, setQuickRevealed] = useState(false)
+  /** 逐句听写：按文章顺序播句子，听写整句后逐词 diff */
+  const [dictQueue, setDictQueue] = useState<Sentence[] | null>(null)
+  const [dictIndex, setDictIndex] = useState(0)
+  const [dictInput, setDictInput] = useState('')
+  const [dictChecked, setDictChecked] = useState(false)
+  const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -655,7 +661,7 @@ export default function ReaderApp() {
   const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (studyQueue || quizQueue) return
+      if (studyQueue || quizQueue || quickQueue || dictQueue) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -1126,39 +1132,42 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
 
-  /** 听写全文：按文章顺序，对句中目标词播句子做听力填空，自动推进。 */
+  /** 逐句听写：按文章顺序播句子，用户听写整句，逐词 diff。 */
   const startDictation = useCallback(() => {
-    if (!doc) return
-    const used = new Set<string>()
-    const qs: QuizQuestion[] = []
-    for (const s of doc.sentences) {
-      for (const it of library.items) {
-        if (used.has(it.lemma)) continue
-        const q = makeDictationQuestion(it, s.text)
-        if (q) {
-          qs.push(q)
-          used.add(it.lemma)
-        }
-      }
-    }
-    if (!qs.length) {
-      flash('这篇没有可用于听写的生词（句子需含已建的生词）')
+    if (!doc) {
+      flash('先打开一篇文章')
       return
     }
-    if (quizAdvanceRef.current) {
-      window.clearTimeout(quizAdvanceRef.current)
-      quizAdvanceRef.current = null
+    const list = doc.sentences.filter((s) => s.text.trim())
+    if (!list.length) {
+      flash('这篇没有可听写的句子')
+      return
     }
     setStudyQueue(null)
-    setQuizQueue(qs)
-    setQuizIndex(0)
-    setQuizInput('')
-    setQuizChecked(false)
-    setQuizResult(null)
-    setQuizResults([])
-    setQuizAutoRun(true)
     setQuizSetupOpen(false)
-  }, [doc, library.items, flash])
+    setQuizQueue(null)
+    setQuickQueue(null)
+    setDictQueue(list)
+    setDictIndex(0)
+    setDictInput('')
+    setDictChecked(false)
+    setDictDiff(null)
+  }, [doc, flash])
+
+  const checkDict = useCallback(() => {
+    if (!dictQueue) return
+    const s = dictQueue[dictIndex]
+    if (!s) return
+    setDictDiff(diffWords(s.text, dictInput).tokens)
+    setDictChecked(true)
+  }, [dictQueue, dictIndex, dictInput])
+
+  const nextDict = useCallback(() => {
+    setDictInput('')
+    setDictChecked(false)
+    setDictDiff(null)
+    setDictIndex((i) => i + 1)
+  }, [])
 
   const nextQuiz = useCallback(() => {
     if (quizAdvanceRef.current) {
@@ -1278,6 +1287,30 @@ export default function ReaderApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [quickQueue, quickIndex, gradeQuick])
+
+  // 听写快捷键：回车 检查 / 下一句，Tab 重听，Esc 退出
+  useEffect(() => {
+    if (!dictQueue) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setDictQueue(null)
+        return
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        const s = dictQueue[dictIndex]
+        if (s) speakRef.current(s.text)
+        return
+      }
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      if (dictIndex >= dictQueue.length) return
+      if (!dictChecked) checkDict()
+      else nextDict()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [dictQueue, dictIndex, dictChecked, checkDict, nextDict])
 
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
@@ -1436,6 +1469,20 @@ export default function ReaderApp() {
       }),
     [doc],
   )
+
+  /** 把本句漏写的词加入待选，之后统一查词。 */
+  const dictWrongNow = useCallback(() => {
+    if (!dictQueue) return
+    const s = dictQueue[dictIndex]
+    if (!s) return
+    const words = dictationWrongWords(diffWords(s.text, dictInput))
+    if (!words.length) {
+      flash('这句没有漏写的词')
+      return
+    }
+    mergeBatch(batchItemsFromWords(words))
+    flash(`已把 ${words.length} 个漏写词加入待选`)
+  }, [dictQueue, dictIndex, dictInput, mergeBatch, batchItemsFromWords, flash])
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -1755,6 +1802,12 @@ export default function ReaderApp() {
     const q = quizQueue[quizIndex]
     if ((q?.kind === 'listen' || q?.kind === 'ear') && q.audioText) speak(q.audioText)
   }, [quizQueue, quizIndex, speak])
+
+  // 听写：每换一句自动播放
+  useEffect(() => {
+    if (!dictQueue || dictIndex >= dictQueue.length) return
+    speak(dictQueue[dictIndex].text)
+  }, [dictQueue, dictIndex, speak])
 
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
   const selectSentence = useCallback(
@@ -3051,8 +3104,8 @@ export default function ReaderApp() {
     [library, persist],
   )
 
-  /** 考试 / 快刷 / 听写 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
-  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue
+  /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
+  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
@@ -3883,6 +3936,69 @@ export default function ReaderApp() {
                   </div>
                 </div>
               )}
+          </div>
+        )}
+
+        {dictQueue && (
+          <div className="study dict">
+            <div className="bar study-bar">
+              <button onClick={() => setDictQueue(null)}>结束（Esc）</button>
+              <span className="muted">
+                {Math.min(dictIndex + 1, dictQueue.length)} / {dictQueue.length}
+              </span>
+              <button
+                onClick={() => {
+                  const s = dictQueue[dictIndex]
+                  if (s) speak(s.text)
+                }}
+                title="再听一遍（Tab）"
+              >
+                🔊 再听一遍
+              </button>
+            </div>
+            {dictIndex < dictQueue.length ? (
+              <>
+                <textarea
+                  className="study-input dict-input"
+                  autoFocus
+                  placeholder="听写这一句，回车检查 / 下一句"
+                  value={dictInput}
+                  onChange={(e) => setDictInput(e.target.value)}
+                  disabled={dictChecked}
+                />
+                {dictChecked && dictDiff && (
+                  <div className="dict-diff">
+                    {dictDiff.map((t, i) => (
+                      <span key={i} className={'dt ' + t.type}>
+                        {t.text}{' '}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                <div className="bar study-actions">
+                  {!dictChecked ? (
+                    <button className="primary" onClick={checkDict}>
+                      检查（回车）
+                    </button>
+                  ) : (
+                    <button className="primary" onClick={nextDict}>
+                      {dictIndex + 1 >= dictQueue.length ? '完成（回车）' : '下一句（回车）'}
+                    </button>
+                  )}
+                  {dictChecked && <button onClick={dictWrongNow}>漏写词加入待选</button>}
+                </div>
+              </>
+            ) : (
+              <div className="study-done">
+                <p>听写完成，共 {dictQueue.length} 句。</p>
+                <div className="bar">
+                  <button className="primary" onClick={startDictation}>
+                    再来一遍
+                  </button>
+                  <button onClick={() => setDictQueue(null)}>回到阅读</button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
