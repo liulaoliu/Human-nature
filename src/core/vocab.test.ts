@@ -134,6 +134,15 @@ describe('applyWordAnalysis', () => {
     expect(it0.examples).toHaveLength(2)
   })
 
+  it('查词结果把 word/lemma/id 一起改成原形', () => {
+    let lib = markWord(createLibrary(), { word: 'companies', articleId: 'a1' }, NOW).library
+    expect(lib.items[0].lemma).toBe('company')
+    lib = applyWordAnalysis(lib, [{ word: 'company', meaning: '公司' }], NOW)
+    expect(lib.items[0].word).toBe('company')
+    expect(lib.items[0].lemma).toBe('company')
+    expect(lib.items[0].id).toBe('vocab:company')
+  })
+
   it('手动改过的含义不被覆盖', () => {
     let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
     lib = editItem(lib, lib.items[0].id, { meaning: '\u6211\u81ea\u5df1\u7684\u91ca\u4e49' }, NOW)

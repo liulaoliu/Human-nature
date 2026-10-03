@@ -213,7 +213,9 @@ export function applyWordAnalysis(
   for (const wa of words) {
     const lemma = lemmaOf(wa.word)
     if (!lemma) continue
-    const idx = items.findIndex((it) => it.lemma === lemma)
+    const target = normalizeWord(wa.word)
+    // 命中已有：按 lemma，或按词形完全一致（容忍历史遗留的怪 lemma）
+    const idx = items.findIndex((it) => it.lemma === lemma || (target && normalizeWord(it.word) === target))
     const examples = (wa.examples ?? []).map((e) => ({
       text: e.text,
       translation: e.translation,
@@ -245,10 +247,14 @@ export function applyWordAnalysis(
 
     const cur = items[idx]
     const locked = cur.status === 'edited' || cur.status === 'mastered'
+    // 查询结果里的「原形」优先：连 word/lemma/id 一起改，保持三者一致（手动改过的不动）
+    const newWord = locked ? cur.word : wa.word?.trim() || cur.word
+    const newLemma = locked ? cur.lemma : lemmaOf(newWord) || cur.lemma
     const merged: VocabItem = {
       ...cur,
-      // 查询结果里的「原形」优先显示（手动改过的不动）
-      word: locked ? cur.word : wa.word || cur.word,
+      id: locked ? cur.id : `vocab:${newLemma}`,
+      word: newWord,
+      lemma: newLemma,
       phonetic: cur.phonetic ?? wa.phonetic ?? null,
       partOfSpeech: cur.partOfSpeech ?? wa.partOfSpeech ?? null,
       meaning: locked && cur.meaning ? cur.meaning : wa.meaning ?? cur.meaning,

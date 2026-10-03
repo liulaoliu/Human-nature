@@ -2713,12 +2713,14 @@ export default function ReaderApp() {
     const report: string[] = []
     let next = library
     if (result.words?.length) {
-      next = applyWordAnalysis(next, result.words, new Date(), {
-        articleId: articleTitle || articleKey || '手动粘贴',
-        fileName: articleIdentity,
-        sentenceId: null,
-        sentenceText: '',
-      })
+      next = dedupeLibrary(
+        applyWordAnalysis(next, result.words, new Date(), {
+          articleId: articleTitle || articleKey || '手动粘贴',
+          fileName: articleIdentity,
+          sentenceId: null,
+          sentenceText: '',
+        }),
+      )
     }
     if (result.sentences?.length) {
       const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
