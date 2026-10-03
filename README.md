@@ -54,19 +54,29 @@ npm run dev
 ```
 构建.cmd              # 改过代码后先构建（tsc + vite → dist\）
 启动服务.cmd          # 后台静默启动（独立进程，关窗口不影响），然后显示状态并打开浏览器
+停止服务.cmd          # 停掉后台服务（先停 watchdog 再停服务，不会被自动拉起）
 安装开机自启.cmd      # 登录 Windows 时后台静默启动（VBS 隐藏，无黑窗、不弹浏览器）
 卸载开机自启.cmd      # 取消开机自启
+
+开发.cmd              # 开发模式：先停服务，再开 npm run dev（热更新，同端口同数据）
 ```
+
+**开发 / 使用互不干扰的做法**：两者都用 5173、同一份数据，但同一时刻只跑一个。
+
+- 要写代码：双击 **`开发.cmd`**（自动停服务 → 起 dev server）。开发窗口关掉即结束。
+- 写完要用：双击 **`启动服务.cmd`**（自动以后台服务接管），可配合 `安装开机自启.cmd`。
+- 中途不想用服务：**`停止服务.cmd`**。
+
+其他：
 
 - **端口写死 5173**（`config.json`）：跟 `npm run dev` 同一个 origin，生词本 / 已保存文章 /
   跟读进度（IndexedDB、localStorage）**不会因为换端口而"看不见"**。
-- 服务崩了 **watchdog 自动重启**（连续崩溃 10 次则停）。
+- 服务崩了 **watchdog 自动重启**（连续崩溃 10 次则停）；PID 存在 `server\.watchdog.pid` / `.appServer.pid`。
 - 随时 `node server/status.js` 看状态（PID / 运行时长 / 地址）。
 - **改了源码要重新 `构建.cmd`**（服务跑的是 `dist\`；`articles.json` / `shadowing-state.json` 例外，
   服务会优先读 `public\`，重新抽取正文后刷新即可，不必重建）。
 - 「存入项目」在服务模式下同样可用（`POST /__state` 写 `public\shadowing-state.json`）。
-- 服务开着时 `npm run dev` 会因端口占用报错（`strictPort`）——先用 `任务管理器` 结束 node，
-  或先跑 `启动服务.cmd` 看它在不在。
+- 直接 `npm run dev`（不经 `开发.cmd`）时，若服务在跑会因端口占用报错——先 `停止服务.cmd`。
 
 
 ## 精读 / 生词本（新，`reader.html`）

@@ -15,7 +15,9 @@ for /l %%i in (1,1,15) do (
   timeout /t 1 /nobreak >nul
 )
 echo.
-echo Start FAILED: port 5173 has no response. Did you run "npm run build" (or 构建.cmd)?
+echo Start FAILED: port 5173 has no response.
+echo   - If you are developing, the dev server may be using 5173. Close it, or run 停止服务.cmd.
+echo   - If dist\ is missing, run 构建.cmd first.
 pause
 exit /b 1
 
