@@ -88,7 +88,7 @@ function localDayKey(d: Date = new Date()): string {
  */
 function sentenceNodes(
   text: string,
-  active: { start: number; end: number } | null,
+  active: Set<number> | null,
   lemmas: Set<string>,
   onWord: (word: string) => void,
 ): ReactNode[] {
@@ -97,7 +97,7 @@ function sentenceNodes(
   let pos = 0
   spans.forEach((w, i) => {
     if (w.start > pos) out.push(text.slice(pos, w.start))
-    const on = active !== null && i >= active.start && i < active.end
+    const on = active !== null && active.has(i)
     if (on) {
       out.push(<span key={`w${i}`} className="hl">{w.text}</span>)
     } else {
@@ -144,6 +144,17 @@ interface BatchItem {
   sentenceId: string | null
 }
 
+/** 「待选」清单按文章持久化：切页/关浏览器回来还在。 */
+function loadBatchMap(): Record<string, BatchItem[]> {
+  try {
+    const raw = localStorage.getItem('reader:batch')
+    const v = raw ? (JSON.parse(raw) as Record<string, BatchItem[]>) : {}
+    return v && typeof v === 'object' ? v : {}
+  } catch {
+    return {}
+  }
+}
+
 export default function ReaderApp() {
   const [book, setBook] = useState<ArticleBook | null>(null)
   const [bookError, setBookError] = useState(false)
@@ -153,10 +164,11 @@ export default function ReaderApp() {
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 鼠标精确选中的片段（划选 / 双击选词），可能为空 */
   const [exact, setExact] = useState('')
-  /** 是否用精确片段：按住 Ctrl（Mac ⌘）划选时为真，默认用整句 */
+  /** 是否用精确片段：有精确选区时为真，默认用整句 */
   const [useExact, setUseExact] = useState(false)
-  /** 精确片段落在哪个句子的第几个词（渲染圆角高亮用） */
-  const [exactRange, setExactRange] = useState<{ sid: string; start: number; end: number } | null>(null)
+  /** 精确选区：哪个句子 + 哪些词（可离散，支持下划线多选） */
+  const [selSid, setSelSid] = useState<string | null>(null)
+  const [selIndices, setSelIndices] = useState<number[]>([])
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
   const [pasted, setPasted] = useState('')
   const [lastTask, setLastTask] = useState<AnalysisTask | null>(null)
@@ -318,6 +330,7 @@ export default function ReaderApp() {
   const applyingDom = useRef(false)
   const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
+  const batchMapRef = useRef<Record<string, BatchItem[]>>(loadBatchMap())
   const vocabStartRef = useRef<number | null>(null)
   const vocabAccumRef = useRef(0)
   const sessionPickedRef = useRef(0)
@@ -326,8 +339,6 @@ export default function ReaderApp() {
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
-  /** Ctrl 两段式点选的锚点（同一句内第一个 Ctrl 点的词） */
-  const ctrlAnchorRef = useRef<{ sid: string; word: number } | null>(null)
   const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -467,6 +478,15 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [vocabLevel])
+  // 待选清单按文章持久化
+  useEffect(() => {
+    batchMapRef.current[articleIdentity] = batch
+    try {
+      localStorage.setItem('reader:batch', JSON.stringify(batchMapRef.current))
+    } catch {
+      // 忽略
+    }
+  }, [batch, articleIdentity])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -948,12 +968,12 @@ export default function ReaderApp() {
     setSelectedId(null)
     setExact('')
     setUseExact(false)
-    setExactRange(null)
     setBatch([])
     setPeekSid(null)
     setLastPicked(null)
     setConfirmDelSave(false)
-    ctrlAnchorRef.current = null
+    setSelSid(null)
+    setSelIndices([])
   }, [])
 
   const loadText = useCallback(
@@ -967,6 +987,7 @@ export default function ReaderApp() {
       setArticleTitle(title)
       setArticleBook('')
       setSavedId(id)
+      setBatch(batchMapRef.current[key ?? id ?? title] ?? [])
     },
     [resetSelection],
   )
@@ -982,6 +1003,7 @@ export default function ReaderApp() {
       setArticleTitle(a.title)
       setArticleBook(a.book ?? '')
       setSavedId(a.id)
+      setBatch(batchMapRef.current[a.sourceKey ?? a.id ?? a.title] ?? [])
       remember(a.sourceKey, a.id)
     },
     [resetSelection, remember],
@@ -1348,70 +1370,57 @@ export default function ReaderApp() {
       const b = offsetIn(span, range.endContainer, range.endOffset)
       if (a == null || b == null) return
       const sentenceText = text.trim()
+      const spans = wordSpans(text)
 
-      /** 应用一段字符区间：设高亮；vocabMode 且 finalize 时作为一个「词组」进待选。 */
-      const applySpan = (startChar: number, endChar: number, asPhrase: boolean) => {
-        const s = text.slice(startChar, endChar)
-        if (!s) return
-        setExact(s)
-        setUseExact(true)
-        const r = wordIndexRange(text, startChar, endChar)
-        setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
-        if (finalize && asPhrase && sid) {
-          const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(s))
-          addToBatch([s], sentenceText, sid)
+      /** 设精确选区（离散词下标）；vocabMode 时把 word 增/删到待选。 */
+      const commitSel = (indices: number[], batchWord?: string) => {
+        const uniq = [...new Set(indices)].sort((x, y) => x - y)
+        setSelSid(sid)
+        setSelIndices(uniq)
+        setExact(uniq.map((i) => spans[i].text).join(' '))
+        setUseExact(uniq.length > 0)
+        if (finalize && vocabMode && sid && batchWord) {
+          const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(batchWord))
+          addToBatch([batchWord], sentenceText, sid)
           if (!already) sessionPickedRef.current += 1
-          setLastPicked({ word: s, sid })
+          setLastPicked({ word: batchWord, sid })
         }
         if (finalize) clearDomSelection()
       }
 
-      // Ctrl：单击两段式端点选择（点 bar 再点 from = 选中 bar…from）；拖动=整段
-      if (ctrl) {
-        const spans = wordSpans(text)
-        if (!spans.length) return
-        if (!range.collapsed) {
-          const snapped = snapSelection(text, a, b)
-          if (!snapped) return
-          const r = wordIndexRange(text, snapped.start, snapped.end)
-          if (sid && r) ctrlAnchorRef.current = { sid, word: r.end - 1 }
-          applySpan(snapped.start, snapped.end, vocabMode)
+      const indicesInRange = (startChar: number, endChar: number): number[] => {
+        const r = wordIndexRange(text, startChar, endChar)
+        const out: number[] = []
+        if (r) for (let i = r.start; i < r.end; i++) out.push(i)
+        return out
+      }
+
+      const idxAt = (offset: number) => spans.findIndex((w) => offset >= w.start && offset < w.end)
+
+      // 选词模式：点（含 Ctrl）= 该词增/删进「待选」；Alt/Ctrl 拖动 = 整段
+      if (vocabMode) {
+        if (range.collapsed) {
+          const idx = idxAt(a)
+          if (idx < 0) return
+          commitSel([idx], spans[idx].text)
           return
         }
-        const idx = spans.findIndex((w) => a >= w.start && a < w.end)
-        if (idx < 0) return
-        const anchor = ctrlAnchorRef.current
-        let lo = idx
-        let hi = idx
-        if (anchor && anchor.sid === sid) {
-          lo = Math.min(anchor.word, idx)
-          hi = Math.max(anchor.word, idx)
-        } else {
-          ctrlAnchorRef.current = sid ? { sid, word: idx } : null
-        }
-        applySpan(spans[lo].start, spans[hi].end, vocabMode)
+        const end = altHeld || ctrl ? b : a
+        const snapped = snapSelection(text, a, end)
+        if (!snapped) return
+        commitSel(indicesInRange(snapped.start, snapped.end), snapped.text)
         return
       }
 
-      // 非 Ctrl：清掉 Ctrl 锚点
-      ctrlAnchorRef.current = null
-
-      // 选词模式：点 = 一个词；按住 Alt 拖动 = 整段词组
-      if (vocabMode) {
-        const end = altHeld && !range.collapsed ? b : a
-        const snapped = snapSelection(text, a, end)
-        if (!snapped) return
-        setExact(snapped.text)
-        setUseExact(true)
-        const r = wordIndexRange(text, snapped.start, snapped.end)
-        setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
-        if (finalize) {
-          const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(snapped.text))
-          addToBatch([snapped.text], sentenceText, sid)
-          if (!already) sessionPickedRef.current += 1
-          if (sid) setLastPicked({ word: snapped.text, sid })
-          clearDomSelection()
-        }
+      // 非选词：Ctrl 点 = **离散多选**（点 bar、from 就选这两个，不补中间）
+      if (ctrl && range.collapsed) {
+        if (!finalize) return
+        const idx = idxAt(a)
+        if (idx < 0) return
+        const cur = new Set(selSid === sid ? selIndices : [])
+        if (cur.has(idx)) cur.delete(idx)
+        else cur.add(idx)
+        commitSel([...cur])
         return
       }
 
@@ -1419,15 +1428,26 @@ export default function ReaderApp() {
         // 只是点了一下：整句
         setExact('')
         setUseExact(false)
-        setExactRange(null)
+        setSelSid(null)
+        setSelIndices([])
         return
       }
 
+      // 拖动：连续整段（Ctrl / 非 Ctrl 一样）
       const snapped = snapSelection(text, a, b)
       if (!snapped) return
-      applySpan(snapped.start, snapped.end, false)
+      commitSel(indicesInRange(snapped.start, snapped.end))
     },
-    [vocabMode, altHeld, batch, addToBatch, clearDomSelection, wordIndexRange],
+    [
+      vocabMode,
+      altHeld,
+      batch,
+      addToBatch,
+      clearDomSelection,
+      wordIndexRange,
+      selSid,
+      selIndices,
+    ],
   )
 
   // 拖动过程中实时更新（不改 DOM，避免和拖选打架）；松手时才清原生选区、显示圆角高亮
@@ -2265,7 +2285,7 @@ export default function ReaderApp() {
                             >
                               {sentenceNodes(
                                 s.text,
-                                useExact && exactRange?.sid === sid ? exactRange : null,
+                                selSid === sid && selIndices.length ? new Set(selIndices) : null,
                                 libraryLemmas,
                                 focusEntry,
                               )}{' '}
@@ -2330,8 +2350,8 @@ export default function ReaderApp() {
           </div>
           <div className="muted hint">
             {vocabMode
-              ? '选词模式：点=一个词；Alt 拖动=词组；Ctrl 点两个词=中间整段。'
-              : '单击=整句；拖动=整词吸附；Ctrl 点两个词=选中中间整段。'}
+              ? '选词模式：点=一个词进待选；Alt 拖动=词组。'
+              : '单击=整句；拖动=整段；Ctrl 点词=离散多选（点 bar 再点 from 就选这两个）。'}
           </div>
           <div className="tasks">
             <button className="primary" onClick={mark} disabled={!exact}>
