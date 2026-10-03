@@ -800,6 +800,30 @@ button.danger {
 .listen-transcript { margin-top: 12px; font-size: 14px; color: var(--dim); line-height: 1.7; }
 .listen-transcript summary { cursor: pointer; }
 
+/* 仿写训练 */
+.writing { max-width: 760px; }
+.write-block { display: flex; flex-direction: column; gap: 6px; margin: 8px 0; }
+.write-model,
+.write-text { width: 100%; text-align: left; font-size: 15px; }
+.write-task {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  line-height: 1.7;
+}
+.write-feedback {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  line-height: 1.8;
+}
+.write-issues { margin: 8px 0 8px 18px; }
+.write-issues .bad { color: var(--red); text-decoration: line-through; }
+.write-issues .ok { color: var(--green); }
+.write-polished { margin-top: 8px; }
+
 /* 词形辨析：选项 */
 .quiz-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
 .quiz-options button { font-size: 16px; padding: 8px 14px; }

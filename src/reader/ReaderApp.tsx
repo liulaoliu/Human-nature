@@ -67,6 +67,14 @@ import {
   type ListeningResult,
 } from '../core/listening'
 import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
+import {
+  buildImitationTaskPrompt,
+  buildWritingFeedbackPrompt,
+  parseImitationTask,
+  parseWritingFeedback,
+  type ImitationTask,
+  type WritingFeedback,
+} from '../core/writing'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -249,7 +257,7 @@ export default function ReaderApp() {
     words: string[]
   } | null>(null)
   const [lastTask, setLastTask] = useState<
-    AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | 'language' | null
+    AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | 'language' | 'imitation' | 'feedback' | null
   >(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
@@ -539,6 +547,12 @@ export default function ReaderApp() {
       return false
     }
   })
+  /** 仿写训练：范句 / 任务 / 作答 / 批改 */
+  const [writingOpen, setWritingOpen] = useState(false)
+  const [writingModel, setWritingModel] = useState('')
+  const [writingTask, setWritingTask] = useState<ImitationTask | null>(null)
+  const [writingText, setWritingText] = useState('')
+  const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -1372,15 +1386,18 @@ export default function ReaderApp() {
     return () => window.removeEventListener('keydown', onKey)
   }, [dictQueue, dictIndex, dictChecked, checkDict, nextDict])
 
-  // 听力理解题：Esc 退出
+  // 听力理解题 / 仿写：Esc 退出
   useEffect(() => {
-    if (!listenOpen) return
+    if (!listenOpen && !writingOpen) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setListenOpen(false)
+      if (e.key === 'Escape') {
+        setListenOpen(false)
+        setWritingOpen(false)
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [listenOpen])
+  }, [listenOpen, writingOpen])
 
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
@@ -1613,6 +1630,66 @@ export default function ReaderApp() {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
   }, [doc, flash])
+
+  /** 打开仿写训练（范句默认用当前选中句）。 */
+  const openWriting = useCallback(() => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    const start = doc.sentences.find((s) => s.id === selectedId) ?? doc.sentences[0]
+    setStudyQueue(null)
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setQuickQueue(null)
+    setDictQueue(null)
+    setListenOpen(false)
+    setWritingOpen(true)
+    setWritingModel(start.text)
+    setWritingTask(null)
+    setWritingText('')
+    setWritingFeedback(null)
+  }, [doc, selectedId, flash])
+
+  const copyImitationTask = useCallback(async () => {
+    const model = writingModel.trim()
+    if (!model) {
+      flash('先选一句范句')
+      return
+    }
+    const s = doc?.sentences.find((x) => x.text === model)
+    setLastTask('imitation')
+    askedWordsRef.current = []
+    askedIdsRef.current = []
+    try {
+      await navigator.clipboard.writeText(
+        buildImitationTaskPrompt({ model, structure: s?.language?.structure, mustUse: s?.language?.phrases }),
+      )
+      flash('已复制仿写任务提示词；把 AI 的 JSON 粘回「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [writingModel, doc, flash])
+
+  const copyFeedback = useCallback(async () => {
+    if (!writingTask) {
+      flash('先生成仿写任务')
+      return
+    }
+    if (!writingText.trim()) {
+      flash('先写点东西再批改')
+      return
+    }
+    setLastTask('feedback')
+    askedWordsRef.current = []
+    askedIdsRef.current = []
+    try {
+      await navigator.clipboard.writeText(buildWritingFeedbackPrompt(writingTask, writingText))
+      flash('已复制批改提示词；把 AI 的 JSON 粘回「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [writingTask, writingText, flash])
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -2994,6 +3071,36 @@ export default function ReaderApp() {
       return
     }
 
+    // 仿写：生成任务
+    if (lastTask === 'imitation') {
+      const t = parseImitationTask(raw)
+      if (!t) {
+        setPasteReport(['没解析出仿写任务（需要 JSON：{task, model, rubric}）'])
+        flash('没解析出仿写任务')
+        return
+      }
+      setWritingTask(t)
+      setWritingFeedback(null)
+      setPasted('')
+      setPasteReport([`已生成仿写任务（${t.rubric.length} 个维度）`])
+      flash('已生成仿写任务，开始写吧')
+      return
+    }
+    // 仿写：批改
+    if (lastTask === 'feedback') {
+      const f = parseWritingFeedback(raw)
+      if (!f) {
+        setPasteReport(['没解析出批改结果（需要 JSON：{scores, issues, polished}）'])
+        flash('没解析出批改结果')
+        return
+      }
+      setWritingFeedback(f)
+      setPasted('')
+      setPasteReport([`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`])
+      flash(`批改完成：${f.total}/${f.max}`)
+      return
+    }
+
     const result = parseAnalysis(raw)
     const report: string[] = []
     let next = library
@@ -4270,6 +4377,87 @@ export default function ReaderApp() {
           </div>
         )}
 
+        {writingOpen && (
+          <div className="study writing">
+            <div className="bar study-bar">
+              <button onClick={() => setWritingOpen(false)}>结束（Esc）</button>
+              <span className="muted">仿写训练</span>
+              <button onClick={() => void copyImitationTask()}>① 生成任务</button>
+              <button
+                className="primary"
+                onClick={() => void copyFeedback()}
+                disabled={!writingTask || !writingText.trim()}
+              >
+                ② 批改
+              </button>
+            </div>
+            <div className="write-block">
+              <div className="muted">范句（可改）</div>
+              <textarea
+                className="study-input write-model"
+                value={writingModel}
+                onChange={(e) => setWritingModel(e.target.value)}
+                rows={3}
+              />
+              {writingTask && (
+                <div className="write-task">
+                  <div>
+                    <b>任务：</b>
+                    {writingTask.task}
+                  </div>
+                  {writingTask.structure && <div className="muted">结构：{writingTask.structure}</div>}
+                  {writingTask.mustUse.length > 0 && (
+                    <div className="muted">必须用上：{writingTask.mustUse.join('、')}</div>
+                  )}
+                  {writingTask.rubric.length > 0 && (
+                    <div className="muted">
+                      评分：{writingTask.rubric.map((r) => `${r.dimension}(${r.weight})`).join(' · ')}
+                    </div>
+                  )}
+                </div>
+              )}
+              <div className="muted">我的仿写</div>
+              <textarea
+                className="study-input write-text"
+                placeholder="在这里写…写完点「② 批改」"
+                value={writingText}
+                onChange={(e) => setWritingText(e.target.value)}
+                rows={6}
+              />
+            </div>
+            {writingFeedback && (
+              <div className="write-feedback">
+                <div className="muted">
+                  得分：{writingFeedback.total}/{writingFeedback.max}
+                </div>
+                {writingFeedback.scores.map((s) => (
+                  <div key={s.dimension}>
+                    {s.dimension}：{s.score}/{s.max}
+                    {s.comment ? ` — ${s.comment}` : ''}
+                  </div>
+                ))}
+                {writingFeedback.issues.length > 0 && (
+                  <ul className="write-issues">
+                    {writingFeedback.issues.map((is, i) => (
+                      <li key={i}>
+                        <span className="bad">{is.original}</span> → <span className="ok">{is.suggestion}</span>
+                        {is.reason ? `（${is.reason}）` : ''}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                {writingFeedback.polished && (
+                  <div className="write-polished">
+                    <b>改写示范：</b>
+                    {writingFeedback.polished}
+                  </div>
+                )}
+                {writingFeedback.summary && <div className="muted">{writingFeedback.summary}</div>}
+              </div>
+            )}
+          </div>
+        )}
+
         {browseAll && (
           <div className="all-vocab">
             <div className="bar">
@@ -4394,7 +4582,7 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {!studyQueue && !browseAll && !examActive && doc && !composing && (
+        {!studyQueue && !browseAll && !examActive && !writingOpen && doc && !composing && (
           <>
             <h1>
               {articleTitle || (articleKey ? articleKey : '手动粘贴')}
@@ -4720,6 +4908,9 @@ export default function ReaderApp() {
             />
             显示语言点
           </label>
+          <button onClick={openWriting} disabled={!doc} title="仿写：从范句生成任务 + 评分标准 → 你写 → AI 严格批改">
+            仿写
+          </button>
           <button
             onClick={() => {
               setQuizScope('lapses')
