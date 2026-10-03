@@ -465,6 +465,15 @@ export default function ReaderApp() {
   const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
   const [quickIndex, setQuickIndex] = useState(0)
   const [quickRevealed, setQuickRevealed] = useState(false)
+  /** 每次生成混淆项的批量大小（0=全部） */
+  const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:confusableBatch') ?? '60')
+      return Number.isFinite(n) && n >= 0 ? n : 60
+    } catch {
+      return 60
+    }
+  })
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useState(() => {
     try {
@@ -714,6 +723,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [dailyGoal])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:confusableBatch', String(confusableBatchSize))
+    } catch {
+      // 忽略
+    }
+  }, [confusableBatchSize])
   useEffect(() => {
     try {
       localStorage.setItem('reader:newLimit', String(newLimit))
@@ -1547,8 +1563,11 @@ export default function ReaderApp() {
     () => library.items.filter((it) => it.meaning && !it.confusables?.length),
     [library.items],
   )
-  /** 一次生成多少（提示词别太长）；生成应用后再点，处理下一批。 */
-  const confusableBatch = useMemo(() => confusableTodo.slice(0, 60), [confusableTodo])
+  /** 一次生成多少（可自选；0=全部）；应用后再点，处理下一批。 */
+  const confusableBatch = useMemo(
+    () => (confusableBatchSize > 0 ? confusableTodo.slice(0, confusableBatchSize) : confusableTodo),
+    [confusableTodo, confusableBatchSize],
+  )
 
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
@@ -3836,10 +3855,22 @@ export default function ReaderApp() {
           onClick={() => void copyConfusablePrompt()}
           disabled={!confusableBatch.length}
           style={{ marginTop: 6, marginLeft: 6 }}
-          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；每次最多 60 个，应用后可再点继续"
+          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；可分批，应用后再点继续"
         >
           🤖 生成混淆项（{confusableBatch.length}/{confusableTodo.length}）
         </button>
+        <select
+          value={String(confusableBatchSize)}
+          onChange={(e) => setConfusableBatchSize(Number(e.target.value))}
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="每次生成多少个词的混淆项（全部 = 一次生成，词多时 AI 回复可能被截断，截断的会留到下一批）"
+        >
+          <option value="30">30/批</option>
+          <option value="60">60/批</option>
+          <option value="100">100/批</option>
+          <option value="200">200/批</option>
+          <option value="0">全部/批</option>
+        </select>
 
         <div className="section-title">
           生词本 · 本篇（{articleWords.length}）
