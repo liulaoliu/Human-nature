@@ -57,7 +57,15 @@ import {
   type QuizKind,
   type QuizQuestion,
 } from '../core/quiz'
-import { diffWords, dictationWrongWords, type DiffToken } from '../core/dictation'
+import {
+  diffWords,
+  dictationWrongWords,
+  isClozeBlankCorrect,
+  makeCloze,
+  pickBlankTargets,
+  splitForDictation,
+  type DiffToken,
+} from '../core/dictation'
 import {
   buildListeningQuizPrompt,
   gradeListening,
@@ -559,12 +567,22 @@ export default function ReaderApp() {
   const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
   const [quickIndex, setQuickIndex] = useState(0)
   const [quickRevealed, setQuickRevealed] = useState(false)
-  /** 逐句听写：按文章顺序播句子，听写整句后逐词 diff */
-  const [dictQueue, setDictQueue] = useState<Sentence[] | null>(null)
+  /** 逐句听写：按文章顺序播句子（长句自动切短），听写整句或听音填空 */
+  const [dictQueue, setDictQueue] = useState<{ id: string; text: string }[] | null>(null)
   const [dictIndex, setDictIndex] = useState(0)
   const [dictInput, setDictInput] = useState('')
   const [dictChecked, setDictChecked] = useState(false)
   const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
+  /** 填空模式的作答（每空一个输入） */
+  const [dictBlanks, setDictBlanks] = useState<string[]>([])
+  /** 听写模式：整句 / 填空 */
+  const [dictMode, setDictMode] = useState<'full' | 'cloze'>(() => {
+    try {
+      return localStorage.getItem('reader:dictMode') === 'cloze' ? 'cloze' : 'full'
+    } catch {
+      return 'full'
+    }
+  })
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
@@ -923,6 +941,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [writingModel, writingText, writingTask])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:dictMode', dictMode)
+    } catch {
+      // 忽略
+    }
+  }, [dictMode])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1303,14 +1328,19 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
 
-  /** 逐句听写：按文章顺序播句子，用户听写整句，逐词 diff。 */
+  /** 逐句听写：长句自动切短，按文章顺序播放。 */
   const startDictation = useCallback(() => {
     if (!doc) {
       flash('先打开一篇文章')
       return
     }
-    const list = doc.sentences.filter((s) => s.text.trim())
-    if (!list.length) {
+    const items: { id: string; text: string }[] = []
+    doc.sentences.forEach((s) => {
+      splitForDictation(s.text, 12).forEach((chunk, ci) => {
+        if (chunk.trim()) items.push({ id: `${s.id}-${ci}`, text: chunk })
+      })
+    })
+    if (!items.length) {
       flash('这篇没有可听写的句子')
       return
     }
@@ -1318,26 +1348,28 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(null)
-    setDictQueue(list)
+    setDictQueue(items)
     setDictIndex(0)
     setDictInput('')
     setDictChecked(false)
     setDictDiff(null)
+    setDictBlanks([])
   }, [doc, flash])
 
   const checkDict = useCallback(() => {
     if (!dictQueue) return
-    const s = dictQueue[dictIndex]
-    if (!s) return
-    setDictDiff(diffWords(s.text, dictInput).tokens)
+    const item = dictQueue[dictIndex]
+    if (!item) return
+    if (dictMode !== 'cloze') setDictDiff(diffWords(item.text, dictInput).tokens)
     setDictChecked(true)
     recordActivity('listen', 1)
-  }, [dictQueue, dictIndex, dictInput, recordActivity])
+  }, [dictQueue, dictIndex, dictInput, dictMode, recordActivity])
 
   const nextDict = useCallback(() => {
     setDictInput('')
     setDictChecked(false)
     setDictDiff(null)
+    setDictBlanks([])
     setDictIndex((i) => i + 1)
   }, [])
 
@@ -1471,9 +1503,13 @@ export default function ReaderApp() {
         return
       }
       if (e.key === 'Tab') {
-        e.preventDefault()
-        const s = dictQueue[dictIndex]
-        if (s) speakRef.current(s.text)
+        const t = e.target as HTMLElement | null
+        // 填空模式里有多个输入框，Tab 要用来切换输入框，别抢
+        if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) {
+          e.preventDefault()
+          const s = dictQueue[dictIndex]
+          if (s) speakRef.current(s.text)
+        }
         return
       }
       if (e.key !== 'Enter') return
@@ -1656,20 +1692,6 @@ export default function ReaderApp() {
       }),
     [doc],
   )
-
-  /** 把本句漏写的词加入待选，之后统一查词。 */
-  const dictWrongNow = useCallback(() => {
-    if (!dictQueue) return
-    const s = dictQueue[dictIndex]
-    if (!s) return
-    const words = dictationWrongWords(diffWords(s.text, dictInput))
-    if (!words.length) {
-      flash('这句没有漏写的词')
-      return
-    }
-    mergeBatch(batchItemsFromWords(words))
-    flash(`已把 ${words.length} 个漏写词加入待选`)
-  }, [dictQueue, dictIndex, dictInput, mergeBatch, batchItemsFromWords, flash])
 
   /** 复制听力理解题出题提示词。 */
   const copyListeningPrompt = useCallback(async () => {
@@ -1994,6 +2016,34 @@ export default function ReaderApp() {
     }
     return s
   }, [library.items])
+
+  /** 听写·填空模式：当前短块的挖空题（每块稳定，不随重渲染乱跳）。 */
+  const dictCloze = useMemo(() => {
+    if (dictMode !== 'cloze' || !dictQueue || dictIndex >= dictQueue.length) return null
+    const text = dictQueue[dictIndex].text
+    return makeCloze(text, pickBlankTargets(text, libraryLemmas, 2))
+  }, [dictMode, dictQueue, dictIndex, libraryLemmas])
+
+  /** 把本句漏写 / 填错的词加入待选，之后统一查词。 */
+  const dictWrongNow = useCallback(() => {
+    if (!dictQueue) return
+    const item = dictQueue[dictIndex]
+    if (!item) return
+    let words: string[] = []
+    if (dictMode === 'cloze' && dictCloze) {
+      words = dictCloze.blanks
+        .filter((b, i) => !isClozeBlankCorrect(b, dictBlanks[i] ?? ''))
+        .map((b) => b.answer)
+    } else {
+      words = dictationWrongWords(diffWords(item.text, dictInput))
+    }
+    if (!words.length) {
+      flash('没有漏写 / 填错的词')
+      return
+    }
+    mergeBatch(batchItemsFromWords(words))
+    flash(`已把 ${words.length} 个词加入待选`)
+  }, [dictQueue, dictIndex, dictMode, dictCloze, dictBlanks, dictInput, mergeBatch, batchItemsFromWords, flash])
 
   /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
   const visibleBatch = useMemo(
@@ -4419,6 +4469,32 @@ export default function ReaderApp() {
           <div className="study dict">
             <div className="bar study-bar">
               <button onClick={() => setDictQueue(null)}>结束（Esc）</button>
+              <span className="view-toggle" title="整句：听写整句；填空：句中挖掉几个词来填">
+                <button
+                  className={dictMode === 'full' ? 'primary' : ''}
+                  onClick={() => {
+                    setDictMode('full')
+                    setDictChecked(false)
+                    setDictInput('')
+                    setDictBlanks([])
+                    setDictDiff(null)
+                  }}
+                >
+                  整句
+                </button>
+                <button
+                  className={dictMode === 'cloze' ? 'primary' : ''}
+                  onClick={() => {
+                    setDictMode('cloze')
+                    setDictChecked(false)
+                    setDictInput('')
+                    setDictBlanks([])
+                    setDictDiff(null)
+                  }}
+                >
+                  填空
+                </button>
+              </span>
               <span className="muted">
                 {Math.min(dictIndex + 1, dictQueue.length)} / {dictQueue.length}
               </span>
@@ -4427,29 +4503,61 @@ export default function ReaderApp() {
                   const s = dictQueue[dictIndex]
                   if (s) speak(s.text)
                 }}
-                title="再听一遍（Tab）"
+                title="再听一遍"
               >
                 🔊 再听一遍
               </button>
             </div>
             {dictIndex < dictQueue.length ? (
               <>
-                <textarea
-                  className="study-input dict-input"
-                  autoFocus
-                  placeholder="听写这一句，回车检查 / 下一句"
-                  value={dictInput}
-                  onChange={(e) => setDictInput(e.target.value)}
-                  disabled={dictChecked}
-                />
-                {dictChecked && dictDiff && (
-                  <div className="dict-diff">
-                    {dictDiff.map((t, i) => (
-                      <span key={i} className={'dt ' + t.type}>
-                        {t.text}{' '}
-                      </span>
-                    ))}
-                  </div>
+                {dictMode === 'cloze' && dictCloze ? (
+                  <>
+                    <div className="dict-sentence">{dictCloze.display}</div>
+                    <div className="dict-blanks">
+                      {dictCloze.blanks.map((b, i) => (
+                        <input
+                          key={i}
+                          className={
+                            'study-input dict-blank' +
+                            (dictChecked ? (isClozeBlankCorrect(b, dictBlanks[i] ?? '') ? ' ok' : ' bad') : '')
+                          }
+                          autoFocus={i === 0}
+                          placeholder={`空 ${i + 1}`}
+                          value={dictBlanks[i] ?? ''}
+                          disabled={dictChecked}
+                          onChange={(e) => {
+                            const v = e.target.value
+                            setDictBlanks((arr) => {
+                              const next = [...arr]
+                              next[i] = v
+                              return next
+                            })
+                          }}
+                        />
+                      ))}
+                    </div>
+                    {dictChecked && <div className="dict-reveal">原文：{dictCloze.sentence}</div>}
+                  </>
+                ) : (
+                  <>
+                    <textarea
+                      className="study-input dict-input"
+                      autoFocus
+                      placeholder="听写这一句，回车检查 / 下一句"
+                      value={dictInput}
+                      onChange={(e) => setDictInput(e.target.value)}
+                      disabled={dictChecked}
+                    />
+                    {dictChecked && dictDiff && (
+                      <div className="dict-diff">
+                        {dictDiff.map((t, i) => (
+                          <span key={i} className={'dt ' + t.type}>
+                            {t.text}{' '}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </>
                 )}
                 <div className="bar study-actions">
                   {!dictChecked ? (
@@ -4461,12 +4569,12 @@ export default function ReaderApp() {
                       {dictIndex + 1 >= dictQueue.length ? '完成（回车）' : '下一句（回车）'}
                     </button>
                   )}
-                  {dictChecked && <button onClick={dictWrongNow}>漏写词加入待选</button>}
+                  {dictChecked && <button onClick={dictWrongNow}>漏词加入待选</button>}
                 </div>
               </>
             ) : (
               <div className="study-done">
-                <p>听写完成，共 {dictQueue.length} 句。</p>
+                <p>听写完成，共 {dictQueue.length} 段。</p>
                 <div className="bar">
                   <button className="primary" onClick={startDictation}>
                     再来一遍

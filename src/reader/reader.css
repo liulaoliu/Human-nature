@@ -886,6 +886,13 @@ button.danger {
 .dict-diff .dt { padding: 0 2px; border-radius: 3px; }
 .dict-diff .dt.del { color: #fff; background: var(--red); text-decoration: line-through; }
 .dict-diff .dt.ins { color: #1a1205; background: #ffd479; }
+/* 听写 · 填空模式 */
+.dict-sentence { font-size: 17px; line-height: 1.9; max-width: 760px; margin: 6px 0 10px; }
+.dict-blanks { display: flex; flex-wrap: wrap; gap: 10px; max-width: 760px; }
+.dict-blank { width: 160px; text-align: left; }
+.dict-blank.ok { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.dict-blank.bad { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.dict-reveal { margin-top: 10px; font-size: 14px; color: var(--dim); line-height: 1.7; }
 
 /* 听力理解题 */
 .listen { max-width: 760px; }
