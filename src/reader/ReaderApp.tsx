@@ -68,12 +68,14 @@ import {
 } from '../core/listening'
 import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
 import {
+  addWritingRecord,
   buildImitationTaskPrompt,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
   type ImitationTask,
   type WritingFeedback,
+  type WritingRecord,
 } from '../core/writing'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
@@ -553,6 +555,16 @@ export default function ReaderApp() {
   const [writingTask, setWritingTask] = useState<ImitationTask | null>(null)
   const [writingText, setWritingText] = useState('')
   const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
+  /** 仿写练习历史（存本机） */
+  const [writingHistory, setWritingHistory] = useState<WritingRecord[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:writingHistory') ?? '[]')
+      return Array.isArray(raw) ? (raw as WritingRecord[]) : []
+    } catch {
+      return []
+    }
+  })
+  const [historyOpen, setHistoryOpen] = useState(false)
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -833,6 +845,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [showLanguage])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:writingHistory', JSON.stringify(writingHistory))
+    } catch {
+      // 忽略
+    }
+  }, [writingHistory])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1690,6 +1709,15 @@ export default function ReaderApp() {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
   }, [writingTask, writingText, flash])
+
+  /** 载入一条历史记录回看。 */
+  const loadWritingRecord = useCallback((rec: WritingRecord) => {
+    setWritingModel(rec.model)
+    setWritingText(rec.text)
+    setWritingFeedback(rec.feedback)
+    setWritingTask(null)
+    setHistoryOpen(false)
+  }, [])
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -3095,6 +3123,16 @@ export default function ReaderApp() {
         return
       }
       setWritingFeedback(f)
+      setWritingHistory((h) =>
+        addWritingRecord(h, {
+          at: new Date().toISOString(),
+          articleId: articleIdentity,
+          articleTitle: articleTitle || undefined,
+          model: writingModel,
+          text: writingText,
+          feedback: f,
+        }),
+      )
       setPasted('')
       setPasteReport([`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`])
       flash(`批改完成：${f.total}/${f.max}`)
@@ -3197,6 +3235,8 @@ export default function ReaderApp() {
     articleTitle,
     articleKey,
     articleIdentity,
+    writingModel,
+    writingText,
   ])
 
   /** 把上次未返回的词重新组成提示词，一键复制重试。 */
@@ -4390,6 +4430,7 @@ export default function ReaderApp() {
               >
                 ② 批改
               </button>
+              <button onClick={() => setHistoryOpen((v) => !v)}>历史（{writingHistory.length}）</button>
             </div>
             <div className="write-block">
               <div className="muted">范句（可改）</div>
@@ -4453,6 +4494,31 @@ export default function ReaderApp() {
                   </div>
                 )}
                 {writingFeedback.summary && <div className="muted">{writingFeedback.summary}</div>}
+              </div>
+            )}
+            {historyOpen && (
+              <div className="write-history">
+                <div className="bar">
+                  <span className="muted">练习历史（{writingHistory.length}）</span>
+                  {writingHistory.length > 0 && (
+                    <button className="danger" onClick={() => setWritingHistory([])}>
+                      清空
+                    </button>
+                  )}
+                </div>
+                {writingHistory.length ? (
+                  writingHistory.map((rec, i) => (
+                    <button key={i} className="write-hist-row" onClick={() => loadWritingRecord(rec)}>
+                      <span className="muted">{new Date(rec.at).toLocaleString()}</span>
+                      <span className="ellipsis"> {rec.model}</span>
+                      <b>
+                        {rec.feedback.total}/{rec.feedback.max}
+                      </b>
+                    </button>
+                  ))
+                ) : (
+                  <div className="muted">还没有记录；批改一次就会存下来。</div>
+                )}
               </div>
             )}
           </div>

@@ -214,3 +214,23 @@ export function parseWritingFeedback(raw: string): WritingFeedback | null {
     summary: asString(o.summary) || undefined,
   }
 }
+
+/** 一次仿写练习的记录（存本机，供回看进步）。 */
+export interface WritingRecord {
+  at: string
+  articleId: string
+  articleTitle?: string
+  model: string
+  text: string
+  feedback: WritingFeedback
+}
+
+/** 追加一条记录到最前，并按上限截断（纯函数）。 */
+export function addWritingRecord(
+  list: WritingRecord[],
+  rec: WritingRecord,
+  cap = 200,
+): WritingRecord[] {
+  return [rec, ...list].slice(0, Math.max(0, cap))
+}
+

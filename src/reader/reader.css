@@ -823,6 +823,21 @@ button.danger {
 .write-issues .bad { color: var(--red); text-decoration: line-through; }
 .write-issues .ok { color: var(--green); }
 .write-polished { margin-top: 8px; }
+.write-history { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.write-hist-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  margin-bottom: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.write-hist-row .ellipsis { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.write-hist-row b { font-variant-numeric: tabular-nums; }
 
 /* 词形辨析：选项 */
 .quiz-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }

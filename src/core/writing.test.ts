@@ -1,10 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import {
+  addWritingRecord,
   buildImitationTaskPrompt,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
   type ImitationTask,
+  type WritingRecord,
 } from './writing'
 
 describe('buildImitationTaskPrompt', () => {
@@ -68,5 +70,24 @@ describe('parseWritingFeedback', () => {
   it('没有 scores/issues → null；非法 JSON → null', () => {
     expect(parseWritingFeedback(JSON.stringify({ summary: 'x' }))).toBeNull()
     expect(parseWritingFeedback('nope')).toBeNull()
+  })
+})
+
+describe('addWritingRecord', () => {
+  const rec = (at: string): WritingRecord => ({
+    at,
+    articleId: 'a',
+    model: 'M',
+    text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 },
+  })
+  it('新记录插到最前', () => {
+    expect(addWritingRecord([rec('1')], rec('2')).map((r) => r.at)).toEqual(['2', '1'])
+  })
+  it('超过上限截断', () => {
+    let list: WritingRecord[] = []
+    for (let i = 0; i < 5; i++) list = addWritingRecord(list, rec(String(i)), 3)
+    expect(list).toHaveLength(3)
+    expect(list.map((r) => r.at)).toEqual(['4', '3', '2'])
   })
 })
