@@ -790,6 +790,28 @@ button.danger {
 .due-cell.lv3 { background: color-mix(in srgb, var(--accent) 70%, var(--panel-3)); color: #fff; }
 .due-cell.lv4 { background: var(--accent); color: #fff; }
 
+/* 生词序号：正文上标 + 列表徽标（和 A4 打印对应） */
+.wnum {
+  font-size: 0.62em;
+  color: var(--accent);
+  margin-left: 1px;
+  font-variant-numeric: tabular-nums;
+  vertical-align: super;
+}
+.wnum-badge {
+  display: inline-block;
+  min-width: 16px;
+  margin-right: 6px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 11px;
+  font-weight: 700;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 /* 生词本就地编辑 */
 .edit-inline {
   display: grid;

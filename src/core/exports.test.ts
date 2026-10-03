@@ -93,6 +93,18 @@ describe('renderPrintHTML', () => {
     expect(evil).not.toContain('<script>')
     expect(evil).toContain('&lt;script&gt;')
   })
+  it('带标题 / 副标题 / 序号，空分组不渲染标题', () => {
+    const numbered = renderPrintHTML({
+      title: 'Bad-tempered',
+      subtitle: '2026-10-03 · 1 词',
+      groups: [{ key: '', items: [vocab({ word: 'run' })] }],
+      numberOf: () => 7,
+    })
+    expect(numbered).toContain('<h1>Bad-tempered</h1>')
+    expect(numbered).toContain('2026-10-03')
+    expect(numbered).toContain('<span class="no">7</span>')
+    expect(numbered).not.toContain('<h2>')
+  })
 })
 
 describe('toWordsCSV', () => {

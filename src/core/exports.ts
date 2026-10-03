@@ -91,31 +91,47 @@ export function importDocumentJSON(raw: string): EconomistDocument {
 /**
  * A4 打印用的完整 HTML（三栏密排，一页约 100+ 词）。
  * 在浏览器里打开后「打印 → 另存为 PDF」即可。
+ *
+ * `numberOf` 给出每个词条的序号（和正文/生词本对应）；不传则按打印顺序 1,2,3…
  */
-export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }): string {
+export function renderPrintHTML(input: {
+  title: string
+  groups: VocabGroup[]
+  /** 标题下的一行小字（日期 / 数量等） */
+  subtitle?: string
+  /** 序号；返回 null 表示不编号 */
+  numberOf?: (item: VocabItem) => number | null
+}): string {
   const seen = new Set<string>()
+  let auto = 0
+  let count = 0
   const body = input.groups
     .map((g) => {
       const items = g.items
         .filter((it) => {
           if (seen.has(it.lemma)) return false
           seen.add(it.lemma)
+          count += 1
           return true
         })
         .map((it) => {
+          auto += 1
+          const n = input.numberOf ? input.numberOf(it) : auto
+          const no = n != null ? `<span class="no">${n}</span>` : ''
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
           const meaning = it.meaning ? ` <span class="meaning">${escapeHtml(it.meaning)}</span>` : ''
           const usage = it.usage.length
             ? ` <span class="usage">· ${it.usage.map(escapeHtml).join('；')}</span>`
             : ''
-          return `<div class="item"><span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${meaning}${usage}</div>`
+          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${meaning}${usage}</div>`
         })
         .join('')
-      return items ? `<h2>${escapeHtml(g.key)}</h2>${items}` : ''
+      return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
     })
     .join('')
 
+  const meta = input.subtitle ?? `${count} 词`
   return `<!doctype html>
 <html lang="zh">
 <head>
@@ -130,7 +146,8 @@ export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }):
     line-height: 1.35;
     color: #111;
   }
-  h1 { font-size: 12pt; margin: 0 0 3mm; }
+  h1 { font-size: 12pt; margin: 0 0 1mm; }
+  .meta { font-size: 7.5pt; color: #666; margin: 0 0 3mm; }
   h2 {
     font-size: 8.5pt;
     margin: 2.5mm 0 1mm;
@@ -140,6 +157,12 @@ export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }):
   }
   .items { columns: 3; column-gap: 5mm; column-rule: 0.3pt solid #ddd; }
   .item { break-inside: avoid; margin-bottom: 0.7mm; }
+  .no {
+    display: inline-block;
+    min-width: 4.5mm;
+    color: #888;
+    font-variant-numeric: tabular-nums;
+  }
   .word { font-weight: 700; }
   .phon { color: #555; }
   .pos { color: #777; font-style: italic; }
@@ -149,6 +172,7 @@ export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }):
 </head>
 <body>
 <h1>${escapeHtml(input.title)}</h1>
+<div class="meta">${escapeHtml(meta)}</div>
 <div class="items">
 ${body}
 </div>

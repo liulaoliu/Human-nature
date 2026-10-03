@@ -128,6 +128,9 @@ function sentenceNodes(
   active: Set<number> | null,
   lemmas: Set<string>,
   onWord: (word: string) => void,
+  sid?: string,
+  nums?: Map<string, number> | null,
+  firstNums?: Set<string> | null,
 ): ReactNode[] {
   const spans = wordSpans(text)
   const out: ReactNode[] = []
@@ -140,10 +143,13 @@ function sentenceNodes(
     } else {
       const key = w.text.toLowerCase()
       const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
+      const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
+      const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
       out.push(
         isVocab ? (
           <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
             {w.text}
+            {showNum && <sup className="wnum">{num}</sup>}
           </span>
         ) : (
           w.text
@@ -500,6 +506,25 @@ export default function ReaderApp() {
     () => library.items.filter((it) => it.source?.fileName === articleIdentity),
     [library.items, articleIdentity],
   )
+  /** 本篇生词按「正文首次出现」编号（1,2,3…），并记录首次出现的位置供正文标注。 */
+  const { articleNums, articleFirst } = useMemo(() => {
+    const nums = new Map<string, number>()
+    const first = new Set<string>()
+    if (!doc) return { articleNums: nums, articleFirst: first }
+    const byLemma = new Map<string, VocabItem>()
+    for (const it of articleWords) byLemma.set(it.lemma, it)
+    let n = 0
+    for (const s of doc.sentences) {
+      wordSpans(s.text).forEach((w, i) => {
+        const it = byLemma.get(lemmaOf(w.text))
+        if (!it || nums.has(it.lemma)) return
+        n += 1
+        nums.set(it.lemma, n)
+        first.add(`${s.id}:${i}`)
+      })
+    }
+    return { articleNums: nums, articleFirst: first }
+  }, [doc, articleWords])
   const applyingDom = useRef(false)
   const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
@@ -2645,10 +2670,17 @@ export default function ReaderApp() {
     [persist, flash],
   )
   const doPrint = useCallback(
-    (items: VocabItem[], title: string) => {
+    (items: VocabItem[], title: string, numberOf?: (it: VocabItem) => number | null) => {
+      const sorted = numberOf
+        ? [...items].sort((a, b) => (numberOf(a) ?? 1e9) - (numberOf(b) ?? 1e9))
+        : sortItems(items, 'word')
+      const groups = numberOf ? [{ key: '', items: sorted }] : groupItems(sorted, 'alphabet')
+      const day = new Date().toISOString().slice(0, 10)
       const html = renderPrintHTML({
         title,
-        groups: groupItems(sortItems(items, 'word'), 'alphabet'),
+        groups,
+        subtitle: `${day} · ${items.length} 词`,
+        numberOf,
       })
       const win = window.open('', '_blank')
       if (!win) {
@@ -3672,6 +3704,9 @@ export default function ReaderApp() {
                                 selSid === sid && selIndices.length ? new Set(selIndices) : null,
                                 libraryLemmas,
                                 focusEntry,
+                                sid,
+                                articleNums,
+                                articleFirst,
                               )}{' '}
                             </span>
                             {translateView !== 'off' && (s.translation || translateView === 'only') && (
@@ -3871,7 +3906,13 @@ export default function ReaderApp() {
             Anki（本篇）
           </button>
           <button
-            onClick={() => doPrint(articleWords, articleTitle || '本篇生词')}
+            onClick={() =>
+              doPrint(
+                articleWords,
+                articleTitle || articleKey || '本篇生词',
+                (it) => articleNums.get(it.lemma) ?? null,
+              )
+            }
             disabled={!articleWords.length}
             title="打印本篇生词（A4）"
           >
@@ -4026,6 +4067,7 @@ export default function ReaderApp() {
             onDelete={askDelete}
             onReview={handleReview}
             onEdit={handleEdit}
+            numberOf={(it) => articleNums.get(it.lemma) ?? null}
           />
         ) : (
           <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>

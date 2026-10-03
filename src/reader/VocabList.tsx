@@ -24,6 +24,8 @@ interface Props {
   onEdit: (id: string, patch: VocabEditPatch) => void
   /** 显示「来源」列 / 行（文章 + 原句） */
   showSource?: boolean
+  /** 词条序号（与正文对应）；返回 null 则不显示 */
+  numberOf?: (item: VocabItem) => number | null
 }
 
 interface Draft {
@@ -46,6 +48,7 @@ export default function VocabList({
   onReview,
   onEdit,
   showSource = false,
+  numberOf,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -148,6 +151,7 @@ export default function VocabList({
                 title={it.examples[0]?.text ?? ''}
               >
                 <td className="cell-word">
+                  {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                   {it.word}
                   {it.phonetic && (
                     <span
@@ -227,6 +231,7 @@ export default function VocabList({
                 onClick={onJump ? () => onJump(it) : undefined}
                 title={onJump ? '回到原文这句' : undefined}
               >
+                {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                 {it.word}{' '}
                 {it.phonetic && (
                   <span
