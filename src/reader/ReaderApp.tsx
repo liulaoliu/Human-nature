@@ -244,6 +244,22 @@ function loadBatchMap(): Record<string, BatchItem[]> {
   }
 }
 
+/** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
+function loadWritingDraft(): {
+  model: string
+  text: string
+  task: ImitationTask | null
+} {
+  try {
+    const raw = localStorage.getItem('reader:writingDraft')
+    const v = raw ? (JSON.parse(raw) as { model?: string; text?: string; task?: ImitationTask | null }) : null
+    if (v && typeof v === 'object') return { model: v.model ?? '', text: v.text ?? '', task: v.task ?? null }
+  } catch {
+    // 忽略
+  }
+  return { model: '', text: '', task: null }
+}
+
 export default function ReaderApp() {
   const [book, setBook] = useState<ArticleBook | null>(null)
   const [bookError, setBookError] = useState(false)
@@ -573,9 +589,9 @@ export default function ReaderApp() {
   })
   /** 仿写训练：范句 / 任务 / 作答 / 批改 */
   const [writingOpen, setWritingOpen] = useState(false)
-  const [writingModel, setWritingModel] = useState('')
-  const [writingTask, setWritingTask] = useState<ImitationTask | null>(null)
-  const [writingText, setWritingText] = useState('')
+  const [writingModel, setWritingModel] = useState(() => loadWritingDraft().model)
+  const [writingTask, setWritingTask] = useState<ImitationTask | null>(() => loadWritingDraft().task)
+  const [writingText, setWritingText] = useState(() => loadWritingDraft().text)
   const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
   /** 仿写练习历史（存本机） */
   const [writingHistory, setWritingHistory] = useState<WritingRecord[]>(() => {
@@ -897,6 +913,16 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [activity])
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'reader:writingDraft',
+        JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
+      )
+    } catch {
+      // 忽略
+    }
+  }, [writingModel, writingText, writingTask])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1771,7 +1797,7 @@ export default function ReaderApp() {
     setWritingModel(rec.model)
     setWritingText(rec.text)
     setWritingFeedback(rec.feedback)
-    setWritingTask(null)
+    setWritingTask(rec.task ?? null)
     setHistoryOpen(false)
   }, [])
 
@@ -3188,6 +3214,7 @@ export default function ReaderApp() {
           model: writingModel,
           text: writingText,
           feedback: f,
+          task: writingTask ?? undefined,
         }),
       )
       recordActivity('write', 1)
@@ -3394,10 +3421,11 @@ export default function ReaderApp() {
       stats: sessions,
       studyStats: studyDays,
       activity,
+      writingHistory,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, studyDays, activity, download])
+  }, [library, saved, sessions, studyDays, activity, writingHistory, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -3436,6 +3464,9 @@ export default function ReaderApp() {
           }
           if (Array.isArray(obj.activity)) {
             setActivity(obj.activity as DayActivity[])
+          }
+          if (Array.isArray(obj.writingHistory)) {
+            setWritingHistory(obj.writingHistory as WritingRecord[])
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }

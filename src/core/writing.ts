@@ -223,6 +223,8 @@ export interface WritingRecord {
   model: string
   text: string
   feedback: WritingFeedback
+  /** 当时的仿写任务（题目 + rubric），可能没有 */
+  task?: ImitationTask
 }
 
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */
