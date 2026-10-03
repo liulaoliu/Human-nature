@@ -67,6 +67,7 @@ import {
   type ListeningResult,
 } from '../core/listening'
 import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
+import { buildReadiness } from '../core/readiness'
 import {
   addWritingRecord,
   buildImitationTaskPrompt,
@@ -283,12 +284,13 @@ export default function ReaderApp() {
       return 'md'
     }
   })
-  /** 右侧面板当前 Tab：选词/分析 或 生词本/学习 */
-  const [sideTab, setSideTab] = useState<'pick' | 'vocab'>(() => {
+  /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 */
+  const [sideTab, setSideTab] = useState<'overview' | 'pick' | 'vocab'>(() => {
     try {
-      return localStorage.getItem('reader:sideTab') === 'vocab' ? 'vocab' : 'pick'
+      const v = localStorage.getItem('reader:sideTab')
+      return v === 'vocab' || v === 'pick' ? v : 'overview'
     } catch {
-      return 'pick'
+      return 'overview'
     }
   })
   const [bold, setBold] = useState(() => {
@@ -3440,6 +3442,58 @@ export default function ReaderApp() {
   )
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
+  /** 仪表盘：各能力当前可用性 */
+  const readyRows = useMemo(
+    () =>
+      buildReadiness({
+        hasDoc: !!doc,
+        sentences: doc?.sentences.length ?? 0,
+        translated: doc?.sentences.filter((s) => s.translation).length ?? 0,
+        language: doc?.sentences.filter((s) => s.language).length ?? 0,
+        listenQuiz: listenQuiz?.questions.length ?? 0,
+        vocab: library.items.length,
+        batch: batch.length,
+        unqueried: library.items.filter((it) => it.status === 'unqueried').length,
+        noMeaning: library.items.filter((it) => !it.meaning).length,
+        noExampleUsage: library.items.filter((it) => it.examples.length === 0 || it.usage.length === 0).length,
+        noPhonetic: library.items.filter((it) => !it.phonetic).length,
+        confusableMissing: confusableTodo.length,
+        lemmaCandidates: lemmaCandidates.length,
+        due: library.items.filter((it) => isDue(it)).length,
+        newWords: library.items.filter((it) => it.reviewState.repetitions === 0).length,
+        writingHistory: writingHistory.length,
+      }),
+    [doc, listenQuiz, library.items, batch, confusableTodo, lemmaCandidates, writingHistory],
+  )
+
+  /** 仪表盘每行的「去准备」动作 */
+  const boardAction = (key: string): { label: string; run: () => void } | null => {
+    switch (key) {
+      case 'vocab':
+        return { label: '去选词', run: () => setSideTab('pick') }
+      case 'batch':
+        return { label: '查词', run: () => void copyBatchPrompt() }
+      case 'unqueried':
+        return { label: '补查音标', run: () => void copyMissingPhonetic('missing') }
+      case 'confusable':
+        return { label: '生成混淆项', run: () => void copyConfusablePrompt() }
+      case 'lemma':
+        return { label: '去重整理', run: dedupeNow }
+      case 'review':
+        return { label: '背单词', run: () => startStudy() }
+      case 'dictation':
+        return { label: '去听写', run: startDictation }
+      case 'listen':
+        return { label: '出题', run: openListening }
+      case 'language':
+        return { label: '分析', run: () => void copyLanguagePrompt() }
+      case 'imitation':
+        return { label: '去仿写', run: openWriting }
+      default:
+        return null
+    }
+  }
+
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen
 
   return (
@@ -4759,12 +4813,48 @@ export default function ReaderApp() {
 
       <aside className={'reader-side tab-' + sideTab} ref={sideRef}>
         <div className="side-tabs">
+          <button className={sideTab === 'overview' ? 'primary' : ''} onClick={() => setSideTab('overview')}>
+            总览
+          </button>
           <button className={sideTab === 'pick' ? 'primary' : ''} onClick={() => setSideTab('pick')}>
             选词 / 分析
           </button>
           <button className={sideTab === 'vocab' ? 'primary' : ''} onClick={() => setSideTab('vocab')}>
-            生词本 / 学习
+            生词本
           </button>
+        </div>
+        <div className="side-sec" data-sec="overview">
+          <div className="board">
+            {['读', '词', '听', '写'].map((g) => {
+              const rows = readyRows.filter((r) => r.group === g)
+              if (!rows.length) return null
+              return (
+                <div key={g} className="board-group">
+                  <div className="side-label">{g}</div>
+                  {rows.map((r) => {
+                    const action = boardAction(r.key)
+                    return (
+                      <div key={r.key} className={'board-row ' + r.level}>
+                        <span className="dot" />
+                        <div className="board-body">
+                          <div className="board-head">
+                            <b>{r.label}</b>
+                            <span className="muted">{r.detail}</span>
+                          </div>
+                          {r.hint && <div className="board-hint">{r.hint}</div>}
+                        </div>
+                        {action && (
+                          <button className="board-act" onClick={action.run}>
+                            {action.label}
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )
+            })}
+          </div>
         </div>
         <div className="side-sec" data-sec="pick">
         {visibleBatch.length > 0 && (

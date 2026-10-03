@@ -313,6 +313,7 @@ src/
     listening.ts      听力理解题：严格 JSON 出题 + 解析校验 + 本地判分
     language.ts       逐句语言点分析（结构/语法/idiom/词组/用法）
     writing.ts        仿写：出任务 + 评分 rubric + AI 批改解析
+    readiness.ts      仪表盘：各能力就绪度（可用/缺数据/被挡）
     aligner.ts        句子级音频近似投影（复用 alignText.ts）
     vocab.ts          词库逻辑（去重/来源/筛选/分组/SRS）
     exports.ts        Anki CSV / JSON / A4 打印

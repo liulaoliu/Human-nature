@@ -150,6 +150,31 @@ a { color: var(--accent); }
 .side-label { margin: 12px 0 4px; font-size: 12px; color: var(--dim); font-weight: 600; }
 .reader-side.tab-pick .side-sec[data-sec='vocab'] { display: none; }
 .reader-side.tab-vocab .side-sec[data-sec='pick'] { display: none; }
+.reader-side:not(.tab-overview) .side-sec[data-sec='overview'] { display: none; }
+.reader-side.tab-overview .side-sec[data-sec='pick'],
+.reader-side.tab-overview .side-sec[data-sec='vocab'] { display: none; }
+
+/* 仪表盘 */
+.board { display: flex; flex-direction: column; gap: 12px; }
+.board-group { display: flex; flex-direction: column; gap: 6px; }
+.board-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.board-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--green); }
+.board-row.partial .dot { background: #d9a12b; }
+.board-row.blocked .dot { background: var(--dim); }
+.board-body { flex: 1; min-width: 0; }
+.board-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.board-head b { font-size: 13px; }
+.board-head .muted { font-size: 12px; }
+.board-hint { font-size: 12px; color: var(--dim); margin-top: 2px; line-height: 1.5; }
+.board-act { flex: none; font-size: 12px; padding: 3px 8px; }
 
 /* 顶部「显示 ⚙」下拉，收拢字号/加粗/衬线/护眼 */
 .tb-settings { position: relative; }
