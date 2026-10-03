@@ -1,4 +1,5 @@
 import { detectSpeechSpans } from '../core/vad'
+import { addActivity, dayKeyLocal, type DayActivity } from '../core/activity'
 import { applyChunkEdits, MIN_PIECE_SEC } from '../core/chunkEdits'
 import { resolveTakeChunk } from '../core/takeChunk'
 import {
@@ -1084,6 +1085,19 @@ export class SessionStore {
     const stale = this.state.takes.filter((t) => t.chunkIndex === record.chunkIndex)
     for (const t of stale) await this.deps.repo.remove(t.id)
     await this.deps.repo.save(record)
+    // 记一笔「说」到学习统计（与精读页共用 localStorage；无 localStorage 时跳过）
+    try {
+      if (typeof localStorage !== 'undefined') {
+        const raw = JSON.parse(localStorage.getItem('reader:activity') ?? '[]')
+        const list = Array.isArray(raw) ? (raw as DayActivity[]) : []
+        localStorage.setItem(
+          'reader:activity',
+          JSON.stringify(addActivity(list, dayKeyLocal(new Date()), 'speak', 1)),
+        )
+      }
+    } catch {
+      // 忽略
+    }
     this.set({
       takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],
     })

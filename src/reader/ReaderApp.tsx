@@ -69,6 +69,18 @@ import {
 import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
 import { buildReadiness } from '../core/readiness'
 import {
+  ACTIVITY_CATS,
+  ACTIVITY_LABEL,
+  activityStreak,
+  addActivity,
+  buildHeatmap,
+  dayKeyLocal,
+  dayTotal,
+  sumCats,
+  type ActivityCat,
+  type DayActivity,
+} from '../core/activity'
+import {
   addWritingRecord,
   buildImitationTaskPrompt,
   buildWritingFeedbackPrompt,
@@ -284,11 +296,11 @@ export default function ReaderApp() {
       return 'md'
     }
   })
-  /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 */
-  const [sideTab, setSideTab] = useState<'overview' | 'pick' | 'vocab'>(() => {
+  /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 / 统计 */
+  const [sideTab, setSideTab] = useState<'overview' | 'pick' | 'vocab' | 'stats'>(() => {
     try {
       const v = localStorage.getItem('reader:sideTab')
-      return v === 'vocab' || v === 'pick' ? v : 'overview'
+      return v === 'vocab' || v === 'pick' || v === 'stats' ? v : 'overview'
     } catch {
       return 'overview'
     }
@@ -575,6 +587,15 @@ export default function ReaderApp() {
     }
   })
   const [historyOpen, setHistoryOpen] = useState(false)
+  /** 学习活动统计（按天，落 localStorage） */
+  const [activity, setActivity] = useState<DayActivity[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:activity') ?? '[]')
+      return Array.isArray(raw) ? (raw as DayActivity[]) : []
+    } catch {
+      return []
+    }
+  })
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -869,6 +890,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [writingHistory])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:activity', JSON.stringify(activity))
+    } catch {
+      // 忽略
+    }
+  }, [activity])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1076,6 +1104,12 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 记一笔学习活动（按天 / 分类累计，落盘）。 */
+  const recordActivity = useCallback((cat: ActivityCat, n = 1) => {
+    if (n <= 0) return
+    setActivity((prev) => addActivity(prev, dayKeyLocal(new Date()), cat, n))
+  }, [])
+
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
@@ -1096,6 +1130,7 @@ export default function ReaderApp() {
       }
       studyFlush(0, 1)
       markStudied(cur.id)
+      recordActivity('vocab', 1)
       setStudyCounts((c) =>
         grade === 'again'
           ? { ...c, forgot: c.forgot + 1 }
@@ -1122,7 +1157,7 @@ export default function ReaderApp() {
       setStudyDelArmed(false)
       setStudyIndex((i) => i + 1)
     },
-    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush, markStudied],
+    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush, markStudied, recordActivity],
   )
 
   const closeStudy = useCallback(() => setStudyQueue(null), [])
@@ -1270,7 +1305,8 @@ export default function ReaderApp() {
     if (!s) return
     setDictDiff(diffWords(s.text, dictInput).tokens)
     setDictChecked(true)
-  }, [dictQueue, dictIndex, dictInput])
+    recordActivity('listen', 1)
+  }, [dictQueue, dictIndex, dictInput, recordActivity])
 
   const nextDict = useCallback(() => {
     setDictInput('')
@@ -1303,6 +1339,7 @@ export default function ReaderApp() {
       setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
       persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
       markStudied(q.itemId)
+      recordActivity(q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
       if (quizSpeak) speakRef.current(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
@@ -1314,7 +1351,7 @@ export default function ReaderApp() {
         }, ok ? 650 : 1400)
       }
     },
-    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak],
+    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak, recordActivity],
   )
 
   /** 关闭考试并清掉待触发的自动切题。 */
@@ -1365,11 +1402,12 @@ export default function ReaderApp() {
       if (cur) {
         persist(reviewItem(library, cur.id, ok ? 'good' : 'again'))
         markStudied(cur.id)
+        recordActivity('vocab', 1)
       }
       setQuickRevealed(false)
       setQuickIndex((i) => i + 1)
     },
-    [quickQueue, quickIndex, library, persist, markStudied],
+    [quickQueue, quickIndex, library, persist, markStudied, recordActivity],
   )
 
   // 快刷快捷键：1/← 不认识，2/→ 认识，空格看释义，Esc 退出
@@ -1646,7 +1684,8 @@ export default function ReaderApp() {
     if (!listenQuiz) return
     setListenResult(gradeListening(listenQuiz.questions, listenAnswers))
     setListenSubmitted(true)
-  }, [listenQuiz, listenAnswers])
+    recordActivity('listen', listenQuiz.questions.length)
+  }, [listenQuiz, listenAnswers, recordActivity])
 
   /** 复制逐句语言点分析提示词。 */
   const copyLanguagePrompt = useCallback(async () => {
@@ -3103,6 +3142,7 @@ export default function ReaderApp() {
       }
       setDoc((d) => (d ? { ...d, sentences: applyLanguage(d.sentences, rows) } : d))
       setPendingSave(true)
+      recordActivity('write', rows.length)
       const asked = askedIdsRef.current
       const got = new Set(rows.map((r) => r.id))
       const missing = asked.filter((id) => !got.has(id))
@@ -3150,6 +3190,7 @@ export default function ReaderApp() {
           feedback: f,
         }),
       )
+      recordActivity('write', 1)
       setPasted('')
       setPasteReport([`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`])
       flash(`批改完成：${f.total}/${f.max}`)
@@ -3191,6 +3232,7 @@ export default function ReaderApp() {
             }
           : d,
       )
+      recordActivity('read', result.sentences.length)
     }
     const sentenceTask = lastTask
     const fellBack = !result.words?.length && !result.sentences?.length && !!sentenceTask && !!sentence
@@ -3254,6 +3296,7 @@ export default function ReaderApp() {
     articleIdentity,
     writingModel,
     writingText,
+    recordActivity,
   ])
 
   /** 把上次未返回的词重新组成提示词，一键复制重试。 */
@@ -3350,10 +3393,11 @@ export default function ReaderApp() {
       articles: saved,
       stats: sessions,
       studyStats: studyDays,
+      activity,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, studyDays, download])
+  }, [library, saved, sessions, studyDays, activity, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -3389,6 +3433,9 @@ export default function ReaderApp() {
           if (Array.isArray(obj.studyStats)) {
             const ss = obj.studyStats as { day: string; seconds: number; cards: number }[]
             setStudyDays(ss)
+          }
+          if (Array.isArray(obj.activity)) {
+            setActivity(obj.activity as DayActivity[])
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }
@@ -4826,6 +4873,9 @@ export default function ReaderApp() {
           <button className={sideTab === 'vocab' ? 'primary' : ''} onClick={() => setSideTab('vocab')}>
             生词本
           </button>
+          <button className={sideTab === 'stats' ? 'primary' : ''} onClick={() => setSideTab('stats')}>
+            统计
+          </button>
         </div>
         <div className="side-sec" data-sec="overview">
           <div className="board">
@@ -4859,6 +4909,72 @@ export default function ReaderApp() {
               )
             })}
           </div>
+        </div>
+        <div className="side-sec" data-sec="stats">
+          {(() => {
+            const today = new Date()
+            const tk = dayKeyLocal(today)
+            const weekFrom = (() => {
+              const d = new Date(today)
+              d.setDate(d.getDate() - 6)
+              return dayKeyLocal(d)
+            })()
+            const monthFrom = dayKeyLocal(new Date(today.getFullYear(), today.getMonth(), 1))
+            const todayCats = sumCats(activity, tk, tk)
+            const weekCats = sumCats(activity, weekFrom, tk)
+            const monthCats = sumCats(activity, monthFrom, tk)
+            const streak = activityStreak(activity, today)
+            const counts: Record<string, number> = {}
+            for (const a of activity) counts[a.day] = dayTotal(a)
+            const heat = buildHeatmap(counts, 13, today)
+            const line = (label: string, cats: Record<ActivityCat, number>) => (
+              <div className="stat-line" key={label}>
+                <span className="stat-name">{label}</span>
+                {ACTIVITY_CATS.map((c) => (
+                  <span key={c} className="stat-cat">
+                    {ACTIVITY_LABEL[c]} {cats[c]}
+                  </span>
+                ))}
+                <b className="stat-total">{ACTIVITY_CATS.reduce((s, c) => s + cats[c], 0)}</b>
+              </div>
+            )
+            return (
+              <>
+                <div className="side-label">今日 · 🔥 {streak} 天连续</div>
+                {line('今日', todayCats)}
+                <div className="side-label">近 7 天</div>
+                {line('本周', weekCats)}
+                <div className="side-label">本月（{today.getMonth() + 1} 月）</div>
+                {line('本月', monthCats)}
+                <div className="side-label">近 13 周热力图</div>
+                <div className="heat">
+                  <div className="heat-months">
+                    {heat.monthLabels.map((m) => (
+                      <span key={m.col} style={{ gridColumnStart: m.col + 1 }}>
+                        {m.label}月
+                      </span>
+                    ))}
+                  </div>
+                  <div className="heat-grid">
+                    {heat.cells.map((col, ci) =>
+                      col.map((cell, ri) => (
+                        <div
+                          key={`${ci}-${ri}`}
+                          className={'heat-cell' + (cell.future ? ' future' : ' lv' + cell.level)}
+                          title={cell.future ? '' : `${cell.key}：${cell.count}`}
+                        />
+                      )),
+                    )}
+                  </div>
+                </div>
+                <div className="muted heat-legend">
+                  少 <span className="heat-cell lv0" /> <span className="heat-cell lv1" />{' '}
+                  <span className="heat-cell lv2" /> <span className="heat-cell lv3" />{' '}
+                  <span className="heat-cell lv4" /> 多
+                </div>
+              </>
+            )
+          })()}
         </div>
         <div className="side-sec" data-sec="pick">
         {visibleBatch.length > 0 && (

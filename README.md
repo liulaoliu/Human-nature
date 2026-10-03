@@ -314,6 +314,7 @@ src/
     language.ts       逐句语言点分析（结构/语法/idiom/词组/用法）
     writing.ts        仿写：出任务 + 评分 rubric + AI 批改解析
     readiness.ts      仪表盘：各能力就绪度（可用/缺数据/被挡）
+    activity.ts       学习统计：按天分类累计 + 周/月汇总 + 热力图
     aligner.ts        句子级音频近似投影（复用 alignText.ts）
     vocab.ts          词库逻辑（去重/来源/筛选/分组/SRS）
     exports.ts        Anki CSV / JSON / A4 打印
