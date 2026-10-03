@@ -574,3 +574,24 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .vtable .src-article { color: #cfd5df; }
 .vtable .src-sentence { color: var(--dim); margin-top: 2px; line-height: 1.5; }
 .entry .ex.src { color: var(--dim); font-size: 12px; }
+
+/* 文章标题旁的改名按钮 */
+.title-edit {
+  margin-left: 10px;
+  padding: 2px 9px;
+  font-size: 14px;
+  vertical-align: middle;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  border-radius: var(--radius-sm);
+}
+.title-edit:hover:not(:disabled) { color: var(--fg); background: #262a33; }
+
+/* 通用红色危险按钮（删除保存的两步确认） */
+button.danger {
+  background: var(--red);
+  border-color: var(--red);
+  color: #fff;
+  font-weight: 600;
+}

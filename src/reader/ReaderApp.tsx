@@ -236,6 +236,8 @@ export default function ReaderApp() {
   const [focusLemma, setFocusLemma] = useState<string | null>(null)
   /** 待确认删除的词条 id（两步防误触） */
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  /** 「删除保存」文章的两步确认 */
+  const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 背单词模式：本轮队列 / 当前序号 / 是否已翻面 */
   const [studyQueue, setStudyQueue] = useState<VocabItem[] | null>(null)
   const [studyIndex, setStudyIndex] = useState(0)
@@ -308,6 +310,7 @@ export default function ReaderApp() {
   const articleRef = useRef<HTMLElement | null>(null)
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
+  const saveDelTimerRef = useRef<number | null>(null)
   const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -762,6 +765,23 @@ export default function ReaderApp() {
     if (s && s.text.trim()) speak(s.text)
   }, [selectedId, autoSpeak, doc, speak])
 
+  /** 点句子：切换选中；再点同一句 = 停止朗读。 */
+  const selectSentence = useCallback(
+    (sid: string) => {
+      if (selectedId === sid) {
+        try {
+          if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
+        } catch {
+          // 忽略
+        }
+        lastSpokenRef.current = null
+        return
+      }
+      setSelectedId(sid)
+    },
+    [selectedId],
+  )
+
   /** 点正文里的生词 → 高亮并滚到生词本对应词条。 */
   const focusEntry = useCallback((word: string) => {
     const key = lemmaOf(word)
@@ -873,6 +893,7 @@ export default function ReaderApp() {
     setBatch([])
     setPeekSid(null)
     setLastPicked(null)
+    setConfirmDelSave(false)
   }, [])
 
   const loadText = useCallback(
@@ -959,6 +980,43 @@ export default function ReaderApp() {
     setSavedId(null)
     flash('已删除保存；正文还在，可重新保存')
   }, [savedId, flash])
+
+  /** 「删除保存」两步确认，防误删。 */
+  const askDeleteSave = useCallback(() => {
+    if (confirmDelSave) {
+      setConfirmDelSave(false)
+      if (saveDelTimerRef.current) window.clearTimeout(saveDelTimerRef.current)
+      void deleteSaved()
+      return
+    }
+    setConfirmDelSave(true)
+    if (saveDelTimerRef.current) window.clearTimeout(saveDelTimerRef.current)
+    saveDelTimerRef.current = window.setTimeout(() => setConfirmDelSave(false), 3000)
+  }, [confirmDelSave, deleteSaved])
+
+  /** 改文章标题（已保存的同步存库）。 */
+  const renameArticle = useCallback(async () => {
+    const next = window.prompt('修改文章标题', articleTitle || articleKey || '')
+    if (next === null) return
+    const title = next.trim()
+    if (!title) return
+    setArticleTitle(title)
+    if (savedId && doc) {
+      const id = savedId
+      await articles.current?.save({
+        id,
+        title,
+        book: articleBook || undefined,
+        sourceKey: articleKey,
+        text: sourceText,
+        paragraphs: doc.paragraphs,
+        sentences: doc.sentences,
+        updatedAt: new Date().toISOString(),
+      })
+      setSaved((await articles.current?.list()) ?? [])
+    }
+    flash('已修改标题')
+  }, [articleTitle, articleKey, articleBook, savedId, doc, sourceText, flash])
 
   /** 新建一篇文章：清洗 + 切句 + 直接存进「已保存」。 */
   const createArticle = useCallback(async () => {
@@ -1700,8 +1758,12 @@ export default function ReaderApp() {
             </>
           )}
           {savedId && (
-            <button onClick={() => void deleteSaved()} title="从本机删除这篇的保存（正文仍可重新保存）">
-              删除保存
+            <button
+              className={confirmDelSave ? 'danger' : ''}
+              onClick={askDeleteSave}
+              title="从本机删除这篇的保存（两步确认，防误删）"
+            >
+              {confirmDelSave ? '确认删除保存' : '删除保存'}
             </button>
           )}
           <span className="muted">{library.items.length} 个生词</span>
@@ -2021,7 +2083,12 @@ export default function ReaderApp() {
 
         {!studyQueue && !browseAll && doc && !composing && (
           <>
-            <h1>{articleTitle || (articleKey ? articleKey : '手动粘贴')}</h1>
+            <h1>
+              {articleTitle || (articleKey ? articleKey : '手动粘贴')}
+              <button className="title-edit" onClick={() => void renameArticle()} title="修改文章标题">
+                ✎
+              </button>
+            </h1>
             {editing ? (
               <>
                 <div className="meta">编辑正文：改完点「完成」重新切句；已粘回的翻译/语法按句文保留。</div>
@@ -2056,7 +2123,7 @@ export default function ReaderApp() {
                                 (peekSid === sid && selectedId !== sid ? ' peek' : '') +
                                 (vocabSidSet.has(sid) ? ' has-vocab' : '')
                               }
-                              onClick={() => setSelectedId(sid)}
+                              onClick={() => selectSentence(sid)}
                             >
                               {sentenceNodes(
                                 s.text,
@@ -2069,7 +2136,7 @@ export default function ReaderApp() {
                               <span
                                 data-sid={sid}
                                 className={'tr-block' + (selectedId === sid ? ' sel' : '')}
-                                onClick={() => setSelectedId(sid)}
+                                onClick={() => selectSentence(sid)}
                                 title="点这里等价于选中这句"
                               >
                                 {s.translation ?? '（未翻译）'}
