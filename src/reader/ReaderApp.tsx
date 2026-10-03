@@ -784,6 +784,12 @@ export default function ReaderApp() {
     return s
   }, [library.items])
 
+  /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
+  const visibleBatch = useMemo(
+    () => batch.filter((b) => !libraryLemmas.has(lemmaOf(b.word))),
+    [batch, libraryLemmas],
+  )
+
   /** 未掌握的词（a/d 只在这些句子里跳）。 */
   const activeLemmas = useMemo(() => {
     const s = new Set<string>()
@@ -1374,18 +1380,23 @@ export default function ReaderApp() {
       const sentenceText = text.trim()
       const spans = wordSpans(text)
 
-      /** 设精确选区（离散词下标）；vocabMode 时把 word 增/删到待选。 */
+      /** 设精确选区（离散词下标）；vocabMode 加进待选时清空精确选区（避免两处重复）。 */
       const commitSel = (indices: number[], batchWord?: string) => {
         const uniq = [...new Set(indices)].sort((x, y) => x - y)
-        setSelSid(sid)
-        setSelIndices(uniq)
-        setExact(uniq.map((i) => spans[i].text).join(' '))
-        setUseExact(uniq.length > 0)
         if (finalize && vocabMode && sid && batchWord) {
+          setSelSid(null)
+          setSelIndices([])
+          setExact('')
+          setUseExact(false)
           const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(batchWord))
           addToBatch([batchWord], sentenceText, sid)
           if (!already) sessionPickedRef.current += 1
           setLastPicked({ word: batchWord, sid })
+        } else {
+          setSelSid(sid)
+          setSelIndices(uniq)
+          setExact(uniq.map((i) => spans[i].text).join(' '))
+          setUseExact(uniq.length > 0)
         }
         if (finalize) clearDomSelection()
       }
@@ -1569,9 +1580,9 @@ export default function ReaderApp() {
 
   /** 待选词一次性加入生词本。 */
   const commitBatch = useCallback(() => {
-    if (!batch.length) return
+    if (!visibleBatch.length) return
     let lib = library
-    for (const b of batch) {
+    for (const b of visibleBatch) {
       lib = markWord(lib, {
         word: b.word,
         articleId: articleTitle || articleKey || '手动粘贴',
@@ -1581,22 +1592,24 @@ export default function ReaderApp() {
       }).library
     }
     persist(lib)
-    flash(`已加入 ${batch.length} 个生词`)
+    flash(`已加入 ${visibleBatch.length} 个生词`)
     setBatch([])
-  }, [batch, library, articleIdentity, articleTitle, articleKey, persist, flash])
+  }, [visibleBatch, library, articleIdentity, articleTitle, articleKey, persist, flash])
 
   /** 待选词一键生成批量查词提示词，复制到网页版 DeepSeek。 */
   const copyBatchPrompt = useCallback(async () => {
-    if (!batch.length) return
-    const prompt = buildBatchLookupPrompt(batch.map((b) => ({ word: b.word, context: b.sentence })))
+    if (!visibleBatch.length) return
+    const prompt = buildBatchLookupPrompt(
+      visibleBatch.map((b) => ({ word: b.word, context: b.sentence })),
+    )
     setLastTask('lookup')
     try {
       await navigator.clipboard.writeText(prompt)
-      flash(`已复制 ${batch.length} 个词的查词提示词`)
+      flash(`已复制 ${visibleBatch.length} 个词的查词提示词`)
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [batch, flash])
+  }, [visibleBatch, flash])
 
   /** 从生词本里挑出缺音标的词，生成查词提示词（补齐用）。 */
   const copyMissingPhonetic = useCallback(
@@ -1736,10 +1749,10 @@ export default function ReaderApp() {
     () =>
       download(
         'picked-words.csv',
-        toWordsCSV(batch.map((b) => ({ word: b.word, context: b.sentence }))),
+        toWordsCSV(visibleBatch.map((b) => ({ word: b.word, context: b.sentence }))),
         'text/csv;charset=utf-8',
       ),
-    [batch, download],
+    [visibleBatch, download],
   )
   const doExportWrong = useCallback(
     (items: VocabItem[]) =>
@@ -2361,14 +2374,14 @@ export default function ReaderApp() {
       </main>
 
       <aside className="reader-side" ref={sideRef}>
-        {batch.length > 0 && (
+        {visibleBatch.length > 0 && (
           <div className="picked batch">
             <div className="picked-head">
-              <span className="tag exact">待选 {batch.length}</span>
+              <span className="tag exact">待选 {visibleBatch.length}</span>
               <span className="muted">点正文里的词可加 / 减</span>
             </div>
             <div className="chips">
-              {batch.map((b) => (
+              {visibleBatch.map((b) => (
                 <button
                   key={b.word}
                   className="chipx"
@@ -2387,6 +2400,11 @@ export default function ReaderApp() {
               <button onClick={exportBatch}>导出 CSV</button>
               <button onClick={() => setBatch([])}>清空</button>
             </div>
+            {batch.length > visibleBatch.length && (
+              <div className="muted hint">
+                另有 {batch.length - visibleBatch.length} 个已入库，不再显示（清空可重置）。
+              </div>
+            )}
           </div>
         )}
         <div className="picked">
