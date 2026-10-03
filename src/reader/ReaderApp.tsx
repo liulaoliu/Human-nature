@@ -2132,6 +2132,9 @@ export default function ReaderApp() {
                                 {studyCard.phonetic}
                               </div>
                             )}
+                            {studyCard.usage.length > 0 && (
+                              <div className="study-usage">{studyCard.usage.join('；')}</div>
+                            )}
                             {studySpelling && studyChecked && (
                               <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
                                 {correct ? '✔ 正确' : `✘ 你写的是「${studyInput || '（空）'}」`}
@@ -2145,9 +2148,6 @@ export default function ReaderApp() {
                                   )}
                                   {studyCard.meaning ?? '（无释义）'}
                                 </div>
-                                {studyCard.usage.length > 0 && (
-                                  <div className="mu">{studyCard.usage.join('；')}</div>
-                                )}
                                 {studyCard.examples.slice(0, 1).map((ex, i) => (
                                   <div className="ex" key={i}>
                                     {ex.text}

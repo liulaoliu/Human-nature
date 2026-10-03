@@ -642,3 +642,6 @@ button.danger {
 :root[data-theme='green'] .entry:hover { border-color: #c9dcc6; }
 :root[data-theme='green'] .study-card { background: linear-gradient(180deg, #ffffff, #f3f8f1); }
 :root[data-theme='green'] .toast { background: rgba(255, 255, 255, 0.96); border-color: #c9dcc6; color: #243026; }
+
+/* 背单词卡正面：用法 */
+.study-usage { color: var(--dim); font-size: 14px; line-height: 1.6; margin-top: 10px; max-width: 92%; }
