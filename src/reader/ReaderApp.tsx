@@ -4931,6 +4931,7 @@ export default function ReaderApp() {
             </button>
           </span>
         </div>
+        <div className="side-label">学习 / 练习</div>
         <div className="bar">
           <button
             className="primary"
@@ -5020,6 +5021,9 @@ export default function ReaderApp() {
           >
             错题专练
           </button>
+        </div>
+        <div className="side-label">库 / 导出</div>
+        <div className="bar">
           <button
             onClick={() => setBrowseAll(true)}
             disabled={!library.items.length}
