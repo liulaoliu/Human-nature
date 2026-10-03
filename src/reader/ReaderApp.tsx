@@ -66,6 +66,7 @@ import {
   type ListeningQuiz,
   type ListeningResult,
 } from '../core/listening'
+import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -247,9 +248,9 @@ export default function ReaderApp() {
     task: 'confusable' | 'lookup' | 'lemma' | 'pos'
     words: string[]
   } | null>(null)
-  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | null>(
-    null,
-  )
+  const [lastTask, setLastTask] = useState<
+    AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | 'language' | null
+  >(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -530,6 +531,14 @@ export default function ReaderApp() {
       return 8
     }
   })
+  /** 是否在正文里显示语言点 */
+  const [showLanguage, setShowLanguage] = useState(() => {
+    try {
+      return localStorage.getItem('reader:showLanguage') === '1'
+    } catch {
+      return false
+    }
+  })
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -803,6 +812,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [listenCount])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:showLanguage', showLanguage ? '1' : '0')
+    } catch {
+      // 忽略
+    }
+  }, [showLanguage])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1578,6 +1594,25 @@ export default function ReaderApp() {
     setListenResult(gradeListening(listenQuiz.questions, listenAnswers))
     setListenSubmitted(true)
   }, [listenQuiz, listenAnswers])
+
+  /** 复制逐句语言点分析提示词。 */
+  const copyLanguagePrompt = useCallback(async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    setLastTask('language')
+    askedWordsRef.current = []
+    askedIdsRef.current = doc.sentences.map((s) => s.id)
+    try {
+      await navigator.clipboard.writeText(
+        buildLanguagePrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text }))),
+      )
+      flash('已复制语言点分析提示词；把 AI 的 JSON 粘回「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [doc, flash])
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -2933,6 +2968,29 @@ export default function ReaderApp() {
       setPasted('')
       setPasteReport([`已生成 ${quiz.questions.length} 道题`, '点工具栏「理解题」开始作答'])
       flash(`已生成 ${quiz.questions.length} 道听力理解题`)
+      return
+    }
+
+    // 逐句语言点：写回句子
+    if (lastTask === 'language') {
+      const rows = parseLanguage(raw)
+      if (!rows.length) {
+        setPasteReport(['没解析出语言点（需要 JSON：{"sentences":[{"id":…}] }）'])
+        flash('没解析出语言点')
+        return
+      }
+      setDoc((d) => (d ? { ...d, sentences: applyLanguage(d.sentences, rows) } : d))
+      setPendingSave(true)
+      const asked = askedIdsRef.current
+      const got = new Set(rows.map((r) => r.id))
+      const missing = asked.filter((id) => !got.has(id))
+      const report = [`已写入 ${rows.length} 句语言点`]
+      if (missing.length) {
+        report.push(`AI 未返回 ${missing.length} 句：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+      }
+      setPasteReport(report)
+      setPasted('')
+      flash(`已写入 ${rows.length} 句语言点`)
       return
     }
 
@@ -4400,6 +4458,19 @@ export default function ReaderApp() {
                                 {s.translation ?? '（未翻译）'}
                               </span>
                             )}
+                            {showLanguage && s.language && (
+                              <span className="lang-block">
+                                {s.language.structure && <div>结构：{s.language.structure}</div>}
+                                {s.language.grammar && <div>语法：{s.language.grammar}</div>}
+                                {s.language.idioms?.length ? (
+                                  <div>习语：{s.language.idioms.join('；')}</div>
+                                ) : null}
+                                {s.language.phrases?.length ? (
+                                  <div>词组：{s.language.phrases.join('；')}</div>
+                                ) : null}
+                                {s.language.usage?.length ? <div>用法：{s.language.usage.join('；')}</div> : null}
+                              </span>
+                            )}
                           </span>
                         )
                       })}
@@ -4634,6 +4705,21 @@ export default function ReaderApp() {
             <option value="10">10 题</option>
             <option value="15">15 题</option>
           </select>
+          <button
+            onClick={() => void copyLanguagePrompt()}
+            disabled={!doc}
+            title="逐句语言点分析（结构/语法/idiom/词组/用法）：复制提示词，粘回「应用结果」后写回句子"
+          >
+            语言点
+          </button>
+          <label className="check-inline" title="在正文里显示语言点（结构/语法/习语/词组/用法）">
+            <input
+              type="checkbox"
+              checked={showLanguage}
+              onChange={(e) => setShowLanguage(e.target.checked)}
+            />
+            显示语言点
+          </label>
           <button
             onClick={() => {
               setQuizScope('lapses')

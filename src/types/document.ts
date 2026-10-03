@@ -57,6 +57,20 @@ export interface ReviewState {
   lapses?: number
 }
 
+/** 句子级语言点（AI 结构化分析：结构 / 语法 / idiom / 词组 / 用法）。 */
+export interface SentenceLanguage {
+  /** 结构分析 */
+  structure?: string
+  /** 语法要点 */
+  grammar?: string
+  /** 习语 */
+  idioms?: string[]
+  /** 词组 / 搭配 */
+  phrases?: string[]
+  /** 用法说明 */
+  usage?: string[]
+}
+
 /** 单个句子，精读与复读的共同最小单元。 */
 export interface Sentence {
   /** 如 "s001" */
@@ -75,6 +89,8 @@ export interface Sentence {
   collocations: string[]
   /** 本句出现的生词词形 */
   vocab: string[]
+  /** AI 结构化的语言点（结构/语法/idiom/词组/用法） */
+  language?: SentenceLanguage
   /** 标签，如 ["long_sentence"] */
   tags: string[]
   /** 复习状态 */
