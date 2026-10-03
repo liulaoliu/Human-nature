@@ -99,11 +99,10 @@ export function renderPrintHTML(input: {
   groups: VocabGroup[]
   /** 标题下的一行小字（日期 / 数量等） */
   subtitle?: string
-  /** 序号；返回 null 表示不编号 */
+  /** 序号；不传或返回 null 就不编号（全库打印不编号） */
   numberOf?: (item: VocabItem) => number | null
 }): string {
   const seen = new Set<string>()
-  let auto = 0
   let count = 0
   const body = input.groups
     .map((g) => {
@@ -115,8 +114,7 @@ export function renderPrintHTML(input: {
           return true
         })
         .map((it) => {
-          auto += 1
-          const n = input.numberOf ? input.numberOf(it) : auto
+          const n = input.numberOf ? input.numberOf(it) : null
           const no = n != null ? `<span class="no">${n}</span>` : ''
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''

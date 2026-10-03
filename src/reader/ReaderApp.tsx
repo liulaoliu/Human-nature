@@ -506,23 +506,35 @@ export default function ReaderApp() {
     () => library.items.filter((it) => it.source?.fileName === articleIdentity),
     [library.items, articleIdentity],
   )
-  /** 本篇生词按「正文首次出现」编号（1,2,3…），并记录首次出现的位置供正文标注。 */
+  /**
+   * 本篇生词编号：按**手动标记顺序**（createdAt 升序），同一时刻批量加入的
+   * （如「自动标词」一次入库）再按**正文出现顺序**兜底，所以自动标词自然就是文中顺序。
+   * 每篇文章独立编号，跨篇重置。`articleFirst` 记录每个词在正文首次出现的位置（用于上标）。
+   */
   const { articleNums, articleFirst } = useMemo(() => {
     const nums = new Map<string, number>()
     const first = new Set<string>()
     if (!doc) return { articleNums: nums, articleFirst: first }
     const byLemma = new Map<string, VocabItem>()
     for (const it of articleWords) byLemma.set(it.lemma, it)
-    let n = 0
+    // 每个 lemma 在正文的首次出现位置与顺序
+    const docOrder = new Map<string, number>()
     for (const s of doc.sentences) {
       wordSpans(s.text).forEach((w, i) => {
-        const it = byLemma.get(lemmaOf(w.text))
-        if (!it || nums.has(it.lemma)) return
-        n += 1
-        nums.set(it.lemma, n)
-        first.add(`${s.id}:${i}`)
+        const lem = lemmaOf(w.text)
+        if (byLemma.has(lem) && !docOrder.has(lem)) {
+          docOrder.set(lem, docOrder.size)
+          first.add(`${s.id}:${i}`)
+        }
       })
     }
+    const ordered = [...articleWords].sort(
+      (a, b) =>
+        a.createdAt.localeCompare(b.createdAt) ||
+        (docOrder.get(a.lemma) ?? 1e9) - (docOrder.get(b.lemma) ?? 1e9) ||
+        a.lemma.localeCompare(b.lemma),
+    )
+    ordered.forEach((it, i) => nums.set(it.lemma, i + 1))
     return { articleNums: nums, articleFirst: first }
   }, [doc, articleWords])
   const applyingDom = useRef(false)
@@ -1532,9 +1544,11 @@ export default function ReaderApp() {
 
   /** 还缺 AI 混淆项、且有释义的词（生成干扰项用）。 */
   const confusableTodo = useMemo(
-    () => library.items.filter((it) => it.meaning && !it.confusables?.length).slice(0, 80),
+    () => library.items.filter((it) => it.meaning && !it.confusables?.length),
     [library.items],
   )
+  /** 一次生成多少（提示词别太长）；生成应用后再点，处理下一批。 */
+  const confusableBatch = useMemo(() => confusableTodo.slice(0, 60), [confusableTodo])
 
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
@@ -2481,20 +2495,25 @@ export default function ReaderApp() {
 
   /** 生成混淆项：让 AI 为缺混淆项的词产出形近/义近干扰词，结果粘回「应用结果」。 */
   const copyConfusablePrompt = useCallback(async () => {
-    if (!confusableTodo.length) {
+    if (!confusableBatch.length) {
       flash('没有需要生成混淆项的词（需有释义）')
       return
     }
     setLastTask('confusable')
     try {
       await navigator.clipboard.writeText(
-        buildConfusablePrompt(confusableTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
+        buildConfusablePrompt(confusableBatch.map((it) => ({ word: it.word, meaning: it.meaning }))),
       )
-      flash(`已复制 ${confusableTodo.length} 个词的混淆项提示词；结果粘回「应用结果」`)
+      const rest = confusableTodo.length - confusableBatch.length
+      flash(
+        rest > 0
+          ? `已复制本批 ${confusableBatch.length} 个（还剩 ${rest}）；应用后再点一次继续`
+          : `已复制 ${confusableBatch.length} 个词的混淆项提示词；结果粘回「应用结果」`,
+      )
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [confusableTodo, flash])
+  }, [confusableBatch, confusableTodo, flash])
 
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
@@ -3815,11 +3834,11 @@ export default function ReaderApp() {
         </button>
         <button
           onClick={() => void copyConfusablePrompt()}
-          disabled={!confusableTodo.length}
+          disabled={!confusableBatch.length}
           style={{ marginTop: 6, marginLeft: 6 }}
-          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；结果粘到上面再点「应用结果」"
+          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；每次最多 60 个，应用后可再点继续"
         >
-          🤖 生成混淆项（{confusableTodo.length}）
+          🤖 生成混淆项（{confusableBatch.length}/{confusableTodo.length}）
         </button>
 
         <div className="section-title">
