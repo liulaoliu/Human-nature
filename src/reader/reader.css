@@ -234,6 +234,21 @@ a { color: var(--accent); }
 textarea.paste { height: 110px; resize: none; }
 textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 
+/* 应用 AI 结果后的回执（成功 / 缺失 / 无效） */
+.paste-report {
+  margin-top: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--fg);
+  max-height: 190px;
+  overflow: auto;
+}
+.paste-report > div:first-child { color: var(--green); font-weight: 600; }
+
 /* 选词模式的待选词 */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
 .chipx { padding: 2px 9px; font-size: 12px; border-radius: 999px; }

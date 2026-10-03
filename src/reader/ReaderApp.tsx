@@ -113,6 +113,12 @@ function fmtDue(iso: string | null): string {
   return `${days} 天后`
 }
 
+/** 请求的词里，AI 没返回的（按 lemma 比较）。 */
+function missingWords(requested: string[], returned: string[]): string[] {
+  const got = new Set(returned.map((w) => lemmaOf(w)))
+  return requested.filter((w) => !got.has(lemmaOf(w)))
+}
+
 /** 本机时区的日期键 YYYY-MM-DD */
 function localDayKey(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0')
@@ -214,6 +220,12 @@ export default function ReaderApp() {
   const [selIndices, setSelIndices] = useState<number[]>([])
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
   const [pasted, setPasted] = useState('')
+  /** 上次「复制提示词」请求的词（用于校验 AI 返回是否齐全） */
+  const askedWordsRef = useRef<string[]>([])
+  /** 上次「全文翻译」请求的句子 id（用于校验是否逐句返回） */
+  const askedIdsRef = useRef<string[]>([])
+  /** 应用结果后的回执（成功 / 缺失 / 无效） */
+  const [pasteReport, setPasteReport] = useState<string[]>([])
   const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | null>(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
@@ -2410,6 +2422,8 @@ export default function ReaderApp() {
         return
       }
       setLastTask(task)
+      askedWordsRef.current = task === 'lookup' && exact && !exact.includes(' ') ? [exact] : []
+      askedIdsRef.current = []
       const prompt = buildPrompt({
         task,
         text,
@@ -2450,6 +2464,8 @@ export default function ReaderApp() {
       visibleBatch.map((b) => ({ word: b.word, context: b.sentence })),
     )
     setLastTask('lookup')
+    askedWordsRef.current = visibleBatch.map((b) => b.word)
+    askedIdsRef.current = []
     try {
       await navigator.clipboard.writeText(prompt)
       flash(`已复制 ${visibleBatch.length} 个词的查词提示词`)
@@ -2470,6 +2486,8 @@ export default function ReaderApp() {
         todo.map((it) => ({ word: it.word, context: it.source?.sentenceText })),
       )
       setLastTask('lookup')
+      askedWordsRef.current = todo.map((it) => it.word)
+      askedIdsRef.current = []
       try {
         await navigator.clipboard.writeText(prompt)
         flash(`已复制 ${todo.length} 个词，去 AI 粘贴后把结果贴回「应用结果」`)
@@ -2488,6 +2506,8 @@ export default function ReaderApp() {
     }
     const prompt = buildTranslateAllPrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text })))
     setLastTask('translate')
+    askedIdsRef.current = doc.sentences.map((s) => s.id)
+    askedWordsRef.current = []
     try {
       await navigator.clipboard.writeText(prompt)
       flash('已复制全文翻译提示词；把结果贴回「应用结果」')
@@ -2519,6 +2539,8 @@ export default function ReaderApp() {
       return
     }
     setLastTask('confusable')
+    askedWordsRef.current = confusableBatch.map((it) => it.word)
+    askedIdsRef.current = []
     try {
       await navigator.clipboard.writeText(
         buildConfusablePrompt(confusableBatch.map((it) => ({ word: it.word, meaning: it.meaning }))),
@@ -2537,31 +2559,67 @@ export default function ReaderApp() {
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
+    setPasteReport([])
+
     // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
     if (lastTask === 'auto_vocab') {
       const words = parseWordList(raw)
       if (!words.length) {
+        setPasteReport(['没解析出单词（应为一行一个，或逗号/顿号分隔）'])
         flash('没解析出单词')
         return
       }
       mergeBatch(batchItemsFromWords(words))
       setPasted('')
-      flash(`已加入待选 ${words.length} 个词；可增删后再查词`)
+      setPasteReport([`已加入待选 ${words.length} 个词，可增删后再查词`])
+      flash(`已加入待选 ${words.length} 个词`)
       return
     }
-    // 混淆项：写回对应词条，供选择题当干扰项
+
+    // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
     if (lastTask === 'confusable') {
-      const results = parseConfusables(raw)
-      if (!results.length) {
-        flash('没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）')
+      const parsed = parseConfusables(raw)
+      if (!parsed.length) {
+        setPasteReport(['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'])
+        flash('没解析出混淆项')
         return
       }
-      persist(applyConfusables(library, results))
+      const asked = askedWordsRef.current
+      const libLemmas = new Set(library.items.map((it) => it.lemma))
+      // 每条至少要有 1 个「非空且和原词不同」的易混词
+      const valid = parsed
+        .map((r) => ({
+          ...r,
+          confusables: r.confusables.filter((c) => c.word.trim() && lemmaOf(c.word) !== lemmaOf(r.word)),
+        }))
+        .filter((r) => r.confusables.length > 0)
+      const applied = valid.filter((r) => libLemmas.has(lemmaOf(r.word)))
+      const unknown = valid.filter((r) => !libLemmas.has(lemmaOf(r.word))).map((r) => r.word)
+      const empty = parsed
+        .filter((r) => r.confusables.every((c) => !c.word.trim() || lemmaOf(c.word) === lemmaOf(r.word)))
+        .map((r) => r.word)
+      const missing = missingWords(asked, valid.map((r) => r.word))
+
+      const report: string[] = []
+      if (applied.length) persist(applyConfusables(library, applied))
+      report.push(`成功写入 ${applied.length} 个词的混淆项`)
+      if (missing.length) {
+        report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+      }
+      if (empty.length) {
+        report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
+      }
+      if (unknown.length) {
+        report.push(`词库里没有 ${unknown.length} 个：${unknown.slice(0, 10).join('、')}`)
+      }
+      setPasteReport(report)
       setPasted('')
-      flash(`已写入 ${results.length} 个词的混淆项`)
+      flash(`已写入 ${applied.length} 个${missing.length ? `，缺 ${missing.length}` : ''}`)
       return
     }
+
     const result = parseAnalysis(raw)
+    const report: string[] = []
     let next = library
     if (result.words?.length) {
       next = applyWordAnalysis(next, result.words, new Date(), {
@@ -2595,16 +2653,65 @@ export default function ReaderApp() {
       )
     }
     const sentenceTask = lastTask
-    if (!result.words?.length && !result.sentences?.length && sentenceTask && sentence) {
+    const fellBack = !result.words?.length && !result.sentences?.length && !!sentenceTask && !!sentence
+    if (fellBack && sentenceTask) {
       const updated = applyToSentence(sentence, sentenceTask, raw)
       setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
     }
+
+    // 一点都没解析出来：保留粘贴内容，方便改格式重试
+    if (!result.words?.length && !result.sentences?.length && !fellBack) {
+      setPasteReport(['没解析出可用内容（查词表格 / 逐句翻译 / JSON）；检查格式后重试'])
+      flash('没解析出内容')
+      return
+    }
+
     persist(next)
     // 有句子级结果（翻译/语法/搭配）或落到句子上 → 正文有改动，自动保存
-    if (result.sentences?.length || (sentenceTask && sentence)) setPendingSave(true)
+    if (result.sentences?.length || fellBack) setPendingSave(true)
     setPasted('')
-    flash(result.words?.length ? `已填入 ${result.words.length} 个词条` : '已应用')
-  }, [pasted, library, lastTask, sentence, persist, flash, mergeBatch, batchItemsFromWords])
+
+    if (result.words?.length) {
+      report.push(`已填入 ${result.words.length} 个词条`)
+      const asked = askedWordsRef.current
+      if (asked.length) {
+        const missing = missingWords(asked, result.words.map((w) => w.word))
+        if (missing.length) {
+          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+      }
+      const noPhon = result.words.filter((w) => !w.phonetic).length
+      const noMean = result.words.filter((w) => !w.meaning).length
+      if (noPhon) report.push(`其中 ${noPhon} 个没音标`)
+      if (noMean) report.push(`其中 ${noMean} 个没释义`)
+    }
+    if (result.sentences?.length) {
+      report.push(`已更新 ${result.sentences.length} 句`)
+      const asked = askedIdsRef.current
+      if (asked.length) {
+        const got = new Set(result.sentences.map((x) => x.sentenceId))
+        const missing = asked.filter((id) => !got.has(id))
+        if (missing.length) {
+          report.push(`AI 未返回 ${missing.length} 句：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+      }
+    }
+    if (fellBack) report.push('已按所选句子落上结果')
+    setPasteReport(report.length ? report : ['已应用'])
+    flash(report[0] ?? '已应用')
+  }, [
+    pasted,
+    library,
+    lastTask,
+    sentence,
+    persist,
+    flash,
+    mergeBatch,
+    batchItemsFromWords,
+    articleTitle,
+    articleKey,
+    articleIdentity,
+  ])
 
   const download = useCallback(
     (name: string, content: string, mime: string) => {
@@ -3846,11 +3953,21 @@ export default function ReaderApp() {
           className="paste"
           placeholder="把 DeepSeek 的结果粘回这里，再点「应用结果」"
           value={pasted}
-          onChange={(e) => setPasted(e.target.value)}
+          onChange={(e) => {
+            setPasted(e.target.value)
+            if (pasteReport.length) setPasteReport([])
+          }}
         />
         <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
           应用结果
         </button>
+        {pasteReport.length > 0 && (
+          <div className="paste-report">
+            {pasteReport.map((line, i) => (
+              <div key={i}>{line}</div>
+            ))}
+          </div>
+        )}
         <button
           onClick={() => void copyConfusablePrompt()}
           disabled={!confusableBatch.length}
