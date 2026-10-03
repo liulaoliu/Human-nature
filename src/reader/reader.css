@@ -129,6 +129,9 @@ a { color: var(--accent); }
 .reader.size-lg { --read: 20.5px; }
 .reader.size-xl { --read: 23px; }
 .reader.weight-bold { --read-weight: 600; }
+/* 考试 / 快刷：隐藏原文与生词侧栏，给考试一个干净界面 */
+.reader.exam { grid-template-columns: minmax(0, 1fr); }
+.reader.exam .reader-side { display: none; }
 
 .reader-main { overflow: auto; padding: 24px 34px; }
 .reader-side { border-left: 1px solid var(--line); overflow: auto; padding: 16px; background: var(--panel); }

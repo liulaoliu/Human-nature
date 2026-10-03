@@ -2632,8 +2632,11 @@ export default function ReaderApp() {
     [library, persist],
   )
 
+  /** 考试 / 快刷 / 听写 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
+  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue
+
   return (
-    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}`}>
+    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
       <main
         className="reader-main"
         onMouseDown={onMouseDown}
@@ -3478,7 +3481,7 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {!studyQueue && !browseAll && (composing || !doc) && (
+        {!studyQueue && !browseAll && !examActive && (composing || !doc) && (
           <div className="composer">
             <div className="bar">
               <input
@@ -3556,7 +3559,7 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {!studyQueue && !browseAll && doc && !composing && (
+        {!studyQueue && !browseAll && !examActive && doc && !composing && (
           <>
             <h1>
               {articleTitle || (articleKey ? articleKey : '手动粘贴')}
