@@ -34,6 +34,14 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
+import {
+  buildQuizQuestions,
+  isCorrect,
+  QUIZ_KIND_LABEL,
+  shuffleQuiz,
+  type QuizKind,
+  type QuizQuestion,
+} from '../core/quiz'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -357,6 +365,45 @@ export default function ReaderApp() {
   const studyForgotRef = useRef<string[]>([])
   /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
   const studyBumpedRef = useRef<Set<string>>(new Set())
+
+  /** 考试（检验掌握）：设置 + 一轮题目 + 作答状态 */
+  const [quizSetupOpen, setQuizSetupOpen] = useState(false)
+  const [quizKinds, setQuizKinds] = useState<QuizKind[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:quizKinds') ?? 'null')
+      if (Array.isArray(raw) && raw.length) {
+        const valid = raw.filter((k): k is QuizKind => k === 'spell' || k === 'cloze' || k === 'usage')
+        if (valid.length) return valid
+      }
+    } catch {
+      // 忽略
+    }
+    return ['spell', 'cloze', 'usage']
+  })
+  const [quizScope, setQuizScope] = useState<'all' | 'article' | 'unmastered' | 'due'>(() => {
+    try {
+      const v = localStorage.getItem('reader:quizScope')
+      return v === 'all' || v === 'article' || v === 'due' ? v : 'unmastered'
+    } catch {
+      return 'unmastered'
+    }
+  })
+  const [quizLimit, setQuizLimit] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:quizLimit') ?? '20')
+      return Number.isFinite(n) && n >= 0 ? n : 20
+    } catch {
+      return 20
+    }
+  })
+  const [quizQueue, setQuizQueue] = useState<QuizQuestion[] | null>(null)
+  const [quizIndex, setQuizIndex] = useState(0)
+  const [quizInput, setQuizInput] = useState('')
+  const [quizChecked, setQuizChecked] = useState(false)
+  const [quizResult, setQuizResult] = useState<boolean | null>(null)
+  const [quizResults, setQuizResults] = useState<{ id: string; itemId: string; correct: boolean }[]>([])
+  const [quizSeconds, setQuizSeconds] = useState(0)
+  const quizInputRef = useRef<HTMLInputElement>(null)
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useState(() => {
     try {
@@ -469,7 +516,7 @@ export default function ReaderApp() {
   const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (studyQueue) return
+      if (studyQueue || quizQueue) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -480,7 +527,7 @@ export default function ReaderApp() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue])
+  }, [studyQueue, quizQueue])
 
   useEffect(() => {
     try {
@@ -540,6 +587,15 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [studyMode])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:quizKinds', JSON.stringify(quizKinds))
+      localStorage.setItem('reader:quizScope', quizScope)
+      localStorage.setItem('reader:quizLimit', String(quizLimit))
+    } catch {
+      // 忽略
+    }
+  }, [quizKinds, quizScope, quizLimit])
   useEffect(() => {
     try {
       localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
@@ -623,6 +679,28 @@ export default function ReaderApp() {
     )
   }, [library.items, studyScope, articleIdentity, doc])
 
+  /** 考试的候选池（范围与背单词类似，但多一个「到期」）。 */
+  const quizPool = useMemo(() => {
+    if (quizScope === 'all') return library.items
+    if (quizScope === 'due') return library.items.filter((it) => isDue(it))
+    if (quizScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
+    return library.items.filter(
+      (it) =>
+        it.source?.fileName === articleIdentity ||
+        (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
+    )
+  }, [library.items, quizScope, articleIdentity, doc])
+
+  /** 各范围下能出的题数（用于设置面板提示）。 */
+  const quizPoolSizes = useMemo(() => {
+    const count = (items: VocabItem[]) => buildQuizQuestions(items, quizKinds).length
+    return {
+      all: count(library.items),
+      due: count(library.items.filter((it) => isDue(it))),
+      unmastered: count(library.items.filter((it) => it.status !== 'mastered')),
+    }
+  }, [library.items, quizKinds])
+
   /** 待复习（已学过且到期）数量——用于「复习」模式的角标。 */
   const dueCount = useMemo(
     () => studyPool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length,
@@ -658,6 +736,8 @@ export default function ReaderApp() {
       studyRequeueRef.current = new Map()
       studyForgotRef.current = []
       studyBumpedRef.current = new Set()
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
       setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
       setStudyQueue(q)
       setStudyIndex(0)
@@ -831,6 +911,60 @@ export default function ReaderApp() {
     setStudyDelArmed(false)
   }, [library.items])
 
+  /** 用当前设置出一份考卷（洗牌 + 限量）。 */
+  const startQuiz = useCallback(() => {
+    const qs = buildQuizQuestions(quizPool, quizKinds)
+    if (!qs.length) {
+      flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
+      return
+    }
+    const picked = shuffleQuiz(qs).slice(0, quizLimit > 0 ? quizLimit : qs.length)
+    setStudyQueue(null)
+    setQuizQueue(picked)
+    setQuizIndex(0)
+    setQuizInput('')
+    setQuizChecked(false)
+    setQuizResult(null)
+    setQuizResults([])
+    setQuizSetupOpen(false)
+  }, [quizPool, quizKinds, quizLimit, flash])
+
+  /** 提交本题并判分；对 → SRS good，错 → SRS again（记 lapse）。 */
+  const checkQuiz = useCallback(() => {
+    if (!quizQueue) return
+    const q = quizQueue[quizIndex]
+    if (!q || quizChecked) return
+    const ok = isCorrect(q, quizInput)
+    setQuizChecked(true)
+    setQuizResult(ok)
+    setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
+    persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
+  }, [quizQueue, quizIndex, quizChecked, quizInput, library, persist])
+
+  const nextQuiz = useCallback(() => {
+    if (!quizQueue) return
+    setQuizInput('')
+    setQuizChecked(false)
+    setQuizResult(null)
+    setQuizIndex((i) => i + 1)
+  }, [quizQueue])
+
+  const retryQuizWrong = useCallback(() => {
+    const wrongIds = new Set(quizResults.filter((r) => !r.correct).map((r) => r.itemId))
+    const items = library.items.filter((it) => wrongIds.has(it.id))
+    const qs = buildQuizQuestions(items, quizKinds)
+    if (!qs.length) {
+      flash('没有可重做的错题')
+      return
+    }
+    setQuizQueue(shuffleQuiz(qs))
+    setQuizIndex(0)
+    setQuizInput('')
+    setQuizChecked(false)
+    setQuizResult(null)
+    setQuizResults([])
+  }, [quizResults, library.items, quizKinds, flash])
+
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
     if (!studyQueue || studyEditOpen) return
@@ -896,6 +1030,37 @@ export default function ReaderApp() {
       }
     }
   }, [studyQueue, studyFlush])
+
+  // 考试计时：开考清零，每秒 +1
+  useEffect(() => {
+    if (!quizQueue) return
+    setQuizSeconds(0)
+    const id = window.setInterval(() => setQuizSeconds((s) => s + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [quizQueue])
+
+  // 换题后把焦点送回输入框，方便直接打字
+  useEffect(() => {
+    if (quizQueue && quizIndex < quizQueue.length && !quizChecked) quizInputRef.current?.focus()
+  }, [quizQueue, quizIndex, quizChecked])
+
+  // 考试快捷键：回车 提交 / 下一题；Esc 退出
+  useEffect(() => {
+    if (!quizQueue) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setQuizQueue(null)
+        return
+      }
+      if (e.key !== 'Enter') return
+      e.preventDefault()
+      if (quizIndex >= quizQueue.length) return
+      if (!quizChecked) checkQuiz()
+      else nextQuiz()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [quizQueue, quizIndex, quizChecked, checkQuiz, nextQuiz])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -2618,6 +2783,181 @@ export default function ReaderApp() {
           </div>
         )}
 
+        {quizSetupOpen && !quizQueue && (
+          <div className="study quiz-setup">
+            <div className="bar study-bar">
+              <strong>考试设置</strong>
+              <button onClick={() => setQuizSetupOpen(false)}>取消</button>
+            </div>
+            <div className="quiz-setup-body">
+              <div className="quiz-field">
+                <span className="muted">题型</span>
+                <div className="bar">
+                  {(['spell', 'cloze', 'usage'] as QuizKind[]).map((k) => (
+                    <label className="check-inline" key={k}>
+                      <input
+                        type="checkbox"
+                        checked={quizKinds.includes(k)}
+                        onChange={(e) =>
+                          setQuizKinds((prev) => (e.target.checked ? [...prev, k] : prev.filter((x) => x !== k)))
+                        }
+                      />
+                      {QUIZ_KIND_LABEL[k]}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div className="quiz-field">
+                <span className="muted">范围</span>
+                <div className="bar">
+                  <select
+                    value={quizScope}
+                    onChange={(e) =>
+                      setQuizScope(e.target.value as 'all' | 'article' | 'unmastered' | 'due')
+                    }
+                  >
+                    <option value="unmastered">未掌握</option>
+                    <option value="due">到期</option>
+                    <option value="article">本篇</option>
+                    <option value="all">全部</option>
+                  </select>
+                </div>
+              </div>
+              <div className="quiz-field">
+                <span className="muted">题量</span>
+                <div className="bar">
+                  <select value={String(quizLimit)} onChange={(e) => setQuizLimit(Number(e.target.value))}>
+                    <option value="10">10 题</option>
+                    <option value="20">20 题</option>
+                    <option value="50">50 题</option>
+                    <option value="0">全部</option>
+                  </select>
+                </div>
+              </div>
+              <p className="muted">
+                当前范围可出 {buildQuizQuestions(quizPool, quizKinds).length} 题（未掌握约{' '}
+                {quizPoolSizes.unmastered} 题）。答对按「认识」、答错按「忘记了」计入复习排期。
+              </p>
+              <div className="bar">
+                <button className="primary" onClick={startQuiz} disabled={!quizKinds.length}>
+                  开始考试
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {quizQueue && (
+          <div className="study quiz">
+            <div className="bar study-bar">
+              <button onClick={() => setQuizQueue(null)}>结束（Esc）</button>
+              <span className="muted">
+                {Math.min(quizIndex + 1, quizQueue.length)} / {quizQueue.length}
+              </span>
+              <span className="muted study-timer">⏱ {fmtDur(quizSeconds)}</span>
+              <span className="muted">
+                正确 {quizResults.filter((r) => r.correct).length} / {quizResults.length}
+              </span>
+            </div>
+            {quizIndex < quizQueue.length
+              ? (() => {
+                  const q = quizQueue[quizIndex]
+                  return (
+                    <>
+                      <div className="study-card quiz-card">
+                        <div className="quiz-kind">{QUIZ_KIND_LABEL[q.kind]}</div>
+                        <div className={q.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
+                          {q.kind === 'spell' ? (
+                            <>
+                              {q.partOfSpeech && <span className="cell-pos">{q.partOfSpeech} </span>}
+                              {q.prompt}
+                            </>
+                          ) : (
+                            q.prompt
+                          )}
+                        </div>
+                        {q.kind !== 'spell' && q.meaning && (
+                          <div className="muted quiz-hint">
+                            释义：{q.partOfSpeech ? `${q.partOfSpeech} ` : ''}
+                            {q.meaning}
+                          </div>
+                        )}
+                        <input
+                          className="study-input"
+                          autoFocus
+                          ref={quizInputRef}
+                          placeholder="输入答案，回车提交 / 下一题"
+                          value={quizInput}
+                          onChange={(e) => setQuizInput(e.target.value)}
+                          disabled={quizChecked}
+                        />
+                        {quizChecked && (
+                          <>
+                            <div className={'study-result ' + (quizResult ? 'ok' : 'bad')}>
+                              {quizResult ? '✔ 正确' : `✘ 正确答案：${q.answer}`}
+                            </div>
+                            {q.context && <div className="muted quiz-full">{q.context}</div>}
+                            {q.translation && <div className="muted quiz-full">{q.translation}</div>}
+                          </>
+                        )}
+                      </div>
+                      <div className="bar study-actions">
+                        {!quizChecked ? (
+                          <button className="primary" onClick={checkQuiz}>
+                            提交（回车）
+                          </button>
+                        ) : (
+                          <button className="primary" onClick={nextQuiz}>
+                            {quizIndex + 1 >= quizQueue.length ? '看结果（回车）' : '下一题（回车）'}
+                          </button>
+                        )}
+                        <button onClick={() => setQuizQueue(null)}>退出</button>
+                      </div>
+                    </>
+                  )
+                })()
+              : (() => {
+                  const total = quizResults.length
+                  const correct = quizResults.filter((r) => r.correct).length
+                  const wrongIds = [...new Set(quizResults.filter((r) => !r.correct).map((r) => r.itemId))]
+                  return (
+                    <div className="study-done">
+                      <p>
+                        考试结束：答对 <b>{correct}</b> / {total}
+                        {total ? `（正确率 ${Math.round((correct / total) * 100)}%）` : ''}，用时{' '}
+                        {fmtDur(quizSeconds)}。
+                      </p>
+                      {wrongIds.length > 0 && (
+                        <div className="quiz-wrong">
+                          <div className="muted">错题：</div>
+                          {wrongIds.map((id) => {
+                            const it = library.items.find((x) => x.id === id)
+                            return it ? (
+                              <div key={id}>
+                                <b>{it.word}</b>
+                                {it.meaning ? ` — ${it.meaning}` : ''}
+                              </div>
+                            ) : null
+                          })}
+                        </div>
+                      )}
+                      <div className="bar">
+                        {wrongIds.length > 0 && (
+                          <button className="primary" onClick={retryQuizWrong}>
+                            重做错题 {wrongIds.length}
+                          </button>
+                        )}
+                        <button className={wrongIds.length ? '' : 'primary'} onClick={startQuiz}>
+                          再来一轮
+                        </button>
+                        <button onClick={() => setQuizQueue(null)}>回到阅读</button>
+                      </div>
+                    </div>
+                  )
+                })()}
+          </div>
+        )}
+
         {browseAll && (
           <div className="all-vocab">
             <div className="bar">
@@ -2916,11 +3256,26 @@ export default function ReaderApp() {
         <div className="bar">
           <button
             className="primary"
-            onClick={() => startStudy()}
+            onClick={() => {
+              setQuizQueue(null)
+              setQuizSetupOpen(false)
+              startStudy()
+            }}
             disabled={!library.items.length}
             title="卡片式背单词：新学习没学过的、复习到期的；空格翻面，1/2/3 认识/模糊/忘记了，Esc 退出"
           >
             背单词
+          </button>
+          <button
+            onClick={() => {
+              setStudyQueue(null)
+              setQuizResults([])
+              setQuizSetupOpen(true)
+            }}
+            disabled={!library.items.length}
+            title="考试：拼写 / 例句填空 / 搭配填空，检验掌握效果，成绩计入复习排期"
+          >
+            考试
           </button>
           <button
             onClick={() => setBrowseAll(true)}

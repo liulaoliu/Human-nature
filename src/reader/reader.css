@@ -704,3 +704,24 @@ button.danger {
   border-color: rgba(255, 255, 255, 0.45);
   color: #fff;
 }
+
+/* 考试（检验掌握） */
+.quiz-setup { max-width: 620px; }
+.quiz-setup-body { display: flex; flex-direction: column; gap: 14px; padding: 8px 4px; }
+.quiz-field { display: flex; align-items: center; gap: 12px; }
+.quiz-field > .muted { min-width: 44px; }
+.quiz-field .bar { margin-bottom: 0; }
+.quiz-card { cursor: default; }
+.quiz-kind {
+  font-size: 12px;
+  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 10px;
+  margin-bottom: 14px;
+}
+.quiz-prompt { font-size: 24px; }
+.quiz-sentence { font-size: 22px; line-height: 1.6; }
+.quiz-hint { margin-top: 10px; font-size: 14px; }
+.quiz-full { margin-top: 8px; font-size: 13px; }
+.quiz-wrong { margin: 12px 0; text-align: left; display: inline-block; }
