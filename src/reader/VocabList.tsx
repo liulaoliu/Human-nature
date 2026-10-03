@@ -6,11 +6,14 @@ interface Props {
   view: 'card' | 'table'
   focusLemma: string | null
   confirmDel: string | null
-  onJump: (item: VocabItem) => void
+  /** 不传则点击不跳转（如「全部生词」视图） */
+  onJump?: (item: VocabItem) => void
   onSpeak: (word: string) => void
   onDelete: (id: string) => void
   onReview: (id: string, grade: ReviewGrade) => void
   onEdit: (id: string, meaning: string) => void
+  /** 显示「来源」列 / 行（文章 + 原句） */
+  showSource?: boolean
 }
 
 /** 生词本列表（卡片 / 书本式表格），侧栏与「全部生词」视图共用。 */
@@ -24,15 +27,17 @@ export default function VocabList({
   onDelete,
   onReview,
   onEdit,
+  showSource = false,
 }: Props) {
   if (view === 'table') {
     return (
-      <table className="vtable">
+      <table className={'vtable' + (showSource ? ' has-source' : '')}>
         <thead>
           <tr>
             <th>单词</th>
             <th>含义</th>
             <th>用法</th>
+            {showSource && <th>来源</th>}
             <th />
           </tr>
         </thead>
@@ -42,7 +47,7 @@ export default function VocabList({
               key={it.id}
               data-lemma={it.lemma}
               className={it.lemma === focusLemma ? 'focus' : ''}
-              onClick={() => onJump(it)}
+              onClick={onJump ? () => onJump(it) : undefined}
               title={it.examples[0]?.text ?? ''}
             >
               <td className="cell-word">
@@ -65,6 +70,12 @@ export default function VocabList({
                 {it.meaning ?? ''}
               </td>
               <td className="cell-usage">{it.usage.join('；')}</td>
+              {showSource && (
+                <td className="cell-source">
+                  <div className="src-article">{it.source?.articleId ?? '—'}</div>
+                  {it.source?.sentenceText && <div className="src-sentence">{it.source.sentenceText}</div>}
+                </td>
+              )}
               <td className="cell-act">
                 <button
                   className={confirmDel === it.id ? 'danger' : ''}
@@ -92,7 +103,7 @@ export default function VocabList({
           key={it.id}
           data-lemma={it.lemma}
         >
-          <div className="w" onClick={() => onJump(it)} title="回到原文这句">
+          <div className="w" onClick={onJump ? () => onJump(it) : undefined} title={onJump ? '回到原文这句' : undefined}>
             {it.word}{' '}
             {it.phonetic && (
               <span
@@ -121,6 +132,12 @@ export default function VocabList({
             {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
             {it.source ? ` · ${it.source.articleId}` : ''}
           </div>
+          {showSource && it.source && (
+            <div className="ex src">
+              来源：{it.source.articleId}
+              {it.source.sentenceText ? ` · ${it.source.sentenceText}` : ''}
+            </div>
+          )}
           <div className="row">
             <button onClick={() => onReview(it.id, 'again')}>重来</button>
             <button onClick={() => onReview(it.id, 'good')}>记得</button>

@@ -1929,11 +1929,11 @@ export default function ReaderApp() {
                 view={vocabView}
                 focusLemma={focusLemma}
                 confirmDel={confirmDel}
-                onJump={jumpToSource}
                 onSpeak={speak}
                 onDelete={askDelete}
                 onReview={handleReview}
                 onEdit={handleEdit}
+                showSource
               />
             ) : (
               <div className="muted">生词本是空的</div>
