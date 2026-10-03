@@ -326,6 +326,8 @@ export default function ReaderApp() {
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
+  /** Ctrl 两段式点选的锚点（同一句内第一个 Ctrl 点的词） */
+  const ctrlAnchorRef = useRef<{ sid: string; word: number } | null>(null)
   const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -951,6 +953,7 @@ export default function ReaderApp() {
     setPeekSid(null)
     setLastPicked(null)
     setConfirmDelSave(false)
+    ctrlAnchorRef.current = null
   }, [])
 
   const loadText = useCallback(
@@ -1346,36 +1349,69 @@ export default function ReaderApp() {
       if (a == null || b == null) return
       const sentenceText = text.trim()
 
-      const setRange = (s: number, e: number) => {
-        const r = wordIndexRange(text, s, e)
+      /** 应用一段字符区间：设高亮；vocabMode 且 finalize 时作为一个「词组」进待选。 */
+      const applySpan = (startChar: number, endChar: number, asPhrase: boolean) => {
+        const s = text.slice(startChar, endChar)
+        if (!s) return
+        setExact(s)
+        setUseExact(true)
+        const r = wordIndexRange(text, startChar, endChar)
         setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
+        if (finalize && asPhrase && sid) {
+          const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(s))
+          addToBatch([s], sentenceText, sid)
+          if (!already) sessionPickedRef.current += 1
+          setLastPicked({ word: s, sid })
+        }
+        if (finalize) clearDomSelection()
       }
 
-      // 选词模式：点 = 一个词；按住 Alt 或 Ctrl 拖动 = 整段词组
+      // Ctrl：单击两段式端点选择（点 bar 再点 from = 选中 bar…from）；拖动=整段
+      if (ctrl) {
+        const spans = wordSpans(text)
+        if (!spans.length) return
+        if (!range.collapsed) {
+          const snapped = snapSelection(text, a, b)
+          if (!snapped) return
+          const r = wordIndexRange(text, snapped.start, snapped.end)
+          if (sid && r) ctrlAnchorRef.current = { sid, word: r.end - 1 }
+          applySpan(snapped.start, snapped.end, vocabMode)
+          return
+        }
+        const idx = spans.findIndex((w) => a >= w.start && a < w.end)
+        if (idx < 0) return
+        const anchor = ctrlAnchorRef.current
+        let lo = idx
+        let hi = idx
+        if (anchor && anchor.sid === sid) {
+          lo = Math.min(anchor.word, idx)
+          hi = Math.max(anchor.word, idx)
+        } else {
+          ctrlAnchorRef.current = sid ? { sid, word: idx } : null
+        }
+        applySpan(spans[lo].start, spans[hi].end, vocabMode)
+        return
+      }
+
+      // 非 Ctrl：清掉 Ctrl 锚点
+      ctrlAnchorRef.current = null
+
+      // 选词模式：点 = 一个词；按住 Alt 拖动 = 整段词组
       if (vocabMode) {
-        const end = (altHeld || ctrlHeld) && !range.collapsed ? b : a
+        const end = altHeld && !range.collapsed ? b : a
         const snapped = snapSelection(text, a, end)
         if (!snapped) return
         setExact(snapped.text)
         setUseExact(true)
-        setRange(snapped.start, snapped.end)
+        const r = wordIndexRange(text, snapped.start, snapped.end)
+        setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
         if (finalize) {
-          const already = batch.some((b) => lemmaOf(b.word) === lemmaOf(snapped.text))
+          const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(snapped.text))
           addToBatch([snapped.text], sentenceText, sid)
           if (!already) sessionPickedRef.current += 1
           if (sid) setLastPicked({ word: snapped.text, sid })
           clearDomSelection()
         }
-        return
-      }
-
-      if (ctrl) {
-        const word = snapSelection(text, a, a)
-        if (!word) return
-        setExact(word.text)
-        setUseExact(true)
-        setRange(word.start, word.end)
-        if (finalize) clearDomSelection()
         return
       }
 
@@ -1389,10 +1425,7 @@ export default function ReaderApp() {
 
       const snapped = snapSelection(text, a, b)
       if (!snapped) return
-      setExact(snapped.text)
-      setUseExact(true)
-      setRange(snapped.start, snapped.end)
-      if (finalize) clearDomSelection()
+      applySpan(snapped.start, snapped.end, false)
     },
     [vocabMode, altHeld, batch, addToBatch, clearDomSelection, wordIndexRange],
   )
@@ -2297,8 +2330,8 @@ export default function ReaderApp() {
           </div>
           <div className="muted hint">
             {vocabMode
-              ? '选词模式：点 = 一个词；按住 Alt / Ctrl 拖动 = 词组。'
-              : '单击=整句；拖动=按整词吸附；按住 Ctrl 点=单个词。'}
+              ? '选词模式：点=一个词；Alt 拖动=词组；Ctrl 点两个词=中间整段。'
+              : '单击=整句；拖动=整词吸附；Ctrl 点两个词=选中中间整段。'}
           </div>
           <div className="tasks">
             <button className="primary" onClick={mark} disabled={!exact}>
