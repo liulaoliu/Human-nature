@@ -5,10 +5,12 @@ import {
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildConfusablePrompt,
+  buildLemmaPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
+  parseLemmaTable,
   parseLookupTable,
   parseTranslationTable,
   parseWordList,
@@ -248,5 +250,23 @@ describe('混淆项提示词 / 解析', () => {
     expect(r).toHaveLength(1)
     expect(r[0].word).toBe('run')
     expect(r[0].confusables).toEqual([{ word: 'ran' }, { word: 'run out' }])
+  })
+})
+
+describe('原形校正提示词 / 解析', () => {
+  it('buildLemmaPrompt 带语境与格式', () => {
+    const p = buildLemmaPrompt([{ word: 'saw', context: 'I saw him.' }, { word: 'companies' }])
+    expect(p).toContain('saw  （语境：I saw him.）')
+    expect(p).toContain('- companies')
+    expect(p).toContain('原词形 | 原形')
+  })
+  it('parseLemmaTable 解析管道格式', () => {
+    expect(parseLemmaTable('saw | see\ncompanies | company')).toEqual([
+      { from: 'saw', to: 'see' },
+      { from: 'companies', to: 'company' },
+    ])
+  })
+  it('parseLemmaTable 跳过表头、只取第一个词', () => {
+    expect(parseLemmaTable('原词形 | 原形\nleft | leave （离开）')).toEqual([{ from: 'left', to: 'leave' }])
   })
 })

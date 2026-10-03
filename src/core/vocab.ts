@@ -288,9 +288,50 @@ export function applyConfusables(
   }
 }
 
-/** 手动编辑一个词条，默认把状态置为 edited（不会被后续查询覆盖）。 */
-export function editItem(
+/**
+ * 按「原词形 → 原形」映射校正词条：改 word / lemma / id。
+ * 校正后应再跑一次 dedupeLibrary（可能产生重复）。
+ */
+export function applyLemmaMap(
   library: VocabLibrary,
+  pairs: { from: string; to: string }[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!pairs.length) return library
+  const iso = now.toISOString()
+  const map = new Map<string, string>()
+  for (const p of pairs) {
+    const f = normalizeWord(p.from)
+    const to = p.to.trim()
+    if (f && to) map.set(f, to)
+  }
+  return {
+    ...library,
+    items: library.items.map((it) => {
+      const to = map.get(normalizeWord(it.word)) ?? map.get(it.lemma)
+      if (!to) return it
+      const lemma = lemmaOf(to)
+      return { ...it, word: to, lemma, id: `vocab:${lemma}`, updatedAt: iso }
+    }),
+  }
+}
+
+/**
+ * 重新按 word 计算 lemma（修正历史遗留的旧 lemma / 不统一）。
+ * 之后配合 dedupeLibrary 合并重复。
+ */
+export function relemmaLibrary(library: VocabLibrary): VocabLibrary {
+  return {
+    ...library,
+    items: library.items.map((it) => {
+      const lemma = lemmaOf(it.word)
+      return lemma && lemma !== it.lemma ? { ...it, lemma, id: `vocab:${lemma}` } : it
+    }),
+  }
+}
+
+/** 手动编辑一个词条，默认把状态置为 edited（不会被后续查询覆盖）。 */
+export function editItem(  library: VocabLibrary,
   id: string,
   patch: Partial<Omit<VocabItem, 'id' | 'lemma'>>,
   now: Date = new Date(),

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyConfusables,
+  applyLemmaMap,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -15,6 +16,7 @@ import {
   lemmaOf,
   markWord,
   normalizeWord,
+  relemmaLibrary,
   removeByLemma,
   removeItem,
   review,
@@ -371,5 +373,29 @@ describe('applyConfusables', () => {
     const b = item({ id: 'vocab:b', lemma: 'adapt', word: 'adapt', confusables: [{ word: 'adopt' }, { word: 'adept' }] })
     const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
     expect(lib.items[0].confusables).toEqual([{ word: 'adopt' }, { word: 'adept' }])
+  })
+})
+
+describe('原形校正 / 去重', () => {
+  it('applyLemmaMap 把非原型改为原形（word/lemma/id）', () => {
+    let lib = markWord(createLibrary(), { word: 'saw', articleId: 'a1' }, NOW).library
+    lib = applyLemmaMap(lib, [{ from: 'saw', to: 'see' }], NOW)
+    expect(lib.items[0].word).toBe('see')
+    expect(lib.items[0].lemma).toBe('see')
+    expect(lib.items[0].id).toBe('vocab:see')
+  })
+  it('applyLemmaMap 后 dedupe 合并同一原形的词', () => {
+    let lib = markWord(createLibrary(), { word: 'seen', articleId: 'a1' }, NOW).library
+    lib = markWord(lib, { word: 'saw', articleId: 'a1' }, NOW).library
+    expect(lib.items).toHaveLength(2) // seen / saw 是两个 lemma
+    lib = applyLemmaMap(lib, [{ from: 'seen', to: 'see' }, { from: 'saw', to: 'see' }], NOW)
+    lib = dedupeLibrary(lib)
+    expect(lib.items).toHaveLength(1)
+    expect(lib.items[0].lemma).toBe('see')
+  })
+  it('relemmaLibrary 按 word 重算 lemma', () => {
+    const it = item({ id: 'vocab:x', word: 'running', lemma: 'running' })
+    const lib = relemmaLibrary({ schemaVersion: 1, items: [it] })
+    expect(lib.items[0].lemma).toBe('run')
   })
 })

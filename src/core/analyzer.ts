@@ -324,3 +324,50 @@ export function parseConfusables(raw: string): ConfusableResult[] {
   }
   return out
 }
+
+export interface LemmaPair {
+  from: string
+  to: string
+}
+
+/**
+ * 原形校正提示词：给一批词（带来源句语境），让 AI 判断它们在词典里的**原形**。
+ * 专治「非原型」词条（saw→see、companies→company、analyses→analysis）。
+ */
+export function buildLemmaPrompt(entries: { word: string; context?: string }[]): string {
+  const lines = entries.map((e) => (e.context ? `- ${e.word}  （语境：${e.context}）` : `- ${e.word}`)).join('\n')
+  return [
+    HEADER,
+    '下面每个英文单词，请根据它出现的语境，判断它在词典里的**原形（lemma）**并输出。',
+    '规则：',
+    '- 动词一律还原为不定式（saw→see、went→go、running→run）；',
+    '- 名词还原为单数（companies→company、analyses→analysis、children→child）；',
+    '- 形容词 / 副词还原为原级（better→good、worse→bad）；',
+    '- 注意区分同形不同词：saw（看见→see / 锯子→saw）、found（找到→find / 创建→found）、left（离开→leave / 左边→left），按**语境**判断；',
+    '- 已经是原形就原样返回。',
+    '',
+    '每个词输出一行，格式固定：',
+    '原词形 | 原形',
+    '只输出这些行，不要解释、不要标题、不要编号。',
+    '',
+    '单词与语境：',
+    lines,
+  ].join('\n')
+}
+
+/** 解析「原词形 | 原形」表。 */
+export function parseLemmaTable(raw: string): LemmaPair[] {
+  const out: LemmaPair[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim().replace(/^[-*•\d.、\s]+/, '')
+    if (!t) continue
+    const i = t.search(/[|｜]/)
+    if (i < 0) continue
+    const from = t.slice(0, i).trim()
+    if (!from || /原词形|原形|单词|word/i.test(from)) continue
+    const to = t.slice(i + 1).replace(/^[|｜\s]+/, '').trim().split(/[\s（(,，;；]/)[0]
+    if (!to) continue
+    out.push({ from, to })
+  }
+  return out
+}

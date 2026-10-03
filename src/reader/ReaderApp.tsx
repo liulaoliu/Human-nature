@@ -5,6 +5,7 @@ import { carryAnalysis, segment } from '../core/segmenter'
 import { snapSelection, wordSpans } from '../core/wordSelect'
 import {
   applyConfusables,
+  applyLemmaMap,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -15,6 +16,8 @@ import {
   isDue,
   lemmaOf,
   markWord,
+  normalizeWord,
+  relemmaLibrary,
   removeItem,
   review,
   reviewItem,
@@ -28,10 +31,12 @@ import {
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildConfusablePrompt,
+  buildLemmaPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
+  parseLemmaTable,
   parseWordList,
   type AnalysisTask,
   type VocabLevel,
@@ -227,10 +232,11 @@ export default function ReaderApp() {
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
-  const [pasteMissing, setPasteMissing] = useState<{ task: 'confusable' | 'lookup'; words: string[] } | null>(
-    null,
-  )
-  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | null>(null)
+  const [pasteMissing, setPasteMissing] = useState<{
+    task: 'confusable' | 'lookup' | 'lemma'
+    words: string[]
+  } | null>(null)
+  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | null>(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -1598,6 +1604,12 @@ export default function ReaderApp() {
     [confusableTodo, confusableBatchSize],
   )
 
+  /** 疑似「非原型」的词（word 与 lemma 不一致）——供 AI 校正原形。 */
+  const lemmaCandidates = useMemo(
+    () => library.items.filter((it) => normalizeWord(it.word) !== it.lemma).slice(0, 100),
+    [library.items],
+  )
+
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
     const s = new Set<string>()
@@ -2578,6 +2590,34 @@ export default function ReaderApp() {
     }
   }, [confusableBatch, confusableTodo, flash])
 
+  /** 去重整理（程序）：重算 lemma 后按 lemma 合并重复词条。 */
+  const dedupeNow = useCallback(() => {
+    const before = library.items.length
+    const next = dedupeLibrary(relemmaLibrary(library))
+    persist(next)
+    const removed = before - next.items.length
+    flash(removed > 0 ? `已合并 ${removed} 个重复词` : '没有发现重复词')
+  }, [library, persist, flash])
+
+  /** 生成原形校正提示词：带来源语境，让 AI 判断原形。 */
+  const copyLemmaPrompt = useCallback(async () => {
+    if (!lemmaCandidates.length) {
+      flash('没有疑似非原型的词（word 与原形一致）')
+      return
+    }
+    setLastTask('lemma')
+    askedWordsRef.current = lemmaCandidates.map((it) => it.word)
+    askedIdsRef.current = []
+    try {
+      await navigator.clipboard.writeText(
+        buildLemmaPrompt(lemmaCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
+      )
+      flash(`已复制 ${lemmaCandidates.length} 个词的原形校正提示词；结果粘回「应用结果」`)
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [lemmaCandidates, flash])
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
@@ -2639,6 +2679,33 @@ export default function ReaderApp() {
       setPasteReport(report)
       setPasted('')
       flash(`已写入 ${applied.length} 个${missing.length ? `，缺 ${missing.length}` : ''}`)
+      return
+    }
+
+    // 原形校正：改 word/lemma，再合并重复
+    if (lastTask === 'lemma') {
+      const pairs = parseLemmaTable(raw)
+      if (!pairs.length) {
+        setPasteReport(['没解析出原形（格式：原词形 | 原形）'])
+        flash('没解析出原形')
+        return
+      }
+      const before = library.items.length
+      const mapped = applyLemmaMap(library, pairs)
+      const next = dedupeLibrary(mapped)
+      persist(next)
+      const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
+      const merged = before - next.items.length
+      const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
+      if (merged > 0) report.push(`合并去重 ${merged} 个`)
+      const missing = missingWords(askedWordsRef.current, pairs.map((p) => p.from))
+      if (missing.length) {
+        report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        setPasteMissing({ task: 'lemma', words: missing })
+      }
+      setPasteReport(report)
+      setPasted('')
+      flash(`已校正 ${changed} 个词形${merged ? `，合并 ${merged} 个` : ''}`)
       return
     }
 
@@ -2753,6 +2820,15 @@ export default function ReaderApp() {
         askedIdsRef.current = []
         setLastTask('confusable')
         await navigator.clipboard.writeText(buildConfusablePrompt(entries))
+      } else if (task === 'lemma') {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, context: it?.source?.sentenceText }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('lemma')
+        await navigator.clipboard.writeText(buildLemmaPrompt(entries))
       } else {
         const entries = words.map((w) => {
           const it = byLemma.get(lemmaOf(w))
@@ -4062,6 +4138,22 @@ export default function ReaderApp() {
           <option value="200">200/批</option>
           <option value="0">全部/批</option>
         </select>
+        <button
+          onClick={() => void copyLemmaPrompt()}
+          disabled={!lemmaCandidates.length}
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="把疑似非原型的词（带来源语境）交给 AI 判断原形；结果粘到上面再点「应用结果」"
+        >
+          🔤 校正原形（{lemmaCandidates.length}）
+        </button>
+        <button
+          onClick={dedupeNow}
+          disabled={!library.items.length}
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="重算原形并按原形合并重复词条（程序处理，不经过 AI）"
+        >
+          🧹 去重整理
+        </button>
 
         <div className="section-title">
           生词本 · 本篇（{articleWords.length}）
