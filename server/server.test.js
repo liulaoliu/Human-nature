@@ -7,6 +7,7 @@ import { contentType, safeJoin } from './util.js'
 import { restartDecision } from './watchdog.js'
 import { getPort } from './status.js'
 import { createRequestHandler } from './httpApp.js'
+import { resolveChild, loadMode } from './mode.js'
 
 describe('util', () => {
   it('contentType 按扩展名', () => {
@@ -70,5 +71,19 @@ describe('httpApp 请求处理', () => {
     } finally {
       await new Promise((r) => server.close(r))
     }
+  })
+})
+
+describe('mode.resolveChild / loadMode', () => {
+  it('static 模式跑 appServer', () => {
+    const c = resolveChild(resolve('.'), 'static')
+    expect(c.args[0].endsWith('appServer.js')).toBe(true)
+  })
+  it('dev 模式优先 vite（装了依赖时）', () => {
+    const c = resolveChild(resolve('.'), 'dev')
+    expect(c.args[0].includes('vite') || c.args[0].endsWith('appServer.js')).toBe(true)
+  })
+  it('默认模式是 dev', () => {
+    expect(loadMode(resolve('.'))).toBe('dev')
   })
 })

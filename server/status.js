@@ -19,8 +19,9 @@ export function getPort(argPort) {
   return DEFAULT_PORT
 }
 
-/** GET /api/status；连不上/超时/非 JSON 都返回 null。 */
-export function fetchStatus(port, timeoutMs = 1500) {
+const PROBE_HOSTS = ['localhost', '127.0.0.1', '::1']
+
+function fetchFromHost(host, port, timeoutMs = 1500) {
   return new Promise((resolve) => {
     let done = false
     const finish = (v) => {
@@ -30,7 +31,7 @@ export function fetchStatus(port, timeoutMs = 1500) {
       }
     }
     const req = http.get(
-      { host: '127.0.0.1', port, path: '/api/status', timeout: timeoutMs },
+      { host, port, path: '/api/status', timeout: timeoutMs },
       (res) => {
         let data = ''
         res.on('data', (c) => {
@@ -52,6 +53,15 @@ export function fetchStatus(port, timeoutMs = 1500) {
     })
     req.on('error', () => finish(null))
   })
+}
+
+/** GET /api/status；并行试 localhost / 127.0.0.1 / ::1（Vite 只绑 localhost 时也能探到）。 */
+export async function fetchStatus(port, timeoutMs = 1500) {
+  const results = await Promise.allSettled(PROBE_HOSTS.map((h) => fetchFromHost(h, port, timeoutMs)))
+  for (const r of results) {
+    if (r.status === 'fulfilled' && r.value) return r.value
+  }
+  return null
 }
 
 export function formatUptime(seconds) {

@@ -14,6 +14,21 @@ export function projectStatePlugin() {
   return {
     name: 'shadowing-project-state',
     configureServer(server) {
+      // 服务模式：dev server 也提供 /api/status，供 status.js 和开机自启检查
+      server.middlewares.use((req, res, next) => {
+        if (!req.url || req.url.split('?')[0] !== '/api/status') return next()
+        res.statusCode = 200
+        res.setHeader('Content-Type', 'application/json; charset=utf-8')
+        res.end(
+          JSON.stringify({
+            ok: true,
+            pid: process.pid,
+            uptime: process.uptime(),
+            time: new Date().toISOString(),
+            mode: 'dev',
+          }),
+        )
+      })
       server.middlewares.use('/__state', (req, res, next) => {
         if (req.method !== 'POST') return next()
         let body = ''

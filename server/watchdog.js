@@ -40,6 +40,7 @@ export class Watchdog extends EventEmitter {
   spawn() {
     if (this.stopped) return
     this.child = spawn(this.cmd, this.args, { stdio: 'inherit', windowsHide: true })
+    this.emit('spawn', this.child.pid)
     this.child.on('exit', (code) => this.onExit(code))
   }
 

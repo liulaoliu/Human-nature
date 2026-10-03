@@ -27,7 +27,8 @@ function killByPidFile(file) {
   }
 }
 
-// 必须先杀 watchdog，否则它会把 appServer 重新拉起来
+// 顺序很重要：先杀 watchdog（否则它会把子进程拉起），再杀真正的服务子进程
 const a = killByPidFile('.watchdog.pid')
-const b = killByPidFile('.appServer.pid')
-console.log(a || b ? '服务已停止。' : '服务未在运行（或 PID 文件已失效）。')
+const b = killByPidFile('.child.pid')
+const c = killByPidFile('.appServer.pid')
+console.log(a || b || c ? '服务已停止。' : '服务未在运行（或 PID 文件已失效）。')
