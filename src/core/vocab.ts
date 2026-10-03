@@ -368,6 +368,9 @@ export function sortItems(items: VocabItem[], by: VocabSortBy): VocabItem[] {
 
 export type ReviewGrade = 'again' | 'hard' | 'good' | 'easy'
 
+/** 背单词的两种模式：新学习 / 复习。 */
+export type StudyMode = 'learn' | 'review'
+
 const QUALITY: Record<ReviewGrade, number> = { again: 1, hard: 3, good: 4, easy: 5 }
 
 function addDays(d: Date, days: number): Date {
@@ -478,4 +481,37 @@ export function buildStudyQueue(
   const fresh = freshAll.slice(0, remaining)
   const rest = items.filter((it) => it.reviewState.repetitions > 0 && !isDue(it)).sort(byDue)
   return [...due, ...fresh, ...rest]
+}
+
+/**
+ * 新学习队列：只取「没学过」（repetitions=0）的，按加入时间。
+ * 受每日新词配额限制（newLimit / newToday）。
+ */
+export function buildLearnQueue(
+  items: VocabItem[],
+  _now: Date = new Date(),
+  opts: { newLimit?: number; newToday?: number } = {},
+): VocabItem[] {
+  const fresh = items
+    .filter((it) => it.reviewState.repetitions === 0)
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+  const remaining =
+    opts.newLimit && opts.newLimit > 0 ? Math.max(0, opts.newLimit - (opts.newToday ?? 0)) : Infinity
+  return fresh.slice(0, remaining)
+}
+
+/** 复习队列：只取「已学过且到期」的，按到期时间升序（逾期最久的排前面）。 */
+export function buildReviewQueue(items: VocabItem[], now: Date = new Date()): VocabItem[] {
+  return items
+    .filter(
+      (it) =>
+        it.reviewState.repetitions > 0 &&
+        it.reviewState.due !== null &&
+        new Date(it.reviewState.due) <= now,
+    )
+    .sort(
+      (a, b) =>
+        (a.reviewState.due ?? '').localeCompare(b.reviewState.due ?? '') ||
+        a.createdAt.localeCompare(b.createdAt),
+    )
 }

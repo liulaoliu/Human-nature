@@ -382,6 +382,36 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .study-actions { justify-content: center; }
 .study-done { text-align: center; padding: 40px 0; }
 
+/* 背单词：卡内维护（编辑 / 删除）与反馈 */
+.study-tools { justify-content: center; gap: 10px; }
+.grade-preview { text-align: center; font-size: 12px; margin: 2px 0 6px; }
+.grade-info { color: var(--accent); font-size: 13px; font-weight: 600; }
+.study-srs { margin-top: 12px; font-size: 12px; }
+.study-edit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: 16px;
+  margin: 4px 0 8px;
+  text-align: left;
+}
+.study-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.study-edit label.wide { grid-column: 1 / -1; }
+.study-edit input,
+.study-edit textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--fg);
+}
+.study-edit .bar { grid-column: 1 / -1; }
+
 /* 背单词：拼写 / 朗读 */
 .study-prompt { width: 100%; display: flex; flex-direction: column; gap: 14px; align-items: center; }
 .study-input {

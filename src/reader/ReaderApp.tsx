@@ -5,17 +5,21 @@ import { carryAnalysis, segment } from '../core/segmenter'
 import { snapSelection, wordSpans } from '../core/wordSelect'
 import {
   applyWordAnalysis,
-  buildStudyQueue,
+  buildLearnQueue,
+  buildReviewQueue,
   createLibrary,
   dedupeLibrary,
   editItem,
   groupItems,
+  isDue,
   lemmaOf,
   markWord,
   removeItem,
+  review,
   reviewItem,
   sortItems,
   type ReviewGrade,
+  type StudyMode,
 } from '../core/vocab'
 import {
   applyToSentence,
@@ -74,6 +78,23 @@ function fmtDur(sec: number): string {
   const m = Math.floor(sec / 60)
   if (m < 60) return `${m}:${String(sec % 60).padStart(2, '0')}`
   return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
+}
+
+/** 复习间隔（天）→「明天 / N 天后 / N 个月后」。 */
+function fmtInterval(days: number): string {
+  if (days <= 0) return '稍后'
+  if (days === 1) return '明天'
+  if (days < 30) return `${days} 天后`
+  return `${Math.round(days / 30)} 个月后`
+}
+
+/** 到期时间（ISO）→「现在 / 明天 / N 天后」。 */
+function fmtDue(iso: string | null): string {
+  if (!iso) return ''
+  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
+  if (days <= 0) return '现在'
+  if (days === 1) return '明天'
+  return `${days} 天后`
 }
 
 /** 本机时区的日期键 YYYY-MM-DD */
@@ -308,6 +329,34 @@ export default function ReaderApp() {
   })
   const [studyInput, setStudyInput] = useState('')
   const [studyChecked, setStudyChecked] = useState(false)
+  /** 背单词模式：新学习 / 复习 */
+  const [studyMode, setStudyMode] = useState<StudyMode>(() => {
+    try {
+      return localStorage.getItem('reader:studyMode') === 'review' ? 'review' : 'learn'
+    } catch {
+      return 'learn'
+    }
+  })
+  /** 卡内编辑（改词形/音标/释义/用法）与两步删除 */
+  const [studyEditOpen, setStudyEditOpen] = useState(false)
+  const [studyDraft, setStudyDraft] = useState<{
+    word: string
+    phonetic: string
+    partOfSpeech: string
+    meaning: string
+    usage: string
+  } | null>(null)
+  const [studyDelArmed, setStudyDelArmed] = useState(false)
+  /** 本轮评分计数（认识 / 模糊 / 忘记），用于本轮小结 */
+  const [studyCounts, setStudyCounts] = useState({ know: 0, fuzzy: 0, forgot: 0 })
+  /** 评分后短暂提示「下次复习：X」 */
+  const [gradeInfo, setGradeInfo] = useState('')
+  /** 每个词本轮被"忘记/模糊"重排的次数（防死循环） */
+  const studyRequeueRef = useRef<Map<string, number>>(new Map())
+  /** 本轮点过「忘记了」的词 id，用于收尾重练 */
+  const studyForgotRef = useRef<string[]>([])
+  /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
+  const studyBumpedRef = useRef<Set<string>>(new Set())
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useState(() => {
     try {
@@ -415,11 +464,12 @@ export default function ReaderApp() {
     }
   }, [])
 
-  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发）
+  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
   const toggleVocabRef = useRef<() => void>(() => {})
   const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (studyQueue) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -430,7 +480,7 @@ export default function ReaderApp() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [studyQueue])
 
   useEffect(() => {
     try {
@@ -483,6 +533,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [studySpelling])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:studyMode', studyMode)
+    } catch {
+      // 忽略
+    }
+  }, [studyMode])
   useEffect(() => {
     try {
       localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
@@ -566,19 +623,62 @@ export default function ReaderApp() {
     )
   }, [library.items, studyScope, articleIdentity, doc])
 
-  /** 开始背单词：先到期，再没学过的（受每日新词配额限制），最后其它。 */
-  const startStudy = useCallback(() => {
-    const q = buildStudyQueue(studyPool, new Date(), { newLimit, newToday })
-    if (!q.length) {
-      flash('这个范围里没有词')
-      return
-    }
-    setStudyQueue(q)
-    setStudyIndex(0)
-    setStudyRevealed(false)
-    setStudyInput('')
-    setStudyChecked(false)
-  }, [studyPool, newLimit, newToday, flash])
+  /** 待复习（已学过且到期）数量——用于「复习」模式的角标。 */
+  const dueCount = useMemo(
+    () => studyPool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length,
+    [studyPool],
+  )
+  /** 未学过的新词数量——用于「新学习」模式的角标。 */
+  const newCount = useMemo(
+    () => studyPool.filter((it) => it.reviewState.repetitions === 0).length,
+    [studyPool],
+  )
+
+  /**
+   * 当前卡：优先从词库取最新（评分/编辑后立刻反映），
+   * 队列里的快照只作兜底（比如词条刚从词库删掉）。
+   */
+  const studyCard =
+    studyQueue && studyIndex < studyQueue.length
+      ? (library.items.find((it) => it.id === studyQueue[studyIndex].id) ?? studyQueue[studyIndex])
+      : null
+
+  /** 开始背单词：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
+  const startStudy = useCallback(
+    (modeOverride?: StudyMode) => {
+      const mode = modeOverride ?? studyMode
+      const q =
+        mode === 'review'
+          ? buildReviewQueue(studyPool, new Date())
+          : buildLearnQueue(studyPool, new Date(), { newLimit, newToday })
+      if (!q.length) {
+        flash(mode === 'review' ? '没有到期的复习词，去「新学习」吧' : '没有待学的新词，去「复习」吧')
+        return
+      }
+      studyRequeueRef.current = new Map()
+      studyForgotRef.current = []
+      studyBumpedRef.current = new Set()
+      setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
+      setStudyQueue(q)
+      setStudyIndex(0)
+      setStudyRevealed(false)
+      setStudyInput('')
+      setStudyChecked(false)
+      setStudyEditOpen(false)
+      setStudyDraft(null)
+      setStudyDelArmed(false)
+    },
+    [studyPool, studyMode, newLimit, newToday, flash],
+  )
+
+  /** 切换模式并立刻按新模式开一轮。 */
+  const switchMode = useCallback(
+    (m: StudyMode) => {
+      setStudyMode(m)
+      startStudy(m)
+    },
+    [startStudy],
+  )
 
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {
@@ -609,15 +709,46 @@ export default function ReaderApp() {
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
-      const cur = studyQueue[studyIndex]
-      if (cur) {
-        persist(reviewItem(library, cur.id, grade))
-        if (cur.reviewState.repetitions === 0) bumpNewToday()
+      const queued = studyQueue[studyIndex]
+      if (!queued) return
+      const cur = library.items.find((it) => it.id === queued.id) ?? queued
+      const nextLibrary = reviewItem(library, cur.id, grade)
+      persist(nextLibrary)
+      if (cur.reviewState.repetitions === 0 && !studyBumpedRef.current.has(cur.id)) {
+        studyBumpedRef.current.add(cur.id)
+        bumpNewToday()
+      }
+      const nextState = nextLibrary.items.find((it) => it.id === cur.id)?.reviewState
+      if (nextState) {
+        const label: Record<ReviewGrade, string> = { again: '忘记了', hard: '模糊', good: '认识', easy: '认识' }
+        setGradeInfo(`${label[grade]} · 下次复习：${fmtInterval(nextState.interval)}`)
+        window.setTimeout(() => setGradeInfo(''), 1600)
       }
       studyFlush(0, 1)
+      setStudyCounts((c) =>
+        grade === 'again'
+          ? { ...c, forgot: c.forgot + 1 }
+          : grade === 'hard'
+            ? { ...c, fuzzy: c.fuzzy + 1 }
+            : { ...c, know: c.know + 1 },
+      )
+      if (grade === 'again' && !studyForgotRef.current.includes(cur.id)) {
+        studyForgotRef.current.push(cur.id)
+      }
+      // 帮记忆：忘记 / 模糊的词本轮末尾再出现一次（各有上限，避免死循环）
+      if (grade === 'again' || grade === 'hard') {
+        const used = studyRequeueRef.current.get(cur.id) ?? 0
+        const cap = grade === 'again' ? 2 : 1
+        if (used < cap) {
+          studyRequeueRef.current.set(cur.id, used + 1)
+          setStudyQueue((q) => (q ? [...q, cur] : q))
+        }
+      }
       setStudyRevealed(false)
       setStudyInput('')
       setStudyChecked(false)
+      setStudyEditOpen(false)
+      setStudyDelArmed(false)
       setStudyIndex((i) => i + 1)
     },
     [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush],
@@ -625,15 +756,90 @@ export default function ReaderApp() {
 
   const closeStudy = useCallback(() => setStudyQueue(null), [])
 
-  // 背单词快捷键：空格/回车 翻面/判卷/记得，1/2/3/4 评分，Esc 退出
+  /** 打开卡内编辑，带出当前值。 */
+  const openStudyEdit = useCallback(() => {
+    if (!studyCard) return
+    setStudyDraft({
+      word: studyCard.word,
+      phonetic: studyCard.phonetic ?? '',
+      partOfSpeech: studyCard.partOfSpeech ?? '',
+      meaning: studyCard.meaning ?? '',
+      usage: studyCard.usage.join('；'),
+    })
+    setStudyEditOpen(true)
+    setStudyDelArmed(false)
+  }, [studyCard])
+
+  /** 保存卡内编辑（持久化；状态置 edited，之后查词不会再覆盖）。 */
+  const saveStudyEdit = useCallback(() => {
+    if (!studyCard || !studyDraft) return
+    const usage = studyDraft.usage
+      .split(/[;；\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    persist(
+      editItem(library, studyCard.id, {
+        word: studyDraft.word.trim() || studyCard.word,
+        phonetic: studyDraft.phonetic.trim() || null,
+        partOfSpeech: studyDraft.partOfSpeech.trim() || null,
+        meaning: studyDraft.meaning.trim() || null,
+        usage,
+      }),
+    )
+    setStudyEditOpen(false)
+    setStudyDraft(null)
+    flash('已保存修改')
+  }, [studyCard, studyDraft, library, persist, flash])
+
+  /** 卡内删除（两步确认），并从本轮队列里移除。 */
+  const studyDelete = useCallback(() => {
+    if (!studyCard) return
+    if (!studyDelArmed) {
+      setStudyDelArmed(true)
+      window.setTimeout(() => setStudyDelArmed(false), 3000)
+      return
+    }
+    persist(removeItem(library, studyCard.id))
+    const removedBefore = studyQueue
+      ? studyQueue.slice(0, studyIndex).filter((it) => it.id === studyCard.id).length
+      : 0
+    setStudyQueue((q) => (q ? q.filter((it) => it.id !== studyCard.id) : q))
+    setStudyIndex((i) => Math.max(0, i - removedBefore))
+    setStudyDelArmed(false)
+    setStudyEditOpen(false)
+    setStudyRevealed(false)
+    setStudyInput('')
+    setStudyChecked(false)
+    flash('已删除')
+  }, [studyCard, studyDelArmed, library, persist, studyQueue, studyIndex, flash])
+
+  /** 收尾重练本轮点过「忘记了」的词。 */
+  const retryForgot = useCallback(() => {
+    const ids = new Set(studyForgotRef.current)
+    const items = library.items.filter((it) => ids.has(it.id))
+    if (!items.length) return
+    studyRequeueRef.current = new Map()
+    studyForgotRef.current = []
+    studyBumpedRef.current = new Set()
+    setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
+    setStudyQueue(items)
+    setStudyIndex(0)
+    setStudyRevealed(false)
+    setStudyInput('')
+    setStudyChecked(false)
+    setStudyEditOpen(false)
+    setStudyDelArmed(false)
+  }, [library.items])
+
+  // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
-    if (!studyQueue) return
+    if (!studyQueue || studyEditOpen) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       const canGrade = studySpelling ? studyChecked : studyRevealed
-      const gradeKeys: Record<string, ReviewGrade> = { '1': 'again', '2': 'hard', '3': 'good', '4': 'easy' }
-      // 拼写模式下输入框还 focus 着；判卷后仍要能用 1/2/3/4 评分
+      const gradeKeys: Record<string, ReviewGrade> = { '1': 'good', '2': 'hard', '3': 'again' }
+      // 拼写模式下输入框还 focus 着；判卷后仍要能用 1/2/3 评分
       if (inField) {
         if (canGrade && gradeKeys[e.key]) {
           e.preventDefault()
@@ -656,7 +862,7 @@ export default function ReaderApp() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue, studyIndex, studyRevealed, studySpelling, studyChecked, gradeStudy, closeStudy])
+  }, [studyQueue, studyEditOpen, studyIndex, studyRevealed, studySpelling, studyChecked, gradeStudy, closeStudy])
 
   // 单卡计时：换卡归零，每秒 +1（催你快点，别墨迹）
   useEffect(() => {
@@ -1949,7 +2155,6 @@ export default function ReaderApp() {
     (id: string, meaning: string) => persist(editItem(library, id, { meaning })),
     [library, persist],
   )
-  const studyCard = studyQueue && studyIndex < studyQueue.length ? studyQueue[studyIndex] : null
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}`}>
@@ -2102,7 +2307,7 @@ export default function ReaderApp() {
             <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
             衬线
           </label>
-          <label className="check-inline" title="护眼模式：深绿暗色">
+          <label className="check-inline" title="护眼模式：浅色纸感（浅绿底 + 深色字）">
             <input type="checkbox" checked={eye} onChange={(e) => setEye(e.target.checked)} />
             护眼
           </label>
@@ -2119,6 +2324,23 @@ export default function ReaderApp() {
           <div className="study">
             <div className="bar study-bar">
               <button onClick={closeStudy}>结束（Esc）</button>
+              <span
+                className="view-toggle"
+                title="新学习：还没学过的词；复习：学过且到期的词（切换会立即重开一轮）"
+              >
+                <button
+                  className={studyMode === 'learn' ? 'primary' : ''}
+                  onClick={() => switchMode('learn')}
+                >
+                  新学习 {newCount}
+                </button>
+                <button
+                  className={studyMode === 'review' ? 'primary' : ''}
+                  onClick={() => switchMode('review')}
+                >
+                  复习 {dueCount}
+                </button>
+              </span>
               <select
                 value={studyScope}
                 onChange={(e) => setStudyScope(e.target.value as 'all' | 'article' | 'unmastered' | 'lapses')}
@@ -2154,7 +2376,7 @@ export default function ReaderApp() {
               </label>
               <span className="muted">
                 {Math.min(studyIndex + 1, studyQueue.length)} / {studyQueue.length}
-                {newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
+                {studyMode === 'learn' && newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
               </span>
               <span
                 className={
@@ -2253,26 +2475,112 @@ export default function ReaderApp() {
                                 {studyCard.source?.sentenceText && (
                                   <div className="muted src">来源：{studyCard.source.sentenceText}</div>
                                 )}
+                                <div className="muted study-srs">
+                                  复习 {studyCard.reviewState.repetitions} 次
+                                  {(studyCard.reviewState.lapses ?? 0) > 0
+                                    ? ` · 忘记 ${studyCard.reviewState.lapses} 次`
+                                    : ''}
+                                  {studyCard.reviewState.due
+                                    ? ` · 下次 ${fmtDue(studyCard.reviewState.due)}`
+                                    : ' · 还没排期'}
+                                </div>
                               </div>
                             )}
                           </>
                         )}
                       </div>
-                      {canGrade ? (
-                        <div className="bar study-actions">
-                          <button onClick={() => gradeStudy('again')}>
-                            忘记 <kbd>1</kbd>
-                          </button>
-                          <button onClick={() => gradeStudy('hard')}>
-                            困难 <kbd>2</kbd>
-                          </button>
-                          <button className="primary" onClick={() => gradeStudy('good')}>
-                            记得 <kbd>3</kbd>
-                          </button>
-                          <button onClick={() => gradeStudy('easy')}>
-                            简单 <kbd>4</kbd>
-                          </button>
+
+                      {/* 卡内维护：改词形/释义、删误加的词 */}
+                      <div className="bar study-tools">
+                        <button onClick={openStudyEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
+                          ✎ 编辑
+                        </button>
+                        <button
+                          className={studyDelArmed ? 'danger' : ''}
+                          onClick={studyDelete}
+                          title="删除这个误加的词（两步确认）"
+                        >
+                          {studyDelArmed ? '确认删除' : '删除'}
+                        </button>
+                        {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+                      </div>
+
+                      {studyEditOpen && studyDraft && (
+                        <div className="study-edit">
+                          <label>
+                            单词
+                            <input
+                              value={studyDraft.word}
+                              onChange={(e) => setStudyDraft({ ...studyDraft, word: e.target.value })}
+                            />
+                          </label>
+                          <label>
+                            音标
+                            <input
+                              value={studyDraft.phonetic}
+                              onChange={(e) => setStudyDraft({ ...studyDraft, phonetic: e.target.value })}
+                              placeholder="/.../"
+                            />
+                          </label>
+                          <label>
+                            词性
+                            <input
+                              value={studyDraft.partOfSpeech}
+                              onChange={(e) => setStudyDraft({ ...studyDraft, partOfSpeech: e.target.value })}
+                              placeholder="n. / v. / adj."
+                            />
+                          </label>
+                          <label className="wide">
+                            释义
+                            <textarea
+                              value={studyDraft.meaning}
+                              onChange={(e) => setStudyDraft({ ...studyDraft, meaning: e.target.value })}
+                              rows={2}
+                            />
+                          </label>
+                          <label className="wide">
+                            用法（分号分隔）
+                            <input
+                              value={studyDraft.usage}
+                              onChange={(e) => setStudyDraft({ ...studyDraft, usage: e.target.value })}
+                              placeholder="run a business；run out"
+                            />
+                          </label>
+                          <div className="bar">
+                            <button className="primary" onClick={saveStudyEdit}>
+                              保存
+                            </button>
+                            <button
+                              onClick={() => {
+                                setStudyEditOpen(false)
+                                setStudyDraft(null)
+                              }}
+                            >
+                              取消
+                            </button>
+                          </div>
                         </div>
+                      )}
+
+                      {canGrade ? (
+                        <>
+                          <div className="muted grade-preview">
+                            预计下次：认识 {fmtInterval(review(studyCard.reviewState, 'good').interval)} ·
+                            模糊 {fmtInterval(review(studyCard.reviewState, 'hard').interval)} · 忘记了{' '}
+                            {fmtInterval(review(studyCard.reviewState, 'again').interval)}
+                          </div>
+                          <div className="bar study-actions">
+                            <button className="primary" onClick={() => gradeStudy('good')}>
+                              认识 <kbd>1</kbd>
+                            </button>
+                            <button onClick={() => gradeStudy('hard')}>
+                              模糊 <kbd>2</kbd>
+                            </button>
+                            <button onClick={() => gradeStudy('again')}>
+                              忘记了 <kbd>3</kbd>
+                            </button>
+                          </div>
+                        </>
                       ) : spellingFront ? (
                         <button className="primary" onClick={() => setStudyChecked(true)}>
                           检查（回车）
@@ -2288,11 +2596,20 @@ export default function ReaderApp() {
               : (
               <div className="study-done">
                 <p>
-                  本轮完成，共 {studyQueue.length} 个词，用时 {fmtDur(studyLive)}。
+                  本轮完成：认识 <b>{studyCounts.know}</b> · 模糊 <b>{studyCounts.fuzzy}</b> · 忘记了{' '}
+                  <b>{studyCounts.forgot}</b>，用时 {fmtDur(studyLive)}。
                 </p>
                 <div className="bar">
-                  <button className="primary" onClick={startStudy}>
-                    再来一轮
+                  {studyForgotRef.current.length > 0 && (
+                    <button className="primary" onClick={retryForgot}>
+                      重练忘记的 {studyForgotRef.current.length} 个
+                    </button>
+                  )}
+                  <button
+                    className={studyForgotRef.current.length ? '' : 'primary'}
+                    onClick={() => startStudy()}
+                  >
+                    再来一轮（{studyMode === 'review' ? '复习' : '新学习'}）
                   </button>
                   <button onClick={closeStudy}>回到阅读</button>
                 </div>
@@ -2599,9 +2916,9 @@ export default function ReaderApp() {
         <div className="bar">
           <button
             className="primary"
-            onClick={startStudy}
+            onClick={() => startStudy()}
             disabled={!library.items.length}
-            title="卡片式背单词：先到期、再新词；空格翻面，1/2/3/4 评分，Esc 退出"
+            title="卡片式背单词：新学习没学过的、复习到期的；空格翻面，1/2/3 认识/模糊/忘记了，Esc 退出"
           >
             背单词
           </button>

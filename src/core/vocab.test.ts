@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyWordAnalysis,
+  buildLearnQueue,
+  buildReviewQueue,
   buildStudyQueue,
   createLibrary,
   dedupeLibrary,
@@ -311,6 +313,37 @@ describe('每日新词配额', () => {
   })
   it('不限时不裁剪', () => {
     expect(buildStudyQueue([fresh(1), fresh(2), fresh(3)], now, { newLimit: 0 })).toHaveLength(3)
+  })
+})
+
+describe('新学习 / 复习 两种队列', () => {
+  const now = new Date('2026-10-02T00:00:00Z')
+  const fresh = (n: string) =>
+    item({ id: `f${n}`, lemma: `f${n}`, reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 } })
+  const learned = (n: string, due: string, reps = 2) =>
+    item({ id: `l${n}`, lemma: `l${n}`, reviewState: { ease: 2.5, due, interval: 3, repetitions: reps } })
+
+  it('新学习：只取没学过的', () => {
+    const q = buildLearnQueue([learned('a', '2026-09-01T00:00:00Z'), fresh('b'), fresh('c')], now)
+    expect(q.map((x) => x.lemma)).toEqual(['fb', 'fc'])
+  })
+  it('新学习：受每日配额限制', () => {
+    expect(buildLearnQueue([fresh('a'), fresh('b'), fresh('c')], now, { newLimit: 2, newToday: 1 })).toHaveLength(1)
+  })
+  it('复习：只取已学过且到期的，按到期升序', () => {
+    const q = buildReviewQueue(
+      [
+        learned('later', '2026-12-01T00:00:00Z'),
+        learned('overdue', '2026-09-01T00:00:00Z'),
+        fresh('new'),
+        learned('yesterday', '2026-10-01T00:00:00Z'),
+      ],
+      now,
+    )
+    expect(q.map((x) => x.lemma)).toEqual(['loverdue', 'lyesterday'])
+  })
+  it('复习：没到期 / 没学过的不进队', () => {
+    expect(buildReviewQueue([fresh('a'), learned('b', '2027-01-01T00:00:00Z')], now)).toHaveLength(0)
   })
 })
 
