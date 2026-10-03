@@ -280,7 +280,7 @@ export default function App() {
           onSaveProject={() => void saveToProjectFile()}
         />
         <a className="navlink accent" href="./reader.html" title="打开 Economist 精读 / 生词本">
-          精读 / 生词本 →
+          精读 / 生词本 <span className="arrow">→</span>
         </a>
       </header>
 
@@ -1079,7 +1079,7 @@ function Empty({ onPick, backup }: { onPick: (f: File) => void; backup?: ReactNo
         />
       </label>
       <a className="navlink accent empty-nav" href="./reader.html" title="打开 Economist 精读 / 生词本">
-        精读 / 生词本 →
+        精读 / 生词本 <span className="arrow">→</span>
       </a>
       <p className="tip">
         浏览器不给 <code>file://</code> 页面麦克风权限。如果点录音没反应，在项目目录跑{' '}

@@ -299,22 +299,36 @@ select {
 
 /* 跳到精读 / 生词本页 */
 .navlink {
-  display: inline-block;
-  padding: 6px 11px;
-  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
   background: #262a33;
   border: 1px solid var(--line);
   color: var(--fg);
   text-decoration: none;
   font-size: 13px;
   white-space: nowrap;
+  transition: background 0.15s ease, border-color 0.15s ease, transform 0.06s ease,
+    box-shadow 0.15s ease;
 }
-.navlink:hover { background: #2f343f; }
+.navlink:hover { background: #2f343f; transform: translateY(-1px); }
+.navlink:active { transform: translateY(0); }
+.navlink:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(74, 158, 255, 0.3); }
 .navlink.accent {
-  background: var(--accent);
-  border-color: var(--accent);
+  background: linear-gradient(180deg, #5cabff, #3b8ef0);
+  border-color: #3b8ef0;
   color: #06121f;
   font-weight: 600;
+  box-shadow: 0 4px 14px rgba(74, 158, 255, 0.28);
 }
+.navlink.accent:hover {
+  background: linear-gradient(180deg, #6fb6ff, #4a9eff);
+  box-shadow: 0 7px 20px rgba(74, 158, 255, 0.42);
+}
+.navlink .arrow { display: inline-block; transition: transform 0.15s ease; }
+.navlink:hover .arrow { transform: translateX(3px); }
+.navlink .arrow.back:hover { transform: translateX(-3px); }
 
 .empty-nav { margin-top: 14px; }

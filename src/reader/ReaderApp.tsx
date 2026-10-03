@@ -30,6 +30,7 @@ import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWords
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
+import ArticlePicker from './ArticlePicker'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import './reader.css'
@@ -1583,30 +1584,14 @@ export default function ReaderApp() {
             </select>
           )}
           {(book || saved.length > 0) && (
-            <select value={currentValue} onChange={(e) => onPick(e.target.value)}>
-              <option value="">选择文章…</option>
-              {book && (
-                <optgroup label={`内置（${shownKeys.length}）`}>
-                  {shownKeys.map((k) => (
-                    <option key={k} value={`b:${k}`}>
-                      {k}
-                    </option>
-                  ))}
-                </optgroup>
-              )}
-              {savedGroups.map(([book, list]) => (
-                <optgroup
-                  key={book}
-                  label={book === '单篇' ? `已保存（${list.length}）` : `📖 ${book}（${list.length}）`}
-                >
-                  {list.map((a) => (
-                    <option key={a.id} value={`s:${a.id}`}>
-                      {book === '单篇' ? a.title : a.title.replace(`${book} · `, '')}
-                    </option>
-                  ))}
-                </optgroup>
-              ))}
-            </select>
+            <ArticlePicker
+              book={book}
+              saved={saved}
+              savedGroups={savedGroups}
+              builtinKeys={shownKeys}
+              currentValue={currentValue}
+              onPick={onPick}
+            />
           )}
           <button onClick={() => void saveCurrent()} disabled={!doc} title="把这篇（含粘回的翻译/语法）存到本机，刷新后还在">
             保存这篇
@@ -1705,7 +1690,7 @@ export default function ReaderApp() {
             衬线
           </label>
           <a className="navlink" href="./index.html" title="回到跟读练习">
-            ← 跟读练习
+            <span className="arrow">←</span> 跟读练习
           </a>
         </div>
 
