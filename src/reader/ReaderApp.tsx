@@ -325,6 +325,7 @@ export default function ReaderApp() {
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
+  const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
   const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -791,13 +792,21 @@ export default function ReaderApp() {
   }, [doc, activeLemmas, batch])
   const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
 
-  /** 浏览器 TTS 读单词。 */
+  /** 浏览器 TTS：只读一遍，不循环；同一句正在读时不重开。 */
   const speak = useCallback((text: string) => {
     try {
       if (typeof speechSynthesis === 'undefined') return
-      const u = new SpeechSynthesisUtterance(text)
-      u.lang = 'en-US'
+      const t = text.trim()
+      if (!t) return
+      // 同一句正在读就别重开（避免重复 / 叠读）
+      if (speechSynthesis.speaking && utterRef.current && utterRef.current.text === t) return
       speechSynthesis.cancel()
+      const u = new SpeechSynthesisUtterance(t)
+      u.lang = 'en-US'
+      u.onend = () => {
+        if (utterRef.current === u) utterRef.current = null
+      }
+      utterRef.current = u // 持有引用，避免被 GC 导致中断/重读
       speechSynthesis.speak(u)
     } catch {
       // 忽略
