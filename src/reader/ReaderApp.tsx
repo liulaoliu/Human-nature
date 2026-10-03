@@ -450,6 +450,16 @@ export default function ReaderApp() {
       return true
     }
   })
+  /** 答完朗读正确答案（默认开） */
+  const [quizSpeak, setQuizSpeak] = useState(() => {
+    try {
+      return localStorage.getItem('reader:quizSpeak') !== '0'
+    } catch {
+      return true
+    }
+  })
+  /** 放 speak 的引用：checkQuiz 定义在 speak 之前，用 ref 避免顺序问题 */
+  const speakRef = useRef<(text: string) => void>(() => {})
   const quizAdvanceRef = useRef<number | null>(null)
   /** 本轮实际是否自动切题（听写模式强制开） */
   const [quizAutoRun, setQuizAutoRun] = useState(false)
@@ -714,10 +724,11 @@ export default function ReaderApp() {
       localStorage.setItem('reader:quizLimit', String(quizLimit))
       localStorage.setItem('reader:quizAuto', quizAuto ? '1' : '0')
       localStorage.setItem('reader:quizUnique', quizUnique ? '1' : '0')
+      localStorage.setItem('reader:quizSpeak', quizSpeak ? '1' : '0')
     } catch {
       // 忽略
     }
-  }, [quizKinds, quizScope, quizLimit, quizAuto, quizUnique])
+  }, [quizKinds, quizScope, quizLimit, quizAuto, quizUnique, quizSpeak])
   useEffect(() => {
     try {
       localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
@@ -1164,6 +1175,8 @@ export default function ReaderApp() {
       setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
       persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
       markStudied(q.itemId)
+      // 答完朗读一下（看词选义读英文单词；其余读答案词形）
+      if (quizSpeak) speakRef.current(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
       if (quizAutoRun) {
         if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
@@ -1173,7 +1186,7 @@ export default function ReaderApp() {
         }, ok ? 650 : 1400)
       }
     },
-    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied],
+    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak],
   )
 
   /** 关闭考试并清掉待触发的自动切题。 */
@@ -1707,6 +1720,11 @@ export default function ReaderApp() {
     const s = doc.sentences.find((x) => x.id === selectedId)
     if (s && s.text.trim()) speak(s.text)
   }, [selectedId, autoSpeak, doc, speak])
+
+  // 把 speak 存到 ref，供定义更早的回调（如 checkQuiz）调用
+  useEffect(() => {
+    speakRef.current = speak
+  }, [speak])
 
   // 考试听力题出现时自动朗读句子
   useEffect(() => {
@@ -3469,6 +3487,14 @@ export default function ReaderApp() {
                       onChange={(e) => setQuizUnique(e.target.checked)}
                     />
                     每词一题 · 乱序
+                  </label>
+                  <label className="check-inline" title="答完自动朗读正确答案（练发音）">
+                    <input
+                      type="checkbox"
+                      checked={quizSpeak}
+                      onChange={(e) => setQuizSpeak(e.target.checked)}
+                    />
+                    答完朗读
                   </label>
                 </div>
               </div>
