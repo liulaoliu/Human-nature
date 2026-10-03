@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   blankWord,
   buildQuizQuestions,
+  formatAnswerInput,
   isCorrect,
   makeQuestion,
   normalizeAnswer,
@@ -153,5 +154,36 @@ describe('shuffleQuiz', () => {
     const out = shuffleQuiz(src, () => 0.5)
     expect(src).toEqual([1, 2, 3, 4, 5])
     expect(out.sort()).toEqual([1, 2, 3, 4, 5])
+  })
+})
+
+describe('连字符 / 撇号宽容', () => {
+  const q: QuizQuestion = {
+    id: 'x',
+    itemId: 'x',
+    lemma: 'bad-temperedly',
+    kind: 'spell',
+    word: 'bad-temperedly',
+    prompt: '脾气坏地',
+    meaning: '脾气坏地',
+    partOfSpeech: null,
+    phonetic: null,
+    answer: 'bad-temperedly',
+    accept: ['bad-temperedly'],
+  }
+  it('不打连字符也判对', () => {
+    expect(isCorrect(q, 'badtemperedly')).toBe(true)
+    expect(isCorrect(q, 'bad temperedly')).toBe(true)
+    expect(isCorrect(q, 'bad-temperedly')).toBe(true)
+    expect(isCorrect(q, 'bad')).toBe(false)
+  })
+  it('formatAnswerInput 自动补连字符 / 撇号', () => {
+    expect(formatAnswerInput('bad', 'bad-temperedly')).toBe('bad')
+    expect(formatAnswerInput('badt', 'bad-temperedly')).toBe('bad-t')
+    expect(formatAnswerInput('badtemp', 'bad-temperedly')).toBe('bad-temp')
+    expect(formatAnswerInput('badtemperedly', 'bad-temperedly')).toBe('bad-temperedly')
+    expect(formatAnswerInput("dont", "don't")).toBe("don't")
+    expect(formatAnswerInput('xyz', 'bad-temperedly')).toBe('xyz')
+    expect(formatAnswerInput('', 'bad-temperedly')).toBe('')
   })
 })

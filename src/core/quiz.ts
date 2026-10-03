@@ -63,6 +63,31 @@ export function normalizeAnswer(s: string): string {
     .replace(/\s+/g, ' ')
 }
 
+/** 只留字母数字（用于宽容比较：忽略连字符、撇号、空格）。 */
+function canonical(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]/g, '')
+}
+
+/**
+ * 按答案的标点给输入「补全」连字符 / 撇号：
+ * 只要已输入的字母序列是答案字母序列的前缀，就把答案里对应的
+ * `-` / `'` 自动带上（bad → bad-t → bad-temperedly）。
+ * 这样连字符词、缩写不用手打连接符。
+ */
+export function formatAnswerInput(raw: string, answer: string): string {
+  const typed = canonical(raw)
+  if (!typed) return raw
+  if (!canonical(answer).startsWith(typed)) return raw
+  let count = 0
+  for (let i = 0; i < answer.length; i++) {
+    if (/[a-z0-9]/i.test(answer[i])) {
+      count += 1
+      if (count === typed.length) return answer.slice(0, i + 1)
+    }
+  }
+  return raw
+}
+
 /**
  * 在 text 里找目标词并按 lemma 归位，返回挖空后的文本与命中的原始词形。
  * 找不到返回 null。短语（含空格）按整段子串匹配。
@@ -174,12 +199,19 @@ export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQ
   return out
 }
 
-/** 判分：精确（归一化）命中，或词形还原一致（run / running 视为对）。 */
+/**
+ * 判分：归一化后精确命中，或词形还原一致（run / running），
+ * 且忽略连字符 / 撇号 / 空格（bad-temperedly = badtemperedly）。
+ */
 export function isCorrect(q: QuizQuestion, input: string): boolean {
   const n = normalizeAnswer(input)
   if (!n) return false
   if (q.accept.includes(n)) return true
-  return lemmaOf(n) === q.lemma
+  if (lemmaOf(n) === q.lemma) return true
+  const c = canonical(n)
+  if (!c) return false
+  if (q.accept.some((a) => canonical(a) === c)) return true
+  return canonical(q.lemma) === c
 }
 
 /** Fisher–Yates 洗牌（可注入随机源，便于测试）。 */

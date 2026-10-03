@@ -36,8 +36,10 @@ import {
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import {
   buildQuizQuestions,
+  formatAnswerInput,
   isCorrect,
   isQuizKind,
+  makeQuestion,
   QUIZ_KIND_LABEL,
   shuffleQuiz,
   type QuizKind,
@@ -405,6 +407,23 @@ export default function ReaderApp() {
   const [quizResults, setQuizResults] = useState<{ id: string; itemId: string; correct: boolean }[]>([])
   const [quizSeconds, setQuizSeconds] = useState(0)
   const quizInputRef = useRef<HTMLInputElement>(null)
+  /** 答完自动下一题（默认关，保持手动回车） */
+  const [quizAuto, setQuizAuto] = useState(() => {
+    try {
+      return localStorage.getItem('reader:quizAuto') === '1'
+    } catch {
+      return false
+    }
+  })
+  /** 每个单词只出一题、题型随机（避免同一词连出几题） */
+  const [quizUnique, setQuizUnique] = useState(() => {
+    try {
+      return localStorage.getItem('reader:quizUnique') !== '0'
+    } catch {
+      return true
+    }
+  })
+  const quizAdvanceRef = useRef<number | null>(null)
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useState(() => {
     try {
@@ -596,10 +615,12 @@ export default function ReaderApp() {
       localStorage.setItem('reader:quizKinds', JSON.stringify(quizKinds))
       localStorage.setItem('reader:quizScope', quizScope)
       localStorage.setItem('reader:quizLimit', String(quizLimit))
+      localStorage.setItem('reader:quizAuto', quizAuto ? '1' : '0')
+      localStorage.setItem('reader:quizUnique', quizUnique ? '1' : '0')
     } catch {
       // 忽略
     }
-  }, [quizKinds, quizScope, quizLimit])
+  }, [quizKinds, quizScope, quizLimit, quizAuto, quizUnique])
   useEffect(() => {
     try {
       localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
@@ -915,12 +936,33 @@ export default function ReaderApp() {
     setStudyDelArmed(false)
   }, [library.items])
 
+  /** 出题：默认每个单词只考一次、题型随机；可关掉以允许同一词多题型。 */
+  const buildQuizSet = useCallback(
+    (items: VocabItem[]): QuizQuestion[] => {
+      if (!quizUnique) return buildQuizQuestions(items, quizKinds)
+      return shuffleQuiz(items)
+        .map((it) => {
+          for (const k of shuffleQuiz(quizKinds)) {
+            const q = makeQuestion(it, k)
+            if (q) return q
+          }
+          return null
+        })
+        .filter((q): q is QuizQuestion => q !== null)
+    },
+    [quizUnique, quizKinds],
+  )
+
   /** 用当前设置出一份考卷（洗牌 + 限量）。 */
   const startQuiz = useCallback(() => {
-    const qs = buildQuizQuestions(quizPool, quizKinds)
+    const qs = buildQuizSet(quizPool)
     if (!qs.length) {
       flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
       return
+    }
+    if (quizAdvanceRef.current) {
+      window.clearTimeout(quizAdvanceRef.current)
+      quizAdvanceRef.current = null
     }
     const picked = shuffleQuiz(qs).slice(0, quizLimit > 0 ? quizLimit : qs.length)
     setStudyQueue(null)
@@ -933,6 +975,17 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [quizPool, quizKinds, quizLimit, flash])
 
+  const nextQuiz = useCallback(() => {
+    if (quizAdvanceRef.current) {
+      window.clearTimeout(quizAdvanceRef.current)
+      quizAdvanceRef.current = null
+    }
+    setQuizInput('')
+    setQuizChecked(false)
+    setQuizResult(null)
+    setQuizIndex((i) => i + 1)
+  }, [])
+
   /** 提交本题并判分；对 → SRS good，错 → SRS again（记 lapse）。 */
   const checkQuiz = useCallback(() => {
     if (!quizQueue) return
@@ -943,20 +996,29 @@ export default function ReaderApp() {
     setQuizResult(ok)
     setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
     persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
-  }, [quizQueue, quizIndex, quizChecked, quizInput, library, persist])
+    // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
+    if (quizAuto) {
+      if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
+      quizAdvanceRef.current = window.setTimeout(() => {
+        quizAdvanceRef.current = null
+        nextQuiz()
+      }, ok ? 650 : 1400)
+    }
+  }, [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAuto, nextQuiz])
 
-  const nextQuiz = useCallback(() => {
-    if (!quizQueue) return
-    setQuizInput('')
-    setQuizChecked(false)
-    setQuizResult(null)
-    setQuizIndex((i) => i + 1)
-  }, [quizQueue])
+  /** 关闭考试并清掉待触发的自动切题。 */
+  const closeQuiz = useCallback(() => {
+    if (quizAdvanceRef.current) {
+      window.clearTimeout(quizAdvanceRef.current)
+      quizAdvanceRef.current = null
+    }
+    setQuizQueue(null)
+  }, [])
 
   const retryQuizWrong = useCallback(() => {
     const wrongIds = new Set(quizResults.filter((r) => !r.correct).map((r) => r.itemId))
     const items = library.items.filter((it) => wrongIds.has(it.id))
-    const qs = buildQuizQuestions(items, quizKinds)
+    const qs = buildQuizSet(items)
     if (!qs.length) {
       flash('没有可重做的错题')
       return
@@ -967,7 +1029,7 @@ export default function ReaderApp() {
     setQuizChecked(false)
     setQuizResult(null)
     setQuizResults([])
-  }, [quizResults, library.items, quizKinds, flash])
+  }, [quizResults, library.items, buildQuizSet, flash])
 
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
@@ -1053,7 +1115,7 @@ export default function ReaderApp() {
     if (!quizQueue) return
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        setQuizQueue(null)
+        closeQuiz()
         return
       }
       if (e.key !== 'Enter') return
@@ -1064,7 +1126,14 @@ export default function ReaderApp() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [quizQueue, quizIndex, quizChecked, checkQuiz, nextQuiz])
+  }, [quizQueue, quizIndex, quizChecked, checkQuiz, nextQuiz, closeQuiz])
+
+  // 组件卸载时清掉待触发的自动切题
+  useEffect(() => {
+    return () => {
+      if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
+    }
+  }, [])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -2926,9 +2995,26 @@ export default function ReaderApp() {
                   </select>
                 </div>
               </div>
+              <div className="quiz-field">
+                <span className="muted">答题</span>
+                <div className="bar">
+                  <label className="check-inline" title="答对/答错后自动进入下一题（答错会多停一会儿看答案）">
+                    <input type="checkbox" checked={quizAuto} onChange={(e) => setQuizAuto(e.target.checked)} />
+                    自动下一题
+                  </label>
+                  <label className="check-inline" title="每个单词只考一题、题型随机；关掉可让同一词出多种题型">
+                    <input
+                      type="checkbox"
+                      checked={quizUnique}
+                      onChange={(e) => setQuizUnique(e.target.checked)}
+                    />
+                    每词一题 · 乱序
+                  </label>
+                </div>
+              </div>
               <p className="muted">
-                当前范围可出 {buildQuizQuestions(quizPool, quizKinds).length} 题（未掌握约{' '}
-                {quizPoolSizes.unmastered} 题）。答对按「认识」、答错按「忘记了」计入复习排期。
+                当前范围可出 {buildQuizSet(quizPool).length} 题（未掌握约 {quizPoolSizes.unmastered} 题）。
+                答对按「认识」、答错按「忘记了」计入复习排期。
               </p>
               <div className="bar">
                 <button className="primary" onClick={startQuiz} disabled={!quizKinds.length}>
@@ -2942,7 +3028,7 @@ export default function ReaderApp() {
         {quizQueue && (
           <div className="study quiz">
             <div className="bar study-bar">
-              <button onClick={() => setQuizQueue(null)}>结束（Esc）</button>
+              <button onClick={closeQuiz}>结束（Esc）</button>
               <span className="muted">
                 {Math.min(quizIndex + 1, quizQueue.length)} / {quizQueue.length}
               </span>
@@ -2990,7 +3076,7 @@ export default function ReaderApp() {
                           ref={quizInputRef}
                           placeholder="输入答案，回车提交 / 下一题"
                           value={quizInput}
-                          onChange={(e) => setQuizInput(e.target.value)}
+                          onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
                           disabled={quizChecked}
                         />
                         {quizChecked && (
@@ -3013,7 +3099,7 @@ export default function ReaderApp() {
                             {quizIndex + 1 >= quizQueue.length ? '看结果（回车）' : '下一题（回车）'}
                           </button>
                         )}
-                        <button onClick={() => setQuizQueue(null)}>退出</button>
+                        <button onClick={closeQuiz}>退出</button>
                       </div>
                     </>
                   )
@@ -3052,7 +3138,7 @@ export default function ReaderApp() {
                         <button className={wrongIds.length ? '' : 'primary'} onClick={startQuiz}>
                           再来一轮
                         </button>
-                        <button onClick={() => setQuizQueue(null)}>回到阅读</button>
+                        <button onClick={closeQuiz}>回到阅读</button>
                       </div>
                     </div>
                   )
