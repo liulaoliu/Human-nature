@@ -339,6 +339,8 @@ export default function ReaderApp() {
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
+  /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
+  const rightDownRef = useRef(false)
   const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
@@ -1463,6 +1465,7 @@ export default function ReaderApp() {
     if (editing) return
     const handler = () => {
       if (applyingDom.current) return
+      if (rightDownRef.current) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) return
       applySelection(ctrlHeld, false)
@@ -1474,10 +1477,18 @@ export default function ReaderApp() {
   const onMouseUp = useCallback(
     (e: MouseEvent<HTMLElement>) => {
       if (editing) return
+      if (e.button !== 0) {
+        rightDownRef.current = false
+        return // 右键单独处理
+      }
       applySelection(e.ctrlKey || e.metaKey, true)
     },
     [editing, applySelection],
   )
+
+  const onMouseDown = useCallback((e: MouseEvent<HTMLElement>) => {
+    rightDownRef.current = e.button === 2
+  }, [])
 
   /** 选区所在的句子 —— 默认的操作对象。 */
   const sentence = useMemo(() => {
@@ -1505,6 +1516,17 @@ export default function ReaderApp() {
     setSelIndices([])
     flash(`已加入待选：${word}`)
   }, [exact, batch, addToBatch, sentence, flash])
+
+  // 选词模式下有精确选区时，右键 = 「加入待选」（不再弹浏览器菜单）
+  const onContextMenu = useCallback(
+    (e: MouseEvent<HTMLElement>) => {
+      rightDownRef.current = false
+      if (!vocabMode || !exact.trim()) return
+      e.preventDefault()
+      addSelectionToBatch()
+    },
+    [vocabMode, exact, addSelectionToBatch],
+  )
 
   const mark = useCallback(() => {
     if (!exact) {
@@ -1816,7 +1838,12 @@ export default function ReaderApp() {
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}`}>
-      <main className="reader-main" onMouseUp={onMouseUp}>
+      <main
+        className="reader-main"
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onContextMenu={onContextMenu}
+      >
         <div className="bar">
           <strong>Economist 精读</strong>
           {book && editions.length > 1 && (
@@ -2371,7 +2398,7 @@ export default function ReaderApp() {
           </div>
           <div className="muted hint">
             {vocabMode
-              ? '选词模式：点=一个词进待选；Ctrl 点多个词后「加入待选」拼成词组；Alt 拖动=整段。'
+              ? '选词模式：点=一个词进待选；Ctrl 点多个词后右键或「加入待选」拼成词组；Alt 拖动=整段。'
               : '单击=整句；拖动=整段；Ctrl 点词=离散多选（点 bar 再点 from 就选这两个）。'}
           </div>
           <div className="tasks">
