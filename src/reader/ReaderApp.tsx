@@ -58,6 +58,14 @@ import {
   type QuizQuestion,
 } from '../core/quiz'
 import { diffWords, dictationWrongWords, type DiffToken } from '../core/dictation'
+import {
+  buildListeningQuizPrompt,
+  gradeListening,
+  isListeningCorrect,
+  parseListeningQuiz,
+  type ListeningQuiz,
+  type ListeningResult,
+} from '../core/listening'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
@@ -239,7 +247,9 @@ export default function ReaderApp() {
     task: 'confusable' | 'lookup' | 'lemma' | 'pos'
     words: string[]
   } | null>(null)
-  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | 'pos' | null>(null)
+  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | null>(
+    null,
+  )
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -506,6 +516,20 @@ export default function ReaderApp() {
   const [dictInput, setDictInput] = useState('')
   const [dictChecked, setDictChecked] = useState(false)
   const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
+  /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
+  const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
+  const [listenOpen, setListenOpen] = useState(false)
+  const [listenAnswers, setListenAnswers] = useState<Record<string, string>>({})
+  const [listenSubmitted, setListenSubmitted] = useState(false)
+  const [listenResult, setListenResult] = useState<ListeningResult | null>(null)
+  const [listenCount, setListenCount] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:listenCount') ?? '8')
+      return Number.isFinite(n) && n > 0 ? n : 8
+    } catch {
+      return 8
+    }
+  })
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -772,6 +796,26 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [confusableBatchSize])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:listenCount', String(listenCount))
+    } catch {
+      // 忽略
+    }
+  }, [listenCount])
+  // 换文章时载入该篇已生成的听力理解题
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('reader:listening:' + articleIdentity)
+      setListenQuiz(raw ? (JSON.parse(raw) as ListeningQuiz) : null)
+    } catch {
+      setListenQuiz(null)
+    }
+    setListenOpen(false)
+    setListenAnswers({})
+    setListenSubmitted(false)
+    setListenResult(null)
+  }, [articleIdentity])
   useEffect(() => {
     try {
       localStorage.setItem('reader:newLimit', String(newLimit))
@@ -1312,6 +1356,16 @@ export default function ReaderApp() {
     return () => window.removeEventListener('keydown', onKey)
   }, [dictQueue, dictIndex, dictChecked, checkDict, nextDict])
 
+  // 听力理解题：Esc 退出
+  useEffect(() => {
+    if (!listenOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setListenOpen(false)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [listenOpen])
+
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
     if (!studyQueue || studyEditOpen) return
@@ -1483,6 +1537,47 @@ export default function ReaderApp() {
     mergeBatch(batchItemsFromWords(words))
     flash(`已把 ${words.length} 个漏写词加入待选`)
   }, [dictQueue, dictIndex, dictInput, mergeBatch, batchItemsFromWords, flash])
+
+  /** 复制听力理解题出题提示词。 */
+  const copyListeningPrompt = useCallback(async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    const text = doc.sentences.map((s) => s.text).join(' ')
+    setLastTask('listening')
+    askedWordsRef.current = []
+    askedIdsRef.current = []
+    try {
+      await navigator.clipboard.writeText(buildListeningQuizPrompt(text, { count: listenCount }))
+      flash('已复制听力理解题提示词；把 AI 的 JSON 粘回「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [doc, listenCount, flash])
+
+  /** 打开听力理解题：没有题目就先复制出题提示词。 */
+  const openListening = useCallback(() => {
+    if (listenQuiz && listenQuiz.questions.length) {
+      setStudyQueue(null)
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      setQuickQueue(null)
+      setDictQueue(null)
+      setListenAnswers({})
+      setListenSubmitted(false)
+      setListenResult(null)
+      setListenOpen(true)
+    } else {
+      void copyListeningPrompt()
+    }
+  }, [listenQuiz, copyListeningPrompt])
+
+  const submitListening = useCallback(() => {
+    if (!listenQuiz) return
+    setListenResult(gradeListening(listenQuiz.questions, listenAnswers))
+    setListenSubmitted(true)
+  }, [listenQuiz, listenAnswers])
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -2821,6 +2916,26 @@ export default function ReaderApp() {
       return
     }
 
+    // 听力理解题：解析严格 JSON 并存起来
+    if (lastTask === 'listening') {
+      const quiz = parseListeningQuiz(raw)
+      if (!quiz.questions.length) {
+        setPasteReport(['没解析出题目（需要严格 JSON：{"questions":[…] }，含 type/stem/answer）'])
+        flash('没解析出题目')
+        return
+      }
+      setListenQuiz(quiz)
+      try {
+        localStorage.setItem('reader:listening:' + articleIdentity, JSON.stringify(quiz))
+      } catch {
+        // 忽略
+      }
+      setPasted('')
+      setPasteReport([`已生成 ${quiz.questions.length} 道题`, '点工具栏「理解题」开始作答'])
+      flash(`已生成 ${quiz.questions.length} 道听力理解题`)
+      return
+    }
+
     const result = parseAnalysis(raw)
     const report: string[] = []
     let next = library
@@ -3105,7 +3220,7 @@ export default function ReaderApp() {
   )
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
-  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue
+  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
@@ -4002,6 +4117,101 @@ export default function ReaderApp() {
           </div>
         )}
 
+        {listenOpen && listenQuiz && (
+          <div className="study listen">
+            <div className="bar study-bar">
+              <button onClick={() => setListenOpen(false)}>结束（Esc）</button>
+              <button
+                className={readingAll ? 'danger' : ''}
+                onClick={readingAll ? stopReadAll : startReadAll}
+                title="朗读整篇（练习听力）"
+              >
+                {readingAll ? '⏹ 停止' : '🔊 播放全文'}
+              </button>
+              <span className="muted">共 {listenQuiz.questions.length} 题</span>
+              {listenSubmitted && listenResult && (
+                <span className="muted">
+                  得分 {listenResult.correct}/{listenResult.total}（
+                  {Math.round(listenResult.score * 100)}%）
+                </span>
+              )}
+            </div>
+            <div className="listen-list">
+              {listenQuiz.questions.map((q, qi) => {
+                const got = listenAnswers[q.id] ?? ''
+                const ok = listenSubmitted && isListeningCorrect(q, got)
+                return (
+                  <div className="listen-q" key={q.id}>
+                    <div className="listen-stem">
+                      {qi + 1}. {q.stem}
+                    </div>
+                    {q.type === 'mcq' && q.options ? (
+                      <div className="listen-opts">
+                        {q.options.map((opt) => {
+                          const chosen = got === opt
+                          const cls =
+                            (chosen ? 'primary' : '') +
+                            (listenSubmitted && opt === q.answer ? ' ok' : '') +
+                            (listenSubmitted && chosen && opt !== q.answer ? ' bad' : '')
+                          return (
+                            <button
+                              key={opt}
+                              className={cls}
+                              disabled={listenSubmitted}
+                              onClick={() => setListenAnswers((a) => ({ ...a, [q.id]: opt }))}
+                            >
+                              {opt}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    ) : (
+                      <input
+                        className="study-input listen-input"
+                        disabled={listenSubmitted}
+                        placeholder={q.type === 'gap' ? '填空' : '简答'}
+                        value={got}
+                        onChange={(e) => setListenAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
+                      />
+                    )}
+                    {listenSubmitted && (
+                      <div className={'listen-feedback ' + (ok ? 'ok' : 'bad')}>
+                        {ok ? '✔ 正确' : `✘ 正确答案：${q.answer}`}
+                        {q.explanation ? `　${q.explanation}` : ''}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <div className="bar study-actions">
+              {!listenSubmitted ? (
+                <button className="primary" onClick={submitListening}>
+                  提交判分
+                </button>
+              ) : (
+                <button
+                  className="primary"
+                  onClick={() => {
+                    setListenAnswers({})
+                    setListenSubmitted(false)
+                    setListenResult(null)
+                  }}
+                >
+                  重做
+                </button>
+              )}
+              <button onClick={() => void copyListeningPrompt()}>重新出题</button>
+            </div>
+            {listenSubmitted && doc && (
+              <details className="listen-transcript">
+                <summary>显示原文</summary>
+                <div>{doc.sentences.map((s) => s.text).join(' ')}</div>
+              </details>
+            )}
+          </div>
+        )}
+
         {browseAll && (
           <div className="all-vocab">
             <div className="bar">
@@ -4403,10 +4613,27 @@ export default function ReaderApp() {
           <button
             onClick={startDictation}
             disabled={!doc}
-            title="听写全文：按文章顺序播句子、填句中生词，自动推进"
+            title="逐句听写：按文章顺序播句子，听写整句，逐词 diff；Tab 重听，回车检查"
           >
             听写
           </button>
+          <button
+            onClick={openListening}
+            disabled={!doc}
+            title="听力理解题：AI 出题（带答案+解析）→ 本地判分；没题目时先复制出题提示词"
+          >
+            理解题
+          </button>
+          <select
+            value={String(listenCount)}
+            onChange={(e) => setListenCount(Number(e.target.value))}
+            title="听力理解题出题数量（点「理解题」用）"
+          >
+            <option value="5">5 题</option>
+            <option value="8">8 题</option>
+            <option value="10">10 题</option>
+            <option value="15">15 题</option>
+          </select>
           <button
             onClick={() => {
               setQuizScope('lapses')

@@ -774,6 +774,21 @@ button.danger {
 .dict-diff .dt.del { color: #fff; background: var(--red); text-decoration: line-through; }
 .dict-diff .dt.ins { color: #1a1205; background: #ffd479; }
 
+/* 听力理解题 */
+.listen { max-width: 760px; }
+.listen-list { display: flex; flex-direction: column; gap: 14px; margin: 10px 0; }
+.listen-q { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; background: var(--panel); }
+.listen-stem { font-size: 16px; line-height: 1.6; margin-bottom: 8px; }
+.listen-opts { display: flex; flex-wrap: wrap; gap: 8px; }
+.listen-opts button.ok { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.listen-opts button.bad { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
+.listen-input { width: 100%; text-align: left; }
+.listen-feedback { margin-top: 8px; font-size: 14px; line-height: 1.6; }
+.listen-feedback.ok { color: var(--green); }
+.listen-feedback.bad { color: var(--red); }
+.listen-transcript { margin-top: 12px; font-size: 14px; color: var(--dim); line-height: 1.7; }
+.listen-transcript summary { cursor: pointer; }
+
 /* 词形辨析：选项 */
 .quiz-options { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 6px; }
 .quiz-options button { font-size: 16px; padding: 8px 14px; }
