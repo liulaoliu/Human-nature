@@ -135,6 +135,48 @@ a { color: var(--accent); }
 
 .reader-main { overflow: auto; padding: 24px 34px; }
 .reader-side { border-left: 1px solid var(--line); overflow: auto; padding: 16px; background: var(--panel); }
+/* 右侧面板 Tab：选词/分析 ↔ 生词本/学习 */
+.side-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  padding: 4px 0;
+  z-index: 2;
+}
+.side-tabs button { flex: 1; }
+.reader-side.tab-pick .side-sec[data-sec='vocab'] { display: none; }
+.reader-side.tab-vocab .side-sec[data-sec='pick'] { display: none; }
+
+/* 顶部「显示 ⚙」下拉，收拢字号/加粗/衬线/护眼 */
+.tb-settings { position: relative; }
+.tb-settings > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.tb-settings > summary::-webkit-details-marker { display: none; }
+.tb-settings[open] > summary { border-color: var(--accent); color: var(--accent); }
+.tb-settings-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-2);
+  min-width: 170px;
+}
 
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
 .bar .check-inline { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 13px; cursor: pointer; }

@@ -283,6 +283,14 @@ export default function ReaderApp() {
       return 'md'
     }
   })
+  /** 右侧面板当前 Tab：选词/分析 或 生词本/学习 */
+  const [sideTab, setSideTab] = useState<'pick' | 'vocab'>(() => {
+    try {
+      return localStorage.getItem('reader:sideTab') === 'vocab' ? 'vocab' : 'pick'
+    } catch {
+      return 'pick'
+    }
+  })
   const [bold, setBold] = useState(() => {
     try {
       return localStorage.getItem('reader:bold') === '1'
@@ -740,6 +748,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [fontSize])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:sideTab', sideTab)
+    } catch {
+      // 忽略
+    }
+  }, [sideTab])
   useEffect(() => {
     try {
       localStorage.setItem('reader:bold', bold ? '1' : '0')
@@ -3580,24 +3595,29 @@ export default function ReaderApp() {
             🎯 {studiedToday.ids.length}
             {dailyGoal > 0 ? `/${dailyGoal}` : ''} · 🔥{dayStats.streak}
           </span>
-          <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} title="正文字号">
-            <option value="sm">字号 小</option>
-            <option value="md">字号 中</option>
-            <option value="lg">字号 大</option>
-            <option value="xl">字号 特大</option>
-          </select>
-          <label className="check-inline" title="正文加粗">
-            <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} />
-            加粗
-          </label>
-          <label className="check-inline" title="正文用衬线字体（更像书）">
-            <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
-            衬线
-          </label>
-          <label className="check-inline" title="护眼模式：浅色纸感（浅绿底 + 深色字）">
-            <input type="checkbox" checked={eye} onChange={(e) => setEye(e.target.checked)} />
-            护眼
-          </label>
+          <details className="tb-settings">
+            <summary title="显示设置">显示 ⚙</summary>
+            <div className="tb-settings-body">
+              <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} title="正文字号">
+                <option value="sm">字号 小</option>
+                <option value="md">字号 中</option>
+                <option value="lg">字号 大</option>
+                <option value="xl">字号 特大</option>
+              </select>
+              <label className="check-inline" title="正文加粗">
+                <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} />
+                加粗
+              </label>
+              <label className="check-inline" title="正文用衬线字体（更像书）">
+                <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
+                衬线
+              </label>
+              <label className="check-inline" title="护眼模式：浅色纸感（浅绿底 + 深色字）">
+                <input type="checkbox" checked={eye} onChange={(e) => setEye(e.target.checked)} />
+                护眼
+              </label>
+            </div>
+          </details>
           <a className="navlink" href="./index.html" title="回到跟读练习">
             <span className="arrow">←</span> 跟读练习
           </a>
@@ -4737,7 +4757,16 @@ export default function ReaderApp() {
         )}
       </main>
 
-      <aside className="reader-side" ref={sideRef}>
+      <aside className={'reader-side tab-' + sideTab} ref={sideRef}>
+        <div className="side-tabs">
+          <button className={sideTab === 'pick' ? 'primary' : ''} onClick={() => setSideTab('pick')}>
+            选词 / 分析
+          </button>
+          <button className={sideTab === 'vocab' ? 'primary' : ''} onClick={() => setSideTab('vocab')}>
+            生词本 / 学习
+          </button>
+        </div>
+        <div className="side-sec" data-sec="pick">
         {visibleBatch.length > 0 && (
           <div className="picked batch">
             <div className="picked-head">
@@ -4884,6 +4913,9 @@ export default function ReaderApp() {
           🧹 去重整理
         </button>
 
+        </div>
+
+        <div className="side-sec" data-sec="vocab">
         <div className="section-title">
           生词本 · 本篇（{articleWords.length}）
           <span className="view-toggle">
@@ -5169,6 +5201,7 @@ export default function ReaderApp() {
         ) : (
           <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>
         )}
+        </div>
       </aside>
 
       {toast && <div className="toast">{toast}</div>}
