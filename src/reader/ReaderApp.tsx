@@ -1351,10 +1351,9 @@ export default function ReaderApp() {
         setExactRange(r && sid ? { sid, start: r.start, end: r.end } : null)
       }
 
-      // 选词模式：点=一个词，拖=范围内所有词，都进「待选」清单
+      // 选词模式：点 = 一个词；按住 Alt 或 Ctrl 拖动 = 整段词组
       if (vocabMode) {
-        // 默认只选一个词；按住 Alt 拖动才按整段词组
-        const end = altHeld && !range.collapsed ? b : a
+        const end = (altHeld || ctrlHeld) && !range.collapsed ? b : a
         const snapped = snapSelection(text, a, end)
         if (!snapped) return
         setExact(snapped.text)
@@ -1775,7 +1774,7 @@ export default function ReaderApp() {
             </button>
           )}
           {doc && !editing && (
-            <button className={vocabMode ? 'primary' : ''} onClick={toggleVocabMode} title="选词模式（W）：默认选单个词；按住 Alt 拖动选词组">
+            <button className={vocabMode ? 'primary' : ''} onClick={toggleVocabMode} title="选词模式（W）：默认选单个词；按住 Alt / Ctrl 拖动选词组">
               选词模式{vocabMode ? ' · 开' : ''}
             </button>
           )}
@@ -2298,7 +2297,7 @@ export default function ReaderApp() {
           </div>
           <div className="muted hint">
             {vocabMode
-              ? '选词模式：点 / 拖 = 一个词；按住 Alt 拖动 = 词组。'
+              ? '选词模式：点 = 一个词；按住 Alt / Ctrl 拖动 = 词组。'
               : '单击=整句；拖动=按整词吸附；按住 Ctrl 点=单个词。'}
           </div>
           <div className="tasks">

@@ -16,6 +16,24 @@ export interface WordSpan {
   text: string
 }
 
+/** 连字符（ASCII `-` 和 Unicode `‐`）；en/em dash 不算复合词，避免误并。 */
+const HYPHEN = /^[-\u2010]$/
+
+/** 把「词-词」这种连字符复合词并成一个词（bad-tempered、burqa-clad）。 */
+function mergeHyphenated(text: string, spans: WordSpan[]): WordSpan[] {
+  const out: WordSpan[] = []
+  for (const w of spans) {
+    const prev = out[out.length - 1]
+    if (prev && HYPHEN.test(text.slice(prev.end, w.start))) {
+      prev.end = w.end
+      prev.text = text.slice(prev.start, prev.end)
+    } else {
+      out.push({ ...w })
+    }
+  }
+  return out
+}
+
 /** 切出所有「词」（含字母或数字的片段），标点和空白不算词。 */
 export function wordSpans(text: string): WordSpan[] {
   const Segmenter = (Intl as unknown as { Segmenter?: unknown }).Segmenter
@@ -32,14 +50,14 @@ export function wordSpans(text: string): WordSpan[] {
         out.push({ start: s.index, end: s.index + s.segment.length, text: s.segment })
       }
     }
-    return out
+    return mergeHyphenated(text, out)
   }
   // 兜底：按非字母数字切
   const out: WordSpan[] = []
   const re = /[\p{L}\p{N}]+/gu
   let m: RegExpExecArray | null
   while ((m = re.exec(text))) out.push({ start: m.index, end: m.index + m[0].length, text: m[0] })
-  return out
+  return mergeHyphenated(text, out)
 }
 
 /**

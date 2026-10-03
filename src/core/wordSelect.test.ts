@@ -5,14 +5,20 @@ const S = 'abandon back check deaf ear fish'
 //          0      7    12    18   22  26
 
 describe('wordSpans', () => {
-  it('切出所有词，标点空白不算（连字符词按两段，跨选时中间连字符会带上）', () => {
+  it('切出所有词，标点空白不算', () => {
     expect(wordSpans(S).map((w) => w.text)).toEqual(['abandon', 'back', 'check', 'deaf', 'ear', 'fish'])
+  })
+  it('连字符复合词并成一个词', () => {
+    expect(wordSpans('bad-tempered burqa-clad').map((w) => w.text)).toEqual(['bad-tempered', 'burqa-clad'])
     expect(wordSpans('well-known word, end.')).toEqual([
-      { start: 0, end: 4, text: 'well' },
-      { start: 5, end: 10, text: 'known' },
+      { start: 0, end: 10, text: 'well-known' },
       { start: 11, end: 15, text: 'word' },
       { start: 17, end: 20, text: 'end' },
     ])
+  })
+  it('带空格的连字符 / 破折号不并', () => {
+    expect(wordSpans('a - b').map((w) => w.text)).toEqual(['a', 'b'])
+    expect(wordSpans('a — b').map((w) => w.text)).toEqual(['a', 'b'])
   })
 })
 
@@ -44,5 +50,14 @@ describe('snapSelection', () => {
     expect(S.slice(s.start, s.end)).toBe(s.text)
     expect(s.start).toBe(0)
     expect(s.end).toBe(12)
+  })
+})
+
+describe('snapSelection 连字符复合词', () => {
+  const t = 'a bad-tempered man'
+  it('落在复合词任意位置都整个选中', () => {
+    expect(snapSelection(t, 3, 3)?.text).toBe('bad-tempered')
+    expect(snapSelection(t, 10, 10)?.text).toBe('bad-tempered')
+    expect(snapSelection(t, 2, 13)?.text).toBe('bad-tempered')
   })
 })
