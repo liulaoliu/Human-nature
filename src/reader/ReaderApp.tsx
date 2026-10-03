@@ -31,6 +31,7 @@ import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
 import ArticlePicker from './ArticlePicker'
+import VocabList from './VocabList'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import './reader.css'
@@ -200,6 +201,8 @@ export default function ReaderApp() {
   const [articleBook, setArticleBook] = useState('')
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
+  /** 「全部生词」独立视图（侧栏只显示本篇） */
+  const [browseAll, setBrowseAll] = useState(false)
   /** 译文显示：只看原文 / 原文+译文 / 只看译文 */
   const [translateView, setTranslateView] = useState<'off' | 'below' | 'only'>(() => {
     try {
@@ -290,6 +293,12 @@ export default function ReaderApp() {
   /** 选词模式：点/划直接选生词，攒一批后一键导出 */
   const [vocabMode, setVocabMode] = useState(false)
   const [batch, setBatch] = useState<BatchItem[]>([])
+  /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
+  const articleIdentity = articleKey ?? savedId ?? articleTitle
+  const articleWords = useMemo(
+    () => library.items.filter((it) => it.source?.fileName === articleIdentity),
+    [library.items, articleIdentity],
+  )
   const applyingDom = useRef(false)
   const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
@@ -465,10 +474,10 @@ export default function ReaderApp() {
     if (studyScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
     return library.items.filter(
       (it) =>
-        it.source?.fileName === articleKey ||
+        it.source?.fileName === articleIdentity ||
         (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
     )
-  }, [library.items, studyScope, articleKey, doc])
+  }, [library.items, studyScope, articleIdentity, doc])
 
   /** 开始背单词：先到期，再没学过的（受每日新词配额限制），最后其它。 */
   const startStudy = useCallback(() => {
@@ -776,7 +785,7 @@ export default function ReaderApp() {
     (item: VocabItem) => {
       if (!doc) return
       let sid =
-        item.source?.fileName === articleKey && item.source.sentenceId ? item.source.sentenceId : null
+        item.source?.fileName === articleIdentity && item.source.sentenceId ? item.source.sentenceId : null
       if (sid && !doc.sentences.some((s) => s.id === sid)) sid = null
       let hit = sid ? doc.sentences.find((s) => s.id === sid) : undefined
       if (!hit) {
@@ -813,7 +822,7 @@ export default function ReaderApp() {
       setPeekSid(sid)
       window.requestAnimationFrame(() => scrollToSid(sid))
     },
-    [doc, articleKey, articleTitle, library, persist, flash, scrollToSid],
+    [doc, articleIdentity, articleTitle, library, persist, flash, scrollToSid],
   )
 
   /** A/D：在所有句子间上/下移动，临时浮动高亮作为提示并滚到中间（选词模式游标）。 */
@@ -1316,14 +1325,14 @@ export default function ReaderApp() {
     }
     const result = markWord(library, {
       word: exact,
-      articleId: articleKey ?? '手动粘贴',
-      fileName: articleKey,
+      articleId: articleTitle || articleKey || '手动粘贴',
+      fileName: articleIdentity,
       sentenceId: sentence?.id ?? null,
       sentenceText: sentence?.text ?? '',
     })
     persist(result.library)
     flash(result.created ? `已加入：${result.item.word}` : `已合并：${result.item.word}`)
-  }, [exact, library, articleKey, sentence, persist, flash])
+  }, [exact, library, articleIdentity, articleTitle, articleKey, sentence, persist, flash])
 
   const copyPrompt = useCallback(
     async (task: AnalysisTask) => {
@@ -1355,8 +1364,8 @@ export default function ReaderApp() {
     for (const b of batch) {
       lib = markWord(lib, {
         word: b.word,
-        articleId: articleKey ?? '手动粘贴',
-        fileName: articleKey,
+        articleId: articleTitle || articleKey || '手动粘贴',
+        fileName: articleIdentity,
         sentenceId: b.sentenceId,
         sentenceText: b.sentence,
       }).library
@@ -1364,7 +1373,7 @@ export default function ReaderApp() {
     persist(lib)
     flash(`已加入 ${batch.length} 个生词`)
     setBatch([])
-  }, [batch, library, articleKey, persist, flash])
+  }, [batch, library, articleIdentity, articleTitle, articleKey, persist, flash])
 
   /** 待选词一键生成批量查词提示词，复制到网页版 DeepSeek。 */
   const copyBatchPrompt = useCallback(async () => {
@@ -1422,7 +1431,14 @@ export default function ReaderApp() {
     if (!raw) return
     const result = parseAnalysis(raw)
     let next = library
-    if (result.words?.length) next = applyWordAnalysis(next, result.words)
+    if (result.words?.length) {
+      next = applyWordAnalysis(next, result.words, new Date(), {
+        articleId: articleTitle || articleKey || '手动粘贴',
+        fileName: articleIdentity,
+        sentenceId: null,
+        sentenceText: '',
+      })
+    }
     if (result.sentences?.length) {
       const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
       setDoc((d) =>
@@ -1469,9 +1485,10 @@ export default function ReaderApp() {
     [],
   )
 
-  const exportAnki = useCallback(
-    () => download('vocab-anki.csv', toAnkiCSV(sortItems(library.items, 'word')), 'text/csv;charset=utf-8'),
-    [library.items, download],
+  const doExportAnki = useCallback(
+    (items: VocabItem[]) =>
+      download('vocab-anki.csv', toAnkiCSV(sortItems(items, 'word')), 'text/csv;charset=utf-8'),
+    [download],
   )
   const exportJson = useCallback(
     () => download('vocab.json', exportLibraryJSON(library), 'application/json'),
@@ -1486,9 +1503,10 @@ export default function ReaderApp() {
       ),
     [batch, download],
   )
-  const exportWrong = useCallback(
-    () => download('wrong-words.csv', toWrongWordsCSV(library.items), 'text/csv;charset=utf-8'),
-    [library.items, download],
+  const doExportWrong = useCallback(
+    (items: VocabItem[]) =>
+      download('wrong-words.csv', toWrongWordsCSV(items), 'text/csv;charset=utf-8'),
+    [download],
   )
 
   /** 导出全部：词库 + 已保存的文章，一个 JSON 换电脑用。 */
@@ -1551,21 +1569,33 @@ export default function ReaderApp() {
     },
     [persist, flash],
   )
-  const printWords = useCallback(() => {
-    const html = renderPrintHTML({
-      title: '我的生词本',
-      groups: groupItems(sortItems(library.items, 'word'), 'alphabet'),
-    })
-    const win = window.open('', '_blank')
-    if (!win) {
-      flash('弹窗被拦截，允许后重试')
-      return
-    }
-    win.document.write(html)
-    win.document.close()
-  }, [library.items, flash])
+  const doPrint = useCallback(
+    (items: VocabItem[], title: string) => {
+      const html = renderPrintHTML({
+        title,
+        groups: groupItems(sortItems(items, 'word'), 'alphabet'),
+      })
+      const win = window.open('', '_blank')
+      if (!win) {
+        flash('弹窗被拦截，允许后重试')
+        return
+      }
+      win.document.write(html)
+      win.document.close()
+    },
+    [flash],
+  )
 
-  const list = sortItems(library.items, 'updatedAt')
+  const articleList = sortItems(articleWords, 'updatedAt')
+  const allList = sortItems(library.items, 'updatedAt')
+  const handleReview = useCallback(
+    (id: string, grade: ReviewGrade) => persist(reviewItem(library, id, grade)),
+    [library, persist],
+  )
+  const handleEdit = useCallback(
+    (id: string, meaning: string) => persist(editItem(library, id, { meaning })),
+    [library, persist],
+  )
   const studyCard = studyQueue && studyIndex < studyQueue.length ? studyQueue[studyIndex] : null
 
   return (
@@ -1865,7 +1895,53 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {!studyQueue && (composing || !doc) && (
+        {browseAll && (
+          <div className="all-vocab">
+            <div className="bar">
+              <strong>全部生词（{library.items.length}）</strong>
+              <span className="view-toggle">
+                <button className={vocabView === 'card' ? 'primary' : ''} onClick={() => setVocabView('card')}>
+                  卡片
+                </button>
+                <button className={vocabView === 'table' ? 'primary' : ''} onClick={() => setVocabView('table')}>
+                  表格
+                </button>
+              </span>
+              <button onClick={() => doExportAnki(library.items)} disabled={!library.items.length}>
+                导出 Anki CSV
+              </button>
+              <button onClick={() => doPrint(library.items, '全部生词')} disabled={!library.items.length}>
+                A4 打印
+              </button>
+              <button
+                onClick={() => doExportWrong(library.items)}
+                disabled={!library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
+              >
+                导出错词
+              </button>
+              <button className="primary" onClick={() => setBrowseAll(false)}>
+                关闭
+              </button>
+            </div>
+            {allList.length ? (
+              <VocabList
+                items={allList}
+                view={vocabView}
+                focusLemma={focusLemma}
+                confirmDel={confirmDel}
+                onJump={jumpToSource}
+                onSpeak={speak}
+                onDelete={askDelete}
+                onReview={handleReview}
+                onEdit={handleEdit}
+              />
+            ) : (
+              <div className="muted">生词本是空的</div>
+            )}
+          </div>
+        )}
+
+        {!studyQueue && !browseAll && (composing || !doc) && (
           <div className="composer">
             <div className="bar">
               <input
@@ -1943,7 +2019,7 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {!studyQueue && doc && !composing && (
+        {!studyQueue && !browseAll && doc && !composing && (
           <>
             <h1>{articleTitle || (articleKey ? articleKey : '手动粘贴')}</h1>
             {editing ? (
@@ -2078,7 +2154,7 @@ export default function ReaderApp() {
         </button>
 
         <div className="section-title">
-          生词本（{library.items.length}）
+          生词本 · 本篇（{articleWords.length}）
           <span className="view-toggle">
             <button className={vocabView === 'card' ? 'primary' : ''} onClick={() => setVocabView('card')}>
               卡片
@@ -2101,13 +2177,20 @@ export default function ReaderApp() {
           >
             背单词
           </button>
-          <button onClick={exportAnki} disabled={!library.items.length}>
+          <button
+            onClick={() => setBrowseAll(true)}
+            disabled={!library.items.length}
+            title="查看全部生词（跨文章）"
+          >
+            全部生词
+          </button>
+          <button onClick={() => doExportAnki(articleWords)} disabled={!articleWords.length}>
             导出 Anki CSV
           </button>
           <button onClick={exportJson} disabled={!library.items.length}>
             导出 JSON
           </button>
-          <button onClick={printWords} disabled={!library.items.length}>
+          <button onClick={() => doPrint(articleWords, articleTitle || '本篇生词')} disabled={!articleWords.length}>
             A4 打印
           </button>
           <button
@@ -2128,7 +2211,7 @@ export default function ReaderApp() {
             统计
           </button>
           <button
-            onClick={exportWrong}
+            onClick={() => doExportWrong(library.items)}
             disabled={!library.items.some((it) => (it.reviewState.lapses ?? 0) > 0)}
             title="导出出错过的词（Word, Lapses, Meaning, Context）"
           >
@@ -2183,119 +2266,20 @@ export default function ReaderApp() {
           </div>
         )}
 
-        {vocabView === 'table' ? (
-          <table className="vtable">
-            <thead>
-              <tr>
-                <th>单词</th>
-                <th>含义</th>
-                <th>用法</th>
-                <th />
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((it) => (
-                <tr
-                  key={it.id}
-                  data-lemma={it.lemma}
-                  className={it.lemma === focusLemma ? 'focus' : ''}
-                  onClick={() => jumpToSource(it)}
-                  title={it.examples[0]?.text ?? ''}
-                >
-                  <td className="cell-word">
-                    {it.word}
-                    {it.phonetic && (
-                      <span
-                        className="cell-phon"
-                        title="点读发音"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          speak(it.word)
-                        }}
-                      >
-                        {it.phonetic}
-                      </span>
-                    )}
-                  </td>
-                  <td className="cell-meaning">
-                    {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
-                    {it.meaning ?? ''}
-                  </td>
-                  <td className="cell-usage">{it.usage.join('；')}</td>
-                  <td className="cell-act">
-                    <button
-                      className={confirmDel === it.id ? 'danger' : ''}
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        askDelete(it.id)
-                      }}
-                      title={confirmDel === it.id ? '再点一次确认删除' : '删除（需两步确认）'}
-                    >
-                      {confirmDel === it.id ? '确认' : '×'}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        {articleList.length ? (
+          <VocabList
+            items={articleList}
+            view={vocabView}
+            focusLemma={focusLemma}
+            confirmDel={confirmDel}
+            onJump={jumpToSource}
+            onSpeak={speak}
+            onDelete={askDelete}
+            onReview={handleReview}
+            onEdit={handleEdit}
+          />
         ) : (
-          list.map((it) => (
-            <div
-              className={'entry' + (it.lemma === focusLemma ? ' focus' : '')}
-              key={it.id}
-              data-lemma={it.lemma}
-            >
-              <div className="w" onClick={() => jumpToSource(it)} title="回到原文这句">
-                {it.word}{' '}
-                {it.phonetic && (
-                  <span
-                    className="ph"
-                    title="点读发音"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      speak(it.word)
-                    }}
-                  >
-                    {it.phonetic}
-                  </span>
-                )}
-              </div>
-              {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
-              {it.meaning && <div className="mu">{it.meaning}</div>}
-              {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
-              {it.examples.slice(0, 1).map((ex, i) => (
-                <div className="ex" key={i}>
-                  {ex.text}
-                  {ex.translation ? ` — ${ex.translation}` : ''}
-                </div>
-              ))}
-              <div className="muted">
-                状态：{it.status}
-                {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
-                {it.source ? ` · ${it.source.articleId}` : ''}
-              </div>
-              <div className="row">
-                <button onClick={() => persist(reviewItem(library, it.id, 'again'))}>重来</button>
-                <button onClick={() => persist(reviewItem(library, it.id, 'good'))}>记得</button>
-                <button onClick={() => persist(reviewItem(library, it.id, 'easy'))}>简单</button>
-                <button
-                  onClick={() => {
-                    const m = window.prompt('修改含义', it.meaning ?? '')
-                    if (m !== null) persist(editItem(library, it.id, { meaning: m }))
-                  }}
-                >
-                  改释义
-                </button>
-                <button
-                  className={confirmDel === it.id ? 'danger' : ''}
-                  onClick={() => askDelete(it.id)}
-                  title="两步确认，防误触"
-                >
-                  {confirmDel === it.id ? '确认删除' : '删除'}
-                </button>
-              </div>
-            </div>
-          ))
+          <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>
         )}
       </aside>
 

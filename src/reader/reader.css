@@ -559,3 +559,7 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* 「全部生词」独立视图 */
+.all-vocab { max-width: 1100px; margin: 0 auto; }
+.empty-hint { margin-top: 6px; line-height: 1.7; display: block; }

@@ -193,6 +193,7 @@ export function applyWordAnalysis(
   library: VocabLibrary,
   words: WordAnalysis[],
   now: Date = new Date(),
+  defaultSource?: VocabSource,
 ): VocabLibrary {
   const iso = now.toISOString()
   let items = library.items
@@ -218,7 +219,7 @@ export function applyWordAnalysis(
           meaning: wa.meaning ?? null,
           usage: wa.usage ?? [],
           examples,
-          source: null,
+          source: defaultSource ?? null,
           status: 'queried',
           note: '',
           tags: [],

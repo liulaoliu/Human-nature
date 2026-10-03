@@ -313,3 +313,11 @@ describe('每日新词配额', () => {
     expect(buildStudyQueue([fresh(1), fresh(2), fresh(3)], now, { newLimit: 0 })).toHaveLength(3)
   })
 })
+
+describe('applyWordAnalysis 默认来源', () => {
+  it('新词条带上默认来源（用于归属到当前文章）', () => {
+    const src = { articleId: 'a1', fileName: 'art-A', sentenceId: 's1', sentenceText: 'Foo bar.' }
+    const lib = applyWordAnalysis(createLibrary(), [{ word: 'foo', meaning: 'x' }], NOW, src)
+    expect(lib.items[0].source).toEqual(src)
+  })
+})
