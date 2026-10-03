@@ -316,3 +316,5 @@ select {
   color: #06121f;
   font-weight: 600;
 }
+
+.empty-nav { margin-top: 14px; }
