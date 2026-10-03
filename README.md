@@ -308,6 +308,11 @@ src/
     cleaner.ts        清洗 PDF 伪影（软连字符/ligature/断词）
     segmenter.ts      切句（Intl.Segmenter + 缩写修补）
     analyzer.ts       一键提示词生成 + 粘回解析
+    quiz.ts           考试出题与判分（拼写/填空/听力/看词选义/词形辨析/听音拼词）
+    dictation.ts      逐句听写：词级 diff（漏写/多写）
+    listening.ts      听力理解题：严格 JSON 出题 + 解析校验 + 本地判分
+    language.ts       逐句语言点分析（结构/语法/idiom/词组/用法）
+    writing.ts        仿写：出任务 + 评分 rubric + AI 批改解析
     aligner.ts        句子级音频近似投影（复用 alignText.ts）
     vocab.ts          词库逻辑（去重/来源/筛选/分组/SRS）
     exports.ts        Anki CSV / JSON / A4 打印
