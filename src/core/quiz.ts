@@ -13,12 +13,19 @@ import type { VocabItem } from '../types/document'
  * 判分对大小写、首尾标点、常见词形变化宽容。
  */
 
-export type QuizKind = 'spell' | 'cloze' | 'usage'
+export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen'
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
   cloze: '例句填空',
   usage: '搭配填空',
+  listen: '听力填空',
+}
+
+const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen']
+
+export function isQuizKind(v: unknown): v is QuizKind {
+  return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
 }
 
 export interface QuizQuestion {
@@ -38,6 +45,8 @@ export interface QuizQuestion {
   context?: string
   /** 例句中文翻译（若来源例句带） */
   translation?: string
+  /** 听力填空：要朗读的完整句子 */
+  audioText?: string
   /** 标准答案（原句里出现的词形） */
   answer: string
   /** 可接受答案（归一化后） */
@@ -102,7 +111,7 @@ export function makeQuestion(it: VocabItem, kind: QuizKind): QuizQuestion | null
     }
   }
 
-  if (kind === 'cloze') {
+  if (kind === 'cloze' || kind === 'listen') {
     const contexts = [
       ...it.examples.map((e) => ({ text: e.text, translation: e.translation })),
       { text: it.source?.sentenceText ?? '', translation: undefined as string | undefined },
@@ -111,17 +120,19 @@ export function makeQuestion(it: VocabItem, kind: QuizKind): QuizQuestion | null
       const b = blankWord(ctx.text, it.lemma)
       if (!b) continue
       return {
-        id: `${it.id}:cloze`,
+        id: `${it.id}:${kind}`,
         itemId: it.id,
         lemma: it.lemma,
         kind,
         word,
-        prompt: b.blanked,
+        // 听力填空不显示句子（靠听），其余显示挖空句
+        prompt: kind === 'listen' ? '' : b.blanked,
         meaning: it.meaning,
         partOfSpeech: it.partOfSpeech,
         phonetic: it.phonetic,
         context: ctx.text,
         translation: ctx.translation,
+        audioText: kind === 'listen' ? ctx.text : undefined,
         answer: b.surface,
         accept: baseAccept(it, b.surface),
       }

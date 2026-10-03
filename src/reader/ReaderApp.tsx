@@ -37,6 +37,7 @@ import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWords
 import {
   buildQuizQuestions,
   isCorrect,
+  isQuizKind,
   QUIZ_KIND_LABEL,
   shuffleQuiz,
   type QuizKind,
@@ -46,7 +47,7 @@ import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
 import ArticlePicker from './ArticlePicker'
-import VocabList from './VocabList'
+import VocabList, { type VocabEditPatch } from './VocabList'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import './reader.css'
@@ -372,7 +373,7 @@ export default function ReaderApp() {
     try {
       const raw = JSON.parse(localStorage.getItem('reader:quizKinds') ?? 'null')
       if (Array.isArray(raw) && raw.length) {
-        const valid = raw.filter((k): k is QuizKind => k === 'spell' || k === 'cloze' || k === 'usage')
+        const valid = raw.filter(isQuizKind)
         if (valid.length) return valid
       }
     } catch {
@@ -457,6 +458,9 @@ export default function ReaderApp() {
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
+  /** 是否正在「朗读全文」（TTS 逐句） */
+  const readAllRef = useRef(false)
+  const [readingAll, setReadingAll] = useState(false)
   /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
   const rightDownRef = useRef(false)
   const lastSpokenRef = useRef<string | null>(null)
@@ -1292,6 +1296,8 @@ export default function ReaderApp() {
 
   /** 浏览器 TTS：只读一遍，不循环；同一句正在读时不重开。 */
   const speak = useCallback((text: string) => {
+    readAllRef.current = false
+    setReadingAll(false)
     try {
       if (typeof speechSynthesis === 'undefined') return
       const t = text.trim()
@@ -1311,6 +1317,49 @@ export default function ReaderApp() {
     }
   }, [])
 
+  /** 停止「朗读全文」。 */
+  const stopReadAll = useCallback(() => {
+    readAllRef.current = false
+    setReadingAll(false)
+    try {
+      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
+    } catch {
+      // 忽略
+    }
+  }, [])
+
+  /** 逐句朗读整篇（TTS）；再点一次停止。 */
+  const startReadAll = useCallback(() => {
+    if (!doc) return
+    stopReadAll()
+    const list = doc.sentences.filter((s) => s.text.trim())
+    if (!list.length) return
+    readAllRef.current = true
+    setReadingAll(true)
+    let i = 0
+    const next = () => {
+      if (!readAllRef.current || i >= list.length) {
+        readAllRef.current = false
+        setReadingAll(false)
+        return
+      }
+      const s = list[i++]
+      try {
+        const u = new SpeechSynthesisUtterance(s.text)
+        u.lang = 'en-US'
+        u.rate = 0.95
+        u.onend = () => next()
+        u.onerror = () => next()
+        utterRef.current = u
+        speechSynthesis.speak(u)
+      } catch {
+        readAllRef.current = false
+        setReadingAll(false)
+      }
+    }
+    next()
+  }, [doc, stopReadAll])
+
   // 选中句子后自动朗读（可选）
   useEffect(() => {
     if (!autoSpeak || !selectedId || !doc) return
@@ -1319,6 +1368,13 @@ export default function ReaderApp() {
     const s = doc.sentences.find((x) => x.id === selectedId)
     if (s && s.text.trim()) speak(s.text)
   }, [selectedId, autoSpeak, doc, speak])
+
+  // 考试听力题出现时自动朗读句子
+  useEffect(() => {
+    if (!quizQueue) return
+    const q = quizQueue[quizIndex]
+    if (q?.kind === 'listen' && q.audioText) speak(q.audioText)
+  }, [quizQueue, quizIndex, speak])
 
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
   const selectSentence = useCallback(
@@ -2317,7 +2373,7 @@ export default function ReaderApp() {
     [library, persist],
   )
   const handleEdit = useCallback(
-    (id: string, meaning: string) => persist(editItem(library, id, { meaning })),
+    (id: string, patch: VocabEditPatch) => persist(editItem(library, id, patch)),
     [library, persist],
   )
 
@@ -2423,6 +2479,15 @@ export default function ReaderApp() {
             </button>
           )}
           {doc && !editing && (
+            <button
+              className={readingAll ? 'danger' : ''}
+              onClick={readingAll ? stopReadAll : startReadAll}
+              title="用 TTS 逐句朗读整篇；再点一次停止"
+            >
+              {readingAll ? '⏹ 停止朗读' : '🔊 朗读全文'}
+            </button>
+          )}
+          {doc && !editing && (
             <button onClick={enterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
               编辑正文
             </button>
@@ -2489,6 +2554,16 @@ export default function ReaderApp() {
           <div className="study">
             <div className="bar study-bar">
               <button onClick={closeStudy}>结束（Esc）</button>
+              <button
+                onClick={() => {
+                  setStudyQueue(null)
+                  setQuizResults([])
+                  setQuizSetupOpen(true)
+                }}
+                title="直接考试：拼写 / 例句填空 / 搭配填空 / 听力填空"
+              >
+                考试
+              </button>
               <span
                 className="view-toggle"
                 title="新学习：还没学过的词；复习：学过且到期的词（切换会立即重开一轮）"
@@ -2667,6 +2742,15 @@ export default function ReaderApp() {
                         >
                           {studyDelArmed ? '确认删除' : '删除'}
                         </button>
+                        {(!studyCard.meaning || studyCard.usage.length === 0) && (
+                          <button
+                            className="primary"
+                            onClick={openStudyEdit}
+                            title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题"
+                          >
+                            ＋ 补全释义/用法
+                          </button>
+                        )}
                         {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
                       </div>
 
@@ -2776,6 +2860,14 @@ export default function ReaderApp() {
                   >
                     再来一轮（{studyMode === 'review' ? '复习' : '新学习'}）
                   </button>
+                  <button
+                    onClick={() => {
+                      setQuizResults([])
+                      setQuizSetupOpen(true)
+                    }}
+                  >
+                    考试
+                  </button>
                   <button onClick={closeStudy}>回到阅读</button>
                 </div>
               </div>
@@ -2793,7 +2885,7 @@ export default function ReaderApp() {
               <div className="quiz-field">
                 <span className="muted">题型</span>
                 <div className="bar">
-                  {(['spell', 'cloze', 'usage'] as QuizKind[]).map((k) => (
+                  {(['spell', 'cloze', 'usage', 'listen'] as QuizKind[]).map((k) => (
                     <label className="check-inline" key={k}>
                       <input
                         type="checkbox"
@@ -2866,16 +2958,26 @@ export default function ReaderApp() {
                     <>
                       <div className="study-card quiz-card">
                         <div className="quiz-kind">{QUIZ_KIND_LABEL[q.kind]}</div>
-                        <div className={q.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
-                          {q.kind === 'spell' ? (
-                            <>
-                              {q.partOfSpeech && <span className="cell-pos">{q.partOfSpeech} </span>}
-                              {q.prompt}
-                            </>
-                          ) : (
-                            q.prompt
-                          )}
-                        </div>
+                        {q.kind === 'listen' ? (
+                          <button
+                            className="primary quiz-play"
+                            onClick={() => speak(q.audioText ?? q.context ?? q.word)}
+                            title="再听一遍"
+                          >
+                            🔊 播放句子
+                          </button>
+                        ) : (
+                          <div className={q.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
+                            {q.kind === 'spell' ? (
+                              <>
+                                {q.partOfSpeech && <span className="cell-pos">{q.partOfSpeech} </span>}
+                                {q.prompt}
+                              </>
+                            ) : (
+                              q.prompt
+                            )}
+                          </div>
+                        )}
                         {q.kind !== 'spell' && q.meaning && (
                           <div className="muted quiz-hint">
                             释义：{q.partOfSpeech ? `${q.partOfSpeech} ` : ''}

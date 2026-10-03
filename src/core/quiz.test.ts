@@ -84,6 +84,17 @@ describe('makeQuestion', () => {
   it('搭配填空：usage 不含该词则为 null', () => {
     expect(makeQuestion(item({ usage: ['a business'] }), 'usage')).toBeNull()
   })
+  it('听力填空：隐藏句子、带朗读文本', () => {
+    const it = item({ examples: [{ text: 'They run a business together.', translation: '他们一起经营生意。' }] })
+    const q = makeQuestion(it, 'listen')!
+    expect(q.prompt).toBe('')
+    expect(q.audioText).toBe('They run a business together.')
+    expect(q.context).toBe('They run a business together.')
+    expect(q.answer).toBe('run')
+  })
+  it('听力填空：没有句子则为 null', () => {
+    expect(makeQuestion(item({ examples: [], source: null }), 'listen')).toBeNull()
+  })
 })
 
 describe('buildQuizQuestions', () => {
