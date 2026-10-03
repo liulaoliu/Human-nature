@@ -2375,15 +2375,20 @@ export default function ReaderApp() {
               : '单击=整句；拖动=整段；Ctrl 点词=离散多选（点 bar 再点 from 就选这两个）。'}
           </div>
           <div className="tasks">
-            <button className="primary" onClick={mark} disabled={!exact}>
-              加入生词
-            </button>
             <button
+              className="primary"
               onClick={addSelectionToBatch}
               disabled={!exact}
-              title="把当前选中（Ctrl 点选拼成的词组）加入「待选」清单"
+              title="把当前选中（Ctrl 点选拼成的词组）加入「待选」清单，之后统一查词"
             >
               加入待选
+            </button>
+            <button
+              onClick={mark}
+              disabled={!exact}
+              title="不查词，直接把当前选中存进生词本（状态：未查），之后可用「补查音标」批量补齐"
+            >
+              直接入库（未查词）
             </button>
             {TASKS.map((t) => (
               <button key={t.task} onClick={() => copyPrompt(t.task)}>
