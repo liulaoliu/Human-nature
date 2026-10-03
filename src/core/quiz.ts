@@ -15,7 +15,7 @@ import type { VocabItem } from '../types/document'
  * 判分对大小写、首尾标点、常见词形变化宽容。
  */
 
-export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice'
+export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning'
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
@@ -23,9 +23,10 @@ export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   usage: '搭配填空',
   listen: '听力填空',
   choice: '词形辨析',
+  meaning: '看词选义',
 }
 
-const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice']
+const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning']
 
 export function isQuizKind(v: unknown): v is QuizKind {
   return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
@@ -155,6 +156,27 @@ export function pickDistractors(
   return out
 }
 
+/** 从候选词里挑 n 个与 word 不同的中文释义作干扰项（去重、排除同释义）。 */
+export function pickMeaningDistractors(
+  meaning: string,
+  pool: VocabItem[],
+  n: number,
+  rnd: () => number = Math.random,
+): string[] {
+  const seen = new Set<string>([normalizeAnswer(meaning)])
+  const out: string[] = []
+  for (const c of shuffleQuiz(pool, rnd)) {
+    const m = (c.meaning ?? '').trim()
+    if (!m) continue
+    const key = normalizeAnswer(m)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(m)
+    if (out.length >= n) break
+  }
+  return out
+}
+
 /** 由词条 + 题型出一道题；数据不够（无释义 / 无句子）返回 null。 */
 export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = []): QuizQuestion | null {
   const word = it.word.trim()
@@ -194,6 +216,27 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
       options: shuffleQuiz([word, ...distractors]),
       answer: word,
       accept: baseAccept(it, word),
+    }
+  }
+
+  if (kind === 'meaning') {
+    if (!it.meaning) return null
+    const distractors = pickMeaningDistractors(it.meaning, pool, 3)
+    if (distractors.length < 1) return null
+    return {
+      id: `${it.id}:meaning`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      // 题干是英文单词，选项是中文释义
+      prompt: word,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      options: shuffleQuiz([it.meaning, ...distractors]),
+      answer: it.meaning,
+      accept: [normalizeAnswer(it.meaning)],
     }
   }
 

@@ -1000,7 +1000,7 @@ export default function ReaderApp() {
       return shuffleQuiz(items)
         .map((it) => {
           for (const k of shuffleQuiz(quizKinds)) {
-            const q = makeQuestion(it, k)
+            const q = makeQuestion(it, k, items)
             if (q) return q
           }
           return null
@@ -1261,7 +1261,7 @@ export default function ReaderApp() {
   // 换题后把焦点送回输入框，方便直接打字（词形辨析是点选项，不聚焦）
   useEffect(() => {
     const q = quizQueue && quizIndex < quizQueue.length ? quizQueue[quizIndex] : null
-    if (q && q.kind !== 'choice' && !quizChecked) quizInputRef.current?.focus()
+    if (q && q.kind !== 'choice' && q.kind !== 'meaning' && !quizChecked) quizInputRef.current?.focus()
   }, [quizQueue, quizIndex, quizChecked])
 
   // 考试快捷键：回车 提交 / 下一题；词形辨析可用 1/2/3 选选项；Esc 退出
@@ -1280,7 +1280,7 @@ export default function ReaderApp() {
         else nextQuiz()
         return
       }
-      if (q?.kind === 'choice' && !quizChecked && q.options) {
+      if ((q?.kind === 'choice' || q?.kind === 'meaning') && !quizChecked && q.options) {
         const n = Number(e.key)
         if (n >= 1 && n <= q.options.length) {
           e.preventDefault()
@@ -3150,7 +3150,7 @@ export default function ReaderApp() {
               <div className="quiz-field">
                 <span className="muted">题型</span>
                 <div className="bar">
-                  {(['spell', 'cloze', 'usage', 'listen', 'choice'] as QuizKind[]).map((k) => (
+                  {(['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning'] as QuizKind[]).map((k) => (
                     <label className="check-inline" key={k}>
                       <input
                         type="checkbox"
@@ -3249,6 +3249,17 @@ export default function ReaderApp() {
                           >
                             🔊 播放句子
                           </button>
+                        ) : q.kind === 'meaning' ? (
+                          <div className="study-word quiz-word">
+                            {q.word}
+                            <button
+                              className="speak"
+                              onClick={() => speak(q.word)}
+                              title="朗读"
+                            >
+                              🔊
+                            </button>
+                          </div>
                         ) : (
                           <div className={q.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
                             {q.kind === 'spell' ? (
@@ -3261,13 +3272,13 @@ export default function ReaderApp() {
                             )}
                           </div>
                         )}
-                        {q.kind !== 'spell' && q.meaning && (
+                        {(q.kind === 'cloze' || q.kind === 'usage' || q.kind === 'listen') && q.meaning && (
                           <div className="muted quiz-hint">
                             释义：{q.partOfSpeech ? `${q.partOfSpeech} ` : ''}
                             {q.meaning}
                           </div>
                         )}
-                        {q.kind === 'choice' && q.options ? (
+                        {(q.kind === 'choice' || q.kind === 'meaning') && q.options ? (
                           <div className="quiz-options">
                             {q.options.map((opt, i) => (
                               <button

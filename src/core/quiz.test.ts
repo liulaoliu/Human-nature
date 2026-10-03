@@ -8,6 +8,7 @@ import {
   makeQuestion,
   normalizeAnswer,
   pickDistractors,
+  pickMeaningDistractors,
   shuffleQuiz,
   type QuizQuestion,
 } from './quiz'
@@ -112,6 +113,38 @@ describe('makeQuestion', () => {
   })
   it('词形辨析：没有干扰项则为 null', () => {
     expect(makeQuestion(item({ meaning: '适应' }), 'choice', [])).toBeNull()
+  })
+  it('看词选义：题干是英文、选项是中文释义', () => {
+    const pool = [
+      item({ id: 'a', word: 'adapt', lemma: 'adapt', meaning: '适应' }),
+      item({ id: 'b', word: 'adopt', lemma: 'adopt', meaning: '采用' }),
+      item({ id: 'c', word: 'adept', lemma: 'adept', meaning: '熟练的' }),
+    ]
+    const q = makeQuestion(pool[0], 'meaning', pool)!
+    expect(q.prompt).toBe('adapt')
+    expect(q.answer).toBe('适应')
+    expect(q.options).toContain('适应')
+    expect(q.options!.length).toBeGreaterThanOrEqual(2)
+    expect(isCorrect(q, '适应')).toBe(true)
+    expect(isCorrect(q, '采用')).toBe(false)
+  })
+  it('看词选义：没有释义则为 null', () => {
+    expect(makeQuestion(item({ meaning: null }), 'meaning', [item({ id: 'b', meaning: 'x' })])).toBeNull()
+  })
+})
+
+describe('pickMeaningDistractors', () => {
+  it('排除同释义、去重', () => {
+    const pool = [
+      item({ id: 'a', meaning: '适应' }),
+      item({ id: 'b', meaning: '采用' }),
+      item({ id: 'c', meaning: '采用' }),
+      item({ id: 'd', meaning: '斑马' }),
+    ]
+    const out = pickMeaningDistractors('适应', pool, 3, () => 0.5)
+    expect(out).not.toContain('适应')
+    expect(new Set(out).size).toBe(out.length)
+    expect(out).toContain('采用')
   })
 })
 
