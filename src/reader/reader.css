@@ -645,3 +645,8 @@ button.danger {
 
 /* 背单词卡正面：用法 */
 .study-usage { color: var(--dim); font-size: 14px; line-height: 1.6; margin-top: 10px; max-width: 92%; }
+
+/* 背单词：单卡计时催促 */
+.study-timer { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 13px; margin-left: 10px; }
+.study-timer.warn { color: #d9a12b; font-weight: 600; }
+.study-timer.slow { color: var(--red); font-weight: 700; }

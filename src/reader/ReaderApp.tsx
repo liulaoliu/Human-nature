@@ -276,6 +276,8 @@ export default function ReaderApp() {
   const [studyQueue, setStudyQueue] = useState<VocabItem[] | null>(null)
   const [studyIndex, setStudyIndex] = useState(0)
   const [studyRevealed, setStudyRevealed] = useState(false)
+  /** 当前卡停留秒数（催你快点背） */
+  const [cardSeconds, setCardSeconds] = useState(0)
   /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
   const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered' | 'lapses'>(() => {
     try {
@@ -619,6 +621,14 @@ export default function ReaderApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [studyQueue, studyIndex, studyRevealed, studySpelling, studyChecked, gradeStudy, closeStudy])
+
+  // 单卡计时：换卡归零，每秒 +1（催你快点，别墨迹）
+  useEffect(() => {
+    if (!studyQueue) return
+    setCardSeconds(0)
+    const id = window.setInterval(() => setCardSeconds((s) => s + 1), 1000)
+    return () => window.clearInterval(id)
+  }, [studyQueue, studyIndex])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -2070,6 +2080,14 @@ export default function ReaderApp() {
               <span className="muted">
                 {Math.min(studyIndex + 1, studyQueue.length)} / {studyQueue.length}
                 {newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
+              </span>
+              <span
+                className={
+                  'study-timer' + (cardSeconds >= 25 ? ' slow' : cardSeconds >= 12 ? ' warn' : '')
+                }
+                title="这张卡停了多久；变红就是该翻面/评分了"
+              >
+                ⏱ {cardSeconds}s{cardSeconds >= 25 ? ' · 别墨迹' : ''}
               </span>
             </div>
             {studyCard
