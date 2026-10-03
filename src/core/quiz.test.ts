@@ -142,10 +142,15 @@ describe('pickMeaningDistractors', () => {
       item({ id: 'c', meaning: '采用' }),
       item({ id: 'd', meaning: '斑马' }),
     ]
-    const out = pickMeaningDistractors('适应', pool, 3, () => 0.5)
+    const out = pickMeaningDistractors(pool[0], pool, 3, () => 0.5)
     expect(out).not.toContain('适应')
     expect(new Set(out).size).toBe(out.length)
     expect(out).toContain('采用')
+  })
+  it('优先用 AI 混淆项的释义', () => {
+    const me = item({ id: 'a', meaning: '适应', confusables: [{ word: 'adopt', meaning: '采用' }, { word: 'adept', meaning: '熟练的' }] })
+    const out = pickMeaningDistractors(me, [], 3, () => 0.5)
+    expect(out.slice(0, 2)).toEqual(['采用', '熟练的'])
   })
 })
 
@@ -166,9 +171,14 @@ describe('pickDistractors', () => {
       item({ id: 'c', word: 'adept', lemma: 'adept' }),
       item({ id: 'd', word: 'zebra', lemma: 'zebra' }),
     ]
-    const out = pickDistractors('adapt', pool, 2, () => 0.5)
+    const out = pickDistractors(pool[0], pool, 2, () => 0.5)
     expect(out).not.toContain('adapt')
     expect(out).toContain('adopt')
+  })
+  it('优先用 AI 混淆项', () => {
+    const me = item({ id: 'a', word: 'adapt', lemma: 'adapt', confusables: [{ word: 'adopt' }, { word: 'adept' }] })
+    const out = pickDistractors(me, [], 3, () => 0.5)
+    expect(out.slice(0, 2)).toEqual(['adopt', 'adept'])
   })
 })
 

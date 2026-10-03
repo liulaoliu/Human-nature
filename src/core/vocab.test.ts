@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  applyConfusables,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -352,5 +353,23 @@ describe('applyWordAnalysis 默认来源', () => {
     const src = { articleId: 'a1', fileName: 'art-A', sentenceId: 's1', sentenceText: 'Foo bar.' }
     const lib = applyWordAnalysis(createLibrary(), [{ word: 'foo', meaning: 'x' }], NOW, src)
     expect(lib.items[0].source).toEqual(src)
+  })
+})
+
+describe('applyConfusables', () => {
+  it('按 lemma 写回混淆项', () => {
+    let lib = markWord(createLibrary(), { word: 'adapt', articleId: 'a1' }, NOW).library
+    lib = applyConfusables(lib, [{ word: 'adapts', confusables: [{ word: 'adopt', meaning: '采用' }] }], NOW)
+    expect(lib.items[0].confusables).toEqual([{ word: 'adopt', meaning: '采用' }])
+  })
+  it('匹配不到的词条不动', () => {
+    const lib = applyConfusables(createLibrary(), [{ word: 'zzz', confusables: [{ word: 'x' }] }], NOW)
+    expect(lib.items).toHaveLength(0)
+  })
+  it('去重合并（dedupeLibrary）', () => {
+    const a = item({ id: 'vocab:a', lemma: 'adapt', word: 'adapt', confusables: [{ word: 'adopt' }] })
+    const b = item({ id: 'vocab:b', lemma: 'adapt', word: 'adapt', confusables: [{ word: 'adopt' }, { word: 'adept' }] })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0].confusables).toEqual([{ word: 'adopt' }, { word: 'adept' }])
   })
 })

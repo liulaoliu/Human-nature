@@ -390,6 +390,7 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .grade-preview { text-align: center; font-size: 12px; margin: 2px 0 6px; }
 .grade-info { color: var(--accent); font-size: 13px; font-weight: 600; }
 .study-srs { margin-top: 12px; font-size: 12px; }
+.study-conf { margin-top: 10px; font-size: 13px; }
 .study-edit {
   display: grid;
   grid-template-columns: 1fr 1fr;

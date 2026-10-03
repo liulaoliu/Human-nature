@@ -165,6 +165,9 @@ export default function VocabList({
                 <td className="cell-meaning">
                   {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
                   {it.meaning ?? ''}
+                  {it.confusables && it.confusables.length > 0 && (
+                    <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
+                  )}
                 </td>
                 <td className="cell-usage">{it.usage.join('；')}</td>
                 {showSource && (
@@ -241,6 +244,9 @@ export default function VocabList({
               {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
               {it.meaning && <div className="mu">{it.meaning}</div>}
               {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
+              {it.confusables && it.confusables.length > 0 && (
+                <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
+              )}
               {it.examples.slice(0, 1).map((ex, i) => (
                 <div className="ex" key={i}>
                   {ex.text}

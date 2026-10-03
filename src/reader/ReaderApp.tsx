@@ -4,6 +4,7 @@ import { cleanText } from '../core/cleaner'
 import { carryAnalysis, segment } from '../core/segmenter'
 import { snapSelection, wordSpans } from '../core/wordSelect'
 import {
+  applyConfusables,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -26,9 +27,11 @@ import {
   buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildCleanupPrompt,
+  buildConfusablePrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
+  parseConfusables,
   parseWordList,
   type AnalysisTask,
   type VocabLevel,
@@ -205,7 +208,7 @@ export default function ReaderApp() {
   const [selIndices, setSelIndices] = useState<number[]>([])
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
   const [pasted, setPasted] = useState('')
-  const [lastTask, setLastTask] = useState<AnalysisTask | null>(null)
+  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | null>(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -1502,6 +1505,12 @@ export default function ReaderApp() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
   }, [library.items])
 
+  /** 还缺 AI 混淆项、且有释义的词（生成干扰项用）。 */
+  const confusableTodo = useMemo(
+    () => library.items.filter((it) => it.meaning && !it.confusables?.length).slice(0, 80),
+    [library.items],
+  )
+
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
     const s = new Set<string>()
@@ -2445,6 +2454,23 @@ export default function ReaderApp() {
     }
   }, [doc, vocabLevel, flash])
 
+  /** 生成混淆项：让 AI 为缺混淆项的词产出形近/义近干扰词，结果粘回「应用结果」。 */
+  const copyConfusablePrompt = useCallback(async () => {
+    if (!confusableTodo.length) {
+      flash('没有需要生成混淆项的词（需有释义）')
+      return
+    }
+    setLastTask('confusable')
+    try {
+      await navigator.clipboard.writeText(
+        buildConfusablePrompt(confusableTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
+      )
+      flash(`已复制 ${confusableTodo.length} 个词的混淆项提示词；结果粘回「应用结果」`)
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [confusableTodo, flash])
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
@@ -2458,6 +2484,18 @@ export default function ReaderApp() {
       mergeBatch(batchItemsFromWords(words))
       setPasted('')
       flash(`已加入待选 ${words.length} 个词；可增删后再查词`)
+      return
+    }
+    // 混淆项：写回对应词条，供选择题当干扰项
+    if (lastTask === 'confusable') {
+      const results = parseConfusables(raw)
+      if (!results.length) {
+        flash('没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）')
+        return
+      }
+      persist(applyConfusables(library, results))
+      setPasted('')
+      flash(`已写入 ${results.length} 个词的混淆项`)
       return
     }
     const result = parseAnalysis(raw)
@@ -2493,13 +2531,14 @@ export default function ReaderApp() {
           : d,
       )
     }
-    if (!result.words?.length && !result.sentences?.length && lastTask && sentence) {
-      const updated = applyToSentence(sentence, lastTask, raw)
+    const sentenceTask = lastTask
+    if (!result.words?.length && !result.sentences?.length && sentenceTask && sentence) {
+      const updated = applyToSentence(sentence, sentenceTask, raw)
       setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
     }
     persist(next)
     // 有句子级结果（翻译/语法/搭配）或落到句子上 → 正文有改动，自动保存
-    if (result.sentences?.length || (lastTask && sentence)) setPendingSave(true)
+    if (result.sentences?.length || (sentenceTask && sentence)) setPendingSave(true)
     setPasted('')
     flash(result.words?.length ? `已填入 ${result.words.length} 个词条` : '已应用')
   }, [pasted, library, lastTask, sentence, persist, flash, mergeBatch, batchItemsFromWords])
@@ -2980,6 +3019,14 @@ export default function ReaderApp() {
                                 ))}
                                 {studyCard.source?.sentenceText && (
                                   <div className="muted src">来源：{studyCard.source.sentenceText}</div>
+                                )}
+                                {studyCard.confusables && studyCard.confusables.length > 0 && (
+                                  <div className="muted study-conf">
+                                    易混：
+                                    {studyCard.confusables
+                                      .map((c) => `${c.word}${c.meaning ? `（${c.meaning}）` : ''}`)
+                                      .join('；')}
+                                  </div>
                                 )}
                                 <div className="muted study-srs">
                                   复习 {studyCard.reviewState.repetitions} 次
@@ -3730,6 +3777,14 @@ export default function ReaderApp() {
         />
         <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
           应用结果
+        </button>
+        <button
+          onClick={() => void copyConfusablePrompt()}
+          disabled={!confusableTodo.length}
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；结果粘到上面再点「应用结果」"
+        >
+          🤖 生成混淆项（{confusableTodo.length}）
         </button>
 
         <div className="section-title">

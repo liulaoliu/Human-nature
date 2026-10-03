@@ -141,20 +141,29 @@ function similarScore(a: string, b: string): number {
   return s
 }
 
-/** 从候选词里挑 n 个与 word 形近/音近的干扰项（去重、排除同 lemma）。 */
+/** 从候选词里挑 n 个与词条形近/音近的干扰项（优先 AI 混淆项，再补生词本）。 */
 export function pickDistractors(
-  word: string,
+  it: VocabItem,
   pool: VocabItem[],
   n: number,
   rnd: () => number = Math.random,
 ): string[] {
+  const word = it.word.trim()
   const seen = new Set<string>([word.toLowerCase()])
+  const out: string[] = []
+  // 优先用 AI 生成的易混词
+  for (const c of it.confusables ?? []) {
+    const w = c.word.trim()
+    if (!w || seen.has(w.toLowerCase())) continue
+    seen.add(w.toLowerCase())
+    out.push(w)
+    if (out.length >= n) return out
+  }
   const cands = shuffleQuiz(
     pool.filter((x) => x.word.trim() && !seen.has(x.word.trim().toLowerCase())),
     rnd,
   )
   cands.sort((a, b) => similarScore(word, a.word) - similarScore(word, b.word))
-  const out: string[] = []
   for (const c of cands) {
     const w = c.word.trim()
     if (seen.has(w.toLowerCase())) continue
@@ -165,15 +174,24 @@ export function pickDistractors(
   return out
 }
 
-/** 从候选词里挑 n 个与 word 不同的中文释义作干扰项（去重、排除同释义）。 */
+/** 从候选词里挑 n 个中文释义作干扰项（优先 AI 混淆项，再补生词本）。 */
 export function pickMeaningDistractors(
-  meaning: string,
+  it: VocabItem,
   pool: VocabItem[],
   n: number,
   rnd: () => number = Math.random,
 ): string[] {
-  const seen = new Set<string>([normalizeAnswer(meaning)])
+  const seen = new Set<string>([normalizeAnswer(it.meaning ?? '')])
   const out: string[] = []
+  for (const c of it.confusables ?? []) {
+    const m = (c.meaning ?? '').trim()
+    if (!m) continue
+    const key = normalizeAnswer(m)
+    if (!key || seen.has(key)) continue
+    seen.add(key)
+    out.push(m)
+    if (out.length >= n) return out
+  }
   for (const c of shuffleQuiz(pool, rnd)) {
     const m = (c.meaning ?? '').trim()
     if (!m) continue
@@ -210,7 +228,7 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
 
   if (kind === 'choice') {
     if (!it.meaning) return null
-    const distractors = pickDistractors(word, pool, 3)
+    const distractors = pickDistractors(it, pool, 3)
     if (distractors.length < 1) return null
     return {
       id: `${it.id}:choice`,
@@ -230,7 +248,7 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
 
   if (kind === 'meaning') {
     if (!it.meaning) return null
-    const distractors = pickMeaningDistractors(it.meaning, pool, 3)
+    const distractors = pickMeaningDistractors(it, pool, 3)
     if (distractors.length < 1) return null
     return {
       id: `${it.id}:meaning`,

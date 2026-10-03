@@ -260,3 +260,45 @@ const LEVEL_DESC: Record<VocabLevel, string> = {
 export function buildAutoVocabPrompt(text: string, level: VocabLevel = 'cet6'): string {
   return `${HEADER}\n请${LEVEL_DESC[level]}，从下面这篇文章里挑出**超出该水平、值得查词学习**的单词。\n要求：\n- 每个词输出**原形**：名词用单数、动词用一般现在时（如 running→run、went→go）；\n- 去掉重复；只输出**单个单词**，不要短语、不要编号、不要解释、不要分点，用换行分隔；\n- 数量按文章长度取 15–40 个，按在文中出现的先后顺序。\n文章：\n${quoted(text)}`
 }
+
+export interface ConfusableEntry {
+  word: string
+  meaning?: string
+}
+
+export interface ConfusableResult {
+  word: string
+  confusables: ConfusableEntry[]
+}
+
+/**
+ * 混淆项提示词：为一批词生成形近/义近的干扰词及其中文释义。
+ * 用于给「看词选义 / 词形辨析」提供更贴合的干扰项（生词本太小时尤其有用）。
+ */
+export function buildConfusablePrompt(entries: { word: string; meaning?: string | null }[]): string {
+  const lines = entries.map((e) => (e.meaning ? `- ${e.word}（${e.meaning}）` : `- ${e.word}`)).join('\n')
+  return `${HEADER}\n下面每个英文单词，请给出 3 个最容易与它混淆的词（拼写形近或意思义近，但**含义不同**），并给出其中文释义。\n要求：\n- 每个词输出一行，格式固定：原词 | 易混词1:释义1 ; 易混词2:释义2 ; 易混词3:释义3\n- 易混词必须是真实英语单词，且与原词含义不同；优先拼写形近或义近；\n- 释义用简短中文；只输出这些行，不要解释、不要标题、不要编号。\n示例：\nadapt | adopt:采用 ; adept:熟练的 ; adjust:调整\n单词：\n${lines}`
+}
+
+/** 解析混淆项结果（`原词 | 词:释义 ; 词:释义`）。 */
+export function parseConfusables(raw: string): ConfusableResult[] {
+  const out: ConfusableResult[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim().replace(/^[-*•\d.、\s]+/, '')
+    if (!t) continue
+    const i = t.search(/[|｜]/)
+    if (i < 0) continue
+    const word = t.slice(0, i).trim()
+    if (!word || /原词|易混|单词|word/i.test(word)) continue
+    const confusables: ConfusableEntry[] = []
+    for (const part of t.slice(i + 1).split(/[;；]/)) {
+      const p = part.trim()
+      if (!p) continue
+      const m = p.match(/^(.+?)\s*[:：]\s*(.+)$/)
+      if (m) confusables.push({ word: m[1].trim(), meaning: m[2].trim() })
+      else confusables.push({ word: p })
+    }
+    if (confusables.length) out.push({ word, confusables })
+  }
+  return out
+}

@@ -115,6 +115,14 @@ export interface VocabSource {
 /** 生词状态流转。 */
 export type VocabStatus = 'unqueried' | 'queried' | 'edited' | 'mastered'
 
+/** AI 生成的易混项：形近/义近的词与释义（用于选择题干扰项）。 */
+export interface VocabConfusable {
+  /** 易混的英文词 */
+  word: string
+  /** 其中文释义（可选） */
+  meaning?: string
+}
+
 /**
  * 生词词条，学习层的一等公民。
  *
@@ -145,6 +153,8 @@ export interface VocabItem {
   note: string
   /** 标签 */
   tags: string[]
+  /** AI 生成的易混项（形近/义近）；选择题干扰项优先用它 */
+  confusables?: VocabConfusable[]
   /** 复习状态 */
   reviewState: ReviewState
   /** ISO 8601 */

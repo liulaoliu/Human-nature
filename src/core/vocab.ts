@@ -1,5 +1,6 @@
 import type {
   ReviewState,
+  VocabConfusable,
   VocabExample,
   VocabItem,
   VocabLibrary,
@@ -109,6 +110,17 @@ function mergeUnique(a: string[], b: string[]): string[] {
   const out = [...a]
   for (const x of b) if (!out.includes(x)) out.push(x)
   return out
+}
+
+function mergeConfusables(
+  a: VocabConfusable[] | undefined,
+  b: VocabConfusable[] | undefined,
+): VocabConfusable[] | undefined {
+  const out: VocabConfusable[] = [...(a ?? [])]
+  for (const c of b ?? []) {
+    if (!out.some((x) => x.word.toLowerCase() === c.word.toLowerCase())) out.push(c)
+  }
+  return out.length ? out : undefined
 }
 
 export interface MarkInput {
@@ -249,6 +261,31 @@ export function applyWordAnalysis(
   }
 
   return { ...library, items }
+}
+
+/**
+ * 把 AI 生成的混淆项（形近/义近词）写回对应词条。
+ * 按 lemma 匹配；已有的会被覆盖（视为刷新）。
+ */
+export function applyConfusables(
+  library: VocabLibrary,
+  results: { word: string; confusables: VocabConfusable[] }[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!results.length) return library
+  const iso = now.toISOString()
+  const byLemma = new Map<string, VocabConfusable[]>()
+  for (const r of results) {
+    const lemma = lemmaOf(r.word)
+    if (lemma && r.confusables.length) byLemma.set(lemma, r.confusables)
+  }
+  return {
+    ...library,
+    items: library.items.map((it) => {
+      const c = byLemma.get(it.lemma)
+      return c ? { ...it, confusables: c, updatedAt: iso } : it
+    }),
+  }
 }
 
 /** 手动编辑一个词条，默认把状态置为 edited（不会被后续查询覆盖）。 */
@@ -439,6 +476,7 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
     usage: mergeUnique(a.usage, b.usage),
     examples: mergeExamples(a.examples, b.examples),
     tags: [...new Set([...a.tags, ...b.tags])],
+    confusables: mergeConfusables(a.confusables, b.confusables),
     note: a.note || b.note,
     source: a.source ?? b.source,
     status: stronger.status,

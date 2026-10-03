@@ -4,9 +4,11 @@ import {
   buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildCleanupPrompt,
+  buildConfusablePrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
+  parseConfusables,
   parseLookupTable,
   parseTranslationTable,
   parseWordList,
@@ -219,5 +221,30 @@ describe('buildAutoVocabPrompt', () => {
   })
   it('雅思标准文案不同', () => {
     expect(buildAutoVocabPrompt('x', 'ielts')).toContain('刚开始学雅思')
+  })
+})
+
+describe('混淆项提示词 / 解析', () => {
+  it('buildConfusablePrompt 带原词与释义', () => {
+    const p = buildConfusablePrompt([{ word: 'adapt', meaning: '适应' }, { word: 'run' }])
+    expect(p).toContain('adapt（适应）')
+    expect(p).toContain('- run')
+    expect(p).toContain('易混词1:释义1')
+  })
+  it('parseConfusables 解析管道 + 分号格式', () => {
+    const r = parseConfusables('adapt | adopt:采用 ; adept:熟练的 ; adjust:调整')
+    expect(r).toHaveLength(1)
+    expect(r[0].word).toBe('adapt')
+    expect(r[0].confusables).toEqual([
+      { word: 'adopt', meaning: '采用' },
+      { word: 'adept', meaning: '熟练的' },
+      { word: 'adjust', meaning: '调整' },
+    ])
+  })
+  it('parseConfusables 跳过表头、容忍无释义', () => {
+    const r = parseConfusables('原词 | 易混词:释义\nrun | ran ; run out')
+    expect(r).toHaveLength(1)
+    expect(r[0].word).toBe('run')
+    expect(r[0].confusables).toEqual([{ word: 'ran' }, { word: 'run out' }])
   })
 })
