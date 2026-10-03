@@ -278,6 +278,18 @@ export default function ReaderApp() {
   const [studyRevealed, setStudyRevealed] = useState(false)
   /** 当前卡停留秒数（催你快点背） */
   const [cardSeconds, setCardSeconds] = useState(0)
+  /** 背单词时长统计：本轮实时秒数 + 按天累计（落盘，供统计用） */
+  const [studyLive, setStudyLive] = useState(0)
+  const studyLiveRef = useRef(0)
+  const studyFlushedRef = useRef(0)
+  const [studyDays, setStudyDays] = useState<{ day: string; seconds: number; cards: number }[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:studyStats') ?? '[]')
+      return Array.isArray(raw) ? raw : []
+    } catch {
+      return []
+    }
+  })
   /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
   const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered' | 'lapses'>(() => {
     try {
@@ -473,6 +485,13 @@ export default function ReaderApp() {
   }, [studySpelling])
   useEffect(() => {
     try {
+      localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
+    } catch {
+      // 忽略
+    }
+  }, [studyDays])
+  useEffect(() => {
+    try {
       localStorage.setItem('reader:newLimit', String(newLimit))
     } catch {
       // 忽略
@@ -574,6 +593,19 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 把背单词时长 / 评分次数累加到「今天」（落盘供统计）。 */
+  const studyFlush = useCallback((seconds: number, cards: number) => {
+    if (seconds <= 0 && cards <= 0) return
+    setStudyDays((prev) => {
+      const day = localDayKey()
+      const i = prev.findIndex((d) => d.day === day)
+      if (i < 0) return [...prev, { day, seconds, cards }]
+      const next = [...prev]
+      next[i] = { day, seconds: next[i].seconds + seconds, cards: next[i].cards + cards }
+      return next
+    })
+  }, [])
+
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
@@ -582,12 +614,13 @@ export default function ReaderApp() {
         persist(reviewItem(library, cur.id, grade))
         if (cur.reviewState.repetitions === 0) bumpNewToday()
       }
+      studyFlush(0, 1)
       setStudyRevealed(false)
       setStudyInput('')
       setStudyChecked(false)
       setStudyIndex((i) => i + 1)
     },
-    [studyQueue, studyIndex, library, persist, bumpNewToday],
+    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush],
   )
 
   const closeStudy = useCallback(() => setStudyQueue(null), [])
@@ -597,8 +630,17 @@ export default function ReaderApp() {
     if (!studyQueue) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       const canGrade = studySpelling ? studyChecked : studyRevealed
+      const gradeKeys: Record<string, ReviewGrade> = { '1': 'again', '2': 'hard', '3': 'good', '4': 'easy' }
+      // 拼写模式下输入框还 focus 着；判卷后仍要能用 1/2/3/4 评分
+      if (inField) {
+        if (canGrade && gradeKeys[e.key]) {
+          e.preventDefault()
+          gradeStudy(gradeKeys[e.key])
+        }
+        return
+      }
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
         if (studyIndex >= studyQueue.length) return
@@ -608,14 +650,8 @@ export default function ReaderApp() {
           return
         }
         gradeStudy('good')
-      } else if (e.key === '1') {
-        if (canGrade) gradeStudy('again')
-      } else if (e.key === '2') {
-        if (canGrade) gradeStudy('hard')
-      } else if (e.key === '3') {
-        if (canGrade) gradeStudy('good')
-      } else if (e.key === '4') {
-        if (canGrade) gradeStudy('easy')
+      } else if (gradeKeys[e.key]) {
+        if (canGrade) gradeStudy(gradeKeys[e.key])
       } else if (e.key === 'Escape') closeStudy()
     }
     window.addEventListener('keydown', onKey)
@@ -629,6 +665,31 @@ export default function ReaderApp() {
     const id = window.setInterval(() => setCardSeconds((s) => s + 1), 1000)
     return () => window.clearInterval(id)
   }, [studyQueue, studyIndex])
+
+  // 本轮背单词总时长：进场清零，每秒 +1；每 15s 落盘一次，退出时补落盘
+  useEffect(() => {
+    if (!studyQueue) return
+    studyLiveRef.current = 0
+    studyFlushedRef.current = 0
+    setStudyLive(0)
+    const id = window.setInterval(() => {
+      studyLiveRef.current += 1
+      setStudyLive(studyLiveRef.current)
+      const unflushed = studyLiveRef.current - studyFlushedRef.current
+      if (unflushed >= 15) {
+        studyFlush(unflushed, 0)
+        studyFlushedRef.current = studyLiveRef.current
+      }
+    }, 1000)
+    return () => {
+      window.clearInterval(id)
+      const unflushed = studyLiveRef.current - studyFlushedRef.current
+      if (unflushed > 0) {
+        studyFlush(unflushed, 0)
+        studyFlushedRef.current = studyLiveRef.current
+      }
+    }
+  }, [studyQueue, studyFlush])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -738,6 +799,15 @@ export default function ReaderApp() {
       ),
     [sessions],
   )
+
+  /** 背单词时长统计：累计 / 今日 / 评分次数；显示时加上本轮尚未落盘的部分。 */
+  const studyTotalSeconds = useMemo(() => studyDays.reduce((a, d) => a + d.seconds, 0), [studyDays])
+  const studyTotalCards = useMemo(() => studyDays.reduce((a, d) => a + d.cards, 0), [studyDays])
+  const studyTodaySeconds = useMemo(() => {
+    const d = studyDays.find((x) => x.day === localDayKey())
+    return d?.seconds ?? 0
+  }, [studyDays])
+  const studyGrandSeconds = studyTotalSeconds + Math.max(0, studyLive - studyFlushedRef.current)
 
   /** 按天统计：今天选了多少 + 连续打卡天数。 */
   const dayStats = useMemo(() => {
@@ -1795,10 +1865,11 @@ export default function ReaderApp() {
       library,
       articles: saved,
       stats: sessions,
+      studyStats: studyDays,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, download])
+  }, [library, saved, sessions, studyDays, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -1830,6 +1901,10 @@ export default function ReaderApp() {
             } catch {
               // 忽略
             }
+          }
+          if (Array.isArray(obj.studyStats)) {
+            const ss = obj.studyStats as { day: string; seconds: number; cards: number }[]
+            setStudyDays(ss)
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }
@@ -2089,6 +2164,9 @@ export default function ReaderApp() {
               >
                 ⏱ {cardSeconds}s{cardSeconds >= 25 ? ' · 别墨迹' : ''}
               </span>
+              <span className="muted study-total" title="本轮 / 累计 背单词时长；累计会记入统计">
+                本轮 {fmtDur(studyLive)} · 累计 {fmtDur(studyGrandSeconds)}
+              </span>
             </div>
             {studyCard
               ? (() => {
@@ -2182,12 +2260,18 @@ export default function ReaderApp() {
                       </div>
                       {canGrade ? (
                         <div className="bar study-actions">
-                          <button onClick={() => gradeStudy('again')}>忘记 (1)</button>
-                          <button onClick={() => gradeStudy('hard')}>困难 (2)</button>
-                          <button className="primary" onClick={() => gradeStudy('good')}>
-                            记得 (3)
+                          <button onClick={() => gradeStudy('again')}>
+                            忘记 <kbd>1</kbd>
                           </button>
-                          <button onClick={() => gradeStudy('easy')}>简单 (4)</button>
+                          <button onClick={() => gradeStudy('hard')}>
+                            困难 <kbd>2</kbd>
+                          </button>
+                          <button className="primary" onClick={() => gradeStudy('good')}>
+                            记得 <kbd>3</kbd>
+                          </button>
+                          <button onClick={() => gradeStudy('easy')}>
+                            简单 <kbd>4</kbd>
+                          </button>
                         </div>
                       ) : spellingFront ? (
                         <button className="primary" onClick={() => setStudyChecked(true)}>
@@ -2203,7 +2287,9 @@ export default function ReaderApp() {
                 })()
               : (
               <div className="study-done">
-                <p>本轮完成，共 {studyQueue.length} 个词。</p>
+                <p>
+                  本轮完成，共 {studyQueue.length} 个词，用时 {fmtDur(studyLive)}。
+                </p>
                 <div className="bar">
                   <button className="primary" onClick={startStudy}>
                     再来一轮
@@ -2604,6 +2690,10 @@ export default function ReaderApp() {
             <div className="muted">
               累计 {totals.picked} 词 / {fmtDur(totals.seconds)} · 今日 {dayStats.todayPicked} · 连续{' '}
               {dayStats.streak} 天
+            </div>
+            <div className="muted">
+              背单词：今日 {fmtDur(studyTodaySeconds)} · 累计 {fmtDur(studyTotalSeconds)} · 完成{' '}
+              {studyTotalCards} 次评分
             </div>
             <div className="stats-bars">
               {last7.map((d) => (

@@ -650,3 +650,27 @@ button.danger {
 .study-timer { font-variant-numeric: tabular-nums; color: var(--dim); font-size: 13px; margin-left: 10px; }
 .study-timer.warn { color: #d9a12b; font-weight: 600; }
 .study-timer.slow { color: var(--red); font-weight: 700; }
+
+/* 背单词：总时长 + 评分按钮快捷键徽标 */
+.study-total { margin-left: 10px; font-variant-numeric: tabular-nums; }
+.study-actions kbd {
+  display: inline-block;
+  margin-left: 5px;
+  padding: 0 5px;
+  min-width: 16px;
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--panel-3);
+  color: var(--dim);
+  font: inherit;
+  font-size: 11px;
+  line-height: 16px;
+  text-align: center;
+  vertical-align: 1px;
+}
+.study-actions button.primary kbd {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.45);
+  color: #fff;
+}
