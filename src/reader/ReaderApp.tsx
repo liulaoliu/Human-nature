@@ -39,6 +39,7 @@ import {
   formatAnswerInput,
   isCorrect,
   isQuizKind,
+  makeDictationQuestion,
   makeQuestion,
   QUIZ_KIND_LABEL,
   shuffleQuiz,
@@ -383,10 +384,10 @@ export default function ReaderApp() {
     }
     return ['spell', 'cloze', 'usage']
   })
-  const [quizScope, setQuizScope] = useState<'all' | 'article' | 'unmastered' | 'due'>(() => {
+  const [quizScope, setQuizScope] = useState<'all' | 'article' | 'unmastered' | 'due' | 'lapses'>(() => {
     try {
       const v = localStorage.getItem('reader:quizScope')
-      return v === 'all' || v === 'article' || v === 'due' ? v : 'unmastered'
+      return v === 'all' || v === 'article' || v === 'due' || v === 'lapses' ? v : 'unmastered'
     } catch {
       return 'unmastered'
     }
@@ -424,6 +425,36 @@ export default function ReaderApp() {
     }
   })
   const quizAdvanceRef = useRef<number | null>(null)
+  /** 本轮实际是否自动切题（听写模式强制开） */
+  const [quizAutoRun, setQuizAutoRun] = useState(false)
+  /** 今天学过的不同单词 id（每日目标进度） */
+  const [studiedToday, setStudiedToday] = useState<{ day: string; ids: string[] }>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:studiedToday') ?? 'null') as {
+        day: string
+        ids: string[]
+      } | null
+      if (raw && Array.isArray(raw.ids)) {
+        return raw.day === localDayKey() ? raw : { day: localDayKey(), ids: [] }
+      }
+    } catch {
+      // 忽略
+    }
+    return { day: localDayKey(), ids: [] }
+  })
+  /** 每日目标（个不同单词，0=不设目标） */
+  const [dailyGoal, setDailyGoal] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:dailyGoal') ?? '20')
+      return Number.isFinite(n) && n >= 0 ? n : 20
+    } catch {
+      return 20
+    }
+  })
+  /** 快刷模式（只看单词+音标，一键过卡） */
+  const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
+  const [quickIndex, setQuickIndex] = useState(0)
+  const [quickRevealed, setQuickRevealed] = useState(false)
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useState(() => {
     try {
@@ -630,6 +661,20 @@ export default function ReaderApp() {
   }, [studyDays])
   useEffect(() => {
     try {
+      localStorage.setItem('reader:studiedToday', JSON.stringify(studiedToday))
+    } catch {
+      // 忽略
+    }
+  }, [studiedToday])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:dailyGoal', String(dailyGoal))
+    } catch {
+      // 忽略
+    }
+  }, [dailyGoal])
+  useEffect(() => {
+    try {
       localStorage.setItem('reader:newLimit', String(newLimit))
     } catch {
       // 忽略
@@ -704,10 +749,11 @@ export default function ReaderApp() {
     )
   }, [library.items, studyScope, articleIdentity, doc])
 
-  /** 考试的候选池（范围与背单词类似，但多一个「到期」）。 */
+  /** 考试的候选池（范围与背单词类似，但多一个「到期」「错词」）。 */
   const quizPool = useMemo(() => {
     if (quizScope === 'all') return library.items
     if (quizScope === 'due') return library.items.filter((it) => isDue(it))
+    if (quizScope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
     if (quizScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
     return library.items.filter(
       (it) =>
@@ -811,6 +857,16 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 记「今天学过这个词」（每日目标按不同单词计数）。 */
+  const markStudied = useCallback((itemId: string) => {
+    setStudiedToday((prev) => {
+      const day = localDayKey()
+      const base = prev.day === day ? prev : { day, ids: [] }
+      if (base.ids.includes(itemId)) return base
+      return { day, ids: [...base.ids, itemId] }
+    })
+  }, [])
+
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
@@ -830,6 +886,7 @@ export default function ReaderApp() {
         window.setTimeout(() => setGradeInfo(''), 1600)
       }
       studyFlush(0, 1)
+      markStudied(cur.id)
       setStudyCounts((c) =>
         grade === 'again'
           ? { ...c, forgot: c.forgot + 1 }
@@ -856,7 +913,7 @@ export default function ReaderApp() {
       setStudyDelArmed(false)
       setStudyIndex((i) => i + 1)
     },
-    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush],
+    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush, markStudied],
   )
 
   const closeStudy = useCallback(() => setStudyQueue(null), [])
@@ -972,8 +1029,43 @@ export default function ReaderApp() {
     setQuizChecked(false)
     setQuizResult(null)
     setQuizResults([])
+    setQuizAutoRun(quizAuto)
     setQuizSetupOpen(false)
-  }, [quizPool, quizKinds, quizLimit, flash])
+  }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
+
+  /** 听写全文：按文章顺序，对句中目标词播句子做听力填空，自动推进。 */
+  const startDictation = useCallback(() => {
+    if (!doc) return
+    const used = new Set<string>()
+    const qs: QuizQuestion[] = []
+    for (const s of doc.sentences) {
+      for (const it of library.items) {
+        if (used.has(it.lemma)) continue
+        const q = makeDictationQuestion(it, s.text)
+        if (q) {
+          qs.push(q)
+          used.add(it.lemma)
+        }
+      }
+    }
+    if (!qs.length) {
+      flash('这篇没有可用于听写的生词（句子需含已建的生词）')
+      return
+    }
+    if (quizAdvanceRef.current) {
+      window.clearTimeout(quizAdvanceRef.current)
+      quizAdvanceRef.current = null
+    }
+    setStudyQueue(null)
+    setQuizQueue(qs)
+    setQuizIndex(0)
+    setQuizInput('')
+    setQuizChecked(false)
+    setQuizResult(null)
+    setQuizResults([])
+    setQuizAutoRun(true)
+    setQuizSetupOpen(false)
+  }, [doc, library.items, flash])
 
   const nextQuiz = useCallback(() => {
     if (quizAdvanceRef.current) {
@@ -987,24 +1079,29 @@ export default function ReaderApp() {
   }, [])
 
   /** 提交本题并判分；对 → SRS good，错 → SRS again（记 lapse）。 */
-  const checkQuiz = useCallback(() => {
-    if (!quizQueue) return
-    const q = quizQueue[quizIndex]
-    if (!q || quizChecked) return
-    const ok = isCorrect(q, quizInput)
-    setQuizChecked(true)
-    setQuizResult(ok)
-    setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
-    persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
-    // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
-    if (quizAuto) {
-      if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
-      quizAdvanceRef.current = window.setTimeout(() => {
-        quizAdvanceRef.current = null
-        nextQuiz()
-      }, ok ? 650 : 1400)
-    }
-  }, [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAuto, nextQuiz])
+  const checkQuiz = useCallback(
+    (answerOverride?: string) => {
+      if (!quizQueue) return
+      const q = quizQueue[quizIndex]
+      if (!q || quizChecked) return
+      const ans = answerOverride ?? quizInput
+      const ok = isCorrect(q, ans)
+      setQuizChecked(true)
+      setQuizResult(ok)
+      setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
+      persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
+      markStudied(q.itemId)
+      // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
+      if (quizAutoRun) {
+        if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
+        quizAdvanceRef.current = window.setTimeout(() => {
+          quizAdvanceRef.current = null
+          nextQuiz()
+        }, ok ? 650 : 1400)
+      }
+    },
+    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied],
+  )
 
   /** 关闭考试并清掉待触发的自动切题。 */
   const closeQuiz = useCallback(() => {
@@ -1030,6 +1127,62 @@ export default function ReaderApp() {
     setQuizResult(null)
     setQuizResults([])
   }, [quizResults, library.items, buildQuizSet, flash])
+
+  /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
+  const startQuick = useCallback(() => {
+    const items = sortItems(studyPool, 'due')
+    if (!items.length) {
+      flash('这个范围里没有词')
+      return
+    }
+    setStudyQueue(null)
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setQuickQueue(items)
+    setQuickIndex(0)
+    setQuickRevealed(false)
+  }, [studyPool, flash])
+
+  const gradeQuick = useCallback(
+    (ok: boolean) => {
+      if (!quickQueue) return
+      const queued = quickQueue[quickIndex]
+      const cur = queued ? (library.items.find((it) => it.id === queued.id) ?? queued) : null
+      if (cur) {
+        persist(reviewItem(library, cur.id, ok ? 'good' : 'again'))
+        markStudied(cur.id)
+      }
+      setQuickRevealed(false)
+      setQuickIndex((i) => i + 1)
+    },
+    [quickQueue, quickIndex, library, persist, markStudied],
+  )
+
+  // 快刷快捷键：1/← 不认识，2/→ 认识，空格看释义，Esc 退出
+  useEffect(() => {
+    if (!quickQueue) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setQuickQueue(null)
+        return
+      }
+      if (e.key === ' ' || e.key === 'Enter') {
+        e.preventDefault()
+        setQuickRevealed(true)
+        return
+      }
+      if (quickIndex >= quickQueue.length) return
+      if (e.key === 'ArrowLeft' || e.key === '1') {
+        e.preventDefault()
+        gradeQuick(false)
+      } else if (e.key === 'ArrowRight' || e.key === '2') {
+        e.preventDefault()
+        gradeQuick(true)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [quickQueue, quickIndex, gradeQuick])
 
   // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
@@ -1105,12 +1258,13 @@ export default function ReaderApp() {
     return () => window.clearInterval(id)
   }, [quizQueue])
 
-  // 换题后把焦点送回输入框，方便直接打字
+  // 换题后把焦点送回输入框，方便直接打字（词形辨析是点选项，不聚焦）
   useEffect(() => {
-    if (quizQueue && quizIndex < quizQueue.length && !quizChecked) quizInputRef.current?.focus()
+    const q = quizQueue && quizIndex < quizQueue.length ? quizQueue[quizIndex] : null
+    if (q && q.kind !== 'choice' && !quizChecked) quizInputRef.current?.focus()
   }, [quizQueue, quizIndex, quizChecked])
 
-  // 考试快捷键：回车 提交 / 下一题；Esc 退出
+  // 考试快捷键：回车 提交 / 下一题；词形辨析可用 1/2/3 选选项；Esc 退出
   useEffect(() => {
     if (!quizQueue) return
     const onKey = (e: KeyboardEvent) => {
@@ -1118,11 +1272,23 @@ export default function ReaderApp() {
         closeQuiz()
         return
       }
-      if (e.key !== 'Enter') return
-      e.preventDefault()
-      if (quizIndex >= quizQueue.length) return
-      if (!quizChecked) checkQuiz()
-      else nextQuiz()
+      const q = quizQueue[quizIndex]
+      if (e.key === 'Enter') {
+        e.preventDefault()
+        if (quizIndex >= quizQueue.length) return
+        if (!quizChecked) checkQuiz()
+        else nextQuiz()
+        return
+      }
+      if (q?.kind === 'choice' && !quizChecked && q.options) {
+        const n = Number(e.key)
+        if (n >= 1 && n <= q.options.length) {
+          e.preventDefault()
+          const opt = q.options[n - 1]
+          setQuizInput(opt)
+          checkQuiz(opt)
+        }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -1292,6 +1458,26 @@ export default function ReaderApp() {
     }
     return out
   }, [sessions])
+
+  /** 未来 30 天每天的到期词数（到期日历热力图用）。 */
+  const dueForecast = useMemo(() => {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const byDay = new Map<string, number>()
+    for (const it of library.items) {
+      if (!it.reviewState.due) continue
+      const k = key(new Date(it.reviewState.due))
+      byDay.set(k, (byDay.get(k) ?? 0) + 1)
+    }
+    const out: { key: string; label: string; count: number }[] = []
+    for (let i = 0; i < 30; i++) {
+      const d = new Date()
+      d.setDate(d.getDate() + i)
+      const k = key(d)
+      out.push({ key: k, label: i === 0 ? '今天' : String(d.getDate()), count: byDay.get(k) ?? 0 })
+    }
+    return out
+  }, [library.items])
 
   /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */
   const savedGroups = useMemo(() => {
@@ -2592,6 +2778,13 @@ export default function ReaderApp() {
             </button>
           )}
           <span className="muted">{library.items.length} 个生词</span>
+          <span
+            className="muted goal-chip"
+            title="今日目标（按学过的不同单词数）；点「统计」可改目标"
+          >
+            🎯 {studiedToday.ids.length}
+            {dailyGoal > 0 ? `/${dailyGoal}` : ''} · 🔥{dayStats.streak}
+          </span>
           <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} title="正文字号">
             <option value="sm">字号 小</option>
             <option value="md">字号 中</option>
@@ -2954,7 +3147,7 @@ export default function ReaderApp() {
               <div className="quiz-field">
                 <span className="muted">题型</span>
                 <div className="bar">
-                  {(['spell', 'cloze', 'usage', 'listen'] as QuizKind[]).map((k) => (
+                  {(['spell', 'cloze', 'usage', 'listen', 'choice'] as QuizKind[]).map((k) => (
                     <label className="check-inline" key={k}>
                       <input
                         type="checkbox"
@@ -2974,11 +3167,12 @@ export default function ReaderApp() {
                   <select
                     value={quizScope}
                     onChange={(e) =>
-                      setQuizScope(e.target.value as 'all' | 'article' | 'unmastered' | 'due')
+                      setQuizScope(e.target.value as 'all' | 'article' | 'unmastered' | 'due' | 'lapses')
                     }
                   >
                     <option value="unmastered">未掌握</option>
                     <option value="due">到期</option>
+                    <option value="lapses">错词</option>
                     <option value="article">本篇</option>
                     <option value="all">全部</option>
                   </select>
@@ -3070,15 +3264,41 @@ export default function ReaderApp() {
                             {q.meaning}
                           </div>
                         )}
-                        <input
-                          className="study-input"
-                          autoFocus
-                          ref={quizInputRef}
-                          placeholder="输入答案，回车提交 / 下一题"
-                          value={quizInput}
-                          onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
-                          disabled={quizChecked}
-                        />
+                        {q.kind === 'choice' && q.options ? (
+                          <div className="quiz-options">
+                            {q.options.map((opt, i) => (
+                              <button
+                                key={opt}
+                                className={
+                                  !quizChecked
+                                    ? ''
+                                    : opt === q.answer
+                                      ? 'primary'
+                                      : opt === quizInput
+                                        ? 'danger'
+                                        : ''
+                                }
+                                disabled={quizChecked}
+                                onClick={() => {
+                                  setQuizInput(opt)
+                                  checkQuiz(opt)
+                                }}
+                              >
+                                <kbd>{i + 1}</kbd> {opt}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <input
+                            className="study-input"
+                            autoFocus
+                            ref={quizInputRef}
+                            placeholder="输入答案，回车提交 / 下一题"
+                            value={quizInput}
+                            onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
+                            disabled={quizChecked}
+                          />
+                        )}
                         {quizChecked && (
                           <>
                             <div className={'study-result ' + (quizResult ? 'ok' : 'bad')}>
@@ -3091,7 +3311,7 @@ export default function ReaderApp() {
                       </div>
                       <div className="bar study-actions">
                         {!quizChecked ? (
-                          <button className="primary" onClick={checkQuiz}>
+                          <button className="primary" onClick={() => checkQuiz()}>
                             提交（回车）
                           </button>
                         ) : (
@@ -3143,6 +3363,72 @@ export default function ReaderApp() {
                     </div>
                   )
                 })()}
+          </div>
+        )}
+
+        {quickQueue && (
+          <div className="study quick">
+            <div className="bar study-bar">
+              <button onClick={() => setQuickQueue(null)}>结束（Esc）</button>
+              <span className="muted">
+                {Math.min(quickIndex + 1, quickQueue.length)} / {quickQueue.length}
+              </span>
+              <span className="muted">快刷：1/← 不认识 · 2/→ 认识 · 空格 看释义</span>
+            </div>
+            {quickIndex < quickQueue.length
+              ? (() => {
+                  const cur =
+                    library.items.find((it) => it.id === quickQueue[quickIndex].id) ?? quickQueue[quickIndex]
+                  return (
+                    <>
+                      <div className="study-card quick-card" onClick={() => setQuickRevealed(true)}>
+                        <div className="study-word">
+                          {cur.word}
+                          <button
+                            className="speak"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              speak(cur.word)
+                            }}
+                            title="朗读"
+                          >
+                            🔊
+                          </button>
+                        </div>
+                        {cur.phonetic && <div className="study-phon">{cur.phonetic}</div>}
+                        {quickRevealed && (
+                          <div className="study-back">
+                            <div className="study-meaning">
+                              {cur.partOfSpeech && <span className="cell-pos">{cur.partOfSpeech} </span>}
+                              {cur.meaning ?? '（无释义）'}
+                            </div>
+                            {cur.usage.length > 0 && <div className="muted">{cur.usage.join('；')}</div>}
+                          </div>
+                        )}
+                        {!quickRevealed && <div className="muted quick-hint">空格 / 点击 = 看释义</div>}
+                      </div>
+                      <div className="bar study-actions">
+                        <button onClick={() => gradeQuick(false)}>
+                          不认识 <kbd>1</kbd>
+                        </button>
+                        <button className="primary" onClick={() => gradeQuick(true)}>
+                          认识 <kbd>2</kbd>
+                        </button>
+                      </div>
+                    </>
+                  )
+                })()
+              : (
+                <div className="study-done">
+                  <p>快刷完成，共 {quickQueue.length} 个词。</p>
+                  <div className="bar">
+                    <button className="primary" onClick={startQuick}>
+                      再来一轮
+                    </button>
+                    <button onClick={() => setQuickQueue(null)}>回到阅读</button>
+                  </div>
+                </div>
+              )}
           </div>
         )}
 
@@ -3461,9 +3747,39 @@ export default function ReaderApp() {
               setQuizSetupOpen(true)
             }}
             disabled={!library.items.length}
-            title="考试：拼写 / 例句填空 / 搭配填空，检验掌握效果，成绩计入复习排期"
+            title="考试：拼写 / 例句填空 / 搭配填空 / 听力填空 / 词形辨析，成绩计入复习排期"
           >
             考试
+          </button>
+          <button
+            onClick={() => {
+              setQuickQueue(null)
+              setStudyQueue(null)
+              setQuizSetupOpen(false)
+              startQuick()
+            }}
+            disabled={!library.items.length}
+            title="快刷：只看单词+音标，1/← 不认识，2/→ 认识，空格看释义，Esc 退出"
+          >
+            快刷
+          </button>
+          <button
+            onClick={startDictation}
+            disabled={!doc}
+            title="听写全文：按文章顺序播句子、填句中生词，自动推进"
+          >
+            听写
+          </button>
+          <button
+            onClick={() => {
+              setQuizScope('lapses')
+              setQuizResults([])
+              setQuizSetupOpen(true)
+            }}
+            disabled={!library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
+            title="错题专练：把所有「忘记了」过的词拉出来考"
+          >
+            错题专练
           </button>
           <button
             onClick={() => setBrowseAll(true)}
@@ -3555,6 +3871,27 @@ export default function ReaderApp() {
               背单词：今日 {fmtDur(studyTodaySeconds)} · 累计 {fmtDur(studyTotalSeconds)} · 完成{' '}
               {studyTotalCards} 次评分
             </div>
+            <div className="goal">
+              <div className="muted">
+                今日目标：{studiedToday.ids.length} / {dailyGoal > 0 ? dailyGoal : '不限'} · 🔥{dayStats.streak} 天
+                <select
+                  value={String(dailyGoal)}
+                  onChange={(e) => setDailyGoal(Number(e.target.value))}
+                  title="每日目标（按学过的不同单词数）"
+                >
+                  <option value="0">不限</option>
+                  <option value="10">10 词</option>
+                  <option value="20">20 词</option>
+                  <option value="30">30 词</option>
+                  <option value="50">50 词</option>
+                </select>
+              </div>
+              {dailyGoal > 0 && (
+                <div className="goal-bar">
+                  <div style={{ width: `${Math.min(100, (studiedToday.ids.length / dailyGoal) * 100)}%` }} />
+                </div>
+              )}
+            </div>
             <div className="stats-bars">
               {last7.map((d) => (
                 <div className="stats-day" key={d.key} title={`${d.key}：${d.picked} 词`}>
@@ -3562,6 +3899,29 @@ export default function ReaderApp() {
                     <div className="stats-bar" style={{ height: `${Math.min(100, d.picked * 8)}%` }} />
                   </div>
                   <div className="stats-label">{d.label}</div>
+                </div>
+              ))}
+            </div>
+            <div className="muted due-title">未来 30 天到期（颜色越深越多）</div>
+            <div className="due-heat">
+              {dueForecast.map((d) => (
+                <div
+                  key={d.key}
+                  className={
+                    'due-cell' +
+                    (d.count >= 20
+                      ? ' lv4'
+                      : d.count >= 10
+                        ? ' lv3'
+                        : d.count >= 4
+                          ? ' lv2'
+                          : d.count > 0
+                            ? ' lv1'
+                            : '')
+                  }
+                  title={`${d.key}：${d.count} 词到期`}
+                >
+                  <span>{d.label}</span>
                 </div>
               ))}
             </div>

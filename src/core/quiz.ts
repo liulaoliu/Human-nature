@@ -5,24 +5,27 @@ import type { VocabItem } from '../types/document'
 /**
  * 考试（检验掌握效果）的出题与判分逻辑。纯函数，不碰界面，方便单测。
  *
- * 三种题型：
+ * 题型：
  *   - spell 拼写：给中文释义，拼出英文单词（最基础）
  *   - cloze 例句填空：把例句 / 来源句里的目标词挖空，要求填回来（考语境）
  *   - usage 搭配填空：把「用法/搭配」里的目标词挖空（考使用方式）
+ *   - listen 听力填空：朗读句子、隐藏文本，听音填词
+ *   - choice 词形辨析：给释义，从形近/音近选项里选词（快）
  *
  * 判分对大小写、首尾标点、常见词形变化宽容。
  */
 
-export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen'
+export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice'
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
   cloze: '例句填空',
   usage: '搭配填空',
   listen: '听力填空',
+  choice: '词形辨析',
 }
 
-const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen']
+const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice']
 
 export function isQuizKind(v: unknown): v is QuizKind {
   return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
@@ -47,6 +50,8 @@ export interface QuizQuestion {
   translation?: string
   /** 听力填空：要朗读的完整句子 */
   audioText?: string
+  /** 词形辨析：选项（含正确答案） */
+  options?: string[]
   /** 标准答案（原句里出现的词形） */
   answer: string
   /** 可接受答案（归一化后） */
@@ -114,8 +119,44 @@ function baseAccept(it: VocabItem, surface: string): string[] {
   return [...set]
 }
 
+/** 形近度打分：越小越像（首字母相同、共同前缀长、长度接近）。 */
+function similarScore(a: string, b: string): number {
+  const al = a.toLowerCase()
+  const bl = b.toLowerCase()
+  let s = Math.abs(al.length - bl.length)
+  if (al[0] === bl[0]) s -= 2
+  let p = 0
+  while (p < al.length && p < bl.length && al[p] === bl[p]) p += 1
+  s -= p
+  return s
+}
+
+/** 从候选词里挑 n 个与 word 形近/音近的干扰项（去重、排除同 lemma）。 */
+export function pickDistractors(
+  word: string,
+  pool: VocabItem[],
+  n: number,
+  rnd: () => number = Math.random,
+): string[] {
+  const seen = new Set<string>([word.toLowerCase()])
+  const cands = shuffleQuiz(
+    pool.filter((x) => x.word.trim() && !seen.has(x.word.trim().toLowerCase())),
+    rnd,
+  )
+  cands.sort((a, b) => similarScore(word, a.word) - similarScore(word, b.word))
+  const out: string[] = []
+  for (const c of cands) {
+    const w = c.word.trim()
+    if (seen.has(w.toLowerCase())) continue
+    seen.add(w.toLowerCase())
+    out.push(w)
+    if (out.length >= n) break
+  }
+  return out
+}
+
 /** 由词条 + 题型出一道题；数据不够（无释义 / 无句子）返回 null。 */
-export function makeQuestion(it: VocabItem, kind: QuizKind): QuizQuestion | null {
+export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = []): QuizQuestion | null {
   const word = it.word.trim()
   if (!word) return null
 
@@ -131,6 +172,26 @@ export function makeQuestion(it: VocabItem, kind: QuizKind): QuizQuestion | null
       meaning: it.meaning,
       partOfSpeech: it.partOfSpeech,
       phonetic: it.phonetic,
+      answer: word,
+      accept: baseAccept(it, word),
+    }
+  }
+
+  if (kind === 'choice') {
+    if (!it.meaning) return null
+    const distractors = pickDistractors(word, pool, 3)
+    if (distractors.length < 1) return null
+    return {
+      id: `${it.id}:choice`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: it.meaning,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      options: shuffleQuiz([word, ...distractors]),
       answer: word,
       accept: baseAccept(it, word),
     }
@@ -192,11 +253,37 @@ export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQ
   const out: QuizQuestion[] = []
   for (const it of items) {
     for (const kind of kinds) {
-      const q = makeQuestion(it, kind)
+      const q = makeQuestion(it, kind, items)
       if (q) out.push(q)
     }
   }
   return out
+}
+
+/**
+ * 听写专用题：用给定句子（按原文顺序）做听力填空。
+ * 与 makeQuestion('listen') 不同，这里强制用传入的句子，保证听写顺序 = 文章顺序。
+ */
+export function makeDictationQuestion(it: VocabItem, sentenceText: string): QuizQuestion | null {
+  const word = it.word.trim()
+  if (!word || !sentenceText.trim()) return null
+  const b = blankWord(sentenceText, it.lemma)
+  if (!b) return null
+  return {
+    id: `${it.id}:dictation`,
+    itemId: it.id,
+    lemma: it.lemma,
+    kind: 'listen',
+    word,
+    prompt: '',
+    meaning: it.meaning,
+    partOfSpeech: it.partOfSpeech,
+    phonetic: it.phonetic,
+    context: sentenceText,
+    audioText: sentenceText,
+    answer: b.surface,
+    accept: baseAccept(it, b.surface),
+  }
 }
 
 /**

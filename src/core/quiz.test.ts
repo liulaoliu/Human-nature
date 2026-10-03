@@ -4,8 +4,10 @@ import {
   buildQuizQuestions,
   formatAnswerInput,
   isCorrect,
+  makeDictationQuestion,
   makeQuestion,
   normalizeAnswer,
+  pickDistractors,
   shuffleQuiz,
   type QuizQuestion,
 } from './quiz'
@@ -95,6 +97,48 @@ describe('makeQuestion', () => {
   })
   it('听力填空：没有句子则为 null', () => {
     expect(makeQuestion(item({ examples: [], source: null }), 'listen')).toBeNull()
+  })
+  it('词形辨析：给释义、选项含正确答案与干扰项', () => {
+    const pool = [
+      item({ id: 'a', word: 'adapt', lemma: 'adapt', meaning: '适应' }),
+      item({ id: 'b', word: 'adopt', lemma: 'adopt', meaning: '采用' }),
+      item({ id: 'c', word: 'adept', lemma: 'adept', meaning: '熟练的' }),
+      item({ id: 'd', word: 'zebra', lemma: 'zebra', meaning: '斑马' }),
+    ]
+    const q = makeQuestion(pool[0], 'choice', pool)!
+    expect(q.prompt).toBe('适应')
+    expect(q.options).toContain('adapt')
+    expect(q.options!.length).toBeGreaterThanOrEqual(2)
+  })
+  it('词形辨析：没有干扰项则为 null', () => {
+    expect(makeQuestion(item({ meaning: '适应' }), 'choice', [])).toBeNull()
+  })
+})
+
+describe('pickDistractors', () => {
+  it('排除自身、优先形近', () => {
+    const pool = [
+      item({ id: 'a', word: 'adapt', lemma: 'adapt' }),
+      item({ id: 'b', word: 'adopt', lemma: 'adopt' }),
+      item({ id: 'c', word: 'adept', lemma: 'adept' }),
+      item({ id: 'd', word: 'zebra', lemma: 'zebra' }),
+    ]
+    const out = pickDistractors('adapt', pool, 2, () => 0.5)
+    expect(out).not.toContain('adapt')
+    expect(out).toContain('adopt')
+  })
+})
+
+describe('makeDictationQuestion', () => {
+  it('按给定句子挖空目标词', () => {
+    const it = item({ word: 'run', lemma: 'run', meaning: '跑' })
+    const q = makeDictationQuestion(it, 'She runs daily.')!
+    expect(q.kind).toBe('listen')
+    expect(q.audioText).toBe('She runs daily.')
+    expect(q.answer).toBe('runs')
+  })
+  it('句子里没有该词则为 null', () => {
+    expect(makeDictationQuestion(item(), 'Nothing here.')).toBeNull()
   })
 })
 
