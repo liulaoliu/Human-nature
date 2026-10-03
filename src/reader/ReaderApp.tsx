@@ -1749,11 +1749,11 @@ export default function ReaderApp() {
     speakRef.current = speak
   }, [speak])
 
-  // 考试听力题出现时自动朗读句子
+  // 考试听力题出现时自动朗读（句子 / 单词）
   useEffect(() => {
     if (!quizQueue) return
     const q = quizQueue[quizIndex]
-    if (q?.kind === 'listen' && q.audioText) speak(q.audioText)
+    if ((q?.kind === 'listen' || q?.kind === 'ear') && q.audioText) speak(q.audioText)
   }, [quizQueue, quizIndex, speak])
 
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
@@ -3577,7 +3577,7 @@ export default function ReaderApp() {
               <div className="quiz-field">
                 <span className="muted">题型</span>
                 <div className="bar">
-                  {(['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning'] as QuizKind[]).map((k) => (
+                  {(['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear'] as QuizKind[]).map((k) => (
                     <label className="check-inline" key={k}>
                       <input
                         type="checkbox"
@@ -3676,13 +3676,13 @@ export default function ReaderApp() {
                     <>
                       <div className="study-card quiz-card">
                         <div className="quiz-kind">{QUIZ_KIND_LABEL[q.kind]}</div>
-                        {q.kind === 'listen' ? (
+                        {q.kind === 'listen' || q.kind === 'ear' ? (
                           <button
                             className="primary quiz-play"
                             onClick={() => speak(q.audioText ?? q.context ?? q.word)}
                             title="再听一遍"
                           >
-                            🔊 播放句子
+                            🔊 {q.kind === 'ear' ? '播放单词' : '播放句子'}
                           </button>
                         ) : q.kind === 'meaning' ? (
                           <div className="study-word quiz-word">

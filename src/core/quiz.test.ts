@@ -100,6 +100,13 @@ describe('makeQuestion', () => {
   it('听力填空：没有句子则为 null', () => {
     expect(makeQuestion(item({ examples: [], source: null }), 'listen')).toBeNull()
   })
+  it('听音拼词：隐藏文字、读单词、答案为原词', () => {
+    const q = makeQuestion(item({ word: 'slide', lemma: 'slide' }), 'ear')!
+    expect(q.prompt).toBe('')
+    expect(q.meaning).toBeNull()
+    expect(q.audioText).toBe('slide')
+    expect(q.answer).toBe('slide')
+  })
   it('词形辨析：给释义、选项含正确答案与干扰项', () => {
     const pool = [
       item({ id: 'a', word: 'adapt', lemma: 'adapt', meaning: '适应' }),

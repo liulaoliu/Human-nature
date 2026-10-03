@@ -15,7 +15,7 @@ import type { VocabItem } from '../types/document'
  * 判分对大小写、首尾标点、常见词形变化宽容。
  */
 
-export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning'
+export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning' | 'ear'
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
@@ -24,9 +24,10 @@ export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   listen: '听力填空',
   choice: '词形辨析',
   meaning: '看词选义',
+  ear: '听音拼词',
 }
 
-const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning']
+const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
 
 export function isQuizKind(v: unknown): v is QuizKind {
   return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
@@ -235,6 +236,24 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
       meaning: it.meaning,
       partOfSpeech: it.partOfSpeech,
       phonetic: it.phonetic,
+      answer: word,
+      accept: baseAccept(it, word),
+    }
+  }
+
+  if (kind === 'ear') {
+    // 听音拼词：只放音、不给任何文字提示
+    return {
+      id: `${it.id}:ear`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: '',
+      meaning: null,
+      partOfSpeech: null,
+      phonetic: it.phonetic,
+      audioText: word,
       answer: word,
       accept: baseAccept(it, word),
     }
