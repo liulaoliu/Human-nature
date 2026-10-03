@@ -1908,10 +1908,10 @@ export default function ReaderApp() {
                 </button>
               </span>
               <button onClick={() => doExportAnki(library.items)} disabled={!library.items.length}>
-                导出 Anki CSV
+                整库 Anki CSV
               </button>
               <button onClick={() => doPrint(library.items, '全部生词')} disabled={!library.items.length}>
-                A4 打印
+                整库 A4 打印
               </button>
               <button
                 onClick={() => doExportWrong(library.items)}
@@ -2184,14 +2184,36 @@ export default function ReaderApp() {
           >
             全部生词
           </button>
-          <button onClick={() => doExportAnki(articleWords)} disabled={!articleWords.length}>
-            导出 Anki CSV
+          <button
+            onClick={() => doExportAnki(articleWords)}
+            disabled={!articleWords.length}
+            title="导出本篇生词为 Anki CSV"
+          >
+            Anki（本篇）
+          </button>
+          <button
+            onClick={() => doPrint(articleWords, articleTitle || '本篇生词')}
+            disabled={!articleWords.length}
+            title="打印本篇生词（A4）"
+          >
+            A4（本篇）
+          </button>
+          <button
+            onClick={() => doExportAnki(library.items)}
+            disabled={!library.items.length}
+            title="导出整库生词为 Anki CSV"
+          >
+            Anki（整库）
+          </button>
+          <button
+            onClick={() => doPrint(library.items, '全部生词')}
+            disabled={!library.items.length}
+            title="打印整库生词（A4）"
+          >
+            A4（整库）
           </button>
           <button onClick={exportJson} disabled={!library.items.length}>
             导出 JSON
-          </button>
-          <button onClick={() => doPrint(articleWords, articleTitle || '本篇生词')} disabled={!articleWords.length}>
-            A4 打印
           </button>
           <button
             onClick={() => void copyMissingPhonetic('missing')}
