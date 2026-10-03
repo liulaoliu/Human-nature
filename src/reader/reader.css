@@ -195,6 +195,14 @@ a { color: var(--accent); }
 .entry .ph { color: var(--dim); font-weight: 400; font-size: 14px; }
 .entry .mu { color: #c8ced9; font-size: 14.5px; }
 .entry .ex { color: var(--dim); font-size: 13px; margin-top: 4px; }
+.entry .note {
+  color: var(--dim);
+  font-size: 12px;
+  white-space: pre-wrap;
+  margin-top: 4px;
+  border-left: 2px solid var(--line);
+  padding-left: 8px;
+}
 .entry .row { display: flex; gap: 4px; margin-top: 8px; flex-wrap: wrap; }
 .entry .row button { padding: 3px 8px; font-size: 12.5px; }
 

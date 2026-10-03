@@ -371,3 +371,66 @@ export function parseLemmaTable(raw: string): LemmaPair[] {
   }
   return out
 }
+
+/** -ing/-ed 语法辨析结果的一行（8 列）。 */
+export interface PosRow {
+  lemma: string
+  surface: string
+  pos: string
+  syntax: string
+  role: string
+  meaning: string
+  reason: string
+  label: string
+}
+
+/**
+ * -ing / -ed 语法辨析提示词：强制逐个判断 -ing/-ed 形式在当前语境里的语法身份，
+ * 不许用「可以理解为…/相当于…」含糊带过。
+ */
+export function buildPosPrompt(entries: { word: string; context?: string }[]): string {
+  const lines = entries.map((e) => (e.context ? `- ${e.word}  （语境：${e.context}）` : `- ${e.word}`)).join('\n')
+  return [
+    HEADER,
+    '请针对下面每个单词 / 短语里的 **-ing 或 -ed 形式**，明确判断它在当前语境中具体属于哪一类，',
+    '不要只说「可以理解为……」或「相当于……」。逐个按以下要求分析：',
+    '1. 先给出它在词典里的原形（lemma）。',
+    '2. 明确它的语法身份，必须从下列类别中选一个并说明理由：',
+    '   - 谓语动词',
+    '   - 非谓语动词（不定式 / 动名词 / 现在分词 / 过去分词）',
+    '   - 分词构成的独立形容词',
+    '   - 已经固化为独立形容词的分词',
+    '   - 名词',
+    '   - 其他（请具体说明）',
+    '3. 说明它在当前语境中的具体含义（不要只给词典义）。',
+    '4. 说明它修饰哪个词，或在句中充当什么成分（主语 / 定语 / 状语 / 补语等）。',
+    '5. 如果属于「分词作定语」，必须进一步说明：现在分词还是过去分词、主动还是被动、进行还是完成、相当于哪个定语从句。',
+    '6. 如果它已固化为独立形容词，必须给出证据或常见词典标注，不能仅凭 -ing/-ed 形式就判定为形容词。',
+    '最后用一句话总结最准确的词性标注。',
+    '',
+    '输出格式固定（每行一条，字段用 | 分隔，共 8 列）：',
+    '原形 | 当前形式 | 当前词性 | 语法身份 | 修饰对象/句子成分 | 具体含义 | 判断理由 | 最准确词性标注',
+    '示例：',
+    'slide | sliding | adj. | 现在分词转化来的形容词，作定语 | 修饰 oil prices | 持续下跌的 | 表示主动、进行中的状态，相当于 oil prices that are sliding | adj.（分词形容词）',
+    '只输出这些行，不要解释、不要标题、不要编号。',
+    '',
+    '单词与语境：',
+    lines,
+  ].join('\n')
+}
+
+/** 解析 -ing/-ed 辨析表（8 列）。 */
+export function parsePosTable(raw: string): PosRow[] {
+  const out: PosRow[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim().replace(/^[-*•\d.、\s]+/, '')
+    if (!t) continue
+    const cols = t.split(/[|｜]/).map((c) => c.trim())
+    if (cols.length < 8) continue
+    const [lemma, surface, pos, syntax, role, meaning, reason, label] = cols
+    if (!lemma || !surface) continue
+    if (/原形|当前形式|lemma/i.test(lemma)) continue
+    out.push({ lemma, surface, pos, syntax, role, meaning, reason, label })
+  }
+  return out
+}

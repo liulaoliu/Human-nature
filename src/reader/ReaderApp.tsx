@@ -6,6 +6,7 @@ import { snapSelection, wordSpans } from '../core/wordSelect'
 import {
   applyConfusables,
   applyLemmaMap,
+  applyPosAnalysis,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -32,11 +33,13 @@ import {
   buildCleanupPrompt,
   buildConfusablePrompt,
   buildLemmaPrompt,
+  buildPosPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
   parseLemmaTable,
+  parsePosTable,
   parseWordList,
   type AnalysisTask,
   type VocabLevel,
@@ -233,10 +236,10 @@ export default function ReaderApp() {
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
   const [pasteMissing, setPasteMissing] = useState<{
-    task: 'confusable' | 'lookup' | 'lemma'
+    task: 'confusable' | 'lookup' | 'lemma' | 'pos'
     words: string[]
   } | null>(null)
-  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | null>(null)
+  const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | 'lemma' | 'pos' | null>(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -1610,6 +1613,14 @@ export default function ReaderApp() {
     [library.items],
   )
 
+  /** 含 -ing / -ed 形式的词或短语——供 AI 辨析语法身份。 */
+  const posCandidates = useMemo(() => {
+    const hasIngEd = (s: string) => s.split(/\s+/).some((t) => /(ing|ed)$/i.test(t))
+    return library.items
+      .filter((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)
+      .slice(0, 60)
+  }, [library.items])
+
   /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
   const libraryLemmas = useMemo(() => {
     const s = new Set<string>()
@@ -2618,6 +2629,25 @@ export default function ReaderApp() {
     }
   }, [lemmaCandidates, flash])
 
+  /** 生成 -ing/-ed 语法辨析提示词。 */
+  const copyPosPrompt = useCallback(async () => {
+    if (!posCandidates.length) {
+      flash('没有含 -ing/-ed 的词')
+      return
+    }
+    setLastTask('pos')
+    askedWordsRef.current = posCandidates.map((it) => it.word)
+    askedIdsRef.current = []
+    try {
+      await navigator.clipboard.writeText(
+        buildPosPrompt(posCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
+      )
+      flash(`已复制 ${posCandidates.length} 条 -ing/-ed 辨析提示词；结果粘回「应用结果」`)
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [posCandidates, flash])
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
@@ -2706,6 +2736,35 @@ export default function ReaderApp() {
       setPasteReport(report)
       setPasted('')
       flash(`已校正 ${changed} 个词形${merged ? `，合并 ${merged} 个` : ''}`)
+      return
+    }
+
+    // -ing/-ed 语法辨析：写回原形 / 词性 / 笔记
+    if (lastTask === 'pos') {
+      const rows = parsePosTable(raw)
+      if (!rows.length) {
+        setPasteReport(['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'])
+        flash('没解析出辨析结果')
+        return
+      }
+      const before = library.items.length
+      const next = dedupeLibrary(applyPosAnalysis(library, rows))
+      persist(next)
+      const merged = before - next.items.length
+      const surfaces = rows.map((r) => normalizeWord(r.surface)).filter(Boolean)
+      const missing = askedWordsRef.current.filter((w) => {
+        const nw = normalizeWord(w)
+        return !surfaces.some((s) => nw === s || nw.split(' ').includes(s))
+      })
+      const report: string[] = [`已写回 ${rows.length} 条辨析`]
+      if (merged > 0) report.push(`合并去重 ${merged} 个`)
+      if (missing.length) {
+        report.push(`AI 未覆盖 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        setPasteMissing({ task: 'pos', words: missing })
+      }
+      setPasteReport(report)
+      setPasted('')
+      flash(`已写回 ${rows.length} 条辨析${merged ? `，合并 ${merged} 个` : ''}`)
       return
     }
 
@@ -2831,6 +2890,15 @@ export default function ReaderApp() {
         askedIdsRef.current = []
         setLastTask('lemma')
         await navigator.clipboard.writeText(buildLemmaPrompt(entries))
+      } else if (task === 'pos') {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, context: it?.source?.sentenceText }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('pos')
+        await navigator.clipboard.writeText(buildPosPrompt(entries))
       } else {
         const entries = words.map((w) => {
           const it = byLemma.get(lemmaOf(w))
@@ -4147,6 +4215,14 @@ export default function ReaderApp() {
           title="把疑似非原型的词（带来源语境）交给 AI 判断原形；结果粘到上面再点「应用结果」"
         >
           🔤 校正原形（{lemmaCandidates.length}）
+        </button>
+        <button
+          onClick={() => void copyPosPrompt()}
+          disabled={!posCandidates.length}
+          style={{ marginTop: 6, marginLeft: 6 }}
+          title="让 AI 逐个判断 -ing / -ed 形式在语境里的语法身份（谓语/非谓语/分词形容词…），结果粘回「应用结果」"
+        >
+          🔎 -ing/-ed 辨析（{posCandidates.length}）
         </button>
         <button
           onClick={dedupeNow}

@@ -9,6 +9,7 @@ import type {
   WordAnalysis,
 } from '../types/document'
 import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
+import type { PosRow } from './analyzer'
 
 /**
  * 词库逻辑：生词数据「怎么变」的规则层。
@@ -334,6 +335,52 @@ export function relemmaLibrary(library: VocabLibrary): VocabLibrary {
       return lemma && lemma !== it.lemma ? { ...it, lemma, id: `vocab:${lemma}` } : it
     }),
   }
+}
+
+/**
+ * 写回 -ing/-ed 语法辨析结果：
+ *   - 单词条目（非短语）按其原形改 word/lemma/id；短语条目保持词形不变
+ *   - 词性用短标注；完整辨析（语法身份/成分/理由/最准确词性）追加进 note
+ * 之后建议跑一次 dedupeLibrary。
+ */
+export function applyPosAnalysis(
+  library: VocabLibrary,
+  rows: PosRow[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!rows.length) return library
+  const iso = now.toISOString()
+  const items = [...library.items]
+  for (const row of rows) {
+    const surface = normalizeWord(row.surface)
+    const lemma = normalizeWord(row.lemma)
+    if (!surface) continue
+    // 匹配条目：词形等于当前形式 → 短语里含当前形式 → lemma 相同
+    let idx = items.findIndex((it) => normalizeWord(it.word) === surface)
+    if (idx < 0) idx = items.findIndex((it) => normalizeWord(it.word).split(' ').includes(surface))
+    if (idx < 0) idx = items.findIndex((it) => it.lemma === lemma || normalizeWord(it.word) === lemma)
+    if (idx < 0) continue
+    const cur = items[idx]
+    const single = !cur.word.trim().includes(' ')
+    const locked = cur.status === 'edited' || cur.status === 'mastered'
+    const rewrite = single && !locked && !!row.lemma.trim()
+    const nextWord = rewrite ? row.lemma.trim() : cur.word
+    const nextLemma = rewrite ? lemmaOf(nextWord) || cur.lemma : cur.lemma
+    const noteLine = `[辨析] ${row.surface} — ${row.syntax || ''}${row.role ? `；${row.role}` : ''}${
+      row.reason ? `；${row.reason}` : ''
+    }${row.label || row.pos ? ` → ${row.label || row.pos}` : ''}`
+    items[idx] = {
+      ...cur,
+      id: rewrite ? `vocab:${nextLemma}` : cur.id,
+      word: nextWord,
+      lemma: nextLemma,
+      partOfSpeech: row.pos || cur.partOfSpeech,
+      meaning: cur.meaning ?? row.meaning ?? null,
+      note: cur.note ? `${cur.note}\n${noteLine}` : noteLine,
+      updatedAt: iso,
+    }
+  }
+  return { ...library, items }
 }
 
 /** 手动编辑一个词条，默认把状态置为 edited（不会被后续查询覆盖）。 */

@@ -6,11 +6,13 @@ import {
   buildCleanupPrompt,
   buildConfusablePrompt,
   buildLemmaPrompt,
+  buildPosPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
   parseLemmaTable,
+  parsePosTable,
   parseLookupTable,
   parseTranslationTable,
   parseWordList,
@@ -268,5 +270,29 @@ describe('原形校正提示词 / 解析', () => {
   })
   it('parseLemmaTable 跳过表头、只取第一个词', () => {
     expect(parseLemmaTable('原词形 | 原形\nleft | leave （离开）')).toEqual([{ from: 'left', to: 'leave' }])
+  })
+})
+
+describe('-ing/-ed 语法辨析提示词 / 解析', () => {
+  it('buildPosPrompt 含强制要求与 8 列格式', () => {
+    const p = buildPosPrompt([{ word: 'sliding oil price', context: 'sliding oil prices fell' }])
+    expect(p).toContain('不要只说')
+    expect(p).toContain(
+      '原形 | 当前形式 | 当前词性 | 语法身份 | 修饰对象/句子成分 | 具体含义 | 判断理由 | 最准确词性标注',
+    )
+    expect(p).toContain('sliding oil price  （语境：sliding oil prices fell）')
+  })
+  it('parsePosTable 解析 8 列', () => {
+    const rows = parsePosTable(
+      'slide | sliding | adj. | 现在分词转化来的形容词，作定语 | 修饰 oil prices | 持续下跌的 | 表示主动进行 | adj.（分词形容词）',
+    )
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ lemma: 'slide', surface: 'sliding', pos: 'adj.' })
+  })
+  it('parsePosTable 跳过表头 / 列数不足', () => {
+    expect(
+      parsePosTable('原形 | 当前形式 | 当前词性 | 语法身份 | 修饰对象/句子成分 | 具体含义 | 判断理由 | 最准确词性标注'),
+    ).toHaveLength(0)
+    expect(parsePosTable('a | b | c')).toHaveLength(0)
   })
 })

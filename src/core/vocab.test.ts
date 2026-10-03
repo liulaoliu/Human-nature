@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   applyConfusables,
   applyLemmaMap,
+  applyPosAnalysis,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
@@ -406,5 +407,32 @@ describe('原形校正 / 去重', () => {
     const it = item({ id: 'vocab:x', word: 'running', lemma: 'running' })
     const lib = relemmaLibrary({ schemaVersion: 1, items: [it] })
     expect(lib.items[0].lemma).toBe('run')
+  })
+})
+
+describe('applyPosAnalysis', () => {
+  const row = {
+    lemma: 'slide',
+    surface: 'sliding',
+    pos: 'adj.',
+    syntax: '现在分词转化来的形容词，作定语',
+    role: '修饰 prices',
+    meaning: '持续下跌的',
+    reason: '相当于 prices that are sliding',
+    label: 'adj.（分词形容词）',
+  }
+  it('单词条目按原形改写并写入词性 / 笔记', () => {
+    let lib = markWord(createLibrary(), { word: 'sliding', articleId: 'a1' }, NOW).library
+    lib = applyPosAnalysis(lib, [row], NOW)
+    expect(lib.items[0].word).toBe('slide')
+    expect(lib.items[0].lemma).toBe('slide')
+    expect(lib.items[0].partOfSpeech).toBe('adj.')
+    expect(lib.items[0].note).toContain('辨析')
+  })
+  it('短语条目不改词形，只记笔记', () => {
+    let lib = markWord(createLibrary(), { word: 'sliding oil price', articleId: 'a1' }, NOW).library
+    lib = applyPosAnalysis(lib, [row], NOW)
+    expect(lib.items[0].word).toBe('sliding oil price')
+    expect(lib.items[0].note).toContain('辨析')
   })
 })

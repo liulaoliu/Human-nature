@@ -249,6 +249,7 @@ export default function VocabList({
               {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
               {it.meaning && <div className="mu">{it.meaning}</div>}
               {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
+              {it.note && <div className="note">{it.note}</div>}
               {it.confusables && it.confusables.length > 0 && (
                 <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
               )}
