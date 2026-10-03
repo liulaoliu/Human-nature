@@ -41,6 +41,7 @@ import {
   isQuizKind,
   makeDictationQuestion,
   makeQuestion,
+  maskAnswer,
   QUIZ_KIND_LABEL,
   shuffleQuiz,
   type QuizKind,
@@ -3303,15 +3304,20 @@ export default function ReaderApp() {
                             ))}
                           </div>
                         ) : (
-                          <input
-                            className="study-input"
-                            autoFocus
-                            ref={quizInputRef}
-                            placeholder="输入答案，回车提交 / 下一题"
-                            value={quizInput}
-                            onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
-                            disabled={quizChecked}
-                          />
+                          <>
+                            <input
+                              className="study-input"
+                              autoFocus
+                              ref={quizInputRef}
+                              placeholder="输入答案，回车提交 / 下一题"
+                              value={quizInput}
+                              onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
+                              disabled={quizChecked}
+                            />
+                            <div className="muted quiz-mask" title="提示：一个下划线=一个字母；空格=一个词">
+                              {maskAnswer(q.answer)}
+                            </div>
+                          </>
                         )}
                         {quizChecked && (
                           <>

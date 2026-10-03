@@ -6,6 +6,7 @@ import {
   isCorrect,
   makeDictationQuestion,
   makeQuestion,
+  maskAnswer,
   normalizeAnswer,
   pickDistractors,
   pickMeaningDistractors,
@@ -145,6 +146,15 @@ describe('pickMeaningDistractors', () => {
     expect(out).not.toContain('适应')
     expect(new Set(out).size).toBe(out.length)
     expect(out).toContain('采用')
+  })
+})
+
+describe('maskAnswer', () => {
+  it('字母变下划线，保留空格 / 连字符 / 撇号', () => {
+    expect(maskAnswer('run')).toBe('___')
+    expect(maskAnswer('bad-temperedly')).toBe('___-' + '_'.repeat(10))
+    expect(maskAnswer('run a business')).toBe('___ _ ' + '_'.repeat(8))
+    expect(maskAnswer("don't")).toBe("___'_")
   })
 })
 

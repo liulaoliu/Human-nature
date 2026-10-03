@@ -59,6 +59,15 @@ export interface QuizQuestion {
   accept: string[]
 }
 
+/**
+ * 填空题的「形状提示」：把字母/数字换成下划线，保留空格、连字符、撇号。
+ * 例如 `bad-temperedly` → `___-___________`，`run a business` → `___ _ ________`。
+ * 只暗示长度（几个字母、几个词），不泄露任何字母。
+ */
+export function maskAnswer(answer: string): string {
+  return answer.replace(/[A-Za-z0-9]/g, '_')
+}
+
 /** 归一化作答：小写、去首尾标点、压缩空白。 */
 export function normalizeAnswer(s: string): string {
   return s
