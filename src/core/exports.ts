@@ -89,12 +89,12 @@ export function importDocumentJSON(raw: string): EconomistDocument {
 }
 
 /**
- * A4 打印用的完整 HTML（自带 `@media print` 与两栏排版）。
+ * A4 打印用的完整 HTML（三栏密排，一页约 100+ 词）。
  * 在浏览器里打开后「打印 → 另存为 PDF」即可。
  */
 export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }): string {
   const seen = new Set<string>()
-  const groups = input.groups
+  const body = input.groups
     .map((g) => {
       const items = g.items
         .filter((it) => {
@@ -105,23 +105,14 @@ export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }):
         .map((it) => {
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
-          const meaning = it.meaning ? `<div class="meaning">${escapeHtml(it.meaning)}</div>` : ''
+          const meaning = it.meaning ? ` <span class="meaning">${escapeHtml(it.meaning)}</span>` : ''
           const usage = it.usage.length
-            ? `<div class="usage">${it.usage.map(escapeHtml).join('；')}</div>`
+            ? ` <span class="usage">· ${it.usage.map(escapeHtml).join('；')}</span>`
             : ''
-          const examples = it.examples
-            .slice(0, 2)
-            .map(
-              (ex) =>
-                `<div class="example">${escapeHtml(ex.text)}${
-                  ex.translation ? `<span class="trans">${escapeHtml(ex.translation)}</span>` : ''
-                }</div>`,
-            )
-            .join('')
-          return `<div class="item"><div class="word">${escapeHtml(it.word)}${phonetic}${pos}</div>${meaning}${usage}${examples}</div>`
+          return `<div class="item"><span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${meaning}${usage}</div>`
         })
         .join('')
-      return `<section class="group"><h2>${escapeHtml(g.key)}</h2><div class="items">${items}</div></section>`
+      return items ? `<h2>${escapeHtml(g.key)}</h2>${items}` : ''
     })
     .join('')
 
@@ -131,25 +122,36 @@ export function renderPrintHTML(input: { title: string; groups: VocabGroup[] }):
 <meta charset="utf-8">
 <title>${escapeHtml(input.title)}</title>
 <style>
-  @page { size: A4; margin: 14mm; }
-  body { font-family: Georgia, "Songti SC", serif; font-size: 11pt; color: #111; margin: 0; }
-  h1 { font-size: 16pt; margin: 0 0 6mm; }
-  h2 { font-size: 12pt; border-bottom: 1px solid #999; margin: 5mm 0 2mm; }
-  .items { columns: 2; column-gap: 8mm; }
-  .item { break-inside: avoid; margin-bottom: 3.5mm; }
-  .word { font-weight: bold; }
-  .phon { color: #555; font-weight: normal; }
-  .pos { color: #777; font-style: italic; font-size: 9pt; }
-  .meaning { }
-  .usage { color: #333; }
-  .example { color: #333; font-size: 10pt; }
-  .trans { color: #666; margin-left: 4px; }
-  @media print { .items { columns: 2; } }
+  @page { size: A4; margin: 10mm; }
+  html, body { margin: 0; }
+  body {
+    font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 8pt;
+    line-height: 1.35;
+    color: #111;
+  }
+  h1 { font-size: 12pt; margin: 0 0 3mm; }
+  h2 {
+    font-size: 8.5pt;
+    margin: 2.5mm 0 1mm;
+    padding-bottom: 0.5mm;
+    border-bottom: 0.4pt solid #bbb;
+    break-after: avoid;
+  }
+  .items { columns: 3; column-gap: 5mm; column-rule: 0.3pt solid #ddd; }
+  .item { break-inside: avoid; margin-bottom: 0.7mm; }
+  .word { font-weight: 700; }
+  .phon { color: #555; }
+  .pos { color: #777; font-style: italic; }
+  .usage { color: #555; }
+  @media print { .items { columns: 3; } }
 </style>
 </head>
 <body>
 <h1>${escapeHtml(input.title)}</h1>
-${groups}
+<div class="items">
+${body}
+</div>
 </body>
 </html>`
 }

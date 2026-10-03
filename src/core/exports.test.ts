@@ -81,7 +81,7 @@ describe('renderPrintHTML', () => {
     expect(html).toContain('<!doctype html>')
     expect(html).toContain('@page')
     expect(html).toContain('size: A4')
-    expect(html).toContain('columns: 2')
+    expect(html).toContain('columns: 3')
   })
   it('包含词条内容', () => {
     expect(html).toContain('My Words')
