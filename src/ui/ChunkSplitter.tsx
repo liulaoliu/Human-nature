@@ -239,15 +239,17 @@ export function ChunkSplitter({
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
     ctx.clearRect(0, 0, width, CANVAS_H)
+    const css = (name: string, fallback: string) =>
+      getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
 
-    ctx.fillStyle = '#0e1014'
+    ctx.fillStyle = css('--wave-bg', '#0e1014')
     ctx.fillRect(0, 0, width, CANVAS_H)
 
     // 每像素的 min/max 来自 useColumns：只在视图/宽度变了时重扫。
     // 播放时 progress 每帧变、视图不动 —— 直接重扫的话每帧要扫可视范围内的
     // 全部采样（缩放到整块时 ~100 万次），而波形本身一次都没变。
     if (!cols) {
-      ctx.fillStyle = '#8b93a1'
+      ctx.fillStyle = css('--wave-text', '#8b93a1')
       ctx.font = '12px system-ui'
       ctx.fillText('这段没有可用的采样', 10, CANVAS_H / 2)
       return
@@ -258,17 +260,17 @@ export function ChunkSplitter({
     const mid = CANVAS_H / 2
     // 播放头左侧淡淡压暗，当"已经过"的提示
     const headX = ratioAtTime(head) * width
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)'
+    ctx.fillStyle = css('--wave-dim', 'rgba(0, 0, 0, 0.28)')
     ctx.fillRect(0, 0, Math.max(0, Math.min(width, headX)), CANVAS_H)
 
-    ctx.fillStyle = '#4a9eff'
+    ctx.fillStyle = css('--wave-fg', '#4a9eff')
     for (let x = 0; x < width; x++) {
       const y1 = mid - hi[x] * gain * (mid - 5)
       const y2 = mid - lo[x] * gain * (mid - 5)
       ctx.fillRect(x, y1, 1, Math.max(1, y2 - y1))
     }
 
-    ctx.strokeStyle = 'rgba(139, 147, 161, 0.35)'
+    ctx.strokeStyle = css('--wave-grid', 'rgba(139, 147, 161, 0.35)')
     ctx.beginPath()
     ctx.moveTo(0, mid)
     ctx.lineTo(width, mid)
