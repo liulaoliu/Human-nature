@@ -3441,7 +3441,6 @@ export default function ReaderApp() {
     [library, persist],
   )
 
-  /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   /** 仪表盘：各能力当前可用性 */
   const readyRows = useMemo(
     () =>
@@ -3494,7 +3493,10 @@ export default function ReaderApp() {
     }
   }
 
+  /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen
+  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
+  const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
@@ -3504,6 +3506,7 @@ export default function ReaderApp() {
         onMouseUp={onMouseUp}
         onContextMenu={onContextMenu}
       >
+        {readingView && (
         <div className="bar">
           <strong>Economist 精读</strong>
           {book && editions.length > 1 && (
@@ -3676,6 +3679,7 @@ export default function ReaderApp() {
             <span className="arrow">←</span> 跟读练习
           </a>
         </div>
+        )}
 
         {bookError && !book && (
           <p className="muted">没取到 articles.json（要 http://localhost 打开且文件存在）。可直接把正文粘在下面。</p>
