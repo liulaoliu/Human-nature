@@ -152,6 +152,18 @@ describe('pickMeaningDistractors', () => {
     const out = pickMeaningDistractors(me, [], 3, () => 0.5)
     expect(out.slice(0, 2)).toEqual(['采用', '熟练的'])
   })
+  it('近义 / 包含关系的释义会被剔除', () => {
+    const me = item({
+      id: 'a',
+      meaning: '调整',
+      confusables: [
+        { word: 'x', meaning: '微调，调整' },
+        { word: 'y', meaning: '采纳' },
+      ],
+    })
+    const out = pickMeaningDistractors(me, [], 3, () => 0.5)
+    expect(out).toEqual(['采纳'])
+  })
 })
 
 describe('maskAnswer', () => {
@@ -179,6 +191,20 @@ describe('pickDistractors', () => {
     const me = item({ id: 'a', word: 'adapt', lemma: 'adapt', confusables: [{ word: 'adopt' }, { word: 'adept' }] })
     const out = pickDistractors(me, [], 3, () => 0.5)
     expect(out.slice(0, 2)).toEqual(['adopt', 'adept'])
+  })
+  it('与目标近义的易混词会被剔除', () => {
+    const me = item({
+      id: 'a',
+      word: 'adapt',
+      lemma: 'adapt',
+      meaning: '适应',
+      confusables: [
+        { word: 'adjust', meaning: '适应' },
+        { word: 'adopt', meaning: '收养' },
+      ],
+    })
+    const out = pickDistractors(me, [], 3, () => 0.5)
+    expect(out).toEqual(['adopt'])
   })
 })
 

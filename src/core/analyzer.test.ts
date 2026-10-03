@@ -230,6 +230,8 @@ describe('混淆项提示词 / 解析', () => {
     expect(p).toContain('adapt（适应）')
     expect(p).toContain('- run')
     expect(p).toContain('易混词1:释义1')
+    expect(p).toContain('含义必须明显不同')
+    expect(p).toContain('近义词')
   })
   it('parseConfusables 解析管道 + 分号格式', () => {
     const r = parseConfusables('adapt | adopt:采用 ; adept:熟练的 ; adjust:调整')

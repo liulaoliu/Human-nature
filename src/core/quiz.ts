@@ -129,9 +129,20 @@ function baseAccept(it: VocabItem, surface: string): string[] {
   return [...set]
 }
 
+/**
+ * 两个释义是否「近义/包含」（去标点后相等或互为子串）。
+ * 用来剔掉「微调 / 微调，调整」这类会造成多个正确答案的干扰项。
+ */
+function meaningOverlaps(a: string, b: string): boolean {
+  const strip = (s: string) => normalizeAnswer(s).replace(/[，,；;、\s。.!?！？]+/g, '')
+  const x = strip(a)
+  const y = strip(b)
+  if (!x || !y) return false
+  return x === y || x.includes(y) || y.includes(x)
+}
+
 /** 形近度打分：越小越像（首字母相同、共同前缀长、长度接近）。 */
-function similarScore(a: string, b: string): number {
-  const al = a.toLowerCase()
+function similarScore(a: string, b: string): number {  const al = a.toLowerCase()
   const bl = b.toLowerCase()
   let s = Math.abs(al.length - bl.length)
   if (al[0] === bl[0]) s -= 2
@@ -151,10 +162,11 @@ export function pickDistractors(
   const word = it.word.trim()
   const seen = new Set<string>([word.toLowerCase()])
   const out: string[] = []
-  // 优先用 AI 生成的易混词
+  // 优先用 AI 生成的易混词（跳过与目标近义的，否则选择题有多个答案）
   for (const c of it.confusables ?? []) {
     const w = c.word.trim()
     if (!w || seen.has(w.toLowerCase())) continue
+    if (c.meaning && meaningOverlaps(c.meaning, it.meaning ?? '')) continue
     seen.add(w.toLowerCase())
     out.push(w)
     if (out.length >= n) return out
@@ -183,11 +195,13 @@ export function pickMeaningDistractors(
 ): string[] {
   const seen = new Set<string>([normalizeAnswer(it.meaning ?? '')])
   const out: string[] = []
+  // 与目标释义近义 / 与已选干扰项近义 → 不用
+  const tooClose = (m: string) => meaningOverlaps(m, it.meaning ?? '') || out.some((o) => meaningOverlaps(m, o))
   for (const c of it.confusables ?? []) {
     const m = (c.meaning ?? '').trim()
     if (!m) continue
     const key = normalizeAnswer(m)
-    if (!key || seen.has(key)) continue
+    if (!key || seen.has(key) || tooClose(m)) continue
     seen.add(key)
     out.push(m)
     if (out.length >= n) return out
@@ -196,7 +210,7 @@ export function pickMeaningDistractors(
     const m = (c.meaning ?? '').trim()
     if (!m) continue
     const key = normalizeAnswer(m)
-    if (!key || seen.has(key)) continue
+    if (!key || seen.has(key) || tooClose(m)) continue
     seen.add(key)
     out.push(m)
     if (out.length >= n) break
