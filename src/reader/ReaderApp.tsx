@@ -226,6 +226,10 @@ export default function ReaderApp() {
   const askedIdsRef = useRef<string[]>([])
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
+  /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
+  const [pasteMissing, setPasteMissing] = useState<{ task: 'confusable' | 'lookup'; words: string[] } | null>(
+    null,
+  )
   const [lastTask, setLastTask] = useState<AnalysisTask | 'confusable' | null>(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
@@ -2560,6 +2564,7 @@ export default function ReaderApp() {
     const raw = pasted.trim()
     if (!raw) return
     setPasteReport([])
+    setPasteMissing(null)
 
     // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
     if (lastTask === 'auto_vocab') {
@@ -2605,6 +2610,7 @@ export default function ReaderApp() {
       report.push(`成功写入 ${applied.length} 个词的混淆项`)
       if (missing.length) {
         report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        setPasteMissing({ task: 'confusable', words: missing })
       }
       if (empty.length) {
         report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
@@ -2678,6 +2684,7 @@ export default function ReaderApp() {
         const missing = missingWords(asked, result.words.map((w) => w.word))
         if (missing.length) {
           report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+          setPasteMissing({ task: 'lookup', words: missing })
         }
       }
       const noPhon = result.words.filter((w) => !w.phonetic).length
@@ -2712,6 +2719,37 @@ export default function ReaderApp() {
     articleKey,
     articleIdentity,
   ])
+
+  /** 把上次未返回的词重新组成提示词，一键复制重试。 */
+  const copyMissingAgain = useCallback(async () => {
+    if (!pasteMissing || !pasteMissing.words.length) return
+    const { task, words } = pasteMissing
+    const byLemma = new Map(library.items.map((it) => [it.lemma, it]))
+    try {
+      if (task === 'confusable') {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('confusable')
+        await navigator.clipboard.writeText(buildConfusablePrompt(entries))
+      } else {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, context: it?.source?.sentenceText }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('lookup')
+        await navigator.clipboard.writeText(buildBatchLookupPrompt(entries))
+      }
+      flash(`已复制缺失的 ${words.length} 个词，去 AI 后再贴回`)
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [pasteMissing, library.items, flash])
 
   const download = useCallback(
     (name: string, content: string, mime: string) => {
@@ -3956,6 +3994,7 @@ export default function ReaderApp() {
           onChange={(e) => {
             setPasted(e.target.value)
             if (pasteReport.length) setPasteReport([])
+            if (pasteMissing) setPasteMissing(null)
           }}
         />
         <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
@@ -3967,6 +4006,15 @@ export default function ReaderApp() {
               <div key={i}>{line}</div>
             ))}
           </div>
+        )}
+        {pasteMissing && pasteMissing.words.length > 0 && (
+          <button
+            onClick={() => void copyMissingAgain()}
+            style={{ marginTop: 6 }}
+            title="把 AI 没返回的词重新组成提示词，复制后再贴回"
+          >
+            🔁 复制未返回的 {pasteMissing.words.length} 个
+          </button>
         )}
         <button
           onClick={() => void copyConfusablePrompt()}
