@@ -46,6 +46,29 @@ npm run dev
 **必须走 `http://localhost`，不要双击 `dist/index.html`。** 浏览器的 `file://` 页面拿不到麦克风权限，
 `public/articles.json` 也读不到（`fetch` 被拦）。构建产物要用 `npm run preview` 打开。
 
+## 作为服务运行（后台 + 开机自启）
+
+不想每次开终端跑 `npm run dev` 时，可以把构建产物交给内置的小 HTTP 服务，做成后台常驻 + 开机自启
+（Node 零依赖，脚本参考了同机另一个项目的踩坑经验）。
+
+```
+构建.cmd              # 改过代码后先构建（tsc + vite → dist\）
+启动服务.cmd          # 后台静默启动（独立进程，关窗口不影响），然后显示状态并打开浏览器
+安装开机自启.cmd      # 登录 Windows 时后台静默启动（VBS 隐藏，无黑窗、不弹浏览器）
+卸载开机自启.cmd      # 取消开机自启
+```
+
+- **端口写死 5173**（`config.json`）：跟 `npm run dev` 同一个 origin，生词本 / 已保存文章 /
+  跟读进度（IndexedDB、localStorage）**不会因为换端口而"看不见"**。
+- 服务崩了 **watchdog 自动重启**（连续崩溃 10 次则停）。
+- 随时 `node server/status.js` 看状态（PID / 运行时长 / 地址）。
+- **改了源码要重新 `构建.cmd`**（服务跑的是 `dist\`；`articles.json` / `shadowing-state.json` 例外，
+  服务会优先读 `public\`，重新抽取正文后刷新即可，不必重建）。
+- 「存入项目」在服务模式下同样可用（`POST /__state` 写 `public\shadowing-state.json`）。
+- 服务开着时 `npm run dev` 会因端口占用报错（`strictPort`）——先用 `任务管理器` 结束 node，
+  或先跑 `启动服务.cmd` 看它在不在。
+
+
 ## 精读 / 生词本（新，`reader.html`）
 
 跟读之外多了一个独立的精读页：**`http://localhost:5173/reader.html`**（跟读页是 `/index.html`，两边各有链接互跳）。
@@ -88,7 +111,7 @@ npm run dev
 |---|---|
 | 导出备份 | 下载 `shadowing-backup-YYYY-MM-DD.json`（`shadowing.*` 的 localStorage） |
 | 导入备份 | 选一个备份 json 恢复，然后刷新 |
-| 存入项目 | **只在 `npm run dev` 下可用**：写入 `public/shadowing-state.json` |
+| 存入项目 | **`npm run dev` 或「启动服务」模式下可用**：写入 `public/shadowing-state.json` |
 
 换电脑两条路：
 

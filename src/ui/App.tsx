@@ -1117,7 +1117,7 @@ function BackupBar({
       <button
         className="ghost sm"
         onClick={onSaveProject}
-        title="写入项目的 public/shadowing-state.json，只在 npm run dev 下可用"
+        title="写入项目的 public/shadowing-state.json（npm run dev 或「启动服务」模式下可用）"
       >
         存入项目
       </button>
