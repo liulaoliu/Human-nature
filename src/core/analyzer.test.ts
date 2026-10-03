@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyToSentence,
+  buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildPrompt,
@@ -205,5 +206,18 @@ describe('全文翻译', () => {
   it('parseAnalysis 认 JSON 句子数组', () => {
     const r = parseAnalysis('[{"id":"s001","translation":"他走了。"}]')
     expect(r.sentences?.[0].sentenceId).toBe('s001')
+  })
+})
+
+describe('buildAutoVocabPrompt', () => {
+  it('按词汇标准挑词，要求原形、单词、无解释', () => {
+    const p = buildAutoVocabPrompt('Some text here.', 'cet6')
+    expect(p).toContain('大学英语六级')
+    expect(p).toContain('原形')
+    expect(p).toContain('只输出**单个单词**')
+    expect(p).toContain('Some text here.')
+  })
+  it('雅思标准文案不同', () => {
+    expect(buildAutoVocabPrompt('x', 'ielts')).toContain('刚开始学雅思')
   })
 })

@@ -17,6 +17,7 @@ export type AnalysisTask =
   | 'collocations'
   | 'extract_vocab'
   | 'summarize'
+  | 'auto_vocab'
 
 export interface BuildPromptInput {
   task: AnalysisTask
@@ -51,6 +52,8 @@ export function buildPrompt(input: BuildPromptInput): string {
       return `${HEADER}\n用中文总结下面这段的要点，最多 3 条，每条一行。只输出总结。\n段落：\n${quoted(text)}`
     case 'extract_vocab':
       return `${HEADER}\n从下面段落里提取超出四六级/雅思范围的高频生词，只输出词形，用逗号分隔，不要重复，不要解释。\n段落：\n${quoted(text)}`
+    case 'auto_vocab':
+      return buildAutoVocabPrompt(text)
     case 'lookup': {
       const words = (input.words?.length ? input.words : [text]).join(', ')
       return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中)\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
@@ -238,4 +241,22 @@ export function parseTranslationTable(raw: string): SentenceAnalysis[] {
 export function buildTranslateAllPrompt(sentences: { id: string; text: string }[]): string {
   const list = sentences.map((s) => `${s.id} | ${s.text}`).join('\n')
   return `${HEADER}\n下面是按顺序编号的英文句子。请逐句翻译成地道、通顺的中文，**每个 id 输出一行**，格式固定：\nid | 中文翻译\n要求：id 原样照抄、顺序不变、不合并也不拆分句子；只输出这些行，不要解释、不要加标题。\n${list}`
+}
+
+export type VocabLevel = 'cet4' | 'cet6' | 'kaoyan' | 'ielts' | 'ielts65'
+
+const LEVEL_DESC: Record<VocabLevel, string> = {
+  cet4: '以「大学英语四级」为基准（四级大纲以内的词不要）',
+  cet6: '以「大学英语六级」为基准（六级大纲以内的词不要）',
+  kaoyan: '以「考研英语」大纲为基准',
+  ielts: '以「刚开始学雅思」为基准（约雅思 5.5–6 分，核心词汇约 6000）',
+  ielts65: '以「雅思 6.5 分」为基准（核心词汇约 8000）',
+}
+
+/**
+ * 自动标词提示词：让 AI 按指定词汇水平，从文章里挑出值得查词学习的单词。
+ * 结果是一串「原形」单词，粘回后进入「待选」清单，人工增删后再查词。
+ */
+export function buildAutoVocabPrompt(text: string, level: VocabLevel = 'cet6'): string {
+  return `${HEADER}\n请${LEVEL_DESC[level]}，从下面这篇文章里挑出**超出该水平、值得查词学习**的单词。\n要求：\n- 每个词输出**原形**：名词用单数、动词用一般现在时（如 running→run、went→go）；\n- 去掉重复；只输出**单个单词**，不要短语、不要编号、不要解释、不要分点，用换行分隔；\n- 数量按文章长度取 15–40 个，按在文中出现的先后顺序。\n文章：\n${quoted(text)}`
 }

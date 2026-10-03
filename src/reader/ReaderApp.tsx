@@ -19,12 +19,15 @@ import {
 } from '../core/vocab'
 import {
   applyToSentence,
+  buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
+  parseWordList,
   type AnalysisTask,
+  type VocabLevel,
 } from '../core/analyzer'
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import { createVocabRepo } from '../adapters/vocabRepo'
@@ -220,6 +223,17 @@ export default function ReaderApp() {
       return localStorage.getItem('reader:autoSpeak') === '1'
     } catch {
       return false
+    }
+  })
+  /** 自动标词的词汇标准 */
+  const [vocabLevel, setVocabLevel] = useState<VocabLevel>(() => {
+    try {
+      const v = localStorage.getItem('reader:vocabLevel')
+      return v === 'cet4' || v === 'cet6' || v === 'kaoyan' || v === 'ielts' || v === 'ielts65'
+        ? v
+        : 'cet6'
+    } catch {
+      return 'cet6'
     }
   })
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
@@ -443,6 +457,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [autoSpeak])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:vocabLevel', vocabLevel)
+    } catch {
+      // 忽略
+    }
+  }, [vocabLevel])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -570,6 +591,33 @@ export default function ReaderApp() {
       return next
     })
   }, [])
+
+  /** 批量并入待选（不切换、不删除已有的；按 lemma 去重）。用于自动标词导入。 */
+  const mergeBatch = useCallback((items: BatchItem[]) => {
+    setBatch((prev) => {
+      const next = [...prev]
+      for (const it of items) {
+        const key = lemmaOf(it.word)
+        if (!next.some((x) => lemmaOf(x.word) === key)) next.push(it)
+      }
+      return next
+    })
+  }, [])
+
+  /** 把一串词映射成待选项，并尽量在正文里找到它所在的句子（回填来源）。 */
+  const batchItemsFromWords = useCallback(
+    (words: string[]): BatchItem[] =>
+      words.map((w) => {
+        const key = lemmaOf(w)
+        const s = doc?.sentences.find((x) =>
+          wordSpans(x.text).some(
+            (t) => t.text.toLowerCase() === w.toLowerCase() || lemmaOf(t.text) === key,
+          ),
+        )
+        return { word: w, sentence: s?.text ?? '', sentenceId: s?.id ?? null }
+      }),
+    [doc],
+  )
 
   /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -1484,9 +1532,37 @@ export default function ReaderApp() {
     }
   }, [doc, flash])
 
+  /** 自动标词：按词汇标准让 AI 从全文挑词，结果进「待选」。 */
+  const copyAutoVocab = useCallback(async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    const text = doc.sentences.map((s) => s.text).join(' ')
+    setLastTask('auto_vocab')
+    try {
+      await navigator.clipboard.writeText(buildAutoVocabPrompt(text, vocabLevel))
+      flash('已复制自动标词提示词；把 AI 返回的词表粘到「应用结果」')
+    } catch {
+      flash('复制失败：浏览器需要 localhost 或 https')
+    }
+  }, [doc, vocabLevel, flash])
+
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
+    // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
+    if (lastTask === 'auto_vocab') {
+      const words = parseWordList(raw)
+      if (!words.length) {
+        flash('没解析出单词')
+        return
+      }
+      mergeBatch(batchItemsFromWords(words))
+      setPasted('')
+      flash(`已加入待选 ${words.length} 个词；可增删后再查词`)
+      return
+    }
     const result = parseAnalysis(raw)
     let next = library
     if (result.words?.length) {
@@ -1529,7 +1605,7 @@ export default function ReaderApp() {
     if (result.sentences?.length || (lastTask && sentence)) setPendingSave(true)
     setPasted('')
     flash(result.words?.length ? `已填入 ${result.words.length} 个词条` : '已应用')
-  }, [pasted, library, lastTask, sentence, persist, flash])
+  }, [pasted, library, lastTask, sentence, persist, flash, mergeBatch, batchItemsFromWords])
 
   const download = useCallback(
     (name: string, content: string, mime: string) => {
@@ -1698,6 +1774,27 @@ export default function ReaderApp() {
             <button onClick={() => void copyTranslateAll()} title="生成按句 id 的全文翻译提示词；粘回「应用结果」后逐句对齐">
               全文翻译
             </button>
+          )}
+          {doc && !editing && (
+            <>
+              <select
+                value={vocabLevel}
+                onChange={(e) => setVocabLevel(e.target.value as VocabLevel)}
+                title="自动标词的词汇标准"
+              >
+                <option value="cet4">四级</option>
+                <option value="cet6">六级</option>
+                <option value="ielts">刚开始学雅思</option>
+                <option value="ielts65">雅思 6.5</option>
+                <option value="kaoyan">考研</option>
+              </select>
+              <button
+                onClick={() => void copyAutoVocab()}
+                title="按所选词汇标准，让 AI 从全文挑出要查的词（结果进「待选」，可增删后再查词）"
+              >
+                自动标词
+              </button>
+            </>
           )}
           {doc && !editing && (
             <select
