@@ -615,7 +615,7 @@ export default function ReaderApp() {
     })
   }, [])
 
-  /** 批量并入待选（不切换、不删除已有的；按 lemma 去重）。用于自动标词导入。 */
+  /** 批量并入选区/待选（按 lemma 去重）。用于自动标词导入。 */
   const mergeBatch = useCallback((items: BatchItem[]) => {
     setBatch((prev) => {
       const next = [...prev]
@@ -1397,11 +1397,19 @@ export default function ReaderApp() {
 
       const idxAt = (offset: number) => spans.findIndex((w) => offset >= w.start && offset < w.end)
 
-      // 选词模式：点（含 Ctrl）= 该词增/删进「待选」；Alt/Ctrl 拖动 = 整段
+      // 选词模式：普通点=该词进待选；Ctrl 点=离散选区，拼成词组后再点「加入待选」；Alt/Ctrl 拖动=整段
       if (vocabMode) {
         if (range.collapsed) {
           const idx = idxAt(a)
           if (idx < 0) return
+          if (ctrl) {
+            if (!finalize) return
+            const cur = new Set(selSid === sid ? selIndices : [])
+            if (cur.has(idx)) cur.delete(idx)
+            else cur.add(idx)
+            commitSel([...cur])
+            return
+          }
           commitSel([idx], spans[idx].text)
           return
         }
@@ -1482,8 +1490,21 @@ export default function ReaderApp() {
     return null
   }, [doc, selectedId, exact])
 
-  /** 实际用于提示词/复制的文本：默认整句；按 Ctrl 划选时用更短的精确片段。 */
+  /** 实际用于提示词/复制的文本：默认整句；有精确选区时用选区。 */
   const target = useExact && exact ? exact : sentence?.text || exact
+
+  /** 把当前精确选区（可能是离散拼成的词组）加入待选。 */
+  const addSelectionToBatch = useCallback(() => {
+    const word = exact.trim()
+    if (!word) return
+    const already = batch.some((x) => lemmaOf(x.word) === lemmaOf(word))
+    addToBatch([word], sentence?.text ?? '', sentence?.id ?? null)
+    if (!already) sessionPickedRef.current += 1
+    if (sentence) setLastPicked({ word, sid: sentence.id })
+    setSelSid(null)
+    setSelIndices([])
+    flash(`已加入待选：${word}`)
+  }, [exact, batch, addToBatch, sentence, flash])
 
   const mark = useCallback(() => {
     if (!exact) {
@@ -2350,12 +2371,19 @@ export default function ReaderApp() {
           </div>
           <div className="muted hint">
             {vocabMode
-              ? '选词模式：点=一个词进待选；Alt 拖动=词组。'
+              ? '选词模式：点=一个词进待选；Ctrl 点多个词后「加入待选」拼成词组；Alt 拖动=整段。'
               : '单击=整句；拖动=整段；Ctrl 点词=离散多选（点 bar 再点 from 就选这两个）。'}
           </div>
           <div className="tasks">
             <button className="primary" onClick={mark} disabled={!exact}>
               加入生词
+            </button>
+            <button
+              onClick={addSelectionToBatch}
+              disabled={!exact}
+              title="把当前选中（Ctrl 点选拼成的词组）加入「待选」清单"
+            >
+              加入待选
             </button>
             {TASKS.map((t) => (
               <button key={t.task} onClick={() => copyPrompt(t.task)}>
