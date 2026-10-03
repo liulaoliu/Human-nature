@@ -208,6 +208,14 @@ export default function ReaderApp() {
       return false
     }
   })
+  /** 护眼模式（深绿暗色） */
+  const [eye, setEye] = useState(() => {
+    try {
+      return localStorage.getItem('reader:theme') === 'green'
+    } catch {
+      return false
+    }
+  })
   const [composing, setComposing] = useState(false)
   const [newTitle, setNewTitle] = useState('')
   /** 新建/导入时可选的书名（epub 自动用文件名） */
@@ -431,6 +439,15 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [serif])
+  useEffect(() => {
+    const theme = eye ? 'green' : 'dark'
+    try {
+      localStorage.setItem('reader:theme', theme)
+    } catch {
+      // 忽略
+    }
+    document.documentElement.dataset.theme = theme
+  }, [eye])
   useEffect(() => {
     try {
       localStorage.setItem('reader:vocabView', vocabView)
@@ -1999,6 +2016,10 @@ export default function ReaderApp() {
           <label className="check-inline" title="正文用衬线字体（更像书）">
             <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
             衬线
+          </label>
+          <label className="check-inline" title="护眼模式：深绿暗色">
+            <input type="checkbox" checked={eye} onChange={(e) => setEye(e.target.checked)} />
+            护眼
           </label>
           <a className="navlink" href="./index.html" title="回到跟读练习">
             <span className="arrow">←</span> 跟读练习

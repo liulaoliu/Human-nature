@@ -443,3 +443,31 @@ select:focus-visible { outline: none; box-shadow: var(--ring); }
 @media (prefers-reduced-motion: reduce) {
   * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* 护眼模式：深绿暗色（html[data-theme="green"]） */
+:root[data-theme='green'] {
+  --bg: #0e1712;
+  --bg-elev: #122019;
+  --panel: #16261d;
+  --panel-2: #1b2e22;
+  --panel-3: #223a2b;
+  --line: #27412f;
+  --line-soft: #1f3527;
+  --fg: #e3efe4;
+  --dim: #8fae98;
+  --accent: #4cc38a;
+  --accent-2: #6fd9a3;
+  --accent-ink: #06231a;
+  --accent-soft: rgba(76, 195, 138, 0.16);
+  --red: #ff6b63;
+  --green: #4cc38a;
+}
+:root[data-theme='green'] button,
+:root[data-theme='green'] select,
+:root[data-theme='green'] .navlink { background: #1b2e22; }
+:root[data-theme='green'] button:hover:not(:disabled),
+:root[data-theme='green'] select:hover,
+:root[data-theme='green'] .navlink:hover { background: #243a2c; }
+:root[data-theme='green'] header { background: rgba(14, 23, 18, 0.86); }
+:root[data-theme='green'] .script.edit textarea,
+:root[data-theme='green'] code { background: #0b1410; }

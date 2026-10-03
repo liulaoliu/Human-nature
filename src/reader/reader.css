@@ -595,3 +595,42 @@ button.danger {
   color: #fff;
   font-weight: 600;
 }
+
+/* 护眼模式：深绿暗色（html[data-theme="green"]） */
+:root[data-theme='green'] {
+  --bg: #0e1712;
+  --bg-elev: #122019;
+  --panel: #16261d;
+  --panel-2: #1b2e22;
+  --panel-3: #223a2b;
+  --line: #27412f;
+  --line-soft: #1f3527;
+  --fg: #e3efe4;
+  --dim: #8fae98;
+  --accent: #4cc38a;
+  --accent-2: #6fd9a3;
+  --accent-ink: #06231a;
+  --accent-soft: rgba(76, 195, 138, 0.16);
+  --red: #ff6b63;
+  --green: #4cc38a;
+}
+:root[data-theme='green'] button,
+:root[data-theme='green'] select,
+:root[data-theme='green'] .navlink,
+:root[data-theme='green'] .picker-btn,
+:root[data-theme='green'] .filebtn { background: #1b2e22; }
+:root[data-theme='green'] button:hover:not(:disabled),
+:root[data-theme='green'] select:hover,
+:root[data-theme='green'] .navlink:hover,
+:root[data-theme='green'] .picker-btn:hover,
+:root[data-theme='green'] .filebtn:hover { background: #243a2c; }
+:root[data-theme='green'] textarea,
+:root[data-theme='green'] .title-input,
+:root[data-theme='green'] .study-input,
+:root[data-theme='green'] code { background: #0b1410; }
+:root[data-theme='green'] .navlink.accent {
+  background: linear-gradient(180deg, #6fd9a3, #3fae79);
+  border-color: #3fae79;
+  color: #06231a;
+}
+:root[data-theme='green'] .toast { background: rgba(27, 46, 34, 0.94); border-color: #2c4a37; }
