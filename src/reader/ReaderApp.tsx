@@ -85,7 +85,6 @@ import {
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import { extractEpub, extractPdfText } from './importers'
-import ArticlePicker from './ArticlePicker'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
@@ -100,7 +99,7 @@ import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
 import ReaderBody from './panels/ReaderBody'
 import Composer from './panels/Composer'
-import { fmtDur } from './format'
+import ReaderToolbar from './panels/ReaderToolbar'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
@@ -2857,178 +2856,64 @@ export default function ReaderApp() {
         onContextMenu={onContextMenu}
       >
         {readingView && (
-        <div className="bar">
-          <strong>学吧老哥</strong>
-          {book && editions.length > 1 && (
-            <select value={edition} onChange={(e) => setEdition(e.target.value)} title="按期次筛选内置文章">
-              <option value="全部">全部期次（{bookKeys.length}）</option>
-              {editions.map(([label, n]) => (
-                <option key={label} value={label}>
-                  {label}（{n}）
-                </option>
-              ))}
-            </select>
-          )}
-          {(book || saved.length > 0) && (
-            <ArticlePicker
-              book={book}
-              saved={saved}
-              savedGroups={savedGroups}
-              builtinKeys={shownKeys}
-              currentValue={currentValue}
-              onPick={onPick}
-            />
-          )}
-          <button onClick={() => void saveCurrent()} disabled={!doc} title="把这篇（含粘回的翻译/语法）存到本机，刷新后还在">
-            保存这篇
-          </button>
-          {!editing && (
-            <button onClick={() => setComposing((v) => !v)} title="新建 / 导入一篇文章（可多选 .txt / .md）">
-              ＋ 新建文章
-            </button>
-          )}
-          {doc && !editing && (
-            <button className={vocabMode ? 'primary' : ''} onClick={toggleVocabMode} title="选词模式（W）：默认选单个词；按住 Alt / Ctrl 拖动选词组">
-              选词模式{vocabMode ? ' · 开' : ''}
-            </button>
-          )}
-          {doc && !editing && (
-            <button onClick={() => void copyTranslateAll()} title="生成按句 id 的全文翻译提示词；粘回「应用结果」后逐句对齐">
-              全文翻译
-            </button>
-          )}
-          {doc && !editing && (
-            <>
-              <select
-                value={vocabLevel}
-                onChange={(e) => setVocabLevel(e.target.value as VocabLevel)}
-                title="自动标词的词汇标准"
-              >
-                <option value="cet4">四级</option>
-                <option value="cet6">六级</option>
-                <option value="ielts">刚开始学雅思</option>
-                <option value="ielts65">雅思 6.5</option>
-                <option value="kaoyan">考研</option>
-              </select>
-              <button
-                onClick={() => void copyAutoVocab()}
-                title="按所选词汇标准，让 AI 从全文挑出要查的词（结果进「待选」，可增删后再查词）"
-              >
-                自动标词
-              </button>
-            </>
-          )}
-          {doc && !editing && (
-            <select
-              value={translateView}
-              onChange={(e) => setTranslateView(e.target.value as 'off' | 'below' | 'only')}
-              title="译文显示：只看原文 / 原文+译文 / 只看译文"
-            >
-              <option value="off">只看原文</option>
-              <option value="below">原文+译文</option>
-              <option value="only">只看译文</option>
-            </select>
-          )}
-          {doc && !editing && (
-            <label className="check-inline" title="点句子后自动朗读原文">
-              <input
-                type="checkbox"
-                checked={autoSpeak}
-                onChange={(e) => setAutoSpeak(e.target.checked)}
-              />
-              选中朗读
-            </label>
-          )}
-          {doc && !editing && selectedId && (
-            <button
-              onClick={() => {
-                const s = doc.sentences.find((x) => x.id === selectedId)
-                if (s) speak(s.text)
-              }}
-              title="朗读当前选中句"
-            >
-              🔊 读本句
-            </button>
-          )}
-          {doc && !editing && (
-            <button
-              className={readingAll ? 'danger' : ''}
-              onClick={readingAll ? stopReadAll : startReadAll}
-              title="用 TTS 逐句朗读整篇；再点一次停止"
-            >
-              {readingAll ? '⏹ 停止朗读' : '🔊 朗读全文'}
-            </button>
-          )}
-          {doc && !editing && (
-            <button onClick={enterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
-              编辑正文
-            </button>
-          )}
-          {vocabMode && (
-            <span className="muted timer" title="选词模式计时；今日/连续/累计统计记在本机">
-              ⏱ {fmtDur(vocabSeconds)} · 本轮 {sessionPickedRef.current} · 今日 {dayStats.todayPicked} ·🔥
-              {dayStats.streak} · 累计 {totals.picked} 词 / {fmtDur(totals.seconds)}
-            </span>
-          )}
-          {editing && (
-            <>
-              <button
-                onClick={() => void copyCleanupPrompt(draft, '「完成」')}
-                disabled={!draft.trim()}
-                title="复制一段提示词：让 AI 去掉这段文本的多余换行、粘连和错误，再把结果贴回编辑框"
-              >
-                生成清洗提示词
-              </button>
-              <button className="primary" onClick={applyEdit}>
-                完成
-              </button>
-              <button onClick={cancelEdit}>取消</button>
-            </>
-          )}
-          {savedId && (
-            <button
-              className={confirmDelSave ? 'danger' : ''}
-              onClick={askDeleteSave}
-              title="从本机删除这篇的保存（两步确认，防误删）"
-            >
-              {confirmDelSave ? '确认删除保存' : '删除保存'}
-            </button>
-          )}
-          <span className="muted">{library.items.length} 个生词</span>
-          <span
-            className="muted goal-chip"
-            title="今日目标（按学过的不同单词数）；点「统计」可改目标"
-          >
-            🎯 {studiedToday.ids.length}
-            {dailyGoal > 0 ? `/${dailyGoal}` : ''} · 🔥{dayStats.streak}
-          </span>
-          <details className="tb-settings">
-            <summary title="显示设置">显示 ⚙</summary>
-            <div className="tb-settings-body">
-              <select value={fontSize} onChange={(e) => setFontSize(e.target.value)} title="正文字号">
-                <option value="sm">字号 小</option>
-                <option value="md">字号 中</option>
-                <option value="lg">字号 大</option>
-                <option value="xl">字号 特大</option>
-              </select>
-              <label className="check-inline" title="正文加粗">
-                <input type="checkbox" checked={bold} onChange={(e) => setBold(e.target.checked)} />
-                加粗
-              </label>
-              <label className="check-inline" title="正文用衬线字体（更像书）">
-                <input type="checkbox" checked={serif} onChange={(e) => setSerif(e.target.checked)} />
-                衬线
-              </label>
-              <label className="check-inline" title="护眼模式：浅色纸感（浅绿底 + 深色字）">
-                <input type="checkbox" checked={eye} onChange={(e) => setEye(e.target.checked)} />
-                护眼
-              </label>
-            </div>
-          </details>
-          <a className="navlink" href="./index.html" title="回到跟读练习">
-            <span className="arrow">←</span> 跟读练习
-          </a>
-        </div>
+          <ReaderToolbar
+            book={book}
+            editions={editions}
+            edition={edition}
+            onEditionChange={setEdition}
+            bookKeysCount={bookKeys.length}
+            saved={saved}
+            savedGroups={savedGroups}
+            shownKeys={shownKeys}
+            currentValue={currentValue}
+            onPickArticle={onPick}
+            hasDoc={!!doc}
+            editing={editing}
+            savedId={savedId}
+            onSave={() => void saveCurrent()}
+            onNewArticle={() => setComposing((v) => !v)}
+            vocabMode={vocabMode}
+            onToggleVocab={toggleVocabMode}
+            onTranslateAll={() => void copyTranslateAll()}
+            vocabLevel={vocabLevel}
+            onVocabLevelChange={setVocabLevel}
+            onAutoVocab={() => void copyAutoVocab()}
+            translateView={translateView}
+            onTranslateViewChange={setTranslateView}
+            autoSpeak={autoSpeak}
+            onAutoSpeakChange={setAutoSpeak}
+            selectedId={selectedId}
+            onSpeakSelected={() => {
+              const s = doc?.sentences.find((x) => x.id === selectedId)
+              if (s) speak(s.text)
+            }}
+            readingAll={readingAll}
+            onToggleReadAll={readingAll ? stopReadAll : startReadAll}
+            onEnterEdit={enterEdit}
+            draft={draft}
+            onCleanupEdit={() => void copyCleanupPrompt(draft, '「完成」')}
+            onApplyEdit={applyEdit}
+            onCancelEdit={cancelEdit}
+            vocabSeconds={vocabSeconds}
+            sessionPicked={sessionPickedRef.current}
+            todayPicked={dayStats.todayPicked}
+            streak={dayStats.streak}
+            totalPicked={totals.picked}
+            totalSeconds={totals.seconds}
+            studiedCount={studiedToday.ids.length}
+            dailyGoal={dailyGoal}
+            libraryCount={library.items.length}
+            fontSize={fontSize}
+            onFontSizeChange={setFontSize}
+            bold={bold}
+            onBoldChange={setBold}
+            serif={serif}
+            onSerifChange={setSerif}
+            eye={eye}
+            onEyeChange={setEye}
+            confirmDelSave={confirmDelSave}
+            onDeleteSave={askDeleteSave}
+          />
         )}
 
         {bookError && !book && (
