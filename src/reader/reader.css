@@ -403,6 +403,25 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   margin-bottom: 6px;
   word-break: break-word;
 }
+.web-flow {
+  margin: 2px 0 8px;
+  font-size: 12px;
+}
+.web-flow-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.6;
+}
+.web-flow-row .web-flow-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.web-flow-row.done { color: var(--green); }
+.web-flow-row .web-flow-mark { width: 1em; }
 
 /* 选词模式的待选词 */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }

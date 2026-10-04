@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
+  AI_TASK_LABEL,
   buildAiJobs,
   buildJobPack,
   buildWebPackPrompt,
@@ -56,6 +57,23 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   const pending = useMemo(() => round.filter((j) => !doneSet.has(j.id)), [round, doneSet])
   const missing = useMemo(() => round.filter((j) => askedSet.has(j.id) && !doneSet.has(j.id)), [round, askedSet, doneSet])
+
+  /** 按任务类型分组的全流程进度（完成/总数），顺序按首次出现。 */
+  const webBreakdown = useMemo(() => {
+    const order: AiJobTask[] = []
+    const map = new Map<AiJobTask, { task: AiJobTask; label: string; done: number; total: number }>()
+    for (const j of round) {
+      let g = map.get(j.task)
+      if (!g) {
+        g = { task: j.task, label: AI_TASK_LABEL[j.task] ?? j.task, done: 0, total: 0 }
+        map.set(j.task, g)
+        order.push(j.task)
+      }
+      g.total++
+      if (doneSet.has(j.id)) g.done++
+    }
+    return order.map((t) => map.get(t)!)
+  }, [round, doneSet])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
@@ -240,6 +258,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     webDone: doneCount,
     webPending: pending.length,
     webMissing: missing.length,
+    webBreakdown,
     /** 「还要做」的前几项标签（给 UI 提示用）。 */
     webPendingLabels: pending.slice(0, 6).map((j) => j.label),
     agentMissingCount: missingIds.length,

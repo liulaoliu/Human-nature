@@ -2658,6 +2658,7 @@ export default function ReaderApp() {
     webPending: aiWebPending,
     webMissing: aiWebMissing,
     webPendingLabels: aiWebPendingLabels,
+    webBreakdown: aiWebBreakdown,
   } = useAiPack({
     jobsInput: aiJobsInput,
     applyTaskResult,
@@ -3316,6 +3317,7 @@ export default function ReaderApp() {
           webPending={aiWebPending}
           webMissing={aiWebMissing}
           webPendingLabels={aiWebPendingLabels}
+          webBreakdown={aiWebBreakdown}
           confusableBatchCount={confusableBatch.length}
           confusableTodoCount={confusableTodo.length}
           onCopyConfusable={() => void copyConfusablePrompt()}

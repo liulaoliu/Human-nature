@@ -58,6 +58,7 @@ export interface SidePickProps {
   webPending: number
   webMissing: number
   webPendingLabels: string[]
+  webBreakdown: { task: string; label: string; done: number; total: number }[]
 
   /** 混淆项 / 原形 / -ing-ed / 去重。 */
   confusableBatchCount: number
@@ -113,6 +114,7 @@ export default function SidePick({
   webPending,
   webMissing,
   webPendingLabels,
+  webBreakdown,
   confusableBatchCount,
   confusableTodoCount,
   onCopyConfusable,
@@ -248,6 +250,19 @@ export default function SidePick({
               </span>
             )}
           </div>
+          {webBreakdown.length > 0 && (
+            <div className="web-flow">
+              {webBreakdown.map((g) => (
+                <div key={g.task} className={'web-flow-row' + (g.done === g.total ? ' done' : '')}>
+                  <span className="web-flow-name">{g.label}</span>
+                  <span className="muted">
+                    {g.done}/{g.total}
+                  </span>
+                  <span className="web-flow-mark">{g.done === g.total ? '✔' : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
           {webPending > 0 && webPendingLabels.length > 0 && (
             <div className="muted web-pending">
               还要做：{webPendingLabels.join('、')}

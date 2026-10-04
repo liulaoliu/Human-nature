@@ -40,6 +40,20 @@ export function isAiJobTask(value: unknown): value is AiJobTask {
   return typeof value === 'string' && (AI_JOB_TASKS as readonly string[]).includes(value)
 }
 
+/** 任务类型的中文名（进度面板分组显示用）。 */
+export const AI_TASK_LABEL: Record<AiJobTask, string> = {
+  lookup: '查词/补齐',
+  translate: '翻译',
+  auto_vocab: '自动标词',
+  confusable: '混淆项',
+  lemma: '原形',
+  pos: '-ing/-ed',
+  listening: '听力',
+  language: '语言点',
+  imitation: '仿写',
+  feedback: '批改',
+}
+
 /** 工作包里的一个待办：一条提示词 + 应用它时需要的上下文（问过哪些词/句）。 */
 export interface AiJob {
   id: string
