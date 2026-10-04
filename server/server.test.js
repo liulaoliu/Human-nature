@@ -72,6 +72,33 @@ describe('httpApp 请求处理', () => {
       await new Promise((r) => server.close(r))
     }
   })
+
+  it('fish 静态资源：列表 / 取图 / 防越界', async () => {
+    const dist = mkdtempSync(join(tmpdir(), 'sa-dist-'))
+    const pub = mkdtempSync(join(tmpdir(), 'sa-pub-'))
+    const fish = mkdtempSync(join(tmpdir(), 'sa-fish-'))
+    mkdirSync(join(dist, 'assets'), { recursive: true })
+    writeFileSync(join(dist, 'index.html'), 'x')
+    writeFileSync(join(fish, 'a.png'), 'PNGDATA')
+    writeFileSync(join(fish, 'note.txt'), 'nope')
+    const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub, fishDir: fish }))
+    await new Promise((r) => server.listen(0, r))
+    const port = server.address().port
+    try {
+      const list = await fetch(`http://127.0.0.1:${port}/fish/manifest.json`).then((r) => r.json())
+      expect(list).toEqual(['a.png'])
+      const img = await fetch(`http://127.0.0.1:${port}/fish/a.png`)
+      expect(img.status).toBe(200)
+      expect(img.headers.get('content-type')).toContain('image/png')
+      expect(await img.text()).toBe('PNGDATA')
+      const bad = await fetch(`http://127.0.0.1:${port}/fish/..%2Fsecret`)
+      expect(bad.status).toBe(400)
+      const miss = await fetch(`http://127.0.0.1:${port}/fish/zzz.png`)
+      expect(miss.status).toBe(404)
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  })
 })
 
 describe('mode.resolveChild / loadMode', () => {

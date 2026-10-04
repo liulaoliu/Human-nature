@@ -320,6 +320,7 @@ src/
     exports.ts        Anki CSV / JSON / A4 打印
 tools/              构建期脚本（Python，运行时不需要）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
+  vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案
   extract-articles.py  从 PDF 抽正文，带 wpm 质量闸门
   validate-articles.py 单独跑质量闸门

@@ -3,9 +3,11 @@ import react from '@vitejs/plugin-react'
 // 这个插件用 node:fs 写文件，放在 .mjs 里避免把 Node 类型塞进前端 tsconfig
 // @ts-expect-error .mjs 没有类型声明
 import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
+// @ts-expect-error .mjs 没有类型声明
+import { fishStaticPlugin } from './tools/vite-fish-endpoint.mjs'
 
 export default defineConfig({
-  plugins: [react(), projectStatePlugin()],
+  plugins: [react(), projectStatePlugin(), fishStaticPlugin()],
   base: './',
   build: {
     rollupOptions: {

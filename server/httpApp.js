@@ -1,8 +1,9 @@
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync } from 'node:fs'
+import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 
 const DATA_FILES = new Set(['articles.json', 'shadowing-state.json'])
+const FISH_IMG = /\.(png|jpe?g|gif|webp|avif)$/i
 
 function sendJson(res, code, obj) {
   res.statusCode = code
@@ -30,7 +31,7 @@ function serveFile(res, file, { head = false, cache = false } = {}) {
  *  - articles.json / shadowing-state.json 优先 public（重新生成不必 rebuild）
  *  - 其余静态文件来自 dist/
  */
-export function createRequestHandler({ distDir, publicDir, startedAt = Date.now() }) {
+export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = Date.now() }) {
   return (req, res) => {
     const url = req.url || '/'
     const pathname = url.split('?')[0]
@@ -42,6 +43,43 @@ export function createRequestHandler({ distDir, publicDir, startedAt = Date.now(
         uptime: (Date.now() - startedAt) / 1000,
         time: new Date().toISOString(),
       })
+      return
+    }
+
+    // 静态鱼素材：GET /fish（文件名列表）· GET /fish/<name>
+    if (fishDir && (pathname === '/fish' || pathname === '/fish/manifest.json')) {
+      let names = []
+      try {
+        names = readdirSync(fishDir)
+          .filter((f) => FISH_IMG.test(f))
+          .sort()
+      } catch {
+        // 目录不存在 → 空列表
+      }
+      sendJson(res, 200, names)
+      return
+    }
+    if (fishDir && pathname.startsWith('/fish/')) {
+      let name = ''
+      try {
+        name = decodeURIComponent(pathname.slice('/fish/'.length))
+      } catch {
+        res.statusCode = 400
+        res.end('bad name')
+        return
+      }
+      if (!name || name.includes('..') || name.includes('/') || name.includes('\\') || !FISH_IMG.test(name)) {
+        res.statusCode = 400
+        res.end('bad name')
+        return
+      }
+      const file = join(fishDir, name)
+      if (existsSync(file) && statSync(file).isFile()) {
+        serveFile(res, file, { head: req.method === 'HEAD', cache: true })
+        return
+      }
+      res.statusCode = 404
+      res.end('not found')
       return
     }
 

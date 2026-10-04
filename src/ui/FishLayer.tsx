@@ -1,23 +1,30 @@
-import { useMemo, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
 
 /**
- * 装饰用的一条「鱼」：从 assets/imgs/fish 随机取一张，默认待在右下角。
+ * 装饰用的一条「鱼」：从服务器上的 `/fish`（= assets/imgs/fish/）随机取一张，默认待在右下角。
+ *
+ * 图片是**静态资源**，由 Vite dev 中间件 / 静态服务提供，**不打进 bundle**：
+ *   GET /fish            → 文件名数组
+ *   GET /fish/<name>     → 图片
+ * 目录不存在 / 为空时自动不渲染（不报错）。
  *
  * 交互（都持久化，按「页面」存 localStorage）：
- *   - 左上角小手柄：**拖动改位置**（key = `fish:pos:<pageKey>`）
- *   - 右下角小手柄：**拖动改大小**、双击复位（key = `fish:size:<pageKey>`）
- *
- * 纯装饰、不打扰：
- *   - 图片本身 pointer-events:none，不挡点击；只有两个小手柄可交互；
- *   - 半透明、贴角，基本不遮内容；
- *   - 目录不存在 / 为空时自动不渲染（不报错）。
- * 注意：fish 目录是本地素材（.gitignore），别的机器上可能没有 → 自然就没鱼。
+ *   - 左上角小手柄：拖动改位置（key = `fish:pos:<pageKey>`）
+ *   - 右下角小手柄：拖动改大小、双击复位（key = `fish:size:<pageKey>`）
+ * 图片本身 pointer-events:none，不挡点击。
  */
-const FISH = import.meta.glob('../../assets/imgs/fish/*.{png,jpg,jpeg,gif,webp,avif}', {
-  eager: true,
-  query: '?url',
-  import: 'default',
-}) as Record<string, string>
+const FISH_BASE = '/fish'
+
+let fishCache: Promise<string[]> | null = null
+function loadFishNames(): Promise<string[]> {
+  if (!fishCache) {
+    fishCache = fetch(`${FISH_BASE}/manifest.json`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((v) => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []))
+      .catch(() => [])
+  }
+  return fishCache
+}
 
 const DEFAULT_SIZE = 104
 const MIN_SIZE = 40
@@ -57,10 +64,7 @@ function clampPos(right: number, bottom: number, size: number): { right: number;
 export default function FishLayer({ pageKey = 'default' }: { pageKey?: string }) {
   const sizeKey = `fish:size:${pageKey}`
   const posKey = `fish:pos:${pageKey}`
-  const src = useMemo(() => {
-    const urls = Object.values(FISH)
-    return urls.length ? urls[Math.floor(Math.random() * urls.length)] : ''
-  }, [])
+  const [url, setUrl] = useState('')
   const [size, setSize] = useState(() => loadSize(sizeKey))
   const [pos, setPos] = useState(() => loadPos(posKey))
   const sizeRef = useRef(size)
@@ -70,6 +74,18 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     | { kind: 'size'; x: number; startW: number; moved: boolean }
     | null
   >(null)
+
+  useEffect(() => {
+    let alive = true
+    void loadFishNames().then((names) => {
+      if (!alive || !names.length) return
+      const pick = names[Math.floor(Math.random() * names.length)]
+      setUrl(`${FISH_BASE}/${encodeURIComponent(pick)}`)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
 
   const applySize = (w: number) => {
     const s = Math.round(Math.min(MAX_SIZE, Math.max(MIN_SIZE, w)))
@@ -90,7 +106,7 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
   }
 
-  if (!src) return null
+  if (!url) return null
 
   const onDown = (kind: 'move' | 'size') => (e: ReactPointerEvent<HTMLButtonElement>) => {
     e.preventDefault()
@@ -106,7 +122,6 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     const d = drag.current
     if (!d) return
     if (d.kind === 'move') {
-      // 锚定右下角：往右拖 → right 变小；往下拖 → bottom 变小
       applyPos(d.startR - (e.clientX - d.x), d.startB - (e.clientY - d.y))
     } else {
       applySize(d.startW - (e.clientX - d.x))
@@ -157,7 +172,7 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     >
       <img
         className="fish"
-        src={src}
+        src={url}
         alt=""
         style={{
           width: `${size}px`,
@@ -191,3 +206,4 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     </div>
   )
 }
+

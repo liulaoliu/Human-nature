@@ -8,6 +8,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
 const distDir = join(root, 'dist')
 const publicDir = join(root, 'public')
+const fishDir = join(root, 'assets', 'imgs', 'fish')
 const port = loadPort(root, process.argv[2])
 const pidFile = join(here, '.appServer.pid')
 
@@ -25,7 +26,7 @@ process.on('exit', () => {
   }
 })
 
-const server = createServer(createRequestHandler({ distDir, publicDir }))
+const server = createServer(createRequestHandler({ distDir, publicDir, fishDir }))
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`端口 ${port} 被占用：可能是开发服务器（npm run dev）还在跑，先关掉它，或运行 停止服务.cmd。`)
