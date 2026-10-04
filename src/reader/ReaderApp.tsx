@@ -99,6 +99,7 @@ import SideOverview from './panels/SideOverview'
 import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
 import ReaderBody from './panels/ReaderBody'
+import Composer from './panels/Composer'
 import { fmtDur } from './format'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
@@ -3264,82 +3265,24 @@ export default function ReaderApp() {
         )}
 
         {!studyQueue && !browseAll && !examActive && (composing || !doc) && (
-          <div className="composer">
-            <img className="composer-mascot" src={mascotAI} alt="" />
-            <div className="bar">
-              <input
-                className="title-input"
-                placeholder="文章标题（可留空）"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-              />
-              <input
-                className="title-input book-input"
-                placeholder="书名（可选，用于分组）"
-                value={newBook}
-                onChange={(e) => setNewBook(e.target.value)}
-              />
-              <label className="filebtn" title="读入本地 .txt / .md，可多选（每个文件一篇）">
-                选择文件
-                <input
-                  type="file"
-                  accept=".txt,.md,.markdown,text/plain"
-                  multiple
-                  onChange={(e) => {
-                    void onImportFiles(e.target.files)
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-              <input
-                className="title-input range-input"
-                placeholder="页码范围 14-16（留空=整本）"
-                value={pdfRange}
-                onChange={(e) => setPdfRange(e.target.value)}
-                title="只抽这几页；留空抽整本"
-              />
-              <label className="filebtn" title="浏览器内解析 PDF 文本（扫描件无文字层则读不出）">
-                选择 PDF
-                <input
-                  type="file"
-                  accept=".pdf,application/pdf"
-                  onChange={(e) => {
-                    void onPickPdf(e.target.files?.[0])
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-              <label className="filebtn" title="解析 EPUB，按章拆成多篇保存">
-                选择 EPUB
-                <input
-                  type="file"
-                  accept=".epub,application/epub+zip"
-                  onChange={(e) => {
-                    void onPickEpub(e.target.files?.[0])
-                    e.target.value = ''
-                  }}
-                />
-              </label>
-              <button
-                onClick={() => void copyCleanupPrompt(manual, '「创建文章」')}
-                disabled={!manual.trim()}
-                title="复制一段提示词：让 AI 去掉这段复制文本的多余换行、粘连和错误"
-              >
-                生成清洗提示词
-              </button>
-              <button className="primary" onClick={() => void createArticle()} disabled={!manual.trim()}>
-                创建文章
-              </button>
-              {composing && <button onClick={() => setComposing(false)}>取消</button>}
-              {importing && <span className="muted">{importing}</span>}
-            </div>
-            <textarea
-              className="manual"
-              placeholder="把英文正文粘在这里（或点「选择文件」导入），再点「创建文章」"
-              value={manual}
-              onChange={(e) => setManual(e.target.value)}
-            />
-          </div>
+          <Composer
+            composing={composing}
+            onCancel={() => setComposing(false)}
+            title={newTitle}
+            onTitleChange={setNewTitle}
+            book={newBook}
+            onBookChange={setNewBook}
+            manual={manual}
+            onManualChange={setManual}
+            pdfRange={pdfRange}
+            onPdfRangeChange={setPdfRange}
+            importing={importing}
+            onImportFiles={(files) => void onImportFiles(files)}
+            onPickPdf={(f) => void onPickPdf(f)}
+            onPickEpub={(f) => void onPickEpub(f)}
+            onCleanupPrompt={() => void copyCleanupPrompt(manual, '「创建文章」')}
+            onCreate={() => void createArticle()}
+          />
         )}
 
         {!studyQueue && !browseAll && !examActive && !writingOpen && doc && !composing && (
