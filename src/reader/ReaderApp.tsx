@@ -16,8 +16,6 @@ import {
   applyLemmaMap,
   applyPosAnalysis,
   applyWordAnalysis,
-  buildLearnQueue,
-  buildReviewQueue,
   createLibrary,
   dedupeLibrary,
   editItem,
@@ -31,7 +29,6 @@ import {
   reviewItem,
   sortItems,
   type ReviewGrade,
-  type StudyMode,
 } from '../core/vocab'
 import {
   applyToSentence,
@@ -95,18 +92,19 @@ import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import WritingPanel from './panels/WritingPanel'
-import StudyPanel, { type StudyScope } from './panels/StudyPanel'
+import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import QuickPanel from './panels/QuickPanel'
 import SideOverview from './panels/SideOverview'
 import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
-import { fmtDur, fmtInterval } from './format'
+import { fmtDur } from './format'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
+import { useStudySession } from './hooks/useStudySession'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -366,55 +364,11 @@ export default function ReaderApp() {
     selectedId,
     autoSpeak,
   })
-  /** 背单词模式：本轮队列 / 当前序号 / 是否已翻面 */
-  const [studyQueue, setStudyQueue] = useState<VocabItem[] | null>(null)
-  const [studyIndex, setStudyIndex] = useState(0)
-  const [studyRevealed, setStudyRevealed] = useState(false)
-  /** 当前卡停留秒数（催你快点背） */
-  const [cardSeconds, setCardSeconds] = useState(0)
-  /** 背单词时长统计：本轮实时秒数 + 按天累计（落盘，供统计用） */
-  const [studyLive, setStudyLive] = useState(0)
-  const studyLiveRef = useRef(0)
-  const studyFlushedRef = useRef(0)
+  /** 背单词时长统计：按天累计（落盘，供统计用） */
   const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
     'reader:studyStats',
     [],
   )
-  /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
-  const [studyScope, setStudyScope] = useLocalStorageState<StudyScope>(
-    'reader:studyScope',
-    'unmastered',
-    persistentEnum(['all', 'article', 'unmastered', 'lapses'] as const, 'unmastered'),
-  )
-  const [studySpelling, setStudySpelling] = useLocalStorageState('reader:studySpelling', false, persistentBool)
-  const [studyInput, setStudyInput] = useState('')
-  const [studyChecked, setStudyChecked] = useState(false)
-  /** 背单词模式：新学习 / 复习 */
-  const [studyMode, setStudyMode] = useLocalStorageState<StudyMode>(
-    'reader:studyMode',
-    'learn',
-    persistentEnum(['learn', 'review'] as const, 'learn'),
-  )
-  /** 卡内编辑（改词形/音标/释义/用法）与两步删除 */
-  const [studyEditOpen, setStudyEditOpen] = useState(false)
-  const [studyDraft, setStudyDraft] = useState<{
-    word: string
-    phonetic: string
-    partOfSpeech: string
-    meaning: string
-    usage: string
-  } | null>(null)
-  const [studyDelArmed, setStudyDelArmed] = useState(false)
-  /** 本轮评分计数（认识 / 模糊 / 忘记），用于本轮小结 */
-  const [studyCounts, setStudyCounts] = useState({ know: 0, fuzzy: 0, forgot: 0 })
-  /** 评分后短暂提示「下次复习：X」 */
-  const [gradeInfo, setGradeInfo] = useState('')
-  /** 每个词本轮被"忘记/模糊"重排的次数（防死循环） */
-  const studyRequeueRef = useRef<Map<string, number>>(new Map())
-  /** 本轮点过「忘记了」的词 id，用于收尾重练 */
-  const studyForgotRef = useRef<string[]>([])
-  /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
-  const studyBumpedRef = useRef<Set<string>>(new Set())
 
   /** 今天学过的不同单词 id（每日目标进度） */
   const [studiedToday, setStudiedToday] = useLocalStorageState<{ day: string; ids: string[] }>(
@@ -690,112 +644,6 @@ export default function ReaderApp() {
     return all
   }, [sentenceLemmas])
 
-  /** 背单词候选池：按范围取（全部 / 错词 / 未掌握 / 本篇）。 */
-  const studyPoolFor = useCallback(
-    (scope: 'all' | 'article' | 'unmastered' | 'lapses') => {
-      if (scope === 'all') return library.items
-      if (scope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (scope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-      // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
-      return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
-    },
-    [library.items, articleIdentity, docLemmas],
-  )
-  const studyPool = useMemo(() => studyPoolFor(studyScope), [studyPoolFor, studyScope])
-
-  /** 待复习（已学过且到期）数量——用于「复习」模式的角标。 */
-  const dueCount = useMemo(
-    () => studyPool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length,
-    [studyPool],
-  )
-  /** 未学过的新词数量——用于「新学习」模式的角标。 */
-  const newCount = useMemo(
-    () => studyPool.filter((it) => it.reviewState.repetitions === 0).length,
-    [studyPool],
-  )
-
-  /**
-   * 当前卡：优先从词库取最新（评分/编辑后立刻反映），
-   * 队列里的快照只作兜底（比如词条刚从词库删掉）。
-   */
-  const studyCard =
-    studyQueue && studyIndex < studyQueue.length
-      ? (library.items.find((it) => it.id === studyQueue[studyIndex].id) ?? studyQueue[studyIndex])
-      : null
-
-  /** 开始背单词：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
-  const startStudy = useCallback(
-    (opts?: { mode?: StudyMode; scope?: StudyScope }) => {
-      const mode = opts?.mode ?? studyMode
-      const scope = opts?.scope ?? studyScope
-      if (opts?.mode != null) setStudyMode(mode)
-      if (opts?.scope != null) setStudyScope(scope)
-      const pool = studyPoolFor(scope)
-      const q =
-        mode === 'review'
-          ? buildReviewQueue(pool, new Date())
-          : buildLearnQueue(pool, new Date(), { newLimit, newToday })
-      if (!q.length) {
-        flash(
-          mode === 'review'
-            ? scope === 'article'
-              ? '这篇没有到期的复习词'
-              : '没有到期的复习词，去「新学习」吧'
-            : scope === 'article'
-              ? '这篇没有待学的新词'
-              : '没有待学的新词，去「复习」吧',
-        )
-        return
-      }
-      studyRequeueRef.current = new Map()
-      studyForgotRef.current = []
-      studyBumpedRef.current = new Set()
-      quizApiRef.current?.close()
-      setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
-      setStudyQueue(q)
-      setStudyIndex(0)
-      setStudyRevealed(false)
-      setStudyInput('')
-      setStudyChecked(false)
-      setStudyEditOpen(false)
-      setStudyDraft(null)
-      setStudyDelArmed(false)
-    },
-    [studyPoolFor, studyMode, studyScope, newLimit, newToday, flash],
-  )
-
-  /** 切换模式，立刻按新模式开一轮。 */
-  const switchMode = useCallback((m: StudyMode) => startStudy({ mode: m }), [startStudy])
-
-  /** 切换范围，立刻按新范围开一轮（含「只背本篇」）。 */
-  const switchScope = useCallback(
-    (scope: StudyScope) => startStudy({ scope }),
-    [startStudy],
-  )
-
-  /** 「本篇全部」：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）。 */
-  const startArticleAll = useCallback(() => {
-    const pool = studyPoolFor('article')
-    if (!pool.length) {
-      flash('这篇还没有生词')
-      return
-    }
-    setStudyScope('article')
-    studyRequeueRef.current = new Map()
-    studyForgotRef.current = []
-    studyBumpedRef.current = new Set()
-    quizApiRef.current?.close()
-    setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
-    setStudyQueue(sortItems(pool, 'due'))
-    setStudyIndex(0)
-    setStudyRevealed(false)
-    setStudyInput('')
-    setStudyChecked(false)
-    setStudyEditOpen(false)
-    setStudyDraft(null)
-    setStudyDelArmed(false)
-  }, [studyPoolFor, flash])
-
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {
     // newToday 已由 useLocalStorageState 落盘（自动带上当天日期）
@@ -852,139 +700,67 @@ export default function ReaderApp() {
     return listenQuiz.questions.filter((q) => set.has(q.id))
   }, [listenQuiz, listenWrongIds])
 
-  const gradeStudy = useCallback(
-    (grade: ReviewGrade) => {
-      if (!studyQueue) return
-      const queued = studyQueue[studyIndex]
-      if (!queued) return
-      const cur = library.items.find((it) => it.id === queued.id) ?? queued
-      const nextLibrary = reviewItem(library, cur.id, grade)
-      persist(nextLibrary)
-      if (cur.reviewState.repetitions === 0 && !studyBumpedRef.current.has(cur.id)) {
-        studyBumpedRef.current.add(cur.id)
-        bumpNewToday()
-      }
-      const nextState = nextLibrary.items.find((it) => it.id === cur.id)?.reviewState
-      if (nextState) {
-        const label: Record<ReviewGrade, string> = { again: '忘记了', hard: '模糊', good: '认识', easy: '认识' }
-        setGradeInfo(`${label[grade]} · 下次复习：${fmtInterval(nextState.interval)}`)
-        window.setTimeout(() => setGradeInfo(''), 1600)
-      }
-      studyFlush(0, 1)
-      markStudied(cur.id)
-      recordActivity('vocab', 1)
-      setStudyCounts((c) =>
-        grade === 'again'
-          ? { ...c, forgot: c.forgot + 1 }
-          : grade === 'hard'
-            ? { ...c, fuzzy: c.fuzzy + 1 }
-            : { ...c, know: c.know + 1 },
-      )
-      if (grade === 'again' && !studyForgotRef.current.includes(cur.id)) {
-        studyForgotRef.current.push(cur.id)
-      }
-      // 帮记忆：忘记 / 模糊的词本轮末尾再出现一次（各有上限，避免死循环）
-      if (grade === 'again' || grade === 'hard') {
-        const used = studyRequeueRef.current.get(cur.id) ?? 0
-        const cap = grade === 'again' ? 2 : 1
-        if (used < cap) {
-          studyRequeueRef.current.set(cur.id, used + 1)
-          setStudyQueue((q) => (q ? [...q, cur] : q))
-        }
-      }
-      setStudyRevealed(false)
-      setStudyInput('')
-      setStudyChecked(false)
-      setStudyEditOpen(false)
-      setStudyDelArmed(false)
-      setStudyIndex((i) => i + 1)
-    },
-    [studyQueue, studyIndex, library, persist, bumpNewToday, studyFlush, markStudied, recordActivity],
-  )
-
-  const closeStudy = useCallback(() => setStudyQueue(null), [])
-
-  /** 打开卡内编辑，带出当前值。 */
-  const openStudyEdit = useCallback(() => {
-    if (!studyCard) return
-    setStudyDraft({
-      word: studyCard.word,
-      phonetic: studyCard.phonetic ?? '',
-      partOfSpeech: studyCard.partOfSpeech ?? '',
-      meaning: studyCard.meaning ?? '',
-      usage: studyCard.usage.join('；'),
-    })
-    setStudyEditOpen(true)
-    setStudyDelArmed(false)
-  }, [studyCard])
-
-  /** 保存卡内编辑（持久化；状态置 edited，之后查词不会再覆盖）。 */
-  const saveStudyEdit = useCallback(() => {
-    if (!studyCard || !studyDraft) return
-    const usage = studyDraft.usage
-      .split(/[;；\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
-    persist(
-      editItem(library, studyCard.id, {
-        word: studyDraft.word.trim() || studyCard.word,
-        phonetic: studyDraft.phonetic.trim() || null,
-        partOfSpeech: studyDraft.partOfSpeech.trim() || null,
-        meaning: studyDraft.meaning.trim() || null,
-        usage,
-      }),
-    )
-    setStudyEditOpen(false)
-    setStudyDraft(null)
-    flash('已保存修改')
-  }, [studyCard, studyDraft, library, persist, flash])
-
-  /** 卡内删除（两步确认），并从本轮队列里移除。 */
-  const studyDelete = useCallback(() => {
-    if (!studyCard) return
-    if (!studyDelArmed) {
-      setStudyDelArmed(true)
-      window.setTimeout(() => setStudyDelArmed(false), 3000)
-      return
-    }
-    persist(removeItem(library, studyCard.id))
-    const removedBefore = studyQueue
-      ? studyQueue.slice(0, studyIndex).filter((it) => it.id === studyCard.id).length
-      : 0
-    setStudyQueue((q) => (q ? q.filter((it) => it.id !== studyCard.id) : q))
-    setStudyIndex((i) => Math.max(0, i - removedBefore))
-    setStudyDelArmed(false)
-    setStudyEditOpen(false)
-    setStudyRevealed(false)
-    setStudyInput('')
-    setStudyChecked(false)
-    flash('已删除')
-  }, [studyCard, studyDelArmed, library, persist, studyQueue, studyIndex, flash])
-
-  /** 收尾重练本轮点过「忘记了」的词。 */
-  const retryForgot = useCallback(() => {
-    const ids = new Set(studyForgotRef.current)
-    const items = library.items.filter((it) => ids.has(it.id))
-    if (!items.length) return
-    studyRequeueRef.current = new Map()
-    studyForgotRef.current = []
-    studyBumpedRef.current = new Set()
-    setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
-    setStudyQueue(items)
-    setStudyIndex(0)
-    setStudyRevealed(false)
-    setStudyInput('')
-    setStudyChecked(false)
-    setStudyEditOpen(false)
-    setStudyDelArmed(false)
-  }, [library.items])
+  // ===== 背单词会话（hooks/useStudySession）=====
+  const studyApi = useStudySession({
+    library,
+    articleIdentity,
+    docLemmas,
+    closeQuiz: () => quizApiRef.current?.close(),
+    flash,
+    persist,
+    markStudied,
+    recordActivity,
+    addStudyTime: studyFlush,
+    newLimit,
+    newToday,
+    onBumpNewToday: bumpNewToday,
+  })
+  const {
+    scope: studyScope,
+    spelling: studySpelling,
+    setSpelling: setStudySpelling,
+    mode: studyMode,
+    queue: studyQueue,
+    index: studyIndex,
+    revealed: studyRevealed,
+    setRevealed: setStudyRevealed,
+    input: studyInput,
+    setInput: setStudyInput,
+    checked: studyChecked,
+    setChecked: setStudyChecked,
+    counts: studyCounts,
+    liveSeconds: studyLive,
+    cardSeconds,
+    gradeInfo,
+    editOpen: studyEditOpen,
+    setEditOpen: setStudyEditOpen,
+    pool: studyPool,
+    draft: studyDraft,
+    setDraft: setStudyDraft,
+    delArmed: studyDelArmed,
+    forgotCount: studyForgotCount,
+    card: studyCard,
+    dueCount,
+    newCount,
+    unflushedSeconds: studyUnflushed,
+    start: startStudy,
+    switchMode,
+    switchScope,
+    startArticleAll,
+    grade: gradeStudy,
+    close: closeStudy,
+    retryForgot,
+    openEdit: openStudyEdit,
+    saveEdit: saveStudyEdit,
+    removeCard: studyDelete,
+  } = studyApi
 
   // ===== 考试会话（hooks/useQuizSession）=====
   const quizApi = useQuizSession({
     library,
     articleIdentity,
     docLemmas,
-    closeOthers: () => setStudyQueue(null),
+    closeOthers: () => closeStudy(),
     speak,
     flash,
     persist,
@@ -1033,7 +809,7 @@ export default function ReaderApp() {
   /** 用指定题目开一轮听力理解（错题本「重练听力」用）。 */
   const startListenQuestions = useCallback((questions: ListeningQuestion[]) => {
     if (!questions.length) return
-    setStudyQueue(null)
+    closeStudy()
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(null)
@@ -1092,7 +868,7 @@ export default function ReaderApp() {
       flash('这个范围里没有词')
       return
     }
-    setStudyQueue(null)
+    closeStudy()
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(items)
@@ -1154,72 +930,6 @@ export default function ReaderApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [listenOpen, writingOpen])
-
-  // 背单词快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
-  useEffect(() => {
-    if (!studyQueue || studyEditOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      const t = e.target as HTMLElement | null
-      const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
-      const canGrade = studySpelling ? studyChecked : studyRevealed
-      const gradeKeys: Record<string, ReviewGrade> = { '1': 'good', '2': 'hard', '3': 'again' }
-      // 拼写模式下输入框还 focus 着；判卷后仍要能用 1/2/3 评分
-      if (inField) {
-        if (canGrade && gradeKeys[e.key]) {
-          e.preventDefault()
-          gradeStudy(gradeKeys[e.key])
-        }
-        return
-      }
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault()
-        if (studyIndex >= studyQueue.length) return
-        if (!canGrade) {
-          if (studySpelling) setStudyChecked(true)
-          else setStudyRevealed(true)
-          return
-        }
-        gradeStudy('good')
-      } else if (gradeKeys[e.key]) {
-        if (canGrade) gradeStudy(gradeKeys[e.key])
-      } else if (e.key === 'Escape') closeStudy()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue, studyEditOpen, studyIndex, studyRevealed, studySpelling, studyChecked, gradeStudy, closeStudy])
-
-  // 单卡计时：换卡归零，每秒 +1（催你快点，别墨迹）
-  useEffect(() => {
-    if (!studyQueue) return
-    setCardSeconds(0)
-    const id = window.setInterval(() => setCardSeconds((s) => s + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [studyQueue, studyIndex])
-
-  // 本轮背单词总时长：进场清零，每秒 +1；每 15s 落盘一次，退出时补落盘
-  useEffect(() => {
-    if (!studyQueue) return
-    studyLiveRef.current = 0
-    studyFlushedRef.current = 0
-    setStudyLive(0)
-    const id = window.setInterval(() => {
-      studyLiveRef.current += 1
-      setStudyLive(studyLiveRef.current)
-      const unflushed = studyLiveRef.current - studyFlushedRef.current
-      if (unflushed >= 15) {
-        studyFlush(unflushed, 0)
-        studyFlushedRef.current = studyLiveRef.current
-      }
-    }, 1000)
-    return () => {
-      window.clearInterval(id)
-      const unflushed = studyLiveRef.current - studyFlushedRef.current
-      if (unflushed > 0) {
-        studyFlush(unflushed, 0)
-        studyFlushedRef.current = studyLiveRef.current
-      }
-    }
-  }, [studyQueue, studyFlush])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -1283,7 +993,7 @@ export default function ReaderApp() {
   /** 打开听力理解题：没有题目就先复制出题提示词。 */
   const openListening = useCallback(() => {
     if (listenQuiz && listenQuiz.questions.length) {
-      setStudyQueue(null)
+      closeStudy()
       setQuizSetupOpen(false)
       setQuizQueue(null)
       setQuickQueue(null)
@@ -1366,7 +1076,7 @@ export default function ReaderApp() {
       return
     }
     const start = doc.sentences.find((s) => s.id === selectedId) ?? doc.sentences[0]
-    setStudyQueue(null)
+    closeStudy()
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(null)
@@ -1494,7 +1204,7 @@ export default function ReaderApp() {
     const d = studyDays.find((x) => x.day === localDayKey())
     return d?.seconds ?? 0
   }, [studyDays])
-  const studyGrandSeconds = studyTotalSeconds + Math.max(0, studyLive - studyFlushedRef.current)
+  const studyGrandSeconds = studyTotalSeconds + studyUnflushed
 
   /** 按天统计：今天选了多少 + 连续打卡天数。 */
   const dayStats = useMemo(() => {
@@ -1626,7 +1336,7 @@ export default function ReaderApp() {
     addMistake,
     dropMistake,
     closeOthers: () => {
-      setStudyQueue(null)
+      closeStudy()
       setQuizSetupOpen(false)
       setQuizQueue(null)
       setQuickQueue(null)
@@ -3390,10 +3100,10 @@ export default function ReaderApp() {
             editOpen={studyEditOpen}
             draft={studyDraft}
             delArmed={studyDelArmed}
-            forgotCount={studyForgotRef.current.length}
+            forgotCount={studyForgotCount}
             onClose={closeStudy}
             onExam={() => {
-              setStudyQueue(null)
+              closeStudy()
               setQuizResults([])
               setQuizSetupOpen(true)
             }}
@@ -3863,13 +3573,13 @@ export default function ReaderApp() {
             startArticleAll()
           }}
           onStartExam={() => {
-            setStudyQueue(null)
+            closeStudy()
             setQuizResults([])
             setQuizSetupOpen(true)
           }}
           onStartQuick={() => {
             setQuickQueue(null)
-            setStudyQueue(null)
+            closeStudy()
             setQuizSetupOpen(false)
             startQuick()
           }}
