@@ -91,8 +91,6 @@ import {
 import {
   dictMistake,
   listenMistake,
-  MISTAKE_LABEL,
-  mistakeCounts,
   removeMistake,
   upsertMistake,
   vocabMistake,
@@ -133,6 +131,9 @@ import StudyPanel, { type StudyScope } from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import QuickPanel from './panels/QuickPanel'
+import SideOverview from './panels/SideOverview'
+import SidePick, { type BatchItem } from './panels/SidePick'
+import SideVocab from './panels/SideVocab'
 import { fmtDur, fmtInterval } from './format'
 import FishLayer from '../ui/FishLayer'
 import {
@@ -261,13 +262,6 @@ const TASKS: { task: AnalysisTask; label: string }[] = [
   { task: 'extract_vocab', label: '提取生词' },
   { task: 'summarize', label: '概述' },
 ]
-
-/** 「选词模式」里攒的待选生词。 */
-interface BatchItem {
-  word: string
-  sentence: string
-  sentenceId: string | null
-}
 
 /** 「待选」清单按文章持久化：切页/关浏览器回来还在。 */
 function loadBatchMap(): Record<string, BatchItem[]> {
@@ -4414,551 +4408,138 @@ export default function ReaderApp() {
             统计
           </button>
         </div>
-        <div className="side-sec" data-sec="overview">
-          <div className="board">
-            {mistakes.length > 0 &&
-              (() => {
-                const c = mistakeCounts(mistakes)
-                const rows: { k: 'vocab' | 'listen' | 'dict'; run: () => void }[] = [
-                  { k: 'vocab', run: retryMistakeVocab },
-                  { k: 'listen', run: retryMistakeListen },
-                  { k: 'dict', run: retryMistakeDict },
-                ]
-                return (
-                  <div className="board-group">
-                    <div className="side-label">错题本（{mistakes.length}）</div>
-                    {rows.map(({ k, run }) => (
-                      <div className="board-row partial" key={k}>
-                        <span className="dot" />
-                        <div className="board-body">
-                          <div className="board-head">
-                            <b>{MISTAKE_LABEL[k]}</b>
-                            <span className="muted">{c[k]} 条</span>
-                          </div>
-                        </div>
-                        <button className="board-act" onClick={run} disabled={c[k] === 0}>
-                          重练
-                        </button>
-                      </div>
-                    ))}
-                    <button className="danger" onClick={() => setMistakes([])}>
-                      清空错题本
-                    </button>
-                  </div>
-                )
-              })()}
-            {['读', '词', '听', '写'].map((g) => {
-              const rows = readyRows.filter((r) => r.group === g)
-              if (!rows.length) return null
-              return (
-                <div key={g} className="board-group">
-                  <div className="side-label">{g}</div>
-                  {rows.map((r) => {
-                    const action = boardAction(r.key)
-                    return (
-                      <div key={r.key} className={'board-row ' + r.level}>
-                        <span className="dot" />
-                        <div className="board-body">
-                          <div className="board-head">
-                            <b>{r.label}</b>
-                            <span className="muted">{r.detail}</span>
-                          </div>
-                          {r.hint && <div className="board-hint">{r.hint}</div>}
-                        </div>
-                        {action && (
-                          <button className="board-act" onClick={action.run}>
-                            {action.label}
-                          </button>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <SideOverview
+          mistakes={mistakes}
+          readyRows={readyRows}
+          boardAction={boardAction}
+          onRetryVocab={retryMistakeVocab}
+          onRetryListen={retryMistakeListen}
+          onRetryDict={retryMistakeDict}
+          onClearMistakes={() => setMistakes([])}
+        />
         <div className="side-sec" data-sec="stats">
           <StatsPanel activity={activity} practice={practice} />
         </div>
-        <div className="side-sec" data-sec="pick">
-        {visibleBatch.length > 0 && (
-          <div className="picked batch">
-            <div className="picked-head">
-              <span className="tag exact">待选 {visibleBatch.length}</span>
-              <span className="muted">点正文里的词可加 / 减</span>
-            </div>
-            <div className="chips">
-              {visibleBatch.map((b) => (
-                <button
-                  key={b.word}
-                  className="chipx"
-                  onClick={() => addToBatch([b.word], b.sentence, b.sentenceId)}
-                  title="点击移除"
-                >
-                  {b.word} ×
-                </button>
-              ))}
-            </div>
-            <div className="tasks">
-              <button className="primary" onClick={commitBatch}>
-                加入生词本
-              </button>
-              <button onClick={() => void copyBatchPrompt()}>复制查词提示词</button>
-              <button onClick={exportBatch}>导出 CSV</button>
-              <button onClick={() => setBatch([])}>清空</button>
-            </div>
-            {batch.length > visibleBatch.length && (
-              <div className="muted hint">
-                另有 {batch.length - visibleBatch.length} 个已入库，不再显示（清空可重置）。
-              </div>
-            )}
-          </div>
-        )}
-        <div className="picked">
-          <div className="picked-head">
-            <span className={'tag' + (useExact ? ' exact' : '')}>{useExact ? '精确片段' : '整句'}</span>
-            <span className="word ellipsis" title={target}>
-              {target || '（在正文里划选，或点一句）'}
-            </span>
-          </div>
-          <div className="muted hint">
-            {vocabMode
-              ? '选词模式：点=一个词进待选；Ctrl 点多个词后右键或「加入待选」拼成词组；Alt 拖动=整段。'
-              : '单击=整句；拖动=整段；Ctrl 点词=离散多选（点 bar 再点 from 就选这两个）。'}
-          </div>
-          <div className="tasks">
-            <button
-              className="primary"
-              onClick={addSelectionToBatch}
-              disabled={!exact}
-              title="把当前选中（Ctrl 点选拼成的词组）加入「待选」清单，之后统一查词"
-            >
-              加入待选
-            </button>
-            <button
-              onClick={mark}
-              disabled={!exact}
-              title="不查词，直接把当前选中存进生词本（状态：未查），之后可用「补查音标」批量补齐"
-            >
-              直接入库（未查词）
-            </button>
-            {TASKS.map((t) => (
-              <button key={t.task} onClick={() => copyPrompt(t.task)}>
-                {t.label}
-              </button>
-            ))}
-          </div>
-          <div className="muted">
-            {lastTask ? `上一个任务：${lastTask}` : '点任务 → 复制提示词 → 去 chat.deepseek.com'}
-          </div>
-        </div>
-
-        <textarea
-          className="paste"
-          placeholder="把 DeepSeek 的结果粘回这里，再点「应用结果」"
-          value={pasted}
-          onChange={(e) => {
-            setPasted(e.target.value)
+        <SidePick
+          tasks={TASKS}
+          onPrompt={(t) => void copyPrompt(t)}
+          lastTask={lastTask}
+          target={target}
+          useExact={useExact}
+          vocabMode={vocabMode}
+          canMark={!!exact}
+          visibleBatch={visibleBatch}
+          batchCount={batch.length}
+          onRemoveWord={(b) => addToBatch([b.word], b.sentence, b.sentenceId)}
+          onCommitBatch={commitBatch}
+          onCopyBatchPrompt={() => void copyBatchPrompt()}
+          onExportBatch={exportBatch}
+          onClearBatch={() => setBatch([])}
+          onAddSelectionToBatch={addSelectionToBatch}
+          onMark={mark}
+          pasted={pasted}
+          onPastedChange={(v) => {
+            setPasted(v)
             if (pasteReport.length) setPasteReport([])
             if (pasteMissing) setPasteMissing(null)
           }}
+          pasteReport={pasteReport}
+          pasteMissingCount={pasteMissing?.words.length ?? 0}
+          onApplyPaste={applyPaste}
+          onCopyMissingAgain={() => void copyMissingAgain()}
+          aiJobCount={aiJobCount}
+          onExportAiJobs={exportAiJobs}
+          aiFileRef={aiFileRef}
+          onAiFile={onAiFile}
+          confusableBatchCount={confusableBatch.length}
+          confusableTodoCount={confusableTodo.length}
+          onCopyConfusable={() => void copyConfusablePrompt()}
+          confusableBatchSize={confusableBatchSize}
+          onConfusableBatchSizeChange={setConfusableBatchSize}
+          lemmaCount={lemmaCandidates.length}
+          onCopyLemma={() => void copyLemmaPrompt()}
+          posCount={posCandidates.length}
+          onCopyPos={() => void copyPosPrompt()}
+          hasItems={!!library.items.length}
+          onDedupe={dedupeNow}
         />
-        <div className="ai-pack">
-          <div className="muted">
-            ⚡ 一键打包：导出待办文件 → 整包交给 AI（网页版也行，喂给本机 agent 更快）→
-            把结果 JSON 导回，一次应用全部，不用一条条复制粘贴。
-          </div>
-          <button
-            onClick={exportAiJobs}
-            disabled={!aiJobCount}
-            title="把当前所有待办（查词 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力）打成一个 JSON，整包发出去"
-          >
-            📦 导出 AI 工作包（{aiJobCount} 项）
-          </button>
-          <button
-            onClick={() => aiFileRef.current?.click()}
-            style={{ marginLeft: 6 }}
-            title="导入 AI 返回的结果 JSON（{ results: [{ id, raw }] }），按任务逐条应用并汇总回执"
-          >
-            📥 导入 AI 结果
-          </button>
-          <input
-            ref={aiFileRef}
-            type="file"
-            accept="application/json,.json"
-            style={{ display: 'none' }}
-            onChange={onAiFile}
-          />
-        </div>
-        <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
-          应用结果
-        </button>
-        {pasteReport.length > 0 && (
-          <div className="paste-report">
-            {pasteReport.map((line, i) => (
-              <div key={i}>{line}</div>
-            ))}
-          </div>
-        )}
-        {pasteMissing && pasteMissing.words.length > 0 && (
-          <button
-            onClick={() => void copyMissingAgain()}
-            style={{ marginTop: 6 }}
-            title="把 AI 没返回的词重新组成提示词，复制后再贴回"
-          >
-            🔁 复制未返回的 {pasteMissing.words.length} 个
-          </button>
-        )}
-        <button
-          onClick={() => void copyConfusablePrompt()}
-          disabled={!confusableBatch.length}
-          style={{ marginTop: 6, marginLeft: 6 }}
-          title="让 AI 为缺混淆项的词生成形近/义近干扰词（用于看词选义/词形辨析）；可分批，应用后再点继续"
-        >
-          🤖 生成混淆项（{confusableBatch.length}/{confusableTodo.length}）
-        </button>
-        <select
-          value={String(confusableBatchSize)}
-          onChange={(e) => setConfusableBatchSize(Number(e.target.value))}
-          style={{ marginTop: 6, marginLeft: 6 }}
-          title="每次生成多少个词的混淆项（全部 = 一次生成，词多时 AI 回复可能被截断，截断的会留到下一批）"
-        >
-          <option value="30">30/批</option>
-          <option value="60">60/批</option>
-          <option value="100">100/批</option>
-          <option value="200">200/批</option>
-          <option value="0">全部/批</option>
-        </select>
-        <button
-          onClick={() => void copyLemmaPrompt()}
-          disabled={!lemmaCandidates.length}
-          style={{ marginTop: 6, marginLeft: 6 }}
-          title="把疑似非原型的词（带来源语境）交给 AI 判断原形；结果粘到上面再点「应用结果」"
-        >
-          🔤 校正原形（{lemmaCandidates.length}）
-        </button>
-        <button
-          onClick={() => void copyPosPrompt()}
-          disabled={!posCandidates.length}
-          style={{ marginTop: 6, marginLeft: 6 }}
-          title="让 AI 逐个判断 -ing / -ed 形式在语境里的语法身份（谓语/非谓语/分词形容词…），结果粘回「应用结果」"
-        >
-          🔎 -ing/-ed 辨析（{posCandidates.length}）
-        </button>
-        <button
-          onClick={dedupeNow}
-          disabled={!library.items.length}
-          style={{ marginTop: 6, marginLeft: 6 }}
-          title="重算原形并按原形合并重复词条（程序处理，不经过 AI）"
-        >
-          🧹 去重整理
-        </button>
 
-        </div>
-
-        <div className="side-sec" data-sec="vocab">
-        <div className="section-title">
-          生词本 · 本篇（{articleWords.length}）
-          <span className="view-toggle">
-            <button className={vocabView === 'card' ? 'primary' : ''} onClick={() => setVocabView('card')}>
-              卡片
-            </button>
-            <button
-              className={vocabView === 'table' ? 'primary' : ''}
-              onClick={() => setVocabView('table')}
-              title="像书本词汇表一样密排"
-            >
-              表格
-            </button>
-          </span>
-        </div>
-        <div className="side-label">学习 / 练习</div>
-        <div className="bar">
-          <button
-            className="primary"
-            onClick={() => {
-              setQuizQueue(null)
-              setQuizSetupOpen(false)
-              startStudy()
-            }}
-            disabled={!library.items.length}
-            title="卡片式背单词：新学习没学过的、复习到期的；空格翻面，1/2/3 认识/模糊/忘记了，Esc 退出"
-          >
-            背单词
-          </button>
-          <button
-            onClick={() => {
-              setQuizQueue(null)
-              setQuizSetupOpen(false)
-              startArticleAll()
-            }}
-            disabled={!library.items.length}
-            title="本篇全部：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）"
-          >
-            本篇全部
-          </button>
-          <button
-            onClick={() => {
-              setStudyQueue(null)
-              setQuizResults([])
-              setQuizSetupOpen(true)
-            }}
-            disabled={!library.items.length}
-            title="考试：拼写 / 例句填空 / 搭配填空 / 听力填空 / 词形辨析，成绩计入复习排期"
-          >
-            考试
-          </button>
-          <button
-            onClick={() => {
-              setQuickQueue(null)
-              setStudyQueue(null)
-              setQuizSetupOpen(false)
-              startQuick()
-            }}
-            disabled={!library.items.length}
-            title="快刷：只看单词+音标，1/← 不认识，2/→ 认识，空格看释义，Esc 退出"
-          >
-            快刷
-          </button>
-          <button
-            onClick={() => startDictation()}
-            disabled={!doc}
-            title="逐句听写：按文章顺序播句子，听写整句或听音填空；Tab 重听，回车检查"
-          >
-            听写
-          </button>
-          <button
-            onClick={openListening}
-            disabled={!doc}
-            title="听力理解题：AI 出题（带答案+解析）→ 本地判分；没题目时先复制出题提示词"
-          >
-            理解题
-          </button>
-          <select
-            value={String(listenCount)}
-            onChange={(e) => setListenCount(Number(e.target.value))}
-            title="听力理解题出题数量（点「理解题」用）"
-          >
-            <option value="5">5 题</option>
-            <option value="8">8 题</option>
-            <option value="10">10 题</option>
-            <option value="15">15 题</option>
-          </select>
-          <button
-            onClick={() => void copyLanguagePrompt()}
-            disabled={!doc}
-            title="逐句语言点分析（结构/语法/idiom/词组/用法）：复制提示词，粘回「应用结果」后写回句子"
-          >
-            语言点
-          </button>
-          <label className="check-inline" title="在正文里显示语言点（结构/语法/习语/词组/用法）">
-            <input
-              type="checkbox"
-              checked={showLanguage}
-              onChange={(e) => setShowLanguage(e.target.checked)}
-            />
-            显示语言点
-          </label>
-          <button onClick={openWriting} disabled={!doc} title="仿写：从范句生成任务 + 评分标准 → 你写 → AI 严格批改">
-            仿写
-          </button>
-          <button
-            onClick={() => {
-              setQuizScope('lapses')
-              setQuizResults([])
-              setQuizSetupOpen(true)
-            }}
-            disabled={!library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
-            title="错题专练：把所有「忘记了」过的词拉出来考"
-          >
-            错题专练
-          </button>
-        </div>
-        <div className="side-label">库 / 导出</div>
-        <div className="bar">
-          <button
-            onClick={() => setBrowseAll(true)}
-            disabled={!library.items.length}
-            title="查看全部生词（跨文章）"
-          >
-            全部生词
-          </button>
-          <button
-            onClick={() => doExportAnki(articleWords)}
-            disabled={!articleWords.length}
-            title="导出本篇生词为 Anki CSV"
-          >
-            Anki（本篇）
-          </button>
-          <button
-            onClick={() =>
-              doPrint(
-                articleWords,
-                articleTitle || articleKey || '本篇生词',
-                (it) => articleNums.get(it.lemma) ?? null,
-              )
-            }
-            disabled={!articleWords.length}
-            title="打印本篇生词（A4）"
-          >
-            A4（本篇）
-          </button>
-          <button
-            onClick={() => doExportAnki(library.items)}
-            disabled={!library.items.length}
-            title="导出整库生词为 Anki CSV"
-          >
-            Anki（整库）
-          </button>
-          <button
-            onClick={() => doPrint(library.items, '全部生词')}
-            disabled={!library.items.length}
-            title="打印整库生词（A4）"
-          >
-            A4（整库）
-          </button>
-          <button onClick={exportJson} disabled={!library.items.length}>
-            导出 JSON
-          </button>
-          <button
-            onClick={() => void copyMissingPhonetic('missing')}
-            disabled={!library.items.length}
-            title="给生词本里没有音标的词生成查词提示词；粘回结果即可补齐"
-          >
-            补查音标
-          </button>
-          <button
-            onClick={() => void copyMissingPhonetic('all')}
-            disabled={!library.items.length}
-            title="给全部生词重新生成查词提示词"
-          >
-            全部重查
-          </button>
-          <button onClick={() => setStatsOpen((v) => !v)} title="每日选词统计">
-            统计
-          </button>
-          <button
-            onClick={() => doExportWrong(library.items)}
-            disabled={!library.items.some((it) => (it.reviewState.lapses ?? 0) > 0)}
-            title="导出出错过的词（Word, Lapses, Meaning, Context）"
-          >
-            导出错词
-          </button>
-        </div>
-        <div className="bar">
-          <button onClick={exportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
-            导出全部（备份）
-          </button>
-          <label className="filebtn" title="导入之前的备份 JSON（文章 + 生词）">
-            导入备份
-            <input
-              type="file"
-              accept=".json,application/json"
-              onChange={(e) => {
-                void onImportBackup(e.target.files?.[0])
-                e.target.value = ''
-              }}
-            />
-          </label>
-        </div>
-
-        {statsOpen && (
-          <div className="stats">
-            <div className="muted">
-              累计 {totals.picked} 词 / {fmtDur(totals.seconds)} · 今日 {dayStats.todayPicked} · 连续{' '}
-              {dayStats.streak} 天
-            </div>
-            <div className="muted">
-              背单词：今日 {fmtDur(studyTodaySeconds)} · 累计 {fmtDur(studyTotalSeconds)} · 完成{' '}
-              {studyTotalCards} 次评分
-            </div>
-            <div className="goal">
-              <div className="muted">
-                今日目标：{studiedToday.ids.length} / {dailyGoal > 0 ? dailyGoal : '不限'} · 🔥{dayStats.streak} 天
-                <select
-                  value={String(dailyGoal)}
-                  onChange={(e) => setDailyGoal(Number(e.target.value))}
-                  title="每日目标（按学过的不同单词数）"
-                >
-                  <option value="0">不限</option>
-                  <option value="10">10 词</option>
-                  <option value="20">20 词</option>
-                  <option value="30">30 词</option>
-                  <option value="50">50 词</option>
-                </select>
-              </div>
-              {dailyGoal > 0 && (
-                <div className="goal-bar">
-                  <div style={{ width: `${Math.min(100, (studiedToday.ids.length / dailyGoal) * 100)}%` }} />
-                </div>
-              )}
-            </div>
-            <div className="stats-bars">
-              {last7.map((d) => (
-                <div className="stats-day" key={d.key} title={`${d.key}：${d.picked} 词`}>
-                  <div className="stats-col">
-                    <div className="stats-bar" style={{ height: `${Math.min(100, d.picked * 8)}%` }} />
-                  </div>
-                  <div className="stats-label">{d.label}</div>
-                </div>
-              ))}
-            </div>
-            <div className="muted due-title">未来 30 天到期（颜色越深越多）</div>
-            <div className="due-heat">
-              {dueForecast.map((d) => (
-                <div
-                  key={d.key}
-                  className={
-                    'due-cell' +
-                    (d.count >= 20
-                      ? ' lv4'
-                      : d.count >= 10
-                        ? ' lv3'
-                        : d.count >= 4
-                          ? ' lv2'
-                          : d.count > 0
-                            ? ' lv1'
-                            : '')
-                  }
-                  title={`${d.key}：${d.count} 词到期`}
-                >
-                  <span>{d.label}</span>
-                </div>
-              ))}
-            </div>
-            {byArticle.length > 0 && (
-              <div className="stats-articles">
-                {byArticle.map(([name, n]) => (
-                  <div className="stats-article" key={name}>
-                    <span className="muted ellipsis" title={name}>
-                      {name}
-                    </span>
-                    <b>{n}</b>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {articleList.length ? (
-          <VocabList
-            items={articleList}
-            view={vocabView}
-            focusLemma={focusLemma}
-            confirmDel={confirmDel}
-            onJump={jumpToSource}
-            onSpeak={speak}
-            onDelete={askDelete}
-            onReview={handleReview}
-            onEdit={handleEdit}
-            numberOf={(it) => articleNums.get(it.lemma) ?? null}
-          />
-        ) : (
-          <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>
-        )}
-        </div>
+        <SideVocab
+          articleWords={articleWords}
+          libraryItems={library.items}
+          view={vocabView}
+          onViewChange={setVocabView}
+          hasDoc={!!doc}
+          hasItems={!!library.items.length}
+          hasLapses={library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
+          onStartStudy={() => {
+            setQuizQueue(null)
+            setQuizSetupOpen(false)
+            startStudy()
+          }}
+          onStartArticleAll={() => {
+            setQuizQueue(null)
+            setQuizSetupOpen(false)
+            startArticleAll()
+          }}
+          onStartExam={() => {
+            setStudyQueue(null)
+            setQuizResults([])
+            setQuizSetupOpen(true)
+          }}
+          onStartQuick={() => {
+            setQuickQueue(null)
+            setStudyQueue(null)
+            setQuizSetupOpen(false)
+            startQuick()
+          }}
+          onStartDictation={() => startDictation()}
+          onOpenListening={openListening}
+          listenCount={listenCount}
+          onListenCountChange={setListenCount}
+          onLanguagePrompt={() => void copyLanguagePrompt()}
+          showLanguage={showLanguage}
+          onShowLanguageChange={setShowLanguage}
+          onOpenWriting={openWriting}
+          onWrongPractice={() => {
+            setQuizScope('lapses')
+            setQuizResults([])
+            setQuizSetupOpen(true)
+          }}
+          onBrowseAll={() => setBrowseAll(true)}
+          onExportAnki={doExportAnki}
+          onPrint={doPrint}
+          printTitle={articleTitle || articleKey || '本篇生词'}
+          onExportJson={exportJson}
+          onCopyMissingPhonetic={(only) => void copyMissingPhonetic(only)}
+          onToggleStats={() => setStatsOpen((v) => !v)}
+          onExportWrong={doExportWrong}
+          onExportAll={exportAll}
+          onImportBackup={(f) => void onImportBackup(f)}
+          statsOpen={statsOpen}
+          stats={{
+            totals,
+            dayStats,
+            studyTodaySeconds,
+            studyTotalSeconds,
+            studyTotalCards,
+            studiedCount: studiedToday.ids.length,
+            dailyGoal,
+            last7,
+            dueForecast,
+            byArticle,
+          }}
+          onDailyGoalChange={setDailyGoal}
+          articleList={articleList}
+          articleNums={articleNums}
+          focusLemma={focusLemma}
+          confirmDel={confirmDel}
+          onJumpSource={jumpToSource}
+          onSpeak={speak}
+          onDelete={askDelete}
+          onReview={handleReview}
+          onEdit={handleEdit}
+        />
       </aside>
 
       {toast && <div className="toast">{toast}</div>}
