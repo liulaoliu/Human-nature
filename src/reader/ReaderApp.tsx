@@ -577,6 +577,8 @@ export default function ReaderApp() {
   const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
   /** 填空模式的作答（每空一个输入） */
   const [dictBlanks, setDictBlanks] = useState<string[]>([])
+  const dictInputRef = useRef<HTMLTextAreaElement>(null)
+  const dictFirstBlankRef = useRef<HTMLInputElement>(null)
   /** 听写模式：整句 / 填空 */
   const [dictMode, setDictMode] = useState<'full' | 'cloze'>(() => {
     try {
@@ -2025,6 +2027,13 @@ export default function ReaderApp() {
     const text = dictQueue[dictIndex].text
     return makeCloze(text, pickBlankTargets(text, libraryLemmas, 2))
   }, [dictMode, dictQueue, dictIndex, libraryLemmas])
+
+  // 换题后把焦点送回输入框（autoFocus 只首次生效，换题必须手动聚焦）
+  useEffect(() => {
+    if (!dictQueue || dictIndex >= dictQueue.length || dictChecked) return
+    if (dictMode === 'cloze' && dictCloze) dictFirstBlankRef.current?.focus()
+    else dictInputRef.current?.focus()
+  }, [dictQueue, dictIndex, dictChecked, dictMode, dictCloze])
 
   /** 把本句漏写 / 填错的词加入待选，之后统一查词。 */
   const dictWrongNow = useCallback(() => {
@@ -4525,6 +4534,7 @@ export default function ReaderApp() {
                             (dictChecked ? (isClozeBlankCorrect(b, dictBlanks[i] ?? '') ? ' ok' : ' bad') : '')
                           }
                           autoFocus={i === 0}
+                          ref={i === 0 ? dictFirstBlankRef : undefined}
                           placeholder={`空 ${i + 1}`}
                           value={dictBlanks[i] ?? ''}
                           disabled={dictChecked}
@@ -4546,6 +4556,7 @@ export default function ReaderApp() {
                     <textarea
                       className="study-input dict-input"
                       autoFocus
+                      ref={dictInputRef}
                       placeholder="听写这一句，回车检查 / 下一句"
                       value={dictInput}
                       onChange={(e) => setDictInput(e.target.value)}
