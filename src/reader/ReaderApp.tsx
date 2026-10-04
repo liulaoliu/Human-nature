@@ -56,12 +56,9 @@ import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWords
 import {
   buildQuizQuestions,
   countQuestions,
-  formatAnswerInput,
   isCorrect,
   isQuizKind,
   makeQuestion,
-  maskAnswer,
-  QUIZ_KIND_LABEL,
   shuffleQuiz,
   type QuizKind,
   type QuizQuestion,
@@ -133,6 +130,9 @@ import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import WritingPanel from './panels/WritingPanel'
 import StudyPanel, { type StudyScope } from './panels/StudyPanel'
+import QuizSetupPanel from './panels/QuizSetupPanel'
+import QuizPanel from './panels/QuizPanel'
+import QuickPanel from './panels/QuickPanel'
 import { fmtDur, fmtInterval } from './format'
 import FishLayer from '../ui/FishLayer'
 import {
@@ -482,7 +482,6 @@ export default function ReaderApp() {
   const [quizResult, setQuizResult] = useState<boolean | null>(null)
   const [quizResults, setQuizResults] = useState<{ id: string; itemId: string; correct: boolean }[]>([])
   const [quizSeconds, setQuizSeconds] = useState(0)
-  const quizInputRef = useRef<HTMLInputElement>(null)
   /** 答完自动下一题（默认关，保持手动回车） */
   const [quizAuto, setQuizAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
   /** 每个单词只出一题、题型随机（避免同一词连出几题） */
@@ -1654,12 +1653,6 @@ export default function ReaderApp() {
     const id = window.setInterval(() => setQuizSeconds((s) => s + 1), 1000)
     return () => window.clearInterval(id)
   }, [quizQueue])
-
-  // 换题后把焦点送回输入框，方便直接打字（词形辨析是点选项，不聚焦）
-  useEffect(() => {
-    const q = quizQueue && quizIndex < quizQueue.length ? quizQueue[quizIndex] : null
-    if (q && q.kind !== 'choice' && q.kind !== 'meaning' && !quizChecked) quizInputRef.current?.focus()
-  }, [quizQueue, quizIndex, quizChecked])
 
   // 考试快捷键：回车 提交 / 下一题；词形辨析可用 1/2/3 选选项；Esc 退出
   useEffect(() => {
@@ -4055,322 +4048,67 @@ export default function ReaderApp() {
         )}
 
         {quizSetupOpen && !quizQueue && (
-          <div className="study quiz-setup">
-            <div className="bar study-bar">
-              <strong>考试设置</strong>
-              <button onClick={() => setQuizSetupOpen(false)}>取消</button>
-            </div>
-            <div className="quiz-setup-body">
-              <div className="quiz-field">
-                <span className="muted">题型</span>
-                <div className="bar">
-                  {(['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear'] as QuizKind[]).map((k) => (
-                    <label className="check-inline" key={k}>
-                      <input
-                        type="checkbox"
-                        checked={quizKinds.includes(k)}
-                        onChange={(e) =>
-                          setQuizKinds((prev) => (e.target.checked ? [...prev, k] : prev.filter((x) => x !== k)))
-                        }
-                      />
-                      {QUIZ_KIND_LABEL[k]}
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="quiz-field">
-                <span className="muted">范围</span>
-                <div className="bar">
-                  <select
-                    value={quizScope}
-                    onChange={(e) =>
-                      setQuizScope(e.target.value as 'all' | 'article' | 'unmastered' | 'due' | 'lapses')
-                    }
-                  >
-                    <option value="unmastered">未掌握</option>
-                    <option value="due">到期</option>
-                    <option value="lapses">错词</option>
-                    <option value="article">本篇</option>
-                    <option value="all">全部</option>
-                  </select>
-                </div>
-              </div>
-              <div className="quiz-field">
-                <span className="muted">题量</span>
-                <div className="bar">
-                  <select value={String(quizLimit)} onChange={(e) => setQuizLimit(Number(e.target.value))}>
-                    <option value="10">10 题</option>
-                    <option value="20">20 题</option>
-                    <option value="50">50 题</option>
-                    <option value="0">全部</option>
-                  </select>
-                </div>
-              </div>
-              <div className="quiz-field">
-                <span className="muted">答题</span>
-                <div className="bar">
-                  <label className="check-inline" title="答对/答错后自动进入下一题（答错会多停一会儿看答案）">
-                    <input type="checkbox" checked={quizAuto} onChange={(e) => setQuizAuto(e.target.checked)} />
-                    自动下一题
-                  </label>
-                  <label className="check-inline" title="每个单词只考一题、题型随机；关掉可让同一词出多种题型">
-                    <input
-                      type="checkbox"
-                      checked={quizUnique}
-                      onChange={(e) => setQuizUnique(e.target.checked)}
-                    />
-                    每词一题 · 乱序
-                  </label>
-                  <label className="check-inline" title="答完自动朗读正确答案（练发音）">
-                    <input
-                      type="checkbox"
-                      checked={quizSpeak}
-                      onChange={(e) => setQuizSpeak(e.target.checked)}
-                    />
-                    答完朗读
-                  </label>
-                </div>
-              </div>
-              <p className="muted">
-                当前范围可出 {quizAvailableCount} 题（未掌握约 {quizPoolSizes.unmastered} 题）。
-                答对按「认识」、答错按「忘记了」计入复习排期。
-              </p>
-              <div className="bar">
-                <button className="primary" onClick={startQuiz} disabled={!quizKinds.length}>
-                  开始考试
-                </button>
-              </div>
-            </div>
-          </div>
+          <QuizSetupPanel
+            kinds={quizKinds}
+            scope={quizScope}
+            limit={quizLimit}
+            auto={quizAuto}
+            unique={quizUnique}
+            speakAfter={quizSpeak}
+            availableCount={quizAvailableCount}
+            poolUnmastered={quizPoolSizes.unmastered}
+            onToggleKind={(k, on) => setQuizKinds((prev) => (on ? [...prev, k] : prev.filter((x) => x !== k)))}
+            onScopeChange={setQuizScope}
+            onLimitChange={setQuizLimit}
+            onAutoChange={setQuizAuto}
+            onUniqueChange={setQuizUnique}
+            onSpeakChange={setQuizSpeak}
+            onCancel={() => setQuizSetupOpen(false)}
+            onStart={startQuiz}
+          />
         )}
 
         {quizQueue && (
-          <div className="study quiz">
-            <div className="bar study-bar">
-              <button onClick={closeQuiz}>结束（Esc）</button>
-              <span className="muted">
-                {Math.min(quizIndex + 1, quizQueue.length)} / {quizQueue.length}
-              </span>
-              <span className="muted study-timer">⏱ {fmtDur(quizSeconds)}</span>
-              <span className="muted">
-                正确 {quizResults.filter((r) => r.correct).length} / {quizResults.length}
-              </span>
-            </div>
-            {quizIndex < quizQueue.length
-              ? (() => {
-                  const q = quizQueue[quizIndex]
-                  return (
-                    <>
-                      <div className="study-card quiz-card">
-                        <div className="quiz-kind">{QUIZ_KIND_LABEL[q.kind]}</div>
-                        {q.kind === 'listen' || q.kind === 'ear' ? (
-                          <button
-                            className="primary quiz-play"
-                            onClick={() => speak(q.audioText ?? q.context ?? q.word)}
-                            title="再听一遍"
-                          >
-                            🔊 {q.kind === 'ear' ? '播放单词' : '播放句子'}
-                          </button>
-                        ) : q.kind === 'meaning' ? (
-                          <div className="study-word quiz-word">
-                            {q.word}
-                            <button
-                              className="speak"
-                              onClick={() => speak(q.word)}
-                              title="朗读"
-                            >
-                              🔊
-                            </button>
-                          </div>
-                        ) : (
-                          <div className={q.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
-                            {q.kind === 'spell' ? (
-                              <>
-                                {q.partOfSpeech && <span className="cell-pos">{q.partOfSpeech} </span>}
-                                {q.prompt}
-                              </>
-                            ) : (
-                              q.prompt
-                            )}
-                          </div>
-                        )}
-                        {(q.kind === 'cloze' || q.kind === 'usage' || q.kind === 'listen') && q.meaning && (
-                          <div className="muted quiz-hint">
-                            释义：{q.partOfSpeech ? `${q.partOfSpeech} ` : ''}
-                            {q.meaning}
-                          </div>
-                        )}
-                        {(q.kind === 'choice' || q.kind === 'meaning') && q.options ? (
-                          <div className="quiz-options">
-                            {q.options.map((opt, i) => (
-                              <button
-                                key={opt}
-                                className={
-                                  !quizChecked
-                                    ? ''
-                                    : opt === q.answer
-                                      ? 'primary'
-                                      : opt === quizInput
-                                        ? 'danger'
-                                        : ''
-                                }
-                                disabled={quizChecked}
-                                onClick={() => {
-                                  setQuizInput(opt)
-                                  checkQuiz(opt)
-                                }}
-                              >
-                                <kbd>{i + 1}</kbd> {opt}
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <>
-                            <input
-                              className="study-input"
-                              autoFocus
-                              ref={quizInputRef}
-                              placeholder="输入答案，回车提交 / 下一题"
-                              value={quizInput}
-                              onChange={(e) => setQuizInput(formatAnswerInput(e.target.value, q.answer))}
-                              disabled={quizChecked}
-                            />
-                            <div className="muted quiz-mask" title="提示：一个下划线=一个字母；空格=一个词">
-                              {maskAnswer(q.answer)}
-                            </div>
-                          </>
-                        )}
-                        {quizChecked && (
-                          <>
-                            <div className={'study-result ' + (quizResult ? 'ok' : 'bad')}>
-                              {quizResult ? '✔ 正确' : `✘ 正确答案：${q.answer}`}
-                            </div>
-                            {q.context && <div className="muted quiz-full">{q.context}</div>}
-                            {q.translation && <div className="muted quiz-full">{q.translation}</div>}
-                          </>
-                        )}
-                      </div>
-                      <div className="bar study-actions">
-                        {!quizChecked ? (
-                          <button className="primary" onClick={() => checkQuiz()}>
-                            提交（回车）
-                          </button>
-                        ) : (
-                          <button className="primary" onClick={nextQuiz}>
-                            {quizIndex + 1 >= quizQueue.length ? '看结果（回车）' : '下一题（回车）'}
-                          </button>
-                        )}
-                        <button onClick={closeQuiz}>退出</button>
-                      </div>
-                    </>
-                  )
-                })()
-              : (() => {
-                  const total = quizResults.length
-                  const correct = quizResults.filter((r) => r.correct).length
-                  const wrongIds = [...new Set(quizResults.filter((r) => !r.correct).map((r) => r.itemId))]
-                  return (
-                    <div className="study-done">
-                      <p>
-                        考试结束：答对 <b>{correct}</b> / {total}
-                        {total ? `（正确率 ${Math.round((correct / total) * 100)}%）` : ''}，用时{' '}
-                        {fmtDur(quizSeconds)}。
-                      </p>
-                      {wrongIds.length > 0 && (
-                        <div className="quiz-wrong">
-                          <div className="muted">错题：</div>
-                          {wrongIds.map((id) => {
-                            const it = library.items.find((x) => x.id === id)
-                            return it ? (
-                              <div key={id}>
-                                <b>{it.word}</b>
-                                {it.meaning ? ` — ${it.meaning}` : ''}
-                              </div>
-                            ) : null
-                          })}
-                        </div>
-                      )}
-                      <div className="bar">
-                        {wrongIds.length > 0 && (
-                          <button className="primary" onClick={retryQuizWrong}>
-                            重做错题 {wrongIds.length}
-                          </button>
-                        )}
-                        <button className={wrongIds.length ? '' : 'primary'} onClick={startQuiz}>
-                          再来一轮
-                        </button>
-                        <button onClick={closeQuiz}>回到阅读</button>
-                      </div>
-                    </div>
-                  )
-                })()}
-          </div>
+          <QuizPanel
+            question={quizIndex < quizQueue.length ? quizQueue[quizIndex] : null}
+            queueLength={quizQueue.length}
+            index={quizIndex}
+            seconds={quizSeconds}
+            results={quizResults}
+            checked={quizChecked}
+            input={quizInput}
+            result={quizResult}
+            items={library.items}
+            onClose={closeQuiz}
+            onSpeak={speak}
+            onSubmit={() => checkQuiz()}
+            onNext={nextQuiz}
+            onRetryWrong={retryQuizWrong}
+            onRestart={startQuiz}
+            onSelectOption={(opt) => {
+              setQuizInput(opt)
+              checkQuiz(opt)
+            }}
+            onInputChange={setQuizInput}
+          />
         )}
 
         {quickQueue && (
-          <div className="study quick">
-            <div className="bar study-bar">
-              <button onClick={() => setQuickQueue(null)}>结束（Esc）</button>
-              <span className="muted">
-                {Math.min(quickIndex + 1, quickQueue.length)} / {quickQueue.length}
-              </span>
-              <span className="muted">快刷：1/← 不认识 · 2/→ 认识 · 空格 看释义</span>
-            </div>
-            {quickIndex < quickQueue.length
-              ? (() => {
-                  const cur =
-                    library.items.find((it) => it.id === quickQueue[quickIndex].id) ?? quickQueue[quickIndex]
-                  return (
-                    <>
-                      <div className="study-card quick-card" onClick={() => setQuickRevealed(true)}>
-                        <div className="study-word">
-                          {cur.word}
-                          <button
-                            className="speak"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              speak(cur.word)
-                            }}
-                            title="朗读"
-                          >
-                            🔊
-                          </button>
-                        </div>
-                        {cur.phonetic && <div className="study-phon">{cur.phonetic}</div>}
-                        {quickRevealed && (
-                          <div className="study-back">
-                            <div className="study-meaning">
-                              {cur.partOfSpeech && <span className="cell-pos">{cur.partOfSpeech} </span>}
-                              {cur.meaning ?? '（无释义）'}
-                            </div>
-                            {cur.usage.length > 0 && <div className="muted">{cur.usage.join('；')}</div>}
-                          </div>
-                        )}
-                        {!quickRevealed && <div className="muted quick-hint">空格 / 点击 = 看释义</div>}
-                      </div>
-                      <div className="bar study-actions">
-                        <button onClick={() => gradeQuick(false)}>
-                          不认识 <kbd>1</kbd>
-                        </button>
-                        <button className="primary" onClick={() => gradeQuick(true)}>
-                          认识 <kbd>2</kbd>
-                        </button>
-                      </div>
-                    </>
-                  )
-                })()
-              : (
-                <div className="study-done">
-                  <p>快刷完成，共 {quickQueue.length} 个词。</p>
-                  <div className="bar">
-                    <button className="primary" onClick={startQuick}>
-                      再来一轮
-                    </button>
-                    <button onClick={() => setQuickQueue(null)}>回到阅读</button>
-                  </div>
-                </div>
-              )}
-          </div>
+          <QuickPanel
+            current={
+              quickIndex < quickQueue.length
+                ? (library.items.find((it) => it.id === quickQueue[quickIndex].id) ?? quickQueue[quickIndex])
+                : null
+            }
+            queueLength={quickQueue.length}
+            index={quickIndex}
+            revealed={quickRevealed}
+            onClose={() => setQuickQueue(null)}
+            onReveal={() => setQuickRevealed(true)}
+            onSpeak={speak}
+            onGrade={gradeQuick}
+            onRestart={startQuick}
+          />
         )}
 
         {dictQueue && (

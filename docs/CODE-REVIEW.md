@@ -94,7 +94,10 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 - [x] 抽出 `panels/DictPanel.tsx`（听写：整句/填空，含换题聚焦）。
 - [x] 抽出 `panels/ListeningPanel.tsx`（听力理解）。
 - [x] 抽出 `panels/WritingPanel.tsx`（仿写 + 历史，历史展开改为组件内 UI 状态）。
-- [ ] 接着拆 `StudyPanel` / `QuizPanel`（背单词 / 考试），再把侧栏 Tab 拆成 `SideOverview/SidePick/SideVocab`。
+- [x] 抽出 `panels/StudyPanel.tsx`（背单词/快刷 + 卡内编辑 + SRS 评分）。
+- [x] 抽出 `panels/QuizSetupPanel.tsx` / `QuizPanel.tsx` / `QuickPanel.tsx`（考试设置/答题/快刷）。
+- [x] 顺带把 `fmtDur/fmtInterval/fmtDue` 提到 `reader/format.ts`，考试焦点 effect 移进 QuizPanel。
+- [ ] 接着拆侧栏 Tab：`SideOverview`（仪表盘+错题本）/ `SidePick`（选区/任务/粘回/整理）/ `SideVocab` / `SideStats`。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；
