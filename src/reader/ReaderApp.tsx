@@ -70,6 +70,7 @@ import {
   type MistakeEntry,
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
+import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
 import {
@@ -1151,83 +1152,23 @@ export default function ReaderApp() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [vocabMode])
 
-  const totals = useMemo(
-    () =>
-      sessions.reduce(
-        (a, s) => ({ seconds: a.seconds + s.seconds, picked: a.picked + s.picked }),
-        { seconds: 0, picked: 0 },
-      ),
-    [sessions],
-  )
+  const totals = useMemo(() => sessionTotals(sessions), [sessions])
 
   /** 背单词时长统计：累计 / 今日 / 评分次数；显示时加上本轮尚未落盘的部分。 */
-  const studyTotalSeconds = useMemo(() => studyDays.reduce((a, d) => a + d.seconds, 0), [studyDays])
-  const studyTotalCards = useMemo(() => studyDays.reduce((a, d) => a + d.cards, 0), [studyDays])
-  const studyTodaySeconds = useMemo(() => {
-    const d = studyDays.find((x) => x.day === localDayKey())
-    return d?.seconds ?? 0
-  }, [studyDays])
+  const studyStats = useMemo(() => studyTotals(studyDays), [studyDays])
+  const studyTotalSeconds = studyStats.totalSeconds
+  const studyTotalCards = studyStats.totalCards
+  const studyTodaySeconds = studyStats.todaySeconds
   const studyGrandSeconds = studyTotalSeconds + studyUnflushed
 
   /** 按天统计：今天选了多少 + 连续打卡天数。 */
-  const dayStats = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const byDay = new Map<string, number>()
-    for (const s of sessions) {
-      const k = key(new Date(s.at))
-      byDay.set(k, (byDay.get(k) ?? 0) + s.picked)
-    }
-    const now = new Date()
-    const todayKey = key(now)
-    const cursor = new Date(now)
-    if (!byDay.has(todayKey)) cursor.setDate(cursor.getDate() - 1)
-    let streak = 0
-    while (byDay.has(key(cursor))) {
-      streak += 1
-      cursor.setDate(cursor.getDate() - 1)
-    }
-    return { todayPicked: byDay.get(todayKey) ?? 0, streak }
-  }, [sessions])
+  const dayStats = useMemo(() => pickDayStats(sessions), [sessions])
 
   /** 最近 7 天每天选了多少词（统计面板用）。 */
-  const last7 = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const byDay = new Map<string, number>()
-    for (const s of sessions) {
-      const k = key(new Date(s.at))
-      byDay.set(k, (byDay.get(k) ?? 0) + s.picked)
-    }
-    const out: { key: string; label: string; picked: number }[] = []
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date()
-      d.setDate(d.getDate() - i)
-      const k = key(d)
-      out.push({ key: k, label: String(d.getDate()), picked: byDay.get(k) ?? 0 })
-    }
-    return out
-  }, [sessions])
+  const last7 = useMemo(() => last7Days(sessions), [sessions])
 
   /** 未来 30 天每天的到期词数（到期日历热力图用）。 */
-  const dueForecast = useMemo(() => {
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const key = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const byDay = new Map<string, number>()
-    for (const it of library.items) {
-      if (!it.reviewState.due) continue
-      const k = key(new Date(it.reviewState.due))
-      byDay.set(k, (byDay.get(k) ?? 0) + 1)
-    }
-    const out: { key: string; label: string; count: number }[] = []
-    for (let i = 0; i < 30; i++) {
-      const d = new Date()
-      d.setDate(d.getDate() + i)
-      const k = key(d)
-      out.push({ key: k, label: i === 0 ? '今天' : String(d.getDate()), count: byDay.get(k) ?? 0 })
-    }
-    return out
-  }, [library.items])
+  const dueForecastRows = useMemo(() => dueForecast(library.items), [library.items])
 
   /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */
   const savedGroups = useMemo(() => {
@@ -1242,14 +1183,7 @@ export default function ReaderApp() {
   }, [saved])
 
   /** 按文章统计生词产出（Top 10）。 */
-  const byArticle = useMemo(() => {
-    const m = new Map<string, number>()
-    for (const it of library.items) {
-      const k = it.source?.articleId || '未标来源'
-      m.set(k, (m.get(k) ?? 0) + 1)
-    }
-    return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
-  }, [library.items])
+  const byArticle = useMemo(() => wordsByArticle(library.items), [library.items])
 
   /** 还缺 AI 混淆项、且有释义的词（生成干扰项用）。 */
   const confusableTodo = useMemo(
@@ -3393,7 +3327,7 @@ export default function ReaderApp() {
             studiedCount: studiedToday.ids.length,
             dailyGoal,
             last7,
-            dueForecast,
+            dueForecast: dueForecastRows,
             byArticle,
           }}
           onDailyGoalChange={setDailyGoal}
