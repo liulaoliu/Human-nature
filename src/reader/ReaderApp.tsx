@@ -127,6 +127,14 @@ import { extractEpub, extractPdfText } from './importers'
 import ArticlePicker from './ArticlePicker'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import FishLayer from '../ui/FishLayer'
+import {
+  persistentBool,
+  persistentBoolTrue,
+  persistentEnum,
+  persistentNumber,
+  persistentString,
+  useLocalStorageState,
+} from './hooks/useLocalStorageState'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
@@ -341,43 +349,19 @@ export default function ReaderApp() {
   const [altHeld, setAltHeld] = useState(false)
   const [edition, setEdition] = useState('全部')
   /** 阅读字号 / 字重，存本机 */
-  const [fontSize, setFontSize] = useState(() => {
-    try {
-      return localStorage.getItem('reader:size') ?? 'md'
-    } catch {
-      return 'md'
-    }
-  })
+  const [fontSize, setFontSize] = useLocalStorageState('reader:size', 'md', persistentString)
   /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 / 统计 */
-  const [sideTab, setSideTab] = useState<'overview' | 'pick' | 'vocab' | 'stats'>(() => {
-    try {
-      const v = localStorage.getItem('reader:sideTab')
-      return v === 'vocab' || v === 'pick' || v === 'stats' ? v : 'overview'
-    } catch {
-      return 'overview'
-    }
-  })
-  const [bold, setBold] = useState(() => {
-    try {
-      return localStorage.getItem('reader:bold') === '1'
-    } catch {
-      return false
-    }
-  })
-  const [serif, setSerif] = useState(() => {
-    try {
-      return localStorage.getItem('reader:serif') === '1'
-    } catch {
-      return false
-    }
-  })
-  /** 护眼模式（深绿暗色） */
-  const [eye, setEye] = useState(() => {
-    try {
-      return localStorage.getItem('reader:theme') === 'green'
-    } catch {
-      return false
-    }
+  const [sideTab, setSideTab] = useLocalStorageState<'overview' | 'pick' | 'vocab' | 'stats'>(
+    'reader:sideTab',
+    'overview',
+    persistentEnum(['overview', 'pick', 'vocab', 'stats'] as const, 'overview'),
+  )
+  const [bold, setBold] = useLocalStorageState('reader:bold', false, persistentBool)
+  const [serif, setSerif] = useLocalStorageState('reader:serif', false, persistentBool)
+  /** 护眼模式：浅色纸感 */
+  const [eye, setEye] = useLocalStorageState('reader:theme', false, {
+    parse: (raw) => raw === 'green',
+    serialize: (v) => (v ? 'green' : 'dark'),
   })
   const [composing, setComposing] = useState(false)
   const [newTitle, setNewTitle] = useState('')
@@ -390,45 +374,29 @@ export default function ReaderApp() {
   /** 「全部生词」独立视图（侧栏只显示本篇） */
   const [browseAll, setBrowseAll] = useState(false)
   /** 译文显示：只看原文 / 原文+译文 / 只看译文 */
-  const [translateView, setTranslateView] = useState<'off' | 'below' | 'only'>(() => {
-    try {
-      const v = localStorage.getItem('reader:translateView')
-      return v === 'below' || v === 'only' ? v : 'off'
-    } catch {
-      return 'off'
-    }
-  })
+  const [translateView, setTranslateView] = useLocalStorageState<'off' | 'below' | 'only'>(
+    'reader:translateView',
+    'off',
+    persistentEnum(['off', 'below', 'only'] as const, 'off'),
+  )
   const [pdfRange, setPdfRange] = useState('')
   const [importing, setImporting] = useState('')
   /** 选中句子后自动 TTS 朗读 */
-  const [autoSpeak, setAutoSpeak] = useState(() => {
-    try {
-      return localStorage.getItem('reader:autoSpeak') === '1'
-    } catch {
-      return false
-    }
-  })
+  const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
   /** 自动标词的词汇标准 */
-  const [vocabLevel, setVocabLevel] = useState<VocabLevel>(() => {
-    try {
-      const v = localStorage.getItem('reader:vocabLevel')
-      return v === 'cet4' || v === 'cet6' || v === 'kaoyan' || v === 'ielts' || v === 'ielts65'
-        ? v
-        : 'cet6'
-    } catch {
-      return 'cet6'
-    }
-  })
+  const [vocabLevel, setVocabLevel] = useLocalStorageState<VocabLevel>(
+    'reader:vocabLevel',
+    'cet6',
+    persistentEnum(['cet4', 'cet6', 'kaoyan', 'ielts', 'ielts65'] as const, 'cet6'),
+  )
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
   const [peekSid, setPeekSid] = useState<string | null>(null)
   /** 生词本视图：卡片 / 密排表格 */
-  const [vocabView, setVocabView] = useState<'card' | 'table'>(() => {
-    try {
-      return localStorage.getItem('reader:vocabView') === 'table' ? 'table' : 'card'
-    } catch {
-      return 'card'
-    }
-  })
+  const [vocabView, setVocabView] = useLocalStorageState<'card' | 'table'>(
+    'reader:vocabView',
+    'card',
+    persistentEnum(['card', 'table'] as const, 'card'),
+  )
   /** 生词本里被高亮/滚到的词条（点正文生词时用） */
   const [focusLemma, setFocusLemma] = useState<string | null>(null)
   /** 待确认删除的词条 id（两步防误触） */
@@ -445,40 +413,25 @@ export default function ReaderApp() {
   const [studyLive, setStudyLive] = useState(0)
   const studyLiveRef = useRef(0)
   const studyFlushedRef = useRef(0)
-  const [studyDays, setStudyDays] = useState<{ day: string; seconds: number; cards: number }[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:studyStats') ?? '[]')
-      return Array.isArray(raw) ? raw : []
-    } catch {
-      return []
-    }
-  })
+  const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
+    'reader:studyStats',
+    [],
+  )
   /** 背单词范围 / 拼写模式 / 拼写输入 / 是否已判卷 */
-  const [studyScope, setStudyScope] = useState<'all' | 'article' | 'unmastered' | 'lapses'>(() => {
-    try {
-      const v = localStorage.getItem('reader:studyScope')
-      return v === 'all' || v === 'article' || v === 'lapses' ? v : 'unmastered'
-    } catch {
-      return 'unmastered'
-    }
-  })
-  const [studySpelling, setStudySpelling] = useState(() => {
-    try {
-      return localStorage.getItem('reader:studySpelling') === '1'
-    } catch {
-      return false
-    }
-  })
+  const [studyScope, setStudyScope] = useLocalStorageState<StudyScope>(
+    'reader:studyScope',
+    'unmastered',
+    persistentEnum(['all', 'article', 'unmastered', 'lapses'] as const, 'unmastered'),
+  )
+  const [studySpelling, setStudySpelling] = useLocalStorageState('reader:studySpelling', false, persistentBool)
   const [studyInput, setStudyInput] = useState('')
   const [studyChecked, setStudyChecked] = useState(false)
   /** 背单词模式：新学习 / 复习 */
-  const [studyMode, setStudyMode] = useState<StudyMode>(() => {
-    try {
-      return localStorage.getItem('reader:studyMode') === 'review' ? 'review' : 'learn'
-    } catch {
-      return 'learn'
-    }
-  })
+  const [studyMode, setStudyMode] = useLocalStorageState<StudyMode>(
+    'reader:studyMode',
+    'learn',
+    persistentEnum(['learn', 'review'] as const, 'learn'),
+  )
   /** 卡内编辑（改词形/音标/释义/用法）与两步删除 */
   const [studyEditOpen, setStudyEditOpen] = useState(false)
   const [studyDraft, setStudyDraft] = useState<{
@@ -502,34 +455,30 @@ export default function ReaderApp() {
 
   /** 考试（检验掌握）：设置 + 一轮题目 + 作答状态 */
   const [quizSetupOpen, setQuizSetupOpen] = useState(false)
-  const [quizKinds, setQuizKinds] = useState<QuizKind[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:quizKinds') ?? 'null')
-      if (Array.isArray(raw) && raw.length) {
-        const valid = raw.filter(isQuizKind)
-        if (valid.length) return valid
-      }
-    } catch {
-      // 忽略
-    }
-    return ['spell', 'cloze', 'usage']
-  })
-  const [quizScope, setQuizScope] = useState<'all' | 'article' | 'unmastered' | 'due' | 'lapses'>(() => {
-    try {
-      const v = localStorage.getItem('reader:quizScope')
-      return v === 'all' || v === 'article' || v === 'due' || v === 'lapses' ? v : 'unmastered'
-    } catch {
-      return 'unmastered'
-    }
-  })
-  const [quizLimit, setQuizLimit] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:quizLimit') ?? '20')
-      return Number.isFinite(n) && n >= 0 ? n : 20
-    } catch {
-      return 20
-    }
-  })
+  const [quizKinds, setQuizKinds] = useLocalStorageState<QuizKind[]>(
+    'reader:quizKinds',
+    ['spell', 'cloze', 'usage'],
+    {
+      parse: (raw) => {
+        try {
+          const arr = JSON.parse(raw)
+          if (Array.isArray(arr)) {
+            const valid = arr.filter(isQuizKind)
+            if (valid.length) return valid
+          }
+        } catch {
+          // 忽略
+        }
+        return ['spell', 'cloze', 'usage']
+      },
+    },
+  )
+  const [quizScope, setQuizScope] = useLocalStorageState<'all' | 'article' | 'unmastered' | 'due' | 'lapses'>(
+    'reader:quizScope',
+    'unmastered',
+    persistentEnum(['all', 'article', 'unmastered', 'due', 'lapses'] as const, 'unmastered'),
+  )
+  const [quizLimit, setQuizLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
   const [quizQueue, setQuizQueue] = useState<QuizQuestion[] | null>(null)
   const [quizIndex, setQuizIndex] = useState(0)
   const [quizInput, setQuizInput] = useState('')
@@ -539,29 +488,11 @@ export default function ReaderApp() {
   const [quizSeconds, setQuizSeconds] = useState(0)
   const quizInputRef = useRef<HTMLInputElement>(null)
   /** 答完自动下一题（默认关，保持手动回车） */
-  const [quizAuto, setQuizAuto] = useState(() => {
-    try {
-      return localStorage.getItem('reader:quizAuto') === '1'
-    } catch {
-      return false
-    }
-  })
+  const [quizAuto, setQuizAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
   /** 每个单词只出一题、题型随机（避免同一词连出几题） */
-  const [quizUnique, setQuizUnique] = useState(() => {
-    try {
-      return localStorage.getItem('reader:quizUnique') !== '0'
-    } catch {
-      return true
-    }
-  })
+  const [quizUnique, setQuizUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
   /** 答完朗读正确答案（默认开） */
-  const [quizSpeak, setQuizSpeak] = useState(() => {
-    try {
-      return localStorage.getItem('reader:quizSpeak') !== '0'
-    } catch {
-      return true
-    }
-  })
+  const [quizSpeak, setQuizSpeak] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
   /** 放 speak 的引用：checkQuiz 定义在 speak 之前，用 ref 避免顺序问题 */
   const speakRef = useRef<(text: string) => void>(() => {})
   const quizAdvanceRef = useRef<number | null>(null)
@@ -569,29 +500,27 @@ export default function ReaderApp() {
   /** 本轮实际是否自动切题（听写模式强制开） */
   const [quizAutoRun, setQuizAutoRun] = useState(false)
   /** 今天学过的不同单词 id（每日目标进度） */
-  const [studiedToday, setStudiedToday] = useState<{ day: string; ids: string[] }>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:studiedToday') ?? 'null') as {
-        day: string
-        ids: string[]
-      } | null
-      if (raw && Array.isArray(raw.ids)) {
-        return raw.day === localDayKey() ? raw : { day: localDayKey(), ids: [] }
-      }
-    } catch {
-      // 忽略
-    }
-    return { day: localDayKey(), ids: [] }
-  })
+  const [studiedToday, setStudiedToday] = useLocalStorageState<{ day: string; ids: string[] }>(
+    'reader:studiedToday',
+    { day: localDayKey(), ids: [] },
+    {
+      parse: (raw) => {
+        try {
+          const obj = JSON.parse(raw) as { day?: string; ids?: unknown } | null
+          if (obj && Array.isArray(obj.ids)) {
+            return obj.day === localDayKey()
+              ? { day: obj.day as string, ids: obj.ids as string[] }
+              : { day: localDayKey(), ids: [] }
+          }
+        } catch {
+          // 忽略
+        }
+        return { day: localDayKey(), ids: [] }
+      },
+    },
+  )
   /** 每日目标（个不同单词，0=不设目标） */
-  const [dailyGoal, setDailyGoal] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:dailyGoal') ?? '20')
-      return Number.isFinite(n) && n >= 0 ? n : 20
-    } catch {
-      return 20
-    }
-  })
+  const [dailyGoal, setDailyGoal] = useLocalStorageState('reader:dailyGoal', 20, persistentNumber)
   /** 快刷模式（只看单词+音标，一键过卡） */
   const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
   const [quickIndex, setQuickIndex] = useState(0)
@@ -614,31 +543,15 @@ export default function ReaderApp() {
   const [dictWrongItems, setDictWrongItems] = useState<{ id: string; text: string }[]>([])
   const dictRecordedRef = useRef(false)
   /** 听写模式：整句 / 填空 */
-  const [dictMode, setDictMode] = useState<'full' | 'cloze'>(() => {
-    try {
-      return localStorage.getItem('reader:dictMode') === 'cloze' ? 'cloze' : 'full'
-    } catch {
-      return 'full'
-    }
-  })
+  const [dictMode, setDictMode] = useLocalStorageState<'full' | 'cloze'>(
+    'reader:dictMode',
+    'full',
+    persistentEnum(['full', 'cloze'] as const, 'full'),
+  )
   /** 每句最多多少词（长句按此切短，用户可调） */
-  const [dictWords, setDictWords] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:dictWords') ?? '12')
-      return Number.isFinite(n) && n >= 1 && n <= 30 ? n : 12
-    } catch {
-      return 12
-    }
-  })
+  const [dictWords, setDictWords] = useLocalStorageState('reader:dictWords', 12, persistentNumber)
   /** 填空模式下每题的挖空数量 */
-  const [dictBlankCount, setDictBlankCount] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:dictBlankCount') ?? '2')
-      return Number.isFinite(n) && n >= 1 && n <= 8 ? n : 2
-    } catch {
-      return 2
-    }
-  })
+  const [dictBlankCount, setDictBlankCount] = useLocalStorageState('reader:dictBlankCount', 2, persistentNumber)
   const libraryLemmasRef = useRef<Set<string>>(new Set())
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
@@ -647,22 +560,9 @@ export default function ReaderApp() {
   const [listenAnswers, setListenAnswers] = useState<Record<string, string>>({})
   const [listenSubmitted, setListenSubmitted] = useState(false)
   const [listenResult, setListenResult] = useState<ListeningResult | null>(null)
-  const [listenCount, setListenCount] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:listenCount') ?? '8')
-      return Number.isFinite(n) && n > 0 ? n : 8
-    } catch {
-      return 8
-    }
-  })
+  const [listenCount, setListenCount] = useLocalStorageState('reader:listenCount', 8, persistentNumber)
   /** 是否在正文里显示语言点 */
-  const [showLanguage, setShowLanguage] = useState(() => {
-    try {
-      return localStorage.getItem('reader:showLanguage') === '1'
-    } catch {
-      return false
-    }
-  })
+  const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
   /** 仿写训练：范句 / 任务 / 作答 / 批改 */
   const [writingOpen, setWritingOpen] = useState(false)
   const [writingModel, setWritingModel] = useState(() => loadWritingDraft().model)
@@ -670,83 +570,42 @@ export default function ReaderApp() {
   const [writingText, setWritingText] = useState(() => loadWritingDraft().text)
   const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
   /** 仿写练习历史（存本机） */
-  const [writingHistory, setWritingHistory] = useState<WritingRecord[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:writingHistory') ?? '[]')
-      return Array.isArray(raw) ? (raw as WritingRecord[]) : []
-    } catch {
-      return []
-    }
-  })
+  const [writingHistory, setWritingHistory] = useLocalStorageState<WritingRecord[]>('reader:writingHistory', [])
   const [historyOpen, setHistoryOpen] = useState(false)
   /** 学习活动统计（按天，落 localStorage） */
-  const [activity, setActivity] = useState<DayActivity[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:activity') ?? '[]')
-      return Array.isArray(raw) ? (raw as DayActivity[]) : []
-    } catch {
-      return []
-    }
-  })
+  const [activity, setActivity] = useLocalStorageState<DayActivity[]>('reader:activity', [])
   /** 练习成绩记录（考试 / 听写 / 听力理解） */
-  const [practice, setPractice] = useState<PracticeRecord[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:practice') ?? '[]')
-      return Array.isArray(raw) ? (raw as PracticeRecord[]) : []
-    } catch {
-      return []
-    }
-  })
+  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>('reader:practice', [])
   /** 统一错题本（考试错词 / 听力错题 / 听写漏词） */
-  const [mistakes, setMistakes] = useState<MistakeEntry[]>(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:mistakes') ?? '[]')
-      return Array.isArray(raw) ? (raw as MistakeEntry[]) : []
-    } catch {
-      return []
-    }
-  })
+  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>('reader:mistakes', [])
   /** 每次生成混淆项的批量大小（0=全部） */
-  const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:confusableBatch') ?? '60')
-      return Number.isFinite(n) && n >= 0 ? n : 60
-    } catch {
-      return 60
-    }
-  })
+  const [confusableBatchSize, setConfusableBatchSize] = useLocalStorageState(
+    'reader:confusableBatch',
+    60,
+    persistentNumber,
+  )
   /** 每天引入新词的上限（0=不限）与今天已引入 */
-  const [newLimit, setNewLimit] = useState(() => {
-    try {
-      const n = Number(localStorage.getItem('reader:newLimit') ?? '20')
-      return Number.isFinite(n) && n >= 0 ? n : 20
-    } catch {
-      return 20
-    }
-  })
-  const [newToday, setNewToday] = useState(() => {
-    try {
-      const raw = JSON.parse(localStorage.getItem('reader:newToday') ?? 'null') as {
-        day: string
-        count: number
-      } | null
-      return raw && raw.day === localDayKey() ? raw.count : 0
-    } catch {
-      return 0
-    }
+  const [newLimit, setNewLimit] = useLocalStorageState('reader:newLimit', 20, persistentNumber)
+  const [newToday, setNewToday] = useLocalStorageState('reader:newToday', 0, {
+    parse: (raw) => {
+      try {
+        const obj = JSON.parse(raw) as { day?: string; count?: number } | null
+        return obj && obj.day === localDayKey() && typeof obj.count === 'number' ? obj.count : 0
+      } catch {
+        return 0
+      }
+    },
+    serialize: (count) => JSON.stringify({ day: localDayKey(), count }),
   })
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
   /** 选词模式计时（秒）与历史统计 */
   const [vocabSeconds, setVocabSeconds] = useState(0)
-  const [sessions, setSessions] = useState<{ at: string; seconds: number; picked: number }[]>(() => {
-    try {
-      return JSON.parse(localStorage.getItem('reader:vocabStats') ?? '[]')
-    } catch {
-      return []
-    }
-  })
+  const [sessions, setSessions] = useLocalStorageState<{ at: string; seconds: number; picked: number }[]>(
+    'reader:vocabStats',
+    [],
+  )
   /** 选词模式：点/划直接选生词，攒一批后一键导出 */
   const [vocabMode, setVocabMode] = useState(false)
   const [batch, setBatch] = useState<BatchItem[]>([])
@@ -874,184 +733,11 @@ export default function ReaderApp() {
     return () => window.removeEventListener('keydown', onKey)
   }, [studyQueue, quizQueue])
 
+  // 护眼主题：eye 已由 useLocalStorageState 存成 'green'/'dark'，这里只负责应用到 DOM
   useEffect(() => {
-    try {
-      localStorage.setItem('reader:size', fontSize)
-    } catch {
-      // 忽略
-    }
-  }, [fontSize])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:sideTab', sideTab)
-    } catch {
-      // 忽略
-    }
-  }, [sideTab])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:bold', bold ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [bold])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:serif', serif ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [serif])
-  useEffect(() => {
-    const theme = eye ? 'green' : 'dark'
-    try {
-      localStorage.setItem('reader:theme', theme)
-    } catch {
-      // 忽略
-    }
-    document.documentElement.dataset.theme = theme
+    document.documentElement.dataset.theme = eye ? 'green' : 'dark'
   }, [eye])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:vocabView', vocabView)
-    } catch {
-      // 忽略
-    }
-  }, [vocabView])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:studyScope', studyScope)
-    } catch {
-      // 忽略
-    }
-  }, [studyScope])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:studySpelling', studySpelling ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [studySpelling])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:studyMode', studyMode)
-    } catch {
-      // 忽略
-    }
-  }, [studyMode])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:quizKinds', JSON.stringify(quizKinds))
-      localStorage.setItem('reader:quizScope', quizScope)
-      localStorage.setItem('reader:quizLimit', String(quizLimit))
-      localStorage.setItem('reader:quizAuto', quizAuto ? '1' : '0')
-      localStorage.setItem('reader:quizUnique', quizUnique ? '1' : '0')
-      localStorage.setItem('reader:quizSpeak', quizSpeak ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [quizKinds, quizScope, quizLimit, quizAuto, quizUnique, quizSpeak])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:studyStats', JSON.stringify(studyDays))
-    } catch {
-      // 忽略
-    }
-  }, [studyDays])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:studiedToday', JSON.stringify(studiedToday))
-    } catch {
-      // 忽略
-    }
-  }, [studiedToday])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:dailyGoal', String(dailyGoal))
-    } catch {
-      // 忽略
-    }
-  }, [dailyGoal])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:confusableBatch', String(confusableBatchSize))
-    } catch {
-      // 忽略
-    }
-  }, [confusableBatchSize])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:listenCount', String(listenCount))
-    } catch {
-      // 忽略
-    }
-  }, [listenCount])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:showLanguage', showLanguage ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [showLanguage])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:writingHistory', JSON.stringify(writingHistory))
-    } catch {
-      // 忽略
-    }
-  }, [writingHistory])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:activity', JSON.stringify(activity))
-    } catch {
-      // 忽略
-    }
-  }, [activity])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:practice', JSON.stringify(practice))
-    } catch {
-      // 忽略
-    }
-  }, [practice])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:mistakes', JSON.stringify(mistakes))
-    } catch {
-      // 忽略
-    }
-  }, [mistakes])
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'reader:writingDraft',
-        JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
-      )
-    } catch {
-      // 忽略
-    }
-  }, [writingModel, writingText, writingTask])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:dictMode', dictMode)
-    } catch {
-      // 忽略
-    }
-  }, [dictMode])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:dictWords', String(dictWords))
-    } catch {
-      // 忽略
-    }
-  }, [dictWords])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:dictBlankCount', String(dictBlankCount))
-    } catch {
-      // 忽略
-    }
-  }, [dictBlankCount])
+
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1065,34 +751,6 @@ export default function ReaderApp() {
     setListenSubmitted(false)
     setListenResult(null)
   }, [articleIdentity])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:newLimit', String(newLimit))
-    } catch {
-      // 忽略
-    }
-  }, [newLimit])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:translateView', translateView)
-    } catch {
-      // 忽略
-    }
-  }, [translateView])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:autoSpeak', autoSpeak ? '1' : '0')
-    } catch {
-      // 忽略
-    }
-  }, [autoSpeak])
-  useEffect(() => {
-    try {
-      localStorage.setItem('reader:vocabLevel', vocabLevel)
-    } catch {
-      // 忽略
-    }
-  }, [vocabLevel])
   // 待选清单按文章持久化
   useEffect(() => {
     batchMapRef.current[articleIdentity] = batch
@@ -1102,6 +760,17 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [batch, articleIdentity])
+  // 仿写草稿（范句 / 作答 / 任务）持久化
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        'reader:writingDraft',
+        JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
+      )
+    } catch {
+      // 忽略
+    }
+  }, [writingModel, writingText, writingTask])
 
   const flash = useCallback((message: string) => {
     setToast(message)
@@ -1281,16 +950,9 @@ export default function ReaderApp() {
 
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {
-    setNewToday((prev) => {
-      const next = prev + 1
-      try {
-        localStorage.setItem('reader:newToday', JSON.stringify({ day: localDayKey(), count: next }))
-      } catch {
-        // 忽略
-      }
-      return next
-    })
-  }, [])
+    // newToday 已由 useLocalStorageState 落盘（自动带上当天日期）
+    setNewToday((prev) => prev + 1)
+  }, [setNewToday])
 
   /** 把背单词时长 / 评分次数累加到「今天」（落盘供统计）。 */
   const studyFlush = useCallback((seconds: number, cards: number) => {
@@ -2250,19 +1912,11 @@ export default function ReaderApp() {
     setHistoryOpen(false)
   }, [])
 
-  /** 记一次选词模式会话（存本机 localStorage，最多留 500 条）。 */
+  /** 记一次选词模式会话（sessions 由 useLocalStorageState 落盘，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
     if (seconds < 1 && picked === 0) return
-    setSessions((prev) => {
-      const next = [...prev, { at: new Date().toISOString(), seconds, picked }].slice(-500)
-      try {
-        localStorage.setItem('reader:vocabStats', JSON.stringify(next))
-      } catch {
-        // 忽略
-      }
-      return next
-    })
-  }, [])
+    setSessions((prev) => [...prev, { at: new Date().toISOString(), seconds, picked }].slice(-500))
+  }, [setSessions])
 
   /** 开关选词模式：开时开始计时，关时记一次会话。 */
   const toggleVocabMode = useCallback(() => {
@@ -3980,13 +3634,7 @@ export default function ReaderApp() {
             importedLib = data as VocabLibrary
           }
           if (Array.isArray(obj.stats)) {
-            const stats = obj.stats as { at: string; seconds: number; picked: number }[]
-            setSessions(stats)
-            try {
-              localStorage.setItem('reader:vocabStats', JSON.stringify(stats))
-            } catch {
-              // 忽略
-            }
+            setSessions(obj.stats as { at: string; seconds: number; picked: number }[])
           }
           if (Array.isArray(obj.studyStats)) {
             const ss = obj.studyStats as { day: string; seconds: number; cards: number }[]
