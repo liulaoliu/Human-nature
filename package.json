@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "serve": "node server/appServer.js"
+    "serve": "node server/appServer.js",
+    "ai:pack": "node tools/ai-pack.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",

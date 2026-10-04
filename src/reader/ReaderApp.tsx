@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent, type ReactNode } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type MouseEvent,
+  type ReactNode,
+} from 'react'
 import { styleOf, type ArticleBook } from '../core/matchArticle'
 import { cleanText } from '../core/cleaner'
 import { carryAnalysis, segment } from '../core/segmenter'
@@ -94,6 +103,16 @@ import {
   type MistakeEntry,
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
+import {
+  buildAiJobs,
+  buildJobPack,
+  countAiJobs,
+  isAiJobTask,
+  parseAiResultPack,
+  parseJobPack,
+  type AiJob,
+  type AiJobsInput,
+} from '../core/aiPackage'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
 import {
   addWritingRecord,
@@ -132,6 +151,17 @@ interface Doc {
 
 /** 背单词的范围：全部 / 错词 / 未掌握 / 本篇。 */
 type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
+
+/** AI 任务的键：分析任务 + 各练习/整理任务。 */
+type AiTaskKey =
+  | AnalysisTask
+  | 'confusable'
+  | 'lemma'
+  | 'pos'
+  | 'listening'
+  | 'language'
+  | 'imitation'
+  | 'feedback'
 
 /** 老记录没存 text 时，从段落/句子还原正文。 */
 function reconstructText(a: SavedArticle): string {
@@ -309,6 +339,10 @@ export default function ReaderApp() {
   const askedWordsRef = useRef<string[]>([])
   /** 上次「全文翻译」请求的句子 id（用于校验是否逐句返回） */
   const askedIdsRef = useRef<string[]>([])
+  /** 最近一次导出的 AI 工作包（导入结果时按 id 找回 askedWords / askedIds） */
+  const aiPackRef = useRef<AiJob[]>([])
+  /** 「导入 AI 结果」的隐藏文件选择框 */
+  const aiFileRef = useRef<HTMLInputElement | null>(null)
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
@@ -3185,313 +3219,274 @@ export default function ReaderApp() {
     }
   }, [posCandidates, flash])
 
-  const applyPaste = useCallback(() => {
-    const raw = pasted.trim()
-    if (!raw) return
-    setPasteReport([])
-    setPasteMissing(null)
+  /**
+   * 应用一份 AI 结果（按任务分派）。单条「应用结果」与整包导入都走这里。
+   * 只做解析 + 落库，不动 UI 状态（回执 / 缺失 / 清空交给调用方）。
+   */
+  const applyTaskResult = useCallback(
+    (
+      task: AiTaskKey | null,
+      raw: string,
+      askedWords: string[],
+      askedIds: string[],
+    ): { report: string[]; missing: { task: 'confusable' | 'lookup' | 'lemma' | 'pos'; words: string[] } | null; ok: boolean } => {
+      const text = raw.trim()
+      if (!text) return { report: [], missing: null, ok: false }
 
-    // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
-    if (lastTask === 'auto_vocab') {
-      const words = parseWordList(raw)
-      if (!words.length) {
-        setPasteReport(['没解析出单词（应为一行一个，或逗号/顿号分隔）'])
-        flash('没解析出单词')
-        return
+      // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
+      if (task === 'auto_vocab') {
+        const words = parseWordList(text)
+        if (!words.length)
+          return { report: ['没解析出单词（应为一行一个，或逗号/顿号分隔）'], missing: null, ok: false }
+        mergeBatch(batchItemsFromWords(words))
+        return { report: [`已加入待选 ${words.length} 个词，可增删后再查词`], missing: null, ok: true }
       }
-      mergeBatch(batchItemsFromWords(words))
-      setPasted('')
-      setPasteReport([`已加入待选 ${words.length} 个词，可增删后再查词`])
-      flash(`已加入待选 ${words.length} 个词`)
-      return
-    }
 
-    // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
-    if (lastTask === 'confusable') {
-      const parsed = parseConfusables(raw)
-      if (!parsed.length) {
-        setPasteReport(['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'])
-        flash('没解析出混淆项')
-        return
-      }
-      const asked = askedWordsRef.current
-      const libLemmas = new Set(library.items.map((it) => it.lemma))
-      // 每条至少要有 1 个「非空且和原词不同」的易混词
-      const valid = parsed
-        .map((r) => ({
-          ...r,
-          confusables: r.confusables.filter((c) => c.word.trim() && lemmaOf(c.word) !== lemmaOf(r.word)),
-        }))
-        .filter((r) => r.confusables.length > 0)
-      const applied = valid.filter((r) => libLemmas.has(lemmaOf(r.word)))
-      const unknown = valid.filter((r) => !libLemmas.has(lemmaOf(r.word))).map((r) => r.word)
-      const empty = parsed
-        .filter((r) => r.confusables.every((c) => !c.word.trim() || lemmaOf(c.word) === lemmaOf(r.word)))
-        .map((r) => r.word)
-      const missing = missingWords(asked, valid.map((r) => r.word))
+      // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
+      if (task === 'confusable') {
+        const parsed = parseConfusables(text)
+        if (!parsed.length)
+          return { report: ['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'], missing: null, ok: false }
+        const libLemmas = new Set(library.items.map((it) => it.lemma))
+        // 每条至少要有 1 个「非空且和原词不同」的易混词
+        const valid = parsed
+          .map((r) => ({
+            ...r,
+            confusables: r.confusables.filter((c) => c.word.trim() && lemmaOf(c.word) !== lemmaOf(r.word)),
+          }))
+          .filter((r) => r.confusables.length > 0)
+        const applied = valid.filter((r) => libLemmas.has(lemmaOf(r.word)))
+        const unknown = valid.filter((r) => !libLemmas.has(lemmaOf(r.word))).map((r) => r.word)
+        const empty = parsed
+          .filter((r) => r.confusables.every((c) => !c.word.trim() || lemmaOf(c.word) === lemmaOf(r.word)))
+          .map((r) => r.word)
+        const missing = missingWords(askedWords, valid.map((r) => r.word))
 
-      const report: string[] = []
-      if (applied.length) persist(applyConfusables(library, applied))
-      report.push(`成功写入 ${applied.length} 个词的混淆项`)
-      if (missing.length) {
-        report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        setPasteMissing({ task: 'confusable', words: missing })
-      }
-      if (empty.length) {
-        report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
-      }
-      if (unknown.length) {
-        report.push(`词库里没有 ${unknown.length} 个：${unknown.slice(0, 10).join('、')}`)
-      }
-      setPasteReport(report)
-      setPasted('')
-      flash(`已写入 ${applied.length} 个${missing.length ? `，缺 ${missing.length}` : ''}`)
-      return
-    }
-
-    // 原形校正：改 word/lemma，再合并重复
-    if (lastTask === 'lemma') {
-      const pairs = parseLemmaTable(raw)
-      if (!pairs.length) {
-        setPasteReport(['没解析出原形（格式：原词形 | 原形）'])
-        flash('没解析出原形')
-        return
-      }
-      const before = library.items.length
-      const mapped = applyLemmaMap(library, pairs)
-      const next = dedupeLibrary(mapped)
-      persist(next)
-      const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
-      const merged = before - next.items.length
-      const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
-      if (merged > 0) report.push(`合并去重 ${merged} 个`)
-      const missing = missingWords(askedWordsRef.current, pairs.map((p) => p.from))
-      if (missing.length) {
-        report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        setPasteMissing({ task: 'lemma', words: missing })
-      }
-      setPasteReport(report)
-      setPasted('')
-      flash(`已校正 ${changed} 个词形${merged ? `，合并 ${merged} 个` : ''}`)
-      return
-    }
-
-    // -ing/-ed 语法辨析：写回原形 / 词性 / 笔记
-    if (lastTask === 'pos') {
-      const rows = parsePosTable(raw)
-      if (!rows.length) {
-        setPasteReport(['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'])
-        flash('没解析出辨析结果')
-        return
-      }
-      const before = library.items.length
-      const next = dedupeLibrary(applyPosAnalysis(library, rows))
-      persist(next)
-      const merged = before - next.items.length
-      const surfaces = rows.map((r) => normalizeWord(r.surface)).filter(Boolean)
-      const missing = askedWordsRef.current.filter((w) => {
-        const nw = normalizeWord(w)
-        return !surfaces.some((s) => nw === s || nw.split(' ').includes(s))
-      })
-      const report: string[] = [`已写回 ${rows.length} 条辨析`]
-      if (merged > 0) report.push(`合并去重 ${merged} 个`)
-      if (missing.length) {
-        report.push(`AI 未覆盖 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        setPasteMissing({ task: 'pos', words: missing })
-      }
-      setPasteReport(report)
-      setPasted('')
-      flash(`已写回 ${rows.length} 条辨析${merged ? `，合并 ${merged} 个` : ''}`)
-      return
-    }
-
-    // 听力理解题：解析严格 JSON 并存起来
-    if (lastTask === 'listening') {
-      const quiz = parseListeningQuiz(raw)
-      if (!quiz.questions.length) {
-        setPasteReport(['没解析出题目（需要严格 JSON：{"questions":[…] }，含 type/stem/answer）'])
-        flash('没解析出题目')
-        return
-      }
-      setListenQuiz(quiz)
-      try {
-        localStorage.setItem('reader:listening:' + articleIdentity, JSON.stringify(quiz))
-      } catch {
-        // 忽略
-      }
-      setPasted('')
-      setPasteReport([`已生成 ${quiz.questions.length} 道题`, '点工具栏「理解题」开始作答'])
-      flash(`已生成 ${quiz.questions.length} 道听力理解题`)
-      return
-    }
-
-    // 逐句语言点：写回句子
-    if (lastTask === 'language') {
-      const rows = parseLanguage(raw)
-      if (!rows.length) {
-        setPasteReport(['没解析出语言点（需要 JSON：{"sentences":[{"id":…}] }）'])
-        flash('没解析出语言点')
-        return
-      }
-      setDoc((d) => (d ? { ...d, sentences: applyLanguage(d.sentences, rows) } : d))
-      setPendingSave(true)
-      recordActivity('write', rows.length)
-      const asked = askedIdsRef.current
-      const got = new Set(rows.map((r) => r.id))
-      const missing = asked.filter((id) => !got.has(id))
-      const report = [`已写入 ${rows.length} 句语言点`]
-      if (missing.length) {
-        report.push(`AI 未返回 ${missing.length} 句：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-      }
-      setPasteReport(report)
-      setPasted('')
-      flash(`已写入 ${rows.length} 句语言点`)
-      return
-    }
-
-    // 仿写：生成任务
-    if (lastTask === 'imitation') {
-      const t = parseImitationTask(raw)
-      if (!t) {
-        setPasteReport(['没解析出仿写任务（需要 JSON：{task, model, rubric}）'])
-        flash('没解析出仿写任务')
-        return
-      }
-      setWritingTask(t)
-      setWritingFeedback(null)
-      setPasted('')
-      setPasteReport([`已生成仿写任务（${t.rubric.length} 个维度）`])
-      flash('已生成仿写任务，开始写吧')
-      return
-    }
-    // 仿写：批改
-    if (lastTask === 'feedback') {
-      const f = parseWritingFeedback(raw)
-      if (!f) {
-        setPasteReport(['没解析出批改结果（需要 JSON：{scores, issues, polished}）'])
-        flash('没解析出批改结果')
-        return
-      }
-      setWritingFeedback(f)
-      setWritingHistory((h) =>
-        addWritingRecord(h, {
-          at: new Date().toISOString(),
-          articleId: articleIdentity,
-          articleTitle: articleTitle || undefined,
-          model: writingModel,
-          text: writingText,
-          feedback: f,
-          task: writingTask ?? undefined,
-        }),
-      )
-      recordActivity('write', 1)
-      setPasted('')
-      setPasteReport([`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`])
-      flash(`批改完成：${f.total}/${f.max}`)
-      return
-    }
-
-    const result = parseAnalysis(raw)
-    const report: string[] = []
-    let next = library
-    if (result.words?.length) {
-      next = dedupeLibrary(
-        applyWordAnalysis(next, result.words, new Date(), {
-          articleId: articleTitle || articleKey || '手动粘贴',
-          fileName: articleIdentity,
-          sentenceId: null,
-          sentenceText: '',
-        }),
-      )
-    }
-    if (result.sentences?.length) {
-      const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
-      setDoc((d) =>
-        d
-          ? {
-              ...d,
-              sentences: d.sentences.map((s) => {
-                const a = map.get(s.id)
-                if (!a) return s
-                return {
-                  ...s,
-                  translation: a.translation ?? s.translation,
-                  grammarNote: a.grammarNote ?? s.grammarNote,
-                  collocations: a.collocations
-                    ? [...new Set([...s.collocations, ...a.collocations])]
-                    : s.collocations,
-                  vocab: a.vocab ? [...new Set([...s.vocab, ...a.vocab])] : s.vocab,
-                }
-              }),
-            }
-          : d,
-      )
-      recordActivity('read', result.sentences.length)
-    }
-    const sentenceTask = lastTask
-    const fellBack = !result.words?.length && !result.sentences?.length && !!sentenceTask && !!sentence
-    if (fellBack && sentenceTask) {
-      const updated = applyToSentence(sentence, sentenceTask, raw)
-      setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
-    }
-
-    // 一点都没解析出来：保留粘贴内容，方便改格式重试
-    if (!result.words?.length && !result.sentences?.length && !fellBack) {
-      setPasteReport(['没解析出可用内容（查词表格 / 逐句翻译 / JSON）；检查格式后重试'])
-      flash('没解析出内容')
-      return
-    }
-
-    persist(next)
-    // 有句子级结果（翻译/语法/搭配）或落到句子上 → 正文有改动，自动保存
-    if (result.sentences?.length || fellBack) setPendingSave(true)
-    setPasted('')
-
-    if (result.words?.length) {
-      report.push(`已填入 ${result.words.length} 个词条`)
-      const asked = askedWordsRef.current
-      if (asked.length) {
-        const missing = missingWords(asked, result.words.map((w) => w.word))
+        const report: string[] = []
+        if (applied.length) persist(applyConfusables(library, applied))
+        report.push(`成功写入 ${applied.length} 个词的混淆项`)
         if (missing.length) {
           report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-          setPasteMissing({ task: 'lookup', words: missing })
         }
+        if (empty.length) {
+          report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
+        }
+        if (unknown.length) {
+          report.push(`词库里没有 ${unknown.length} 个：${unknown.slice(0, 10).join('、')}`)
+        }
+        return { report, missing: missing.length ? { task: 'confusable', words: missing } : null, ok: true }
       }
-      const noPhon = result.words.filter((w) => !w.phonetic).length
-      const noMean = result.words.filter((w) => !w.meaning).length
-      if (noPhon) report.push(`其中 ${noPhon} 个没音标`)
-      if (noMean) report.push(`其中 ${noMean} 个没释义`)
-    }
-    if (result.sentences?.length) {
-      report.push(`已更新 ${result.sentences.length} 句`)
-      const asked = askedIdsRef.current
-      if (asked.length) {
-        const got = new Set(result.sentences.map((x) => x.sentenceId))
-        const missing = asked.filter((id) => !got.has(id))
+
+      // 原形校正：改 word/lemma，再合并重复
+      if (task === 'lemma') {
+        const pairs = parseLemmaTable(text)
+        if (!pairs.length) return { report: ['没解析出原形（格式：原词形 | 原形）'], missing: null, ok: false }
+        const before = library.items.length
+        const mapped = applyLemmaMap(library, pairs)
+        const next = dedupeLibrary(mapped)
+        persist(next)
+        const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
+        const merged = before - next.items.length
+        const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
+        if (merged > 0) report.push(`合并去重 ${merged} 个`)
+        const missing = missingWords(askedWords, pairs.map((p) => p.from))
+        if (missing.length) {
+          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+        return { report, missing: missing.length ? { task: 'lemma', words: missing } : null, ok: true }
+      }
+
+      // -ing/-ed 语法辨析：写回原形 / 词性 / 笔记
+      if (task === 'pos') {
+        const rows = parsePosTable(text)
+        if (!rows.length)
+          return { report: ['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'], missing: null, ok: false }
+        const before = library.items.length
+        const next = dedupeLibrary(applyPosAnalysis(library, rows))
+        persist(next)
+        const merged = before - next.items.length
+        const surfaces = rows.map((r) => normalizeWord(r.surface)).filter(Boolean)
+        const missing = askedWords.filter((w) => {
+          const nw = normalizeWord(w)
+          return !surfaces.some((s) => nw === s || nw.split(' ').includes(s))
+        })
+        const report: string[] = [`已写回 ${rows.length} 条辨析`]
+        if (merged > 0) report.push(`合并去重 ${merged} 个`)
+        if (missing.length) {
+          report.push(`AI 未覆盖 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+        return { report, missing: missing.length ? { task: 'pos', words: missing } : null, ok: true }
+      }
+
+      // 听力理解题：解析严格 JSON 并存起来
+      if (task === 'listening') {
+        const quiz = parseListeningQuiz(text)
+        if (!quiz.questions.length)
+          return { report: ['没解析出题目（需要严格 JSON：{"questions":[…] }，含 type/stem/answer）'], missing: null, ok: false }
+        setListenQuiz(quiz)
+        try {
+          localStorage.setItem('reader:listening:' + articleIdentity, JSON.stringify(quiz))
+        } catch {
+          // 忽略
+        }
+        return { report: [`已生成 ${quiz.questions.length} 道题`, '点工具栏「理解题」开始作答'], missing: null, ok: true }
+      }
+
+      // 逐句语言点：写回句子
+      if (task === 'language') {
+        const rows = parseLanguage(text)
+        if (!rows.length)
+          return { report: ['没解析出语言点（需要 JSON：{"sentences":[{"id":…}] }）'], missing: null, ok: false }
+        setDoc((d) => (d ? { ...d, sentences: applyLanguage(d.sentences, rows) } : d))
+        setPendingSave(true)
+        recordActivity('write', rows.length)
+        const got = new Set(rows.map((r) => r.id))
+        const missing = askedIds.filter((id) => !got.has(id))
+        const report = [`已写入 ${rows.length} 句语言点`]
         if (missing.length) {
           report.push(`AI 未返回 ${missing.length} 句：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
         }
+        return { report, missing: null, ok: true }
       }
+
+      // 仿写：生成任务
+      if (task === 'imitation') {
+        const t = parseImitationTask(text)
+        if (!t) return { report: ['没解析出仿写任务（需要 JSON：{task, model, rubric}）'], missing: null, ok: false }
+        setWritingTask(t)
+        setWritingFeedback(null)
+        return { report: [`已生成仿写任务（${t.rubric.length} 个维度）`], missing: null, ok: true }
+      }
+      // 仿写：批改
+      if (task === 'feedback') {
+        const f = parseWritingFeedback(text)
+        if (!f) return { report: ['没解析出批改结果（需要 JSON：{scores, issues, polished}）'], missing: null, ok: false }
+        setWritingFeedback(f)
+        setWritingHistory((h) =>
+          addWritingRecord(h, {
+            at: new Date().toISOString(),
+            articleId: articleIdentity,
+            articleTitle: articleTitle || undefined,
+            model: writingModel,
+            text: writingText,
+            feedback: f,
+            task: writingTask ?? undefined,
+          }),
+        )
+        recordActivity('write', 1)
+        return { report: [`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`], missing: null, ok: true }
+      }
+
+      // 通用：查词表格 / 逐句翻译 / JSON
+      const result = parseAnalysis(text)
+      const report: string[] = []
+      let missing: { task: 'lookup'; words: string[] } | null = null
+      let next = library
+      if (result.words?.length) {
+        next = dedupeLibrary(
+          applyWordAnalysis(next, result.words, new Date(), {
+            articleId: articleTitle || articleKey || '手动粘贴',
+            fileName: articleIdentity,
+            sentenceId: null,
+            sentenceText: '',
+          }),
+        )
+      }
+      if (result.sentences?.length) {
+        const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
+        setDoc((d) =>
+          d
+            ? {
+                ...d,
+                sentences: d.sentences.map((s) => {
+                  const a = map.get(s.id)
+                  if (!a) return s
+                  return {
+                    ...s,
+                    translation: a.translation ?? s.translation,
+                    grammarNote: a.grammarNote ?? s.grammarNote,
+                    collocations: a.collocations
+                      ? [...new Set([...s.collocations, ...a.collocations])]
+                      : s.collocations,
+                    vocab: a.vocab ? [...new Set([...s.vocab, ...a.vocab])] : s.vocab,
+                  }
+                }),
+              }
+            : d,
+        )
+        recordActivity('read', result.sentences.length)
+      }
+      const fellBack = !result.words?.length && !result.sentences?.length && !!task && !!sentence
+      if (fellBack && task) {
+        const updated = applyToSentence(sentence, task, text)
+        setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
+      }
+
+      // 一点都没解析出来：返回失败（调用方保留粘贴内容，方便改格式重试）
+      if (!result.words?.length && !result.sentences?.length && !fellBack) {
+        return { report: ['没解析出可用内容（查词表格 / 逐句翻译 / JSON）；检查格式后重试'], missing: null, ok: false }
+      }
+
+      persist(next)
+      // 有句子级结果（翻译/语法/搭配）或落到句子上 → 正文有改动，自动保存
+      if (result.sentences?.length || fellBack) setPendingSave(true)
+
+      if (result.words?.length) {
+        report.push(`已填入 ${result.words.length} 个词条`)
+        if (askedWords.length) {
+          const m = missingWords(askedWords, result.words.map((w) => w.word))
+          if (m.length) {
+            report.push(`AI 未返回 ${m.length} 个：${m.slice(0, 20).join('、')}${m.length > 20 ? '…' : ''}`)
+            missing = { task: 'lookup', words: m }
+          }
+        }
+        const noPhon = result.words.filter((w) => !w.phonetic).length
+        const noMean = result.words.filter((w) => !w.meaning).length
+        if (noPhon) report.push(`其中 ${noPhon} 个没音标`)
+        if (noMean) report.push(`其中 ${noMean} 个没释义`)
+      }
+      if (result.sentences?.length) {
+        report.push(`已更新 ${result.sentences.length} 句`)
+        if (askedIds.length) {
+          const got = new Set(result.sentences.map((x) => x.sentenceId))
+          const m = askedIds.filter((id) => !got.has(id))
+          if (m.length) {
+            report.push(`AI 未返回 ${m.length} 句：${m.slice(0, 20).join('、')}${m.length > 20 ? '…' : ''}`)
+          }
+        }
+      }
+      if (fellBack) report.push('已按所选句子落上结果')
+      return { report: report.length ? report : ['已应用'], missing, ok: true }
+    },
+    [
+      library,
+      sentence,
+      persist,
+      mergeBatch,
+      batchItemsFromWords,
+      articleTitle,
+      articleKey,
+      articleIdentity,
+      writingModel,
+      writingText,
+      writingTask,
+      recordActivity,
+    ],
+  )
+
+  const applyPaste = useCallback(() => {
+    const raw = pasted.trim()
+    if (!raw) return
+    const res = applyTaskResult(lastTask, raw, askedWordsRef.current, askedIdsRef.current)
+    setPasteReport(res.report)
+    setPasteMissing(res.missing)
+    if (res.ok) {
+      setPasted('')
+      flash(res.report[0] ?? '已应用')
+    } else {
+      flash(res.report[0] ?? '没解析出内容')
     }
-    if (fellBack) report.push('已按所选句子落上结果')
-    setPasteReport(report.length ? report : ['已应用'])
-    flash(report[0] ?? '已应用')
-  }, [
-    pasted,
-    library,
-    lastTask,
-    sentence,
-    persist,
-    flash,
-    mergeBatch,
-    batchItemsFromWords,
-    articleTitle,
-    articleKey,
-    articleIdentity,
-    writingModel,
-    writingText,
-    recordActivity,
-  ])
+  }, [pasted, lastTask, applyTaskResult, flash])
 
   /** 把上次未返回的词重新组成提示词，一键复制重试。 */
   const copyMissingAgain = useCallback(async () => {
@@ -3552,6 +3547,109 @@ export default function ReaderApp() {
       URL.revokeObjectURL(url)
     },
     [],
+  )
+
+  /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
+  const aiJobsInput = useMemo<AiJobsInput>(
+    () => ({
+      batch: visibleBatch.map((b) => ({ word: b.word, sentence: b.sentence })),
+      items: library.items,
+      confusableTodo,
+      confusableBatchSize,
+      lemmaCandidates,
+      posCandidates,
+      sentences: doc?.sentences ?? [],
+      hasListenQuiz: !!listenQuiz,
+      listenCount,
+    }),
+    [
+      visibleBatch,
+      library,
+      confusableTodo,
+      confusableBatchSize,
+      lemmaCandidates,
+      posCandidates,
+      doc,
+      listenQuiz,
+      listenCount,
+    ],
+  )
+
+  /** 待办任务数（只数，不生成提示词），给按钮显示用。 */
+  const aiJobCount = useMemo(() => countAiJobs(aiJobsInput), [aiJobsInput])
+
+  /** 导出 AI 工作包：一个 JSON 文件，整包交给 AI 或本机 agent。 */
+  const exportAiJobs = useCallback(() => {
+    const jobs = buildAiJobs(aiJobsInput)
+    if (!jobs.length) {
+      flash('没有待办（生词本已齐，也没有缺译文/语言点/听力题）')
+      return
+    }
+    aiPackRef.current = jobs
+    const pack = buildJobPack(jobs)
+    try {
+      localStorage.setItem('reader:aiJobPack', JSON.stringify(pack))
+    } catch {
+      // 忽略
+    }
+    download(`ai-jobs-${dayKeyLocal(new Date())}.json`, JSON.stringify(pack, null, 2), 'application/json')
+    flash(`已导出 ${jobs.length} 项待办；整包交给 AI 后，把结果 JSON 导回`)
+  }, [aiJobsInput, download, flash])
+
+  /** 导入 AI 结果包：按 job id 找回任务与上下文，逐条应用，汇总回执。 */
+  const readAiResults = useCallback(
+    async (file: File) => {
+      const text = await file.text()
+      const { results, error } = parseAiResultPack(text)
+      if (error) {
+        flash('导入失败：' + error)
+        return
+      }
+      // 找回最近一次的 job 列表（内存优先，其次 localStorage）
+      let pool = aiPackRef.current
+      if (!pool.length) {
+        try {
+          const raw = localStorage.getItem('reader:aiJobPack')
+          if (raw) pool = parseJobPack(raw)?.jobs ?? []
+        } catch {
+          // 忽略
+        }
+      }
+      const byId = new Map(pool.map((j) => [j.id, j]))
+      const lines: string[] = []
+      let okCount = 0
+      let failCount = 0
+      for (const r of results) {
+        const job = r.id ? byId.get(r.id) : undefined
+        const task = job?.task ?? (isAiJobTask(r.task) ? r.task : null)
+        if (!task) {
+          lines.push(`跳过：找不到任务（id=${r.id || '无'}）`)
+          failCount++
+          continue
+        }
+        const res = applyTaskResult(
+          task,
+          r.raw,
+          job?.askedWords ?? r.askedWords ?? [],
+          job?.askedIds ?? r.askedIds ?? [],
+        )
+        if (res.ok) okCount++
+        else failCount++
+        lines.push(`【${job?.label ?? task}】${res.report[0] ?? (res.ok ? '已应用' : '未解析')}`)
+      }
+      setPasteReport([`导入完成：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)])
+      flash(`导入完成：成功 ${okCount}，失败 ${failCount}`)
+    },
+    [applyTaskResult, flash],
+  )
+
+  const onAiFile = useCallback(
+    (e: ChangeEvent<HTMLInputElement>) => {
+      const f = e.target.files?.[0]
+      e.target.value = ''
+      if (f) void readAiResults(f)
+    },
+    [readAiResults],
   )
 
   const doExportAnki = useCallback(
@@ -5349,6 +5447,33 @@ export default function ReaderApp() {
             if (pasteMissing) setPasteMissing(null)
           }}
         />
+        <div className="ai-pack">
+          <div className="muted">
+            ⚡ 一键打包：导出待办文件 → 整包交给 AI（网页版也行，喂给本机 agent 更快）→
+            把结果 JSON 导回，一次应用全部，不用一条条复制粘贴。
+          </div>
+          <button
+            onClick={exportAiJobs}
+            disabled={!aiJobCount}
+            title="把当前所有待办（查词 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力）打成一个 JSON，整包发出去"
+          >
+            📦 导出 AI 工作包（{aiJobCount} 项）
+          </button>
+          <button
+            onClick={() => aiFileRef.current?.click()}
+            style={{ marginLeft: 6 }}
+            title="导入 AI 返回的结果 JSON（{ results: [{ id, raw }] }），按任务逐条应用并汇总回执"
+          >
+            📥 导入 AI 结果
+          </button>
+          <input
+            ref={aiFileRef}
+            type="file"
+            accept="application/json,.json"
+            style={{ display: 'none' }}
+            onChange={onAiFile}
+          />
+        </div>
         <button className="primary" onClick={applyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
           应用结果
         </button>

@@ -91,6 +91,11 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
 - **标**：划选单词 → 「加入生词」。按词形（lemma）去重，`running`/`runs`/`ran` 归一条，自动记下来源文章和原句。
 - **查（不接 API）**：选中句子或单词 → 点「翻译 / 查词 / 语法 / 搭配 / 提取生词 / 概述」→ 提示词自动复制 →
   去 `chat.deepseek.com` 粘贴 → 把结果贴回右栏 → 「应用结果」解析成词条/翻译。
+- **⚡ 批量（AI 工作包）**：右栏「选词·分析」里可**一键导出 AI 工作包**——把当前所有待办
+  （待选/补音标/混淆项/原形/-ing-ed/翻译/语言点/听力）打成一个 `ai-jobs-*.json`；整包丢给 AI
+  （网页版也行，或**喂给本机 agent**），再把回答按 `{ results: [{ id, raw }] }` 存成 JSON
+  **一键导回**，逐条应用并汇总回执，省掉「复制→粘贴→再来」的循环。
+  配了 API key 时可用 `npm run ai:pack`（见 `tools/ai-pack.mjs`）全自动跑完。
 - **用**：**导出 Anki CSV**（Front/Back/Tags）、**导出 JSON**、**A4 打印**（浏览器打印→另存为 PDF）。
 - **新建 / 导入**：顶栏「＋ 新建文章」——粘正文，或导入本地文件：
   - `.txt` / `.md`：**可多选**，每个文件一篇；
@@ -312,6 +317,7 @@ src/
     cleaner.ts        清洗 PDF 伪影（软连字符/ligature/断词）
     segmenter.ts      切句（Intl.Segmenter + 缩写修补）
     analyzer.ts       一键提示词生成 + 粘回解析
+    aiPackage.ts      AI 工作包：打包待办提示词 + 解析 AI 结果文件（批量导入）
     quiz.ts           考试出题与判分（拼写/填空/听力/看词选义/词形辨析/听音拼词）
     dictation.ts      逐句听写：词级 diff（漏写/多写）
     listening.ts      听力理解题：严格 JSON 出题 + 解析校验 + 本地判分

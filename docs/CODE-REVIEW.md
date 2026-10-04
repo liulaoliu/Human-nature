@@ -80,10 +80,17 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 
 > 原则：**每一步都可构建、可测、可单独提交**；不改变行为，只搬代码。用"绞杀者模式"逐步替换，而不是一次性重写。
 
-### 阶段 0（本轮已做）
+### 阶段 0（已做）
 - [x] `useLocalStorageState` + 预设，消灭 ~30 处持久化样板（-350 行）。
 
+### 阶段 0.5（已做）：AI 工作包（把手工循环自动化）
+- 需求：省掉「复制提示词 → 网页版 AI → 粘回 → 重复」的循环。
+- 做法：新增 `core/aiPackage.ts` —— 由当前数据**推导所有待办**（`buildAiJobs`）、打包（`buildJobPack`）、解析结果文件（`parseAiResultPack`/`parseJobPack`），全部纯逻辑 + 单测。
+- 组件抽 `applyTaskResult(task, raw, askedWords, askedIds)`，单条粘贴与整包导入共用。
+- UI：选词·分析里「📦 导出 AI 工作包 / 📥 导入 AI 结果」。导出的 `ai-jobs-*.json` 可**整包喂给本机 agent**；配 key 时 `npm run ai:pack`（`tools/ai-pack.mjs`）可全自动跑。
+
 ### 阶段 1：把 `ReaderApp` 拆成 **ViewModel + 组件**（最大收益）
+- [x] 抽出 `panels/StatsPanel.tsx`（统计 Tab 的巨型 IIFE → 组件）。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；
@@ -123,6 +130,9 @@ src/reader/
 **验收**：`ReaderApp` ≤ 500 行；`npm test` 仍全绿；行为一致。
 
 ### 阶段 2：AI 任务抽象成**注册表**
+- [x] 先把 `applyPaste` 的 `if` 链抽成 `applyTaskResult(task, raw, …)`，单条粘贴与整包导入共用（为注册表铺路）。
+- [ ] 进一步把「build 提示词 / parse / apply / report」收进一个 `AiTask` 对象：
+
 把 `lastTask` + `applyPaste` 的 `if` 链，换成：
 ```ts
 interface AiTask {
