@@ -111,7 +111,7 @@ export function formatUptime(seconds) {
 const pad = (n) => String(n).padStart(2, '0')
 
 export function printStatus(port, st) {
-  console.log('跟读/精读 本地服务')
+  console.log('学吧老哥 本地服务')
   if (!st) {
     console.log(`  状态: 未运行（端口 ${port} 无响应）`)
     return

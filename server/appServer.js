@@ -36,6 +36,6 @@ server.on('error', (e) => {
   process.exit(1)
 })
 server.listen(port, () => {
-  console.log(`跟读/精读 服务已启动： http://localhost:${port}/`)
+  console.log(`学吧老哥 服务已启动： http://localhost:${port}/`)
   console.log(`  精读页： http://localhost:${port}/reader.html`)
 })

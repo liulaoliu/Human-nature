@@ -4063,7 +4063,7 @@ export default function ReaderApp() {
       >
         {readingView && (
         <div className="bar">
-          <strong>Economist 精读</strong>
+          <strong>学吧老哥</strong>
           {book && editions.length > 1 && (
             <select value={edition} onChange={(e) => setEdition(e.target.value)} title="按期次筛选内置文章">
               <option value="全部">全部期次（{bookKeys.length}）</option>
