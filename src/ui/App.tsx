@@ -7,6 +7,7 @@ import { createTakeRepo } from '../adapters/takeRepo'
 import { createScriptRepo } from '../adapters/scriptRepo'
 import { createScriptEditRepo } from '../adapters/scriptEditRepo'
 import { createCalibrationRepo } from '../adapters/calibrationRepo'
+import { pickAudioFile, supportsAudioPicker } from '../adapters/audioPick'
 import {
   applyLocalState,
   currentBackup,
@@ -32,6 +33,18 @@ const MIC_RAW_KEY = 'shadowing.ui.micRaw'
 const MIC_DEV_KEY = 'shadowing.ui.micDevice'
 const HANGOVER_KEY = 'shadowing.ui.hangoverMs'
 const TAKE_BOOST_KEY = 'shadowing.ui.takeBoost'
+
+/**
+ * 选音频：支持 File System Access 时改用能「记住上次目录」的选框（并阻止原生 input 弹出），
+ * 否则回退普通 input（浏览器一般也会记住上次目录）。
+ */
+function interceptAudioPick(e: { preventDefault: () => void }, load: (f: File) => void): void {
+  if (!supportsAudioPicker()) return
+  e.preventDefault()
+  void pickAudioFile().then((f) => {
+    if (f) load(f)
+  })
+}
 
 function readViewMode(): ViewMode {
   try {
@@ -265,6 +278,7 @@ export default function App() {
           <input
             type="file"
             accept="audio/*"
+            onClick={(e) => interceptAudioPick(e, (f) => void store.load(f, f.name))}
             onChange={(e) => {
               const f = e.target.files?.[0]
               if (f) void store.load(f, f.name)
@@ -1074,6 +1088,7 @@ function Empty({ onPick, backup }: { onPick: (f: File) => void; backup?: ReactNo
         <input
           type="file"
           accept="audio/*"
+          onClick={(e) => interceptAudioPick(e, onPick)}
           onChange={(e) => {
             const f = e.target.files?.[0]
             if (f) onPick(f)
