@@ -1239,6 +1239,30 @@ export default function ReaderApp() {
     [startStudy],
   )
 
+  /** 「本篇全部」：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）。 */
+  const startArticleAll = useCallback(() => {
+    const pool = studyPoolFor('article')
+    if (!pool.length) {
+      flash('这篇还没有生词')
+      return
+    }
+    setStudyScope('article')
+    studyRequeueRef.current = new Map()
+    studyForgotRef.current = []
+    studyBumpedRef.current = new Set()
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
+    setStudyQueue(sortItems(pool, 'due'))
+    setStudyIndex(0)
+    setStudyRevealed(false)
+    setStudyInput('')
+    setStudyChecked(false)
+    setStudyEditOpen(false)
+    setStudyDraft(null)
+    setStudyDelArmed(false)
+  }, [studyPoolFor, flash])
+
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {
     setNewToday((prev) => {
@@ -4301,6 +4325,12 @@ export default function ReaderApp() {
                 <option value="lapses">错词</option>
                 <option value="all">全部</option>
               </select>
+              <button
+                onClick={startArticleAll}
+                title="把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）"
+              >
+                本篇全部
+              </button>
               <select
                 value={String(newLimit)}
                 onChange={(e) => setNewLimit(Number(e.target.value))}
@@ -5865,6 +5895,17 @@ export default function ReaderApp() {
             title="卡片式背单词：新学习没学过的、复习到期的；空格翻面，1/2/3 认识/模糊/忘记了，Esc 退出"
           >
             背单词
+          </button>
+          <button
+            onClick={() => {
+              setQuizQueue(null)
+              setQuizSetupOpen(false)
+              startArticleAll()
+            }}
+            disabled={!library.items.length}
+            title="本篇全部：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）"
+          >
+            本篇全部
           </button>
           <button
             onClick={() => {
