@@ -1129,20 +1129,35 @@ export default function ReaderApp() {
     [confirmDel, library, persist],
   )
 
+  /** 每个句子的 lemma 集合（只随 doc 变，避免「本篇」过滤时对每个词条重扫全文）。 */
+  const sentenceLemmas = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    if (doc) {
+      for (const s of doc.sentences) {
+        const set = new Set<string>()
+        for (const w of wordSpans(s.text)) set.add(lemmaOf(w.text))
+        m.set(s.id, set)
+      }
+    }
+    return m
+  }, [doc])
+  /** 全文出现过的 lemma 集合（「本篇」范围用）。 */
+  const docLemmas = useMemo(() => {
+    const all = new Set<string>()
+    for (const set of sentenceLemmas.values()) for (const l of set) all.add(l)
+    return all
+  }, [sentenceLemmas])
+
   /** 背单词候选池：按范围取（全部 / 错词 / 未掌握 / 本篇）。 */
   const studyPoolFor = useCallback(
     (scope: 'all' | 'article' | 'unmastered' | 'lapses') => {
       if (scope === 'all') return library.items
       if (scope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
       if (scope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-      // 本篇：来源是本文，或词形出现在正文里
-      return library.items.filter(
-        (it) =>
-          it.source?.fileName === articleIdentity ||
-          (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
-      )
+      // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
+      return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
     },
-    [library.items, articleIdentity, doc],
+    [library.items, articleIdentity, docLemmas],
   )
   const studyPool = useMemo(() => studyPoolFor(studyScope), [studyPoolFor, studyScope])
 
@@ -1152,12 +1167,8 @@ export default function ReaderApp() {
     if (quizScope === 'due') return library.items.filter((it) => isDue(it))
     if (quizScope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
     if (quizScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-    return library.items.filter(
-      (it) =>
-        it.source?.fileName === articleIdentity ||
-        (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
-    )
-  }, [library.items, quizScope, articleIdentity, doc])
+    return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
+  }, [library.items, quizScope, articleIdentity, docLemmas])
 
   /** 各范围下能出的题数（用于设置面板提示）。 */
   const quizPoolSizes = useMemo(() => {
@@ -2539,15 +2550,15 @@ export default function ReaderApp() {
     const batchSids = new Set<string>()
     for (const b of batch) if (b.sentenceId) batchSids.add(b.sentenceId)
     return doc.sentences
-      .filter(
-        (s) =>
-          batchSids.has(s.id) ||
-          wordSpans(s.text).some(
-            (w) => activeLemmas.has(w.text.toLowerCase()) || activeLemmas.has(lemmaOf(w.text)),
-          ),
-      )
+      .filter((s) => {
+        if (batchSids.has(s.id)) return true
+        const set = sentenceLemmas.get(s.id)
+        if (!set) return false
+        for (const l of set) if (activeLemmas.has(l)) return true
+        return false
+      })
       .map((s) => s.id)
-  }, [doc, activeLemmas, batch])
+  }, [doc, sentenceLemmas, activeLemmas, batch])
   const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
 
   /** 浏览器 TTS：只读一遍，不循环；同一句正在读时不重开。 */
