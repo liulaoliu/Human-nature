@@ -55,11 +55,48 @@ function fetchFromHost(host, port, timeoutMs = 1500) {
   })
 }
 
-/** GET /api/status；并行试 localhost / 127.0.0.1 / ::1（Vite 只绑 localhost 时也能探到）。 */
+/** 探测根路径是否有人应答（dev 模式的 Vite 没有 /api/status，靠这个兜底）。 */
+function probeRoot(host, port, timeoutMs = 1500) {
+  return new Promise((resolve) => {
+    let done = false
+    const finish = (v) => {
+      if (!done) {
+        done = true
+        resolve(v)
+      }
+    }
+    const req = http.get({ host, port, path: '/', timeout: timeoutMs }, (res) => {
+      res.resume()
+      res.on('end', () => finish(true))
+      res.on('error', () => finish(false))
+    })
+    req.on('timeout', () => {
+      req.destroy()
+      finish(false)
+    })
+    req.on('error', () => finish(false))
+  })
+}
+
+function readChildPid() {
+  try {
+    const n = Number(readFileSync(join(root, 'server', '.child.pid'), 'utf8').trim())
+    return Number.isFinite(n) ? n : 0
+  } catch {
+    return 0
+  }
+}
+
+/** GET /api/status（static 模式）或探根路径（dev 模式的 Vite）。 */
 export async function fetchStatus(port, timeoutMs = 1500) {
   const results = await Promise.allSettled(PROBE_HOSTS.map((h) => fetchFromHost(h, port, timeoutMs)))
   for (const r of results) {
     if (r.status === 'fulfilled' && r.value) return r.value
+  }
+  // dev 模式兜底：Vite 不提供 /api/status，只要根路径有响应就算在跑
+  const roots = await Promise.allSettled(PROBE_HOSTS.map((h) => probeRoot(h, port, timeoutMs)))
+  if (roots.some((r) => r.status === 'fulfilled' && r.value)) {
+    return { ok: true, pid: readChildPid(), uptime: 0, time: new Date().toISOString(), dev: true }
   }
   return null
 }

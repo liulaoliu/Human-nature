@@ -11,6 +11,8 @@ export function spawnDetachedServer(spawnFn = spawn) {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
+    // 从项目根启动：silent-start.vbs 会把 cwd 设成 server/，这里纠正回来
+    cwd: join(here, '..'),
   })
   child.unref()
   return child

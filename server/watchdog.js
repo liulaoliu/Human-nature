@@ -14,10 +14,11 @@ export function restartDecision({ code, consecutive, maxRestarts }) {
 
 /** 守护进程：子进程崩溃自动重启。 */
 export class Watchdog extends EventEmitter {
-  constructor({ cmd, args, maxRestarts = 10, restartDelayMs = 2000 }) {
+  constructor({ cmd, args, cwd = undefined, maxRestarts = 10, restartDelayMs = 2000 }) {
     super()
     this.cmd = cmd
     this.args = args
+    this.cwd = cwd
     this.maxRestarts = maxRestarts
     this.restartDelayMs = restartDelayMs
     this.consecutive = 0
@@ -39,7 +40,7 @@ export class Watchdog extends EventEmitter {
 
   spawn() {
     if (this.stopped) return
-    this.child = spawn(this.cmd, this.args, { stdio: 'inherit', windowsHide: true })
+    this.child = spawn(this.cmd, this.args, { stdio: 'inherit', windowsHide: true, cwd: this.cwd })
     this.emit('spawn', this.child.pid)
     this.child.on('exit', (code) => this.onExit(code))
   }

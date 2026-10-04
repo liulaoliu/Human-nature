@@ -28,6 +28,8 @@ console.log(`[service] mode=${mode}`)
 const wd = new Watchdog({
   cmd: child.cmd,
   args: child.args,
+  // 固定在项目根跑：否则从 server/ 启动时 Vite 的 root 会变成 server/，页面全 404
+  cwd: root,
   maxRestarts: 10,
   restartDelayMs: 2000,
 })
