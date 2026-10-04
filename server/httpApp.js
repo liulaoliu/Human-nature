@@ -3,7 +3,27 @@ import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 
 const DATA_FILES = new Set(['articles.json', 'shadowing-state.json'])
-const FISH_IMG = /\.(png|jpe?g|gif|webp|avif)$/i
+const FISH_IMG = /\.(png|jpe?g|webp|avif)$/i
+const FISH_MAX = 600 * 1024
+
+/** 只收轻量图（排除动画 gif / 大文件），避免装饰图吃 CPU。 */
+function listFish(dir) {
+  let names = []
+  try {
+    names = readdirSync(dir).filter((f) => FISH_IMG.test(f))
+  } catch {
+    return []
+  }
+  const sizeOf = (f) => {
+    try {
+      return statSync(join(dir, f)).size
+    } catch {
+      return Infinity
+    }
+  }
+  const light = names.filter((f) => sizeOf(f) <= FISH_MAX)
+  return (light.length ? light : names).sort()
+}
 
 function sendJson(res, code, obj) {
   res.statusCode = code
@@ -48,15 +68,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
 
     // 静态鱼素材：GET /fish（文件名列表）· GET /fish/<name>
     if (fishDir && (pathname === '/fish' || pathname === '/fish/manifest.json')) {
-      let names = []
-      try {
-        names = readdirSync(fishDir)
-          .filter((f) => FISH_IMG.test(f))
-          .sort()
-      } catch {
-        // 目录不存在 → 空列表
-      }
-      sendJson(res, 200, names)
+      sendJson(res, 200, listFish(fishDir))
       return
     }
     if (fishDir && pathname.startsWith('/fish/')) {

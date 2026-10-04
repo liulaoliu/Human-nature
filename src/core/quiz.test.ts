@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   blankWord,
   buildQuizQuestions,
+  countQuestions,
   formatAnswerInput,
   isCorrect,
   makeDictationQuestion,
@@ -179,6 +180,19 @@ describe('maskAnswer', () => {
     expect(maskAnswer('bad-temperedly')).toBe('___-' + '_'.repeat(10))
     expect(maskAnswer('run a business')).toBe('___ _ ' + '_'.repeat(8))
     expect(maskAnswer("don't")).toBe("___'_")
+  })
+})
+
+describe('countQuestions', () => {
+  it('按题型与数据判定', () => {
+    const items = [
+      item({ id: 'a', word: 'run', lemma: 'run', meaning: '跑' }),
+      item({ id: 'b', word: 'go', lemma: 'go', meaning: null, examples: [{ text: 'go fast' }] }),
+      item({ id: 'c', word: 'x', lemma: 'x', meaning: null, examples: [], source: null }),
+    ]
+    expect(countQuestions(items, ['spell'])).toBe(1)
+    expect(countQuestions(items, ['cloze'])).toBe(1)
+    expect(countQuestions(items, ['ear'])).toBe(3)
   })
 })
 

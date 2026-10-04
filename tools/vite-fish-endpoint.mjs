@@ -12,7 +12,27 @@ import { join, resolve } from 'node:path'
  *
  * 放 .mjs 是因为要用 node:fs，而前端 tsconfig 不装 @types/node。
  */
-const IMG = /\.(png|jpe?g|gif|webp|avif)$/i
+const IMG = /\.(png|jpe?g|webp|avif)$/i
+/** 只收轻量的图：排除动画 gif（吃 CPU）、排除大文件（解码/内存） */
+const MAX_BYTES = 600 * 1024
+
+function listFish(dir) {
+  let names = []
+  try {
+    names = readdirSync(dir).filter((f) => IMG.test(f))
+  } catch {
+    return []
+  }
+  const sizeOf = (f) => {
+    try {
+      return statSync(join(dir, f)).size
+    } catch {
+      return Infinity
+    }
+  }
+  const light = names.filter((f) => sizeOf(f) <= MAX_BYTES)
+  return (light.length ? light : names).sort()
+}
 
 function typeOf(name) {
   const n = name.toLowerCase()
@@ -33,14 +53,7 @@ export function fishStaticPlugin() {
         if (path !== '/fish' && path !== '/fish/manifest.json' && !path.startsWith('/fish/')) return next()
 
         if (path === '/fish' || path === '/fish/manifest.json') {
-          let names = []
-          try {
-            names = readdirSync(fishDir)
-              .filter((f) => IMG.test(f))
-              .sort()
-          } catch {
-            // 目录不存在 → 空列表
-          }
+          const names = listFish(fishDir)
           res.statusCode = 200
           res.setHeader('Content-Type', 'application/json; charset=utf-8')
           res.end(JSON.stringify(names))

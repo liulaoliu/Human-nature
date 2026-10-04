@@ -352,8 +352,7 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
 }
 
 /** 根据选中的题型，为一组词条出题（每个词条每种题型最多一题）。 */
-export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQuestion[] {
-  const out: QuizQuestion[] = []
+export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQuestion[] {  const out: QuizQuestion[] = []
   for (const it of items) {
     for (const kind of kinds) {
       const q = makeQuestion(it, kind, items)
@@ -364,10 +363,30 @@ export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQ
 }
 
 /**
+ * 「大概能出多少题」的**廉价**计数：不生成干扰项 / 例句，只判断词条是否具备条件。
+ * 用于设置面板提示与统计，避免 O(N²) 的 buildQuizQuestions。
+ * （默认「每词一题」模式下，约等于可选词条数。）
+ */
+export function countQuestions(items: VocabItem[], kinds: QuizKind[]): number {
+  const wantEar = kinds.includes('ear')
+  const wantMeaningKinds = kinds.includes('spell') || kinds.includes('choice') || kinds.includes('meaning')
+  const wantCtx = kinds.includes('cloze') || kinds.includes('listen')
+  const wantUsage = kinds.includes('usage')
+  let n = 0
+  for (const it of items) {
+    if (!it.word.trim()) continue
+    const hasMeaning = !!it.meaning
+    const hasCtx = it.examples.some((e) => e.text.trim()) || !!it.source?.sentenceText
+    const hasUsage = it.usage.length > 0
+    if (wantEar || (wantMeaningKinds && hasMeaning) || (wantCtx && hasCtx) || (wantUsage && hasUsage)) n += 1
+  }
+  return n
+}
+
+/**
  * 听写专用题：用给定句子（按原文顺序）做听力填空。
  * 与 makeQuestion('listen') 不同，这里强制用传入的句子，保证听写顺序 = 文章顺序。
- */
-export function makeDictationQuestion(it: VocabItem, sentenceText: string): QuizQuestion | null {
+ */export function makeDictationQuestion(it: VocabItem, sentenceText: string): QuizQuestion | null {
   const word = it.word.trim()
   if (!word || !sentenceText.trim()) return null
   const b = blankWord(sentenceText, it.lemma)

@@ -47,6 +47,7 @@ import {
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import {
   buildQuizQuestions,
+  countQuestions,
   formatAnswerInput,
   isCorrect,
   isQuizKind,
@@ -1160,13 +1161,17 @@ export default function ReaderApp() {
 
   /** 各范围下能出的题数（用于设置面板提示）。 */
   const quizPoolSizes = useMemo(() => {
-    const count = (items: VocabItem[]) => buildQuizQuestions(items, quizKinds).length
+    // 用廉价计数（不生成干扰项），避免每次改词库都跑 O(N²) 的 buildQuizQuestions
+    const count = (items: VocabItem[]) => countQuestions(items, quizKinds)
     return {
       all: count(library.items),
       due: count(library.items.filter((it) => isDue(it))),
       unmastered: count(library.items.filter((it) => it.status !== 'mastered')),
     }
   }, [library.items, quizKinds])
+
+  /** 当前范围大致能出多少题（廉价计数，供设置面板提示；别用 buildQuizSet，太贵）。 */
+  const quizAvailableCount = useMemo(() => countQuestions(quizPool, quizKinds), [quizPool, quizKinds])
 
   /** 待复习（已学过且到期）数量——用于「复习」模式的角标。 */
   const dueCount = useMemo(
@@ -4701,7 +4706,7 @@ export default function ReaderApp() {
                 </div>
               </div>
               <p className="muted">
-                当前范围可出 {buildQuizSet(quizPool).length} 题（未掌握约 {quizPoolSizes.unmastered} 题）。
+                当前范围可出 {quizAvailableCount} 题（未掌握约 {quizPoolSizes.unmastered} 题）。
                 答对按「认识」、答错按「忘记了」计入复习排期。
               </p>
               <div className="bar">
