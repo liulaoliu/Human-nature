@@ -12,7 +12,6 @@ import {
   createLibrary,
   dedupeLibrary,
   editItem,
-  groupItems,
   isDue,
   lemmaOf,
   markWord,
@@ -30,7 +29,6 @@ import {
   type AnalysisTask,
   type VocabLevel,
 } from '../core/analyzer'
-import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import {
   buildListeningQuizPrompt,
   gradeListening,
@@ -88,6 +86,7 @@ import { useArticleImport } from './hooks/useArticleImport'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
+import { useExport } from './hooks/useExport'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -1806,17 +1805,37 @@ export default function ReaderApp() {
     }
   }, [pasteMissing, library.items, flash])
 
-  const download = useCallback(
-    (name: string, content: string, mime: string) => {
-      const url = URL.createObjectURL(new Blob([content], { type: mime }))
-      const a = document.createElement('a')
-      a.href = url
-      a.download = name
-      a.click()
-      URL.revokeObjectURL(url)
-    },
-    [],
-  )
+  /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
+  const {
+    download,
+    doExportAnki,
+    exportJson,
+    exportBatch,
+    doExportWrong,
+    exportAll,
+    onImportBackup,
+    doPrint,
+  } = useExport({
+    articles,
+    library,
+    saved,
+    sessions,
+    studyDays,
+    activity,
+    writingHistory,
+    practice,
+    mistakes,
+    visibleBatch,
+    persist,
+    flash,
+    setSaved,
+    setSessions,
+    setStudyDays,
+    setActivity,
+    setWritingHistory,
+    setPractice,
+    setMistakes,
+  })
 
   /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
   const aiJobsInput = useMemo<AiJobsInput>(
@@ -1885,128 +1904,6 @@ export default function ReaderApp() {
     applyPaste()
   }, [pasted, applyAiWeb, applyPaste])
 
-  const doExportAnki = useCallback(
-    (items: VocabItem[]) =>
-      download('vocab-anki.csv', toAnkiCSV(sortItems(items, 'word')), 'text/csv;charset=utf-8'),
-    [download],
-  )
-  const exportJson = useCallback(
-    () => download('vocab.json', exportLibraryJSON(library), 'application/json'),
-    [library, download],
-  )
-  const exportBatch = useCallback(
-    () =>
-      download(
-        'picked-words.csv',
-        toWordsCSV(visibleBatch.map((b) => ({ word: b.word, context: b.sentence }))),
-        'text/csv;charset=utf-8',
-      ),
-    [visibleBatch, download],
-  )
-  const doExportWrong = useCallback(
-    (items: VocabItem[]) =>
-      download('wrong-words.csv', toWrongWordsCSV(items), 'text/csv;charset=utf-8'),
-    [download],
-  )
-
-  /** 导出全部：词库 + 已保存的文章，一个 JSON 换电脑用。 */
-  const exportAll = useCallback(() => {
-    const backup = {
-      version: 1,
-      exportedAt: new Date().toISOString(),
-      library,
-      articles: saved,
-      stats: sessions,
-      studyStats: studyDays,
-      activity,
-      writingHistory,
-      practice,
-      mistakes,
-    }
-    const day = new Date().toISOString().slice(0, 10)
-    download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, studyDays, activity, writingHistory, practice, mistakes, download])
-
-  /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
-  const onImportBackup = useCallback(
-    async (file: File | null | undefined) => {
-      if (!file) return
-      try {
-        const data: unknown = JSON.parse(await file.text())
-        let imported: SavedArticle[] = []
-        let importedLib: VocabLibrary | null = null
-        if (Array.isArray(data)) {
-          if (data.length && data[0] && typeof data[0] === 'object' && 'sentences' in data[0]) {
-            imported = data as SavedArticle[]
-          } else if (data.length && data[0] && typeof data[0] === 'object' && 'lemma' in data[0]) {
-            importedLib = { schemaVersion: 1, items: data as VocabLibrary['items'] }
-          }
-        } else if (data && typeof data === 'object') {
-          const obj = data as Record<string, unknown>
-          if (Array.isArray(obj.articles)) imported = obj.articles as SavedArticle[]
-          if (obj.library && typeof obj.library === 'object' && Array.isArray((obj.library as VocabLibrary).items)) {
-            importedLib = obj.library as VocabLibrary
-          } else if (Array.isArray(obj.items)) {
-            importedLib = data as VocabLibrary
-          }
-          if (Array.isArray(obj.stats)) {
-            setSessions(obj.stats as { at: string; seconds: number; picked: number }[])
-          }
-          if (Array.isArray(obj.studyStats)) {
-            const ss = obj.studyStats as { day: string; seconds: number; cards: number }[]
-            setStudyDays(ss)
-          }
-          if (Array.isArray(obj.activity)) {
-            setActivity(obj.activity as DayActivity[])
-          }
-          if (Array.isArray(obj.writingHistory)) {
-            setWritingHistory(obj.writingHistory as WritingRecord[])
-          }
-          if (Array.isArray(obj.practice)) {
-            setPractice(obj.practice as PracticeRecord[])
-          }
-          if (Array.isArray(obj.mistakes)) {
-            setMistakes(obj.mistakes as MistakeEntry[])
-          }
-          if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
-        }
-        for (const a of imported) {
-          if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
-            await articles.current?.save(a)
-          }
-        }
-        if (importedLib) persist(importedLib)
-        setSaved((await articles.current?.list()) ?? [])
-        flash(`导入完成：文章 ${imported.length} 篇${importedLib ? `，生词 ${importedLib.items.length} 个` : ''}`)
-      } catch {
-        flash('导入失败：不是有效的 JSON 备份')
-      }
-    },
-    [persist, flash],
-  )
-  const doPrint = useCallback(
-    (items: VocabItem[], title: string, numberOf?: (it: VocabItem) => number | null) => {
-      const sorted = numberOf
-        ? [...items].sort((a, b) => (numberOf(a) ?? 1e9) - (numberOf(b) ?? 1e9))
-        : sortItems(items, 'word')
-      const groups = numberOf ? [{ key: '', items: sorted }] : groupItems(sorted, 'alphabet')
-      const day = new Date().toISOString().slice(0, 10)
-      const html = renderPrintHTML({
-        title,
-        groups,
-        subtitle: `${day} · ${items.length} 词`,
-        numberOf,
-      })
-      const win = window.open('', '_blank')
-      if (!win) {
-        flash('弹窗被拦截，允许后重试')
-        return
-      }
-      win.document.write(html)
-      win.document.close()
-    },
-    [flash],
-  )
 
   const articleList = sortItems(articleWords, 'updatedAt')
   const allList = sortItems(library.items, 'updatedAt')
