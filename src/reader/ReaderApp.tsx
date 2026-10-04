@@ -136,6 +136,9 @@ interface Doc {
   sentences: Sentence[]
 }
 
+/** 背单词的范围：全部 / 错词 / 未掌握 / 本篇。 */
+type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
+
 /** 老记录没存 text 时，从段落/句子还原正文。 */
 function reconstructText(a: SavedArticle): string {
   const byId = new Map(a.sentences.map((s) => [s.id, s]))
@@ -1125,17 +1128,22 @@ export default function ReaderApp() {
     [confirmDel, library, persist],
   )
 
-  /** 背单词候选池（按范围过滤：全部 / 本篇 / 未掌握）。 */
-  const studyPool = useMemo(() => {
-    if (studyScope === 'all') return library.items
-    if (studyScope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-    if (studyScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-    return library.items.filter(
-      (it) =>
-        it.source?.fileName === articleIdentity ||
-        (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
-    )
-  }, [library.items, studyScope, articleIdentity, doc])
+  /** 背单词候选池：按范围取（全部 / 错词 / 未掌握 / 本篇）。 */
+  const studyPoolFor = useCallback(
+    (scope: 'all' | 'article' | 'unmastered' | 'lapses') => {
+      if (scope === 'all') return library.items
+      if (scope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
+      if (scope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
+      // 本篇：来源是本文，或词形出现在正文里
+      return library.items.filter(
+        (it) =>
+          it.source?.fileName === articleIdentity ||
+          (doc != null && doc.sentences.some((s) => wordSpans(s.text).some((w) => lemmaOf(w.text) === it.lemma))),
+      )
+    },
+    [library.items, articleIdentity, doc],
+  )
+  const studyPool = useMemo(() => studyPoolFor(studyScope), [studyPoolFor, studyScope])
 
   /** 考试的候选池（范围与背单词类似，但多一个「到期」「错词」）。 */
   const quizPool = useMemo(() => {
@@ -1182,14 +1190,26 @@ export default function ReaderApp() {
 
   /** 开始背单词：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
   const startStudy = useCallback(
-    (modeOverride?: StudyMode) => {
-      const mode = modeOverride ?? studyMode
+    (opts?: { mode?: StudyMode; scope?: StudyScope }) => {
+      const mode = opts?.mode ?? studyMode
+      const scope = opts?.scope ?? studyScope
+      if (opts?.mode != null) setStudyMode(mode)
+      if (opts?.scope != null) setStudyScope(scope)
+      const pool = studyPoolFor(scope)
       const q =
         mode === 'review'
-          ? buildReviewQueue(studyPool, new Date())
-          : buildLearnQueue(studyPool, new Date(), { newLimit, newToday })
+          ? buildReviewQueue(pool, new Date())
+          : buildLearnQueue(pool, new Date(), { newLimit, newToday })
       if (!q.length) {
-        flash(mode === 'review' ? '没有到期的复习词，去「新学习」吧' : '没有待学的新词，去「复习」吧')
+        flash(
+          mode === 'review'
+            ? scope === 'article'
+              ? '这篇没有到期的复习词'
+              : '没有到期的复习词，去「新学习」吧'
+            : scope === 'article'
+              ? '这篇没有待学的新词'
+              : '没有待学的新词，去「复习」吧',
+        )
         return
       }
       studyRequeueRef.current = new Map()
@@ -1207,15 +1227,15 @@ export default function ReaderApp() {
       setStudyDraft(null)
       setStudyDelArmed(false)
     },
-    [studyPool, studyMode, newLimit, newToday, flash],
+    [studyPoolFor, studyMode, studyScope, newLimit, newToday, flash],
   )
 
-  /** 切换模式并立刻按新模式开一轮。 */
-  const switchMode = useCallback(
-    (m: StudyMode) => {
-      setStudyMode(m)
-      startStudy(m)
-    },
+  /** 切换模式，立刻按新模式开一轮。 */
+  const switchMode = useCallback((m: StudyMode) => startStudy({ mode: m }), [startStudy])
+
+  /** 切换范围，立刻按新范围开一轮（含「只背本篇」）。 */
+  const switchScope = useCallback(
+    (scope: StudyScope) => startStudy({ scope }),
     [startStudy],
   )
 
@@ -4273,12 +4293,12 @@ export default function ReaderApp() {
               </span>
               <select
                 value={studyScope}
-                onChange={(e) => setStudyScope(e.target.value as 'all' | 'article' | 'unmastered' | 'lapses')}
-                title="背词范围（下一轮生效）"
+                onChange={(e) => switchScope(e.target.value as StudyScope)}
+                title="背词范围；改完立即按新范围重开一轮"
               >
+                <option value="article">本篇（只背这篇）</option>
                 <option value="unmastered">未掌握</option>
                 <option value="lapses">错词</option>
-                <option value="article">本篇</option>
                 <option value="all">全部</option>
               </select>
               <select
