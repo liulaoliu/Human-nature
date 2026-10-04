@@ -267,6 +267,8 @@ IndexedDB 上建了 `fileName` 索引，开文件只取这一篇的，不会把�
 
 设计取舍（为什么砍掉一半功能、哪些是有意不做的）在 [`DESIGN.md`](DESIGN.md)。
 没做完的和已知问题在 [`TODO.md`](TODO.md)。
+性能踩坑与教训在 [`docs/PERF-NOTES.md`](docs/PERF-NOTES.md)。
+代码评审与重构方案（Clean Code）在 [`docs/CODE-REVIEW.md`](docs/CODE-REVIEW.md)。
 
 ## 结构
 
@@ -302,8 +304,10 @@ src/
     document.ts       精读/词库的中间层数据模型（唯一真相来源）
   reader/           精读页（独立入口 reader.html）
     main.tsx
-    ReaderApp.tsx     阅读 + 划词标生词 + 一键提示词 + 导出
+    ReaderApp.tsx     阅读 + 划词标生词 + 一键提示词 + 导出（大组件，重构中）
     reader.css
+    hooks/            自定义 hook（useLocalStorageState 等）
+    panels/           拆出来的面板组件（StatsPanel、后续 StudyPanel/DictPanel…）
   core/             精读新增：
     cleaner.ts        清洗 PDF 伪影（软连字符/ligature/断词）
     segmenter.ts      切句（Intl.Segmenter + 缩写修补）
