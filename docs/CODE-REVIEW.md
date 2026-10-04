@@ -99,8 +99,9 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 - [x] 顺带把 `fmtDur/fmtInterval/fmtDue` 提到 `reader/format.ts`，考试焦点 effect 移进 QuizPanel。
 - [x] 拆侧栏 Tab：`SideOverview`（仪表盘+错题本）/ `SidePick`（选区/任务/粘回/AI 工作包/整理）/ `SideVocab`（生词本+每日统计）。
 - [x] 逻辑下沉到 feature hooks：`useSpeaking` / `useAiPack` / `useDictation` / `useQuizSession` / `useStudySession`（会话状态 + 效应都进 hook）。
+- [x] 视图拆成 `panels/`：会话面板 7 个 + 侧栏 3 个 + 统计 + 阅读正文 `ReaderBody` + 新建 `Composer` + 顶栏 `ReaderToolbar`（共 14 个）。
 - [x] AI 工作包加「网页版（DeepSeek）」路径：复制提示词 / 应用 / 缺项重问 / 分块（`core/aiPackage`）。
-- [ ] 下一阶段：`reader/store.ts`（selector 分层 + actions）——把 hook 之间共享的 `library/doc/prefs` 再收口一层。
+- [ ] 下一阶段：`reader/store.ts`（selector 分层 + actions）——把 hook 之间共享的 `library/doc/prefs` 再收口一层；以及 `useReaderDoc`（文章加载/保存/切句）。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；
