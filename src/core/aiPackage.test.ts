@@ -210,6 +210,15 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs.find((j) => j.task === 'listening')).toBeUndefined()
   })
 
+  it('翻译/语言点按句分块（避免单条太大被截断）', () => {
+    const sentences = Array.from({ length: 13 }, (_, i) => mkSentence({ id: `s${i}` }))
+    const jobs = buildAiJobs(emptyInput({ sentences, hasListenQuiz: true }))
+    expect(jobs.filter((j) => j.task === 'translate')).toHaveLength(3)
+    expect(jobs.filter((j) => j.task === 'language')).toHaveLength(3)
+    expect(jobs.find((j) => j.task === 'translate')?.askedIds).toHaveLength(6)
+    expect(jobs.filter((j) => j.task === 'translate')[2].askedIds).toHaveLength(1)
+  })
+
   it('countAiJobs 与 buildAiJobs 数量一致', () => {
     const input = emptyInput({
       batch: [{ word: 'a' }],

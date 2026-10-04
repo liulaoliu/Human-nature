@@ -189,6 +189,8 @@ export interface AiJobsInput {
 }
 
 const LOOKUP_CHUNK = 30
+/** 翻译 / 语言点每次带多少句（一条太长会在网页端被截断）。 */
+const SENTENCE_CHUNK = 6
 
 /**
  * 由当前数据推导出所有「待办」：每条 = 一条完整提示词 + 应用时需要的上下文。
@@ -255,26 +257,32 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       input.posCandidates.map((it) => it.word),
     )
   }
-  // 缺译文 → 全文翻译
+  // 缺译文 → 全文翻译（按句分块：一条塞几十句最容易在网页端被截断）
   const noTrans = input.sentences.filter((s) => !s.translation)
-  if (noTrans.length) {
+  let tPos = 0
+  for (const part of chunk(noTrans, SENTENCE_CHUNK)) {
+    const from = tPos + 1
+    tPos += part.length
     push(
       'translate',
-      `全文翻译（${noTrans.length} 句）`,
-      buildTranslateAllPrompt(noTrans.map((s) => ({ id: s.id, text: s.text }))),
+      `翻译（第 ${from}-${tPos} 句）`,
+      buildTranslateAllPrompt(part.map((s) => ({ id: s.id, text: s.text }))),
       [],
-      noTrans.map((s) => s.id),
+      part.map((s) => s.id),
     )
   }
-  // 缺语言点 → 逐句语言点
+  // 缺语言点 → 逐句语言点（同样按句分块）
   const noLang = input.sentences.filter((s) => !s.language)
-  if (noLang.length) {
+  let lPos = 0
+  for (const part of chunk(noLang, SENTENCE_CHUNK)) {
+    const from = lPos + 1
+    lPos += part.length
     push(
       'language',
-      `逐句语言点（${noLang.length} 句）`,
-      buildLanguagePrompt(noLang.map((s) => ({ id: s.id, text: s.text }))),
+      `语言点（第 ${from}-${lPos} 句）`,
+      buildLanguagePrompt(part.map((s) => ({ id: s.id, text: s.text }))),
       [],
-      noLang.map((s) => s.id),
+      part.map((s) => s.id),
     )
   }
   // 没有听力题 → 生成听力理解题
@@ -394,8 +402,14 @@ export function countAiJobs(input: AiJobsInput): number {
   ).length
   if (input.lemmaCandidates.length) n++
   if (input.posCandidates.length) n++
-  if (input.sentences.some((s) => !s.translation)) n++
-  if (input.sentences.some((s) => !s.language)) n++
+  n += chunk(
+    input.sentences.filter((s) => !s.translation),
+    SENTENCE_CHUNK,
+  ).length
+  n += chunk(
+    input.sentences.filter((s) => !s.language),
+    SENTENCE_CHUNK,
+  ).length
   if (input.sentences.length && !input.hasListenQuiz) n++
   return n
 }

@@ -384,6 +384,18 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   border-top: 1px dashed var(--line);
 }
 .ai-web .muted { line-height: 1.5; }
+.web-progress {
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.web-progress .web-done { color: var(--green); font-weight: 600; }
+.web-progress .web-miss { color: #c0392b; }
+.web-pending {
+  font-size: 12px;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  word-break: break-word;
+}
 
 /* 选词模式的待选词 */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }

@@ -2646,7 +2646,12 @@ export default function ReaderApp() {
     copyWebPrompt: copyAiWebPrompt,
     applyWeb: applyAiWeb,
     copyWebMissing: copyAiWebMissing,
-    missingCount: aiMissingCount,
+    refreshWebRound: refreshAiWebRound,
+    webTotal: aiWebTotal,
+    webDone: aiWebDone,
+    webPending: aiWebPending,
+    webMissing: aiWebMissing,
+    webPendingLabels: aiWebPendingLabels,
   } = useAiPack({
     jobsInput: aiJobsInput,
     applyTaskResult,
@@ -3282,8 +3287,13 @@ export default function ReaderApp() {
           onAiWebBatchSizeChange={setAiWebBatchSize}
           onCopyWebPrompt={() => void copyAiWebPrompt()}
           onApplyWeb={() => applyAiWeb(pasted)}
-          aiMissingCount={aiMissingCount}
           onCopyWebMissing={() => void copyAiWebMissing()}
+          onRefreshWeb={refreshAiWebRound}
+          webTotal={aiWebTotal}
+          webDone={aiWebDone}
+          webPending={aiWebPending}
+          webMissing={aiWebMissing}
+          webPendingLabels={aiWebPendingLabels}
           confusableBatchCount={confusableBatch.length}
           confusableTodoCount={confusableTodo.length}
           onCopyConfusable={() => void copyConfusablePrompt()}

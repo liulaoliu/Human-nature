@@ -50,8 +50,13 @@ export interface SidePickProps {
   onAiWebBatchSizeChange: (n: number) => void
   onCopyWebPrompt: () => void
   onApplyWeb: () => void
-  aiMissingCount: number
   onCopyWebMissing: () => void
+  onRefreshWeb: () => void
+  webTotal: number
+  webDone: number
+  webPending: number
+  webMissing: number
+  webPendingLabels: string[]
 
   /** 混淆项 / 原形 / -ing-ed / 去重。 */
   confusableBatchCount: number
@@ -99,8 +104,13 @@ export default function SidePick({
   onAiWebBatchSizeChange,
   onCopyWebPrompt,
   onApplyWeb,
-  aiMissingCount,
   onCopyWebMissing,
+  onRefreshWeb,
+  webTotal,
+  webDone,
+  webPending,
+  webMissing,
+  webPendingLabels,
   confusableBatchCount,
   confusableTodoCount,
   onCopyConfusable,
@@ -211,16 +221,41 @@ export default function SidePick({
 
         <div className="ai-web">
           <div className="muted">
-            网页版（DeepSeek 等）：复制提示词 → 网页粘贴 → 整段回复贴回上面的框 → 应用；漏答的会提示重问。
+            网页版（DeepSeek 等）：复制提示词 → 网页粘贴 → 整段回复贴回上面的框 → 应用。
+            翻译 / 语言点已按句分块，避免一次太多被截断。
           </div>
-          <button onClick={onCopyWebPrompt} disabled={!aiJobCount} title="复制一条含全部待办的工作包提示词；可分批，避免网页端截断">
-            📋 复制网页版提示词
+
+          <div className="web-progress">
+            {webTotal === 0 ? (
+              <span className="muted">当前没有待办</span>
+            ) : webPending === 0 ? (
+              <span className="web-done">🎉 全部完成（{webDone}/{webTotal}）</span>
+            ) : (
+              <span>
+                进度 <b>{webDone}</b>/{webTotal} · 还要做 <b>{webPending}</b>
+                {webMissing > 0 && <span className="web-miss"> · 缺项 {webMissing}</span>}
+              </span>
+            )}
+          </div>
+          {webPending > 0 && webPendingLabels.length > 0 && (
+            <div className="muted web-pending">
+              还要做：{webPendingLabels.join('、')}
+              {webPending > webPendingLabels.length ? ` …共 ${webPending} 项` : ''}
+            </div>
+          )}
+
+          <button
+            onClick={onCopyWebPrompt}
+            disabled={webPending === 0}
+            title="复制「下一批还没做」的任务；已完成的会自动跳过"
+          >
+            📋 复制下一批提示词（{webPending} 项待做）
           </button>
           <select
             value={String(aiWebBatchSize)}
             onChange={(e) => onAiWebBatchSizeChange(Number(e.target.value))}
             style={{ marginLeft: 6 }}
-            title="每批几个任务（网页端回复容易截断，分批更稳；分批时要一批批复制/应用）"
+            title="每批几个任务（网页端回复容易截断，分批更稳）"
           >
             <option value="4">4/批</option>
             <option value="6">6/批</option>
@@ -232,11 +267,14 @@ export default function SidePick({
             <button className="primary" onClick={onApplyWeb} disabled={!pasted.trim()}>
               ✅ 应用网页版结果
             </button>
-            {aiMissingCount > 0 && (
-              <button onClick={onCopyWebMissing} title="把上次没返回的任务再问一遍">
-                🔁 复制未返回的 {aiMissingCount} 项
+            {webMissing > 0 && (
+              <button onClick={onCopyWebMissing} title="只重发「问过但没成功」的项">
+                🔁 重发缺项 {webMissing}
               </button>
             )}
+            <button onClick={onRefreshWeb} title="数据变了就重新统计待办（会清零进度）">
+              ↺ 刷新
+            </button>
           </div>
         </div>
       </div>
