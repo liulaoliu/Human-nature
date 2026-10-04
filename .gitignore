@@ -15,3 +15,6 @@ __pycache__/
 *.tsv
 *.pdf
 server/*.pid
+
+# 本地图片素材（不进仓库）
+assets/imgs/fish/
