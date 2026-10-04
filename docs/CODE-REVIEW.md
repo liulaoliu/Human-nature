@@ -98,7 +98,9 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 - [x] 抽出 `panels/QuizSetupPanel.tsx` / `QuizPanel.tsx` / `QuickPanel.tsx`（考试设置/答题/快刷）。
 - [x] 顺带把 `fmtDur/fmtInterval/fmtDue` 提到 `reader/format.ts`，考试焦点 effect 移进 QuizPanel。
 - [x] 拆侧栏 Tab：`SideOverview`（仪表盘+错题本）/ `SidePick`（选区/任务/粘回/AI 工作包/整理）/ `SideVocab`（生词本+每日统计）。
-- [ ] 下一阶段：把这些面板背后的**逻辑**收进 `reader/store.ts`（selector 分层 + actions），让面板只接 props/选择器。
+- [x] 逻辑下沉到 feature hooks：`useSpeaking` / `useAiPack` / `useDictation` / `useQuizSession` / `useStudySession`（会话状态 + 效应都进 hook）。
+- [x] AI 工作包加「网页版（DeepSeek）」路径：复制提示词 / 应用 / 缺项重问 / 分块（`core/aiPackage`）。
+- [ ] 下一阶段：`reader/store.ts`（selector 分层 + actions）——把 hook 之间共享的 `library/doc/prefs` 再收口一层。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；
