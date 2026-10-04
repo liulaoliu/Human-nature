@@ -103,6 +103,7 @@ import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../a
 import { extractEpub, extractPdfText } from './importers'
 import ArticlePicker from './ArticlePicker'
 import VocabList, { type VocabEditPatch } from './VocabList'
+import FishLayer from '../ui/FishLayer'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
@@ -3629,6 +3630,7 @@ export default function ReaderApp() {
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
+      <FishLayer />
       <main
         className="reader-main"
         onMouseDown={onMouseDown}
