@@ -3630,7 +3630,7 @@ export default function ReaderApp() {
 
   return (
     <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
-      <FishLayer />
+      <FishLayer pageKey="reader" />
       <main
         className="reader-main"
         onMouseDown={onMouseDown}

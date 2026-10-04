@@ -249,7 +249,7 @@ export default function App() {
   if (s.status === 'empty') {
     return (
       <div className="app">
-        <FishLayer />
+        <FishLayer pageKey="shadowing" />
         {notice && (
           <div className="banner">
             {notice}
@@ -274,7 +274,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <FishLayer />
+      <FishLayer pageKey="shadowing" />
       <header>
         <label className="file">
           换音频
