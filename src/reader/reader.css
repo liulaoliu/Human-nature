@@ -136,6 +136,14 @@ a { color: var(--accent); }
 .reader-main { overflow: auto; padding: 24px 34px; }
 .reader-side { border-left: 1px solid var(--line); overflow: auto; padding: 16px; background: var(--panel); }
 /* 右侧面板 Tab：选词/分析 ↔ 生词本/学习 */
+.side-brand { display: flex; justify-content: center; margin: 0 0 8px; }
+.side-brand img {
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  box-shadow: var(--shadow-1);
+  object-fit: cover;
+}
 .side-tabs {
   display: flex;
   gap: 6px;

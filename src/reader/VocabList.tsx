@@ -150,21 +150,17 @@ export default function VocabList({
                 onClick={onJump ? () => onJump(it) : undefined}
                 title={it.examples[0]?.text ?? ''}
               >
-                <td className="cell-word">
+                <td
+                  className="cell-word"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onSpeak(it.word)
+                  }}
+                  title="点读发音"
+                >
                   {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                   {it.word}
-                  {it.phonetic && (
-                    <span
-                      className="cell-phon"
-                      title="点读发音"
-                      onClick={(e) => {
-                        e.stopPropagation()
-                        onSpeak(it.word)
-                      }}
-                    >
-                      {it.phonetic}
-                    </span>
-                  )}
+                  {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
                 </td>
                 <td className="cell-meaning">
                   {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
@@ -228,23 +224,12 @@ export default function VocabList({
             <>
               <div
                 className="w"
-                onClick={onJump ? () => onJump(it) : undefined}
-                title={onJump ? '回到原文这句' : undefined}
+                onClick={() => onSpeak(it.word)}
+                title="点读发音"
               >
                 {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                 {it.word}{' '}
-                {it.phonetic && (
-                  <span
-                    className="ph"
-                    title="点读发音"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSpeak(it.word)
-                    }}
-                  >
-                    {it.phonetic}
-                  </span>
-                )}
+                {it.phonetic && <span className="ph">{it.phonetic}</span>}
               </div>
               {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
               {it.meaning && <div className="mu">{it.meaning}</div>}
@@ -274,6 +259,11 @@ export default function VocabList({
                 <button onClick={() => onReview(it.id, 'again')}>重来</button>
                 <button onClick={() => onReview(it.id, 'good')}>记得</button>
                 <button onClick={() => onReview(it.id, 'easy')}>简单</button>
+                {onJump && (
+                  <button onClick={() => onJump(it)} title="回到原文这句">
+                    回原文
+                  </button>
+                )}
                 <button onClick={() => startEdit(it)}>编辑</button>
                 <button
                   className={confirmDel === it.id ? 'danger' : ''}

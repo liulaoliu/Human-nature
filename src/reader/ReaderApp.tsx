@@ -5004,6 +5004,9 @@ export default function ReaderApp() {
       </main>
 
       <aside className={'reader-side tab-' + sideTab} ref={sideRef}>
+        <div className="side-brand">
+          <img src={mascotAI} alt="" title="精读" />
+        </div>
         <div className="side-tabs">
           <button className={sideTab === 'overview' ? 'primary' : ''} onClick={() => setSideTab('overview')}>
             总览
