@@ -734,6 +734,17 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .all-vocab { max-width: 1100px; margin: 0 auto; }
 .empty-hint { margin-top: 6px; line-height: 1.7; display: block; }
 
+/* 精读页「新建文章」欢迎立绘 */
+.composer-mascot {
+  display: block;
+  width: 112px;
+  height: 112px;
+  border-radius: 26px;
+  margin: 4px 0 12px;
+  box-shadow: var(--shadow-2);
+  object-fit: cover;
+}
+
 /* 「全部生词」表格：来源列 + 原句 */
 .vtable.has-source th:nth-child(1), .vtable.has-source td:nth-child(1) { width: 15%; }
 .vtable.has-source th:nth-child(2), .vtable.has-source td:nth-child(2) { width: 24%; }

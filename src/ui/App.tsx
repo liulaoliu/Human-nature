@@ -17,6 +17,7 @@ import { parseBackup } from '../core/stateBackup'
 import { GRANULARITY_LABEL, type Granularity, type Take } from '../core/ports'
 import type { AlignedChunk, ResolvedAnchor } from '../core/alignText'
 import { wordRangeFromText } from '../core/pickWords'
+import mascotBig from '../../assets/imgs/big.png'
 
 const RATES = [0.5, 0.75, 1, 1.5, 2]
 const GRANS: Granularity[] = ['short', 'normal', 'long']
@@ -1065,6 +1066,7 @@ function offsetInBox(box: HTMLElement, container: Node, offset: number): number 
 function Empty({ onPick, backup }: { onPick: (f: File) => void; backup?: ReactNode }) {
   return (
     <div className="empty">
+      <img className="empty-mascot" src={mascotBig} alt="" />
       <h1>跟读练习</h1>
       <p>选一个音频文件（mp3 / wav），自动切成块，然后一块一块听、跟读、对比。</p>
       <label className="big-btn">

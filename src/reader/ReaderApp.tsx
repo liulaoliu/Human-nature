@@ -105,6 +105,7 @@ import ArticlePicker from './ArticlePicker'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import type { VocabRepoPort } from '../core/ports'
 import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
+import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
 
 interface Doc {
@@ -4836,6 +4837,7 @@ export default function ReaderApp() {
 
         {!studyQueue && !browseAll && !examActive && (composing || !doc) && (
           <div className="composer">
+            <img className="composer-mascot" src={mascotAI} alt="" />
             <div className="bar">
               <input
                 className="title-input"

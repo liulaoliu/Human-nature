@@ -327,6 +327,14 @@ main .row { margin-bottom: 12px; flex-wrap: wrap; }
 .hint { color: var(--dim); font-size: 12px; margin-top: 20px; }
 
 .empty { max-width: 600px; margin: 13vh auto; padding: 0 24px; text-align: center; }
+.empty-mascot {
+  width: 132px;
+  height: 132px;
+  border-radius: 30px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow-2);
+  object-fit: cover;
+}
 .empty h1 {
   font-size: 30px;
   letter-spacing: -0.4px;
