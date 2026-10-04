@@ -7,11 +7,13 @@
  * 具体的解析与应用（apply*）仍在 ReaderApp 里组装。
  */
 import {
+  buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildConfusablePrompt,
   buildLemmaPrompt,
   buildPosPrompt,
   buildTranslateAllPrompt,
+  type VocabLevel,
 } from './analyzer'
 import { buildLanguagePrompt } from './language'
 import { buildListeningQuizPrompt } from './listening'
@@ -182,6 +184,8 @@ export interface AiJobsInput {
   posCandidates: VocabItem[]
   /** 当前文章的句子。 */
   sentences: Sentence[]
+  /** 自动标词的词汇标准。 */
+  vocabLevel: VocabLevel
   /** 是否已有听力理解题。 */
   hasListenQuiz: boolean
   /** 听力题数量。 */
@@ -217,6 +221,17 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       `批量查词（待选 ${input.batch.length}）`,
       buildBatchLookupPrompt(input.batch.map((b) => ({ word: b.word, context: b.sentence }))),
       input.batch.map((b) => b.word),
+    )
+  }
+  // 自动标词：让 AI 按词汇标准从全文挑词 → 结果进「待选」（应用后点「刷新」会再生成查词任务）
+  if (input.sentences.length) {
+    push(
+      'auto_vocab',
+      `自动标词（${input.vocabLevel}）`,
+      buildAutoVocabPrompt(
+        input.sentences.map((s) => s.text).join(' '),
+        input.vocabLevel,
+      ),
     )
   }
   // 生词本缺音标/释义 → 批量查词（每 N 个一份，避免 AI 回复被截断）
@@ -400,6 +415,7 @@ export function countAiJobs(input: AiJobsInput): number {
     input.confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : input.confusableTodo.length || 1,
   ).length
+  if (input.sentences.length) n++
   if (input.lemmaCandidates.length) n++
   if (input.posCandidates.length) n++
   n += chunk(

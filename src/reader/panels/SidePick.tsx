@@ -204,7 +204,7 @@ export default function SidePick({
         <button
           onClick={onExportAiJobs}
           disabled={!aiJobCount}
-          title="把当前所有待办（查词 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力）打成一个 JSON，整包发出去"
+          title="把当前所有待办（自动标词 / 查词 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力）打成一个 JSON，整包发出去"
         >
           📦 导出 AI 工作包（{aiJobCount} 项）
         </button>

@@ -59,6 +59,7 @@ const emptyInput = (over: Partial<AiJobsInput> = {}): AiJobsInput => ({
   lemmaCandidates: [],
   posCandidates: [],
   sentences: [],
+  vocabLevel: 'cet6',
   hasListenQuiz: false,
   listenCount: 8,
   ...over,
@@ -208,6 +209,13 @@ describe('buildAiJobs / countAiJobs', () => {
   it('已有听力题就不再打包听力', () => {
     const jobs = buildAiJobs(emptyInput({ sentences: [mkSentence({ translation: 'x', language: {} })], hasListenQuiz: true }))
     expect(jobs.find((j) => j.task === 'listening')).toBeUndefined()
+  })
+
+  it('有文章句子 → 生成一条自动标词', () => {
+    const jobs = buildAiJobs(emptyInput({ sentences: [mkSentence({ id: 's1' })] }))
+    const auto = jobs.find((j) => j.task === 'auto_vocab')
+    expect(auto).toBeTruthy()
+    expect(auto?.label).toContain('cet6')
   })
 
   it('翻译/语言点按句分块（避免单条太大被截断）', () => {
