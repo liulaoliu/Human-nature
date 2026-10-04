@@ -80,6 +80,7 @@ import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
+import { useQuickSession } from './hooks/useQuickSession'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -273,14 +274,12 @@ export default function ReaderApp() {
   )
   /** 每日目标（个不同单词，0=不设目标） */
   const [dailyGoal, setDailyGoal] = useLocalStorageState('reader:dailyGoal', 20, persistentNumber)
-  /** 快刷模式（只看单词+音标，一键过卡） */
-  const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
-  const [quickIndex, setQuickIndex] = useState(0)
-  const [quickRevealed, setQuickRevealed] = useState(false)
   /** 听写会话 API 的引用：供定义在 useDictation 之前的少数回调（打开听力/仿写、错题重练）使用。 */
   const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
   /** 考试会话 API 的引用：供定义在 useQuizSession 之前的少数回调（背单词开始时关闭考试）使用。 */
   const quizApiRef = useRef<ReturnType<typeof useQuizSession> | null>(null)
+  /** 快刷会话 API 的引用：供定义在 useQuickSession 之前的少数回调使用。 */
+  const quickApiRef = useRef<ReturnType<typeof useQuickSession> | null>(null)
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
@@ -698,7 +697,7 @@ export default function ReaderApp() {
     closeStudy()
     setQuizSetupOpen(false)
     setQuizQueue(null)
-    setQuickQueue(null)
+    quickApiRef.current?.close()
     dictApiRef.current?.close()
     setListenQuiz({ questions })
     setListenWrongIds(null)
@@ -748,61 +747,30 @@ export default function ReaderApp() {
   }, [mistakes, startDictItems, flash])
 
   /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
-  const startQuick = useCallback(() => {
-    const items = sortItems(studyPool, 'due')
-    if (!items.length) {
-      flash('这个范围里没有词')
-      return
-    }
-    closeStudy()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(items)
-    setQuickIndex(0)
-    setQuickRevealed(false)
-  }, [studyPool, flash])
-
-  const gradeQuick = useCallback(
-    (ok: boolean) => {
-      if (!quickQueue) return
-      const queued = quickQueue[quickIndex]
-      const cur = queued ? (library.items.find((it) => it.id === queued.id) ?? queued) : null
-      if (cur) {
-        persist(reviewItem(library, cur.id, ok ? 'good' : 'again'))
-        markStudied(cur.id)
-        recordActivity('vocab', 1)
-      }
-      setQuickRevealed(false)
-      setQuickIndex((i) => i + 1)
+  /** 快刷会话（逻辑在 hooks/useQuickSession）。 */
+  const quickApi = useQuickSession({
+    studyPool,
+    library,
+    persist,
+    markStudied,
+    recordActivity,
+    flash,
+    closeOthers: () => {
+      closeStudy()
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
     },
-    [quickQueue, quickIndex, library, persist, markStudied, recordActivity],
-  )
-
-  // 快刷快捷键：1/← 不认识，2/→ 认识，空格看释义，Esc 退出
-  useEffect(() => {
-    if (!quickQueue) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setQuickQueue(null)
-        return
-      }
-      if (e.key === ' ' || e.key === 'Enter') {
-        e.preventDefault()
-        setQuickRevealed(true)
-        return
-      }
-      if (quickIndex >= quickQueue.length) return
-      if (e.key === 'ArrowLeft' || e.key === '1') {
-        e.preventDefault()
-        gradeQuick(false)
-      } else if (e.key === 'ArrowRight' || e.key === '2') {
-        e.preventDefault()
-        gradeQuick(true)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [quickQueue, quickIndex, gradeQuick])
+  })
+  quickApiRef.current = quickApi
+  const {
+    queue: quickQueue,
+    setQueue: setQuickQueue,
+    index: quickIndex,
+    revealed: quickRevealed,
+    setRevealed: setQuickRevealed,
+    start: startQuick,
+    grade: gradeQuick,
+  } = quickApi
 
   // 听力理解题 / 仿写：Esc 退出
   useEffect(() => {
