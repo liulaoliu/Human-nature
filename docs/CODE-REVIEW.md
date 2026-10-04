@@ -91,6 +91,10 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 
 ### 阶段 1：把 `ReaderApp` 拆成 **ViewModel + 组件**（最大收益）
 - [x] 抽出 `panels/StatsPanel.tsx`（统计 Tab 的巨型 IIFE → 组件）。
+- [x] 抽出 `panels/DictPanel.tsx`（听写：整句/填空，含换题聚焦）。
+- [x] 抽出 `panels/ListeningPanel.tsx`（听力理解）。
+- [x] 抽出 `panels/WritingPanel.tsx`（仿写 + 历史，历史展开改为组件内 UI 状态）。
+- [ ] 接着拆 `StudyPanel` / `QuizPanel`（背单词 / 考试），再把侧栏 Tab 拆成 `SideOverview/SidePick/SideVocab`。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；

@@ -130,6 +130,9 @@ import { extractEpub, extractPdfText } from './importers'
 import ArticlePicker from './ArticlePicker'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import StatsPanel from './panels/StatsPanel'
+import DictPanel from './panels/DictPanel'
+import ListeningPanel from './panels/ListeningPanel'
+import WritingPanel from './panels/WritingPanel'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -552,8 +555,6 @@ export default function ReaderApp() {
   const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
   /** 填空模式的作答（每空一个输入） */
   const [dictBlanks, setDictBlanks] = useState<string[]>([])
-  const dictInputRef = useRef<HTMLTextAreaElement>(null)
-  const dictFirstBlankRef = useRef<HTMLInputElement>(null)
   /** 当前填空（供 checkDict 判分用，避免声明顺序问题）与「答对自动下一句」的定时器 */
   const dictClozeRef = useRef<ClozeQuestion | null>(null)
   const dictAdvanceRef = useRef<number | null>(null)
@@ -590,7 +591,6 @@ export default function ReaderApp() {
   const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
   /** 仿写练习历史（存本机） */
   const [writingHistory, setWritingHistory] = useLocalStorageState<WritingRecord[]>('reader:writingHistory', [])
-  const [historyOpen, setHistoryOpen] = useState(false)
   /** 学习活动统计（按天，落 localStorage） */
   const [activity, setActivity] = useLocalStorageState<DayActivity[]>('reader:activity', [])
   /** 练习成绩记录（考试 / 听写 / 听力理解） */
@@ -1928,7 +1928,6 @@ export default function ReaderApp() {
     setWritingText(rec.text)
     setWritingFeedback(rec.feedback)
     setWritingTask(rec.task ?? null)
-    setHistoryOpen(false)
   }, [])
 
   /** 记一次选词模式会话（sessions 由 useLocalStorageState 落盘，最多留 500 条）。 */
@@ -2128,13 +2127,6 @@ export default function ReaderApp() {
     const text = dictQueue[dictIndex].text
     return makeCloze(text, pickBlankTargets(text, libraryLemmas, dictBlankCount))
   }, [dictMode, dictQueue, dictIndex, libraryLemmas, dictBlankCount])
-
-  // 换题后把焦点送回输入框（autoFocus 只首次生效，换题必须手动聚焦）
-  useEffect(() => {
-    if (!dictQueue || dictIndex >= dictQueue.length || dictChecked) return
-    if (dictMode === 'cloze' && dictCloze) dictFirstBlankRef.current?.focus()
-    else dictInputRef.current?.focus()
-  }, [dictQueue, dictIndex, dictChecked, dictMode, dictCloze])
 
   // 把当前填空存进 ref，供 checkDict 判分（checkDict 定义更早，不能直接引用 dictCloze）
   useEffect(() => {
@@ -4690,379 +4682,74 @@ export default function ReaderApp() {
         )}
 
         {dictQueue && (
-          <div className="study dict">
-            <div className="bar study-bar">
-              <button
-                onClick={() => {
-                  clearDictAdvance()
-                  setDictQueue(null)
-                }}
-              >
-                结束（Esc）
-              </button>
-              <span className="view-toggle" title="整句：听写整句；填空：句中挖掉几个词来填">
-                <button
-                  className={dictMode === 'full' ? 'primary' : ''}
-                  onClick={() => startDictation({ mode: 'full' })}
-                >
-                  整句
-                </button>
-                <button
-                  className={dictMode === 'cloze' ? 'primary' : ''}
-                  onClick={() => startDictation({ mode: 'cloze' })}
-                >
-                  填空
-                </button>
-              </span>
-              <select
-                value={String(dictWords)}
-                onChange={(e) => startDictation({ words: Number(e.target.value) })}
-                title="整句模式下每句最多多少词（越长越难）；改完立即重开一轮"
-              >
-                <option value="1">每句 1 词</option>
-                <option value="2">每句 2 词</option>
-                <option value="3">每句 3 词</option>
-                <option value="5">每句 5 词</option>
-                <option value="8">每句 8 词</option>
-                <option value="12">每句 12 词</option>
-                <option value="20">每句 20 词</option>
-              </select>
-              {dictMode === 'cloze' && (
-                <select
-                  value={String(dictBlankCount)}
-                  onChange={(e) => startDictation({ blanks: Number(e.target.value) })}
-                  title="填空模式下每题挖几个空；不够空会自动并长句子"
-                >
-                  <option value="1">填空 1 个/题</option>
-                  <option value="2">填空 2 个/题</option>
-                  <option value="3">填空 3 个/题</option>
-                  <option value="5">填空 5 个/题</option>
-                </select>
-              )}
-              <span className="muted">
-                {Math.min(dictIndex + 1, dictQueue.length)} / {dictQueue.length}
-              </span>
-              <button
-                onClick={() => {
-                  const s = dictQueue[dictIndex]
-                  if (s) speak(s.text)
-                }}
-                title="再听一遍"
-              >
-                🔊 再听一遍
-              </button>
-            </div>
-            {dictIndex < dictQueue.length ? (
-              <>
-                {dictMode === 'cloze' && dictCloze ? (
-                  <>
-                    <div className="dict-sentence">{dictCloze.display}</div>
-                    <div className="dict-blanks">
-                      {dictCloze.blanks.map((b, i) => (
-                        <input
-                          key={i}
-                          className={
-                            'study-input dict-blank' +
-                            (dictChecked ? (isClozeBlankCorrect(b, dictBlanks[i] ?? '') ? ' ok' : ' bad') : '')
-                          }
-                          autoFocus={i === 0}
-                          ref={i === 0 ? dictFirstBlankRef : undefined}
-                          placeholder={`空 ${i + 1}`}
-                          value={dictBlanks[i] ?? ''}
-                          disabled={dictChecked}
-                          onChange={(e) => {
-                            const v = e.target.value
-                            setDictBlanks((arr) => {
-                              const next = [...arr]
-                              next[i] = v
-                              return next
-                            })
-                          }}
-                        />
-                      ))}
-                    </div>
-                    {dictChecked && <div className="dict-reveal">原文：{dictCloze.sentence}</div>}
-                  </>
-                ) : (
-                  <>
-                    <textarea
-                      className="study-input dict-input"
-                      autoFocus
-                      ref={dictInputRef}
-                      placeholder="听写这一句，回车检查 / 下一句"
-                      value={dictInput}
-                      onChange={(e) => setDictInput(e.target.value)}
-                      disabled={dictChecked}
-                    />
-                    {dictChecked && dictDiff && (
-                      <div className="dict-diff">
-                        {dictDiff.map((t, i) => (
-                          <span key={i} className={'dt ' + t.type}>
-                            {t.text}{' '}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-                    {dictChecked && <div className="dict-reveal">原文：{dictQueue[dictIndex]?.text}</div>}
-                  </>
-                )}
-                <div className="bar study-actions">
-                  {!dictChecked ? (
-                    <button className="primary" onClick={checkDict}>
-                      检查（回车）
-                    </button>
-                  ) : (
-                    <button className="primary" onClick={nextDict}>
-                      {dictIndex + 1 >= dictQueue.length ? '完成（回车）' : '下一句（回车）'}
-                    </button>
-                  )}
-                  {dictChecked && <button onClick={dictWrongNow}>漏词加入待选</button>}
-                </div>
-              </>
-            ) : (
-              <div className="study-done">
-                <p>
-                  听写完成：答对 <b>{dictResults.filter(Boolean).length}</b> / {dictResults.length}
-                  {dictResults.length
-                    ? `（${Math.round((dictResults.filter(Boolean).length / dictResults.length) * 100)}%）`
-                    : ''}
-                </p>
-                {dictWrongItems.length > 0 && (
-                  <div className="dict-wrong">
-                    <div className="muted">错题（{dictWrongItems.length}）：</div>
-                    {dictWrongItems.map((w) => (
-                      <div key={w.id} className="dict-wrong-item">
-                        {w.text}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                <div className="bar">
-                  {dictWrongItems.length > 0 && (
-                    <button className="primary" onClick={retryDictWrong}>
-                      重练错题 {dictWrongItems.length}
-                    </button>
-                  )}
-                  <button
-                    className={dictWrongItems.length ? '' : 'primary'}
-                    onClick={() => startDictation()}
-                  >
-                    再来一遍
-                  </button>
-                  <button
-                    onClick={() => {
-                      clearDictAdvance()
-                      setDictQueue(null)
-                    }}
-                  >
-                    回到阅读
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
+          <DictPanel
+            queue={dictQueue}
+            index={dictIndex}
+            mode={dictMode}
+            words={dictWords}
+            blankCount={dictBlankCount}
+            checked={dictChecked}
+            diff={dictDiff}
+            cloze={dictCloze}
+            blanks={dictBlanks}
+            input={dictInput}
+            results={dictResults}
+            wrongItems={dictWrongItems}
+            onStart={startDictation}
+            onCheck={checkDict}
+            onNext={nextDict}
+            onWrongNow={dictWrongNow}
+            onRetryWrong={retryDictWrong}
+            onClose={() => {
+              clearDictAdvance()
+              setDictQueue(null)
+            }}
+            onSpeak={speak}
+            onInputChange={setDictInput}
+            onBlankChange={(i, v) =>
+              setDictBlanks((arr) => {
+                const next = [...arr]
+                next[i] = v
+                return next
+              })
+            }
+          />
         )}
 
         {listenOpen && listenQuiz && (
-          <div className="study listen">
-            <div className="bar study-bar">
-              <button onClick={() => setListenOpen(false)}>结束（Esc）</button>
-              <button
-                className={readingAll ? 'danger' : ''}
-                onClick={readingAll ? stopReadAll : startReadAll}
-                title="朗读整篇（练习听力）"
-              >
-                {readingAll ? '⏹ 停止' : '🔊 播放全文'}
-              </button>
-              <span className="muted">
-                共 {listenQuestions.length} 题{listenWrongIds ? '（只做错题）' : ''}
-              </span>
-              {listenSubmitted && listenResult && (
-                <span className="muted">
-                  得分 {listenResult.correct}/{listenResult.total}（
-                  {Math.round(listenResult.score * 100)}%）
-                </span>
-              )}
-            </div>
-            <div className="listen-list">
-              {listenQuestions.map((q, qi) => {
-                const got = listenAnswers[q.id] ?? ''
-                const ok = listenSubmitted && isListeningCorrect(q, got)
-                return (
-                  <div className="listen-q" key={q.id}>
-                    <div className="listen-stem">
-                      {qi + 1}. {q.stem}
-                    </div>
-                    {q.type === 'mcq' && q.options ? (
-                      <div className="listen-opts">
-                        {q.options.map((opt) => {
-                          const chosen = got === opt
-                          const cls =
-                            (chosen ? 'primary' : '') +
-                            (listenSubmitted && opt === q.answer ? ' ok' : '') +
-                            (listenSubmitted && chosen && opt !== q.answer ? ' bad' : '')
-                          return (
-                            <button
-                              key={opt}
-                              className={cls}
-                              disabled={listenSubmitted}
-                              onClick={() => setListenAnswers((a) => ({ ...a, [q.id]: opt }))}
-                            >
-                              {opt}
-                            </button>
-                          )
-                        })}
-                      </div>
-                    ) : (
-                      <input
-                        className="study-input listen-input"
-                        disabled={listenSubmitted}
-                        placeholder={q.type === 'gap' ? '填空' : '简答'}
-                        value={got}
-                        onChange={(e) => setListenAnswers((a) => ({ ...a, [q.id]: e.target.value }))}
-                      />
-                    )}
-                    {listenSubmitted && (
-                      <div className={'listen-feedback ' + (ok ? 'ok' : 'bad')}>
-                        {ok ? '✔ 正确' : `✘ 正确答案：${q.answer}`}
-                        {q.explanation ? `　${q.explanation}` : ''}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-            <div className="bar study-actions">
-              {!listenSubmitted ? (
-                <button className="primary" onClick={submitListening}>
-                  提交判分
-                </button>
-              ) : (
-                <>
-                  {listenResult && listenResult.correct < listenResult.total && (
-                    <button className="primary" onClick={retryListenWrong}>
-                      重做错题 {listenResult.total - listenResult.correct}
-                    </button>
-                  )}
-                  <button onClick={showAllListen}>重做全部</button>
-                </>
-              )}
-              <button onClick={() => void copyListeningPrompt()}>重新出题</button>
-            </div>
-            {listenSubmitted && doc && (
-              <details className="listen-transcript">
-                <summary>显示原文</summary>
-                <div>{doc.sentences.map((s) => s.text).join(' ')}</div>
-              </details>
-            )}
-          </div>
+          <ListeningPanel
+            questions={listenQuestions}
+            answers={listenAnswers}
+            submitted={listenSubmitted}
+            result={listenResult}
+            onlyWrong={!!listenWrongIds}
+            readingAll={readingAll}
+            transcript={doc ? doc.sentences.map((s) => s.text).join(' ') : null}
+            onClose={() => setListenOpen(false)}
+            onToggleRead={readingAll ? stopReadAll : startReadAll}
+            onAnswer={(id, value) => setListenAnswers((a) => ({ ...a, [id]: value }))}
+            onSubmit={submitListening}
+            onRetryWrong={retryListenWrong}
+            onShowAll={showAllListen}
+            onRegenerate={() => void copyListeningPrompt()}
+          />
         )}
 
         {writingOpen && (
-          <div className="study writing">
-            <div className="bar study-bar">
-              <button onClick={() => setWritingOpen(false)}>结束（Esc）</button>
-              <span className="muted">仿写训练</span>
-              <button onClick={() => void copyImitationTask()}>① 生成任务</button>
-              <button
-                className="primary"
-                onClick={() => void copyFeedback()}
-                disabled={!writingTask || !writingText.trim()}
-              >
-                ② 批改
-              </button>
-              <button onClick={() => setHistoryOpen((v) => !v)}>历史（{writingHistory.length}）</button>
-            </div>
-            <div className="write-block">
-              <div className="muted">范句（可改）</div>
-              <textarea
-                className="study-input write-model"
-                value={writingModel}
-                onChange={(e) => setWritingModel(e.target.value)}
-                rows={3}
-              />
-              {writingTask && (
-                <div className="write-task">
-                  <div>
-                    <b>任务：</b>
-                    {writingTask.task}
-                  </div>
-                  {writingTask.structure && <div className="muted">结构：{writingTask.structure}</div>}
-                  {writingTask.mustUse.length > 0 && (
-                    <div className="muted">必须用上：{writingTask.mustUse.join('、')}</div>
-                  )}
-                  {writingTask.rubric.length > 0 && (
-                    <div className="muted">
-                      评分：{writingTask.rubric.map((r) => `${r.dimension}(${r.weight})`).join(' · ')}
-                    </div>
-                  )}
-                </div>
-              )}
-              <div className="muted">我的仿写</div>
-              <textarea
-                className="study-input write-text"
-                placeholder="在这里写…写完点「② 批改」"
-                value={writingText}
-                onChange={(e) => setWritingText(e.target.value)}
-                rows={6}
-              />
-            </div>
-            {writingFeedback && (
-              <div className="write-feedback">
-                <div className="muted">
-                  得分：{writingFeedback.total}/{writingFeedback.max}
-                </div>
-                {writingFeedback.scores.map((s) => (
-                  <div key={s.dimension}>
-                    {s.dimension}：{s.score}/{s.max}
-                    {s.comment ? ` — ${s.comment}` : ''}
-                  </div>
-                ))}
-                {writingFeedback.issues.length > 0 && (
-                  <ul className="write-issues">
-                    {writingFeedback.issues.map((is, i) => (
-                      <li key={i}>
-                        <span className="bad">{is.original}</span> → <span className="ok">{is.suggestion}</span>
-                        {is.reason ? `（${is.reason}）` : ''}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {writingFeedback.polished && (
-                  <div className="write-polished">
-                    <b>改写示范：</b>
-                    {writingFeedback.polished}
-                  </div>
-                )}
-                {writingFeedback.summary && <div className="muted">{writingFeedback.summary}</div>}
-              </div>
-            )}
-            {historyOpen && (
-              <div className="write-history">
-                <div className="bar">
-                  <span className="muted">练习历史（{writingHistory.length}）</span>
-                  {writingHistory.length > 0 && (
-                    <button className="danger" onClick={() => setWritingHistory([])}>
-                      清空
-                    </button>
-                  )}
-                </div>
-                {writingHistory.length ? (
-                  writingHistory.map((rec, i) => (
-                    <button key={i} className="write-hist-row" onClick={() => loadWritingRecord(rec)}>
-                      <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-                      <span className="ellipsis"> {rec.model}</span>
-                      <b>
-                        {rec.feedback.total}/{rec.feedback.max}
-                      </b>
-                    </button>
-                  ))
-                ) : (
-                  <div className="muted">还没有记录；批改一次就会存下来。</div>
-                )}
-              </div>
-            )}
-          </div>
+          <WritingPanel
+            model={writingModel}
+            text={writingText}
+            task={writingTask}
+            feedback={writingFeedback}
+            history={writingHistory}
+            onClose={() => setWritingOpen(false)}
+            onGenerateTask={() => void copyImitationTask()}
+            onFeedback={() => void copyFeedback()}
+            onModelChange={setWritingModel}
+            onTextChange={setWritingText}
+            onClearHistory={() => setWritingHistory([])}
+            onLoadRecord={loadWritingRecord}
+          />
         )}
 
         {browseAll && (
