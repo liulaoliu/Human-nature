@@ -506,3 +506,8 @@ select:focus-visible { outline: none; box-shadow: var(--ring); }
   border-left-color: var(--accent);
   box-shadow: 0 0 0 1px rgba(47, 143, 91, 0.45), 0 0 18px rgba(47, 143, 91, 0.22);
 }
+
+/* 装饰鱼：静止、贴边、垫在内容下层（不挡点击 / 不盖文字） */
+.app { position: relative; z-index: 1; }
+.fish-layer { position: fixed; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
+.fish { position: absolute; opacity: 0.6; border-radius: 8px; user-select: none; }

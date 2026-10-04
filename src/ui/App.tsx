@@ -3,6 +3,7 @@ import { SessionStore } from '../state/session'
 import { useSession } from './useSession'
 import { BrowserPlayer, BrowserRecorder, listAudioInputs } from '../adapters/browserAudio'
 import { ChunkSplitter } from './ChunkSplitter'
+import FishLayer from './FishLayer'
 import { createTakeRepo } from '../adapters/takeRepo'
 import { createScriptRepo } from '../adapters/scriptRepo'
 import { createScriptEditRepo } from '../adapters/scriptEditRepo'
@@ -248,6 +249,7 @@ export default function App() {
   if (s.status === 'empty') {
     return (
       <div className="app">
+        <FishLayer />
         {notice && (
           <div className="banner">
             {notice}
@@ -272,6 +274,7 @@ export default function App() {
 
   return (
     <div className="app">
+      <FishLayer />
       <header>
         <label className="file">
           换音频
