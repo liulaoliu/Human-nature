@@ -72,6 +72,7 @@ import {
   gradeListening,
   isListeningCorrect,
   parseListeningQuiz,
+  type ListeningQuestion,
   type ListeningQuiz,
   type ListeningResult,
 } from '../core/listening'
@@ -81,9 +82,21 @@ import {
   addPracticeRecord,
   PRACTICE_LABEL,
   recentPractice,
+  sumByKind,
+  sumPractice,
   type PracticeKind,
   type PracticeRecord,
 } from '../core/practice'
+import {
+  dictMistake,
+  listenMistake,
+  MISTAKE_LABEL,
+  mistakeCounts,
+  removeMistake,
+  upsertMistake,
+  vocabMistake,
+  type MistakeEntry,
+} from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
 import {
   ACTIVITY_CATS,
@@ -680,6 +693,15 @@ export default function ReaderApp() {
       return []
     }
   })
+  /** 统一错题本（考试错词 / 听力错题 / 听写漏词） */
+  const [mistakes, setMistakes] = useState<MistakeEntry[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:mistakes') ?? '[]')
+      return Array.isArray(raw) ? (raw as MistakeEntry[]) : []
+    } catch {
+      return []
+    }
+  })
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useState(() => {
     try {
@@ -990,6 +1012,13 @@ export default function ReaderApp() {
   }, [practice])
   useEffect(() => {
     try {
+      localStorage.setItem('reader:mistakes', JSON.stringify(mistakes))
+    } catch {
+      // 忽略
+    }
+  }, [mistakes])
+  useEffect(() => {
+    try {
       localStorage.setItem(
         'reader:writingDraft',
         JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
@@ -1236,6 +1265,13 @@ export default function ReaderApp() {
   const recordPractice = useCallback((kind: PracticeKind, total: number, correct: number) => {
     if (total <= 0) return
     setPractice((prev) => addPracticeRecord(prev, { at: new Date().toISOString(), kind, total, correct }))
+  }, [])
+
+  const addMistake = useCallback((entry: MistakeEntry) => {
+    setMistakes((prev) => upsertMistake(prev, entry))
+  }, [])
+  const dropMistake = useCallback((id: string) => {
+    setMistakes((prev) => removeMistake(prev, id))
   }, [])
 
   /** 听力理解题：当前要作答的题（「重做错题」时只含错题） */
@@ -1539,6 +1575,10 @@ export default function ReaderApp() {
     if (!ok) {
       setDictWrongItems((w) => (w.some((x) => x.id === item.id) ? w : [...w, { id: item.id, text: item.text }]))
     }
+    // 错题本：听写漏词（对→清掉，错→记上）
+    const dictId = dictMistake(item.text, '').id
+    if (ok) dropMistake(dictId)
+    else addMistake(dictMistake(item.text, new Date().toISOString()))
     // 全对 → 自动下一句；有错 → 停下（显示原文，等你手动下一句）
     if (ok) {
       clearDictAdvance()
@@ -1547,7 +1587,18 @@ export default function ReaderApp() {
         nextDict()
       }, 700)
     }
-  }, [dictQueue, dictIndex, dictInput, dictMode, dictBlanks, recordActivity, nextDict, clearDictAdvance])
+  }, [
+    dictQueue,
+    dictIndex,
+    dictInput,
+    dictMode,
+    dictBlanks,
+    recordActivity,
+    nextDict,
+    clearDictAdvance,
+    addMistake,
+    dropMistake,
+  ])
 
   const nextQuiz = useCallback(() => {
     if (quizAdvanceRef.current) {
@@ -1571,6 +1622,8 @@ export default function ReaderApp() {
       setQuizChecked(true)
       setQuizResult(ok)
       setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
+      if (ok) dropMistake(`vocab:${q.itemId}`)
+      else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
       persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
       markStudied(q.itemId)
       recordActivity(q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
@@ -1585,7 +1638,7 @@ export default function ReaderApp() {
         }, ok ? 650 : 1400)
       }
     },
-    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak, recordActivity],
+    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak, recordActivity, addMistake, dropMistake],
   )
 
   /** 关闭考试并清掉待触发的自动切题。 */
@@ -1613,6 +1666,106 @@ export default function ReaderApp() {
     setQuizResults([])
     quizRecordedRef.current = false
   }, [quizResults, library.items, buildQuizSet, flash])
+
+  /** 从指定词条开一轮考试（错题本「重练词汇」用）。 */
+  const startQuizItems = useCallback(
+    (ids: string[]) => {
+      const items = library.items.filter((it) => ids.includes(it.id))
+      const qs = buildQuizSet(items)
+      if (!qs.length) {
+        flash('这些词暂时出不了题（缺释义 / 例句）')
+        return
+      }
+      if (quizAdvanceRef.current) {
+        window.clearTimeout(quizAdvanceRef.current)
+        quizAdvanceRef.current = null
+      }
+      setStudyQueue(null)
+      setQuizQueue(shuffleQuiz(qs))
+      setQuizIndex(0)
+      setQuizInput('')
+      setQuizChecked(false)
+      setQuizResult(null)
+      setQuizResults([])
+      quizRecordedRef.current = false
+      setQuizAutoRun(quizAuto)
+      setQuizSetupOpen(false)
+    },
+    [library.items, buildQuizSet, quizAuto, flash],
+  )
+
+  /** 用指定题目开一轮听力理解（错题本「重练听力」用）。 */
+  const startListenQuestions = useCallback((questions: ListeningQuestion[]) => {
+    if (!questions.length) return
+    setStudyQueue(null)
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setQuickQueue(null)
+    setDictQueue(null)
+    setListenQuiz({ questions })
+    setListenWrongIds(null)
+    setListenAnswers({})
+    setListenSubmitted(false)
+    setListenResult(null)
+    setListenOpen(true)
+  }, [])
+
+  /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
+  const startDictItems = useCallback((items: { id: string; text: string }[]) => {
+    if (!items.length) return
+    if (dictAdvanceRef.current) {
+      window.clearTimeout(dictAdvanceRef.current)
+      dictAdvanceRef.current = null
+    }
+    setDictMode('full')
+    setStudyQueue(null)
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setQuickQueue(null)
+    setDictQueue(items)
+    setDictIndex(0)
+    setDictInput('')
+    setDictChecked(false)
+    setDictDiff(null)
+    setDictBlanks([])
+    setDictResults([])
+    setDictWrongItems([])
+    dictRecordedRef.current = false
+  }, [])
+
+  /** 错题本：重练考试错词。 */
+  const retryMistakeVocab = useCallback(() => {
+    const ids = mistakes.filter((m) => m.kind === 'vocab' && m.itemId).map((m) => m.itemId as string)
+    if (!ids.length) {
+      flash('没有考试错词')
+      return
+    }
+    startQuizItems(ids)
+  }, [mistakes, startQuizItems, flash])
+
+  /** 错题本：重练听力错题。 */
+  const retryMistakeListen = useCallback(() => {
+    const qs = mistakes
+      .filter((m) => m.kind === 'listen' && m.question)
+      .map((m) => m.question as ListeningQuestion)
+    if (!qs.length) {
+      flash('没有听力错题')
+      return
+    }
+    startListenQuestions(qs)
+  }, [mistakes, startListenQuestions, flash])
+
+  /** 错题本：重练听写漏词。 */
+  const retryMistakeDict = useCallback(() => {
+    const items = mistakes
+      .filter((m) => m.kind === 'dict' && m.text)
+      .map((m, i) => ({ id: `mk-${i}`, text: m.text as string }))
+    if (!items.length) {
+      flash('没有听写漏词')
+      return
+    }
+    startDictItems(items)
+  }, [mistakes, startDictItems, flash])
 
   /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
   const startQuick = useCallback(() => {
@@ -1914,7 +2067,21 @@ export default function ReaderApp() {
     setListenSubmitted(true)
     recordActivity('listen', listenQuestions.length)
     recordPractice('listening', res.total, res.correct)
-  }, [listenQuestions, listenAnswers, recordActivity, recordPractice])
+    // 错题本：听力错题（对→清掉，错→记上）
+    for (const q of listenQuestions) {
+      const id = listenMistake(articleIdentity, q, '').id
+      if (isListeningCorrect(q, listenAnswers[q.id] ?? '')) dropMistake(id)
+      else addMistake(listenMistake(articleIdentity, q, new Date().toISOString()))
+    }
+  }, [
+    listenQuestions,
+    listenAnswers,
+    recordActivity,
+    recordPractice,
+    articleIdentity,
+    addMistake,
+    dropMistake,
+  ])
 
   /** 听力理解题：只重做错题。 */
   const retryListenWrong = useCallback(() => {
@@ -3724,10 +3891,11 @@ export default function ReaderApp() {
       activity,
       writingHistory,
       practice,
+      mistakes,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, studyDays, activity, writingHistory, practice, download])
+  }, [library, saved, sessions, studyDays, activity, writingHistory, practice, mistakes, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -3772,6 +3940,9 @@ export default function ReaderApp() {
           }
           if (Array.isArray(obj.practice)) {
             setPractice(obj.practice as PracticeRecord[])
+          }
+          if (Array.isArray(obj.mistakes)) {
+            setMistakes(obj.mistakes as MistakeEntry[])
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }
@@ -5331,6 +5502,37 @@ export default function ReaderApp() {
         </div>
         <div className="side-sec" data-sec="overview">
           <div className="board">
+            {mistakes.length > 0 &&
+              (() => {
+                const c = mistakeCounts(mistakes)
+                const rows: { k: 'vocab' | 'listen' | 'dict'; run: () => void }[] = [
+                  { k: 'vocab', run: retryMistakeVocab },
+                  { k: 'listen', run: retryMistakeListen },
+                  { k: 'dict', run: retryMistakeDict },
+                ]
+                return (
+                  <div className="board-group">
+                    <div className="side-label">错题本（{mistakes.length}）</div>
+                    {rows.map(({ k, run }) => (
+                      <div className="board-row partial" key={k}>
+                        <span className="dot" />
+                        <div className="board-body">
+                          <div className="board-head">
+                            <b>{MISTAKE_LABEL[k]}</b>
+                            <span className="muted">{c[k]} 条</span>
+                          </div>
+                        </div>
+                        <button className="board-act" onClick={run} disabled={c[k] === 0}>
+                          重练
+                        </button>
+                      </div>
+                    ))}
+                    <button className="danger" onClick={() => setMistakes([])}>
+                      清空错题本
+                    </button>
+                  </div>
+                )
+              })()}
             {['读', '词', '听', '写'].map((g) => {
               const rows = readyRows.filter((r) => r.group === g)
               if (!rows.length) return null
@@ -5379,6 +5581,12 @@ export default function ReaderApp() {
             const counts: Record<string, number> = {}
             for (const a of activity) counts[a.day] = dayTotal(a)
             const heat = buildHeatmap(counts, 13, today)
+            const pct = (s: { total: number; correct: number }) =>
+              s.total ? `${s.correct}/${s.total}（${Math.round((s.correct / s.total) * 100)}%）` : '—'
+            const weekPractice = sumPractice(practice.filter((r) => r.at.slice(0, 10) >= weekFrom))
+            const monthPractice = sumPractice(practice.filter((r) => r.at.slice(0, 10) >= monthFrom))
+            const allPractice = sumPractice(practice)
+            const kindSums = sumByKind(practice)
             const line = (label: string, cats: Record<ActivityCat, number>) => (
               <div className="stat-line" key={label}>
                 <span className="stat-name">{label}</span>
@@ -5398,6 +5606,23 @@ export default function ReaderApp() {
                 {line('本周', weekCats)}
                 <div className="side-label">本月（{today.getMonth() + 1} 月）</div>
                 {line('本月', monthCats)}
+                <div className="side-label">练习正确率（考试 / 听写 / 听力）</div>
+                <div className="stat-line">
+                  <span className="stat-name">本周</span>
+                  <span className="stat-cat">{pct(weekPractice)}</span>
+                </div>
+                <div className="stat-line">
+                  <span className="stat-name">本月</span>
+                  <span className="stat-cat">{pct(monthPractice)}</span>
+                </div>
+                <div className="stat-line">
+                  <span className="stat-name">累计</span>
+                  <span className="stat-cat">{pct(allPractice)}</span>
+                </div>
+                <div className="muted">
+                  考试 {pct(kindSums.quiz)} · 听写 {pct(kindSums.dictation)} · 听力{' '}
+                  {pct(kindSums.listening)}
+                </div>
                 <div className="side-label">近 13 周热力图</div>
                 <div className="heat">
                   <div className="heat-months">

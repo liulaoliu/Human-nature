@@ -39,6 +39,36 @@ export function recentPractice(list: PracticeRecord[], n = 10): PracticeRecord[]
   return list.slice(-Math.max(0, n)).reverse()
 }
 
+export interface PracticeSum {
+  total: number
+  correct: number
+}
+
+/** 合计 total/correct。 */
+export function sumPractice(list: PracticeRecord[]): PracticeSum {
+  let total = 0
+  let correct = 0
+  for (const r of list) {
+    total += r.total
+    correct += r.correct
+  }
+  return { total, correct }
+}
+
+/** 按类型合计。 */
+export function sumByKind(list: PracticeRecord[]): Record<PracticeKind, PracticeSum> {
+  const out: Record<PracticeKind, PracticeSum> = {
+    quiz: { total: 0, correct: 0 },
+    dictation: { total: 0, correct: 0 },
+    listening: { total: 0, correct: 0 },
+  }
+  for (const r of list) {
+    out[r.kind].total += r.total
+    out[r.kind].correct += r.correct
+  }
+  return out
+}
+
 export interface PracticeDayTotals {
   total: number
   correct: number

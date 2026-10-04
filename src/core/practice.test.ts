@@ -4,6 +4,8 @@ import {
   addPracticeRecord,
   practiceByDay,
   recentPractice,
+  sumByKind,
+  sumPractice,
   type PracticeRecord,
 } from './practice'
 
@@ -40,5 +42,21 @@ describe('practiceByDay', () => {
     const m = practiceByDay([rec('2026-10-01T09:00:00Z', 4, 2), rec('2026-10-01T10:00:00Z', 6, 5), rec('2026-10-02T09:00:00Z', 2, 2)], day)
     expect(m.get('2026-10-01')).toEqual({ total: 10, correct: 7, count: 2 })
     expect(m.get('2026-10-02')).toEqual({ total: 2, correct: 2, count: 1 })
+  })
+})
+
+describe('sumPractice / sumByKind', () => {
+  it('合计与按类型', () => {
+    const list: PracticeRecord[] = [
+      { at: 'a', kind: 'quiz', total: 10, correct: 6 },
+      { at: 'b', kind: 'dictation', total: 4, correct: 3 },
+      { at: 'c', kind: 'quiz', total: 5, correct: 5 },
+    ]
+    expect(sumPractice(list)).toEqual({ total: 19, correct: 14 })
+    expect(sumByKind(list)).toEqual({
+      quiz: { total: 15, correct: 11 },
+      dictation: { total: 4, correct: 3 },
+      listening: { total: 0, correct: 0 },
+    })
   })
 })
