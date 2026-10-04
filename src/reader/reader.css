@@ -912,6 +912,8 @@ button.danger {
 .dict-blank.ok { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
 .dict-blank.bad { border-color: var(--red); box-shadow: inset 0 0 0 1px var(--red); }
 .dict-reveal { margin-top: 10px; font-size: 14px; color: var(--dim); line-height: 1.7; }
+.dict-wrong { margin: 10px 0; max-height: 200px; overflow: auto; text-align: left; width: 100%; }
+.dict-wrong-item { font-size: 13px; color: var(--dim); padding: 3px 0; border-bottom: 1px dashed var(--line); }
 
 /* 听力理解题 */
 .listen { max-width: 760px; }

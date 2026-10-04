@@ -76,6 +76,14 @@ import {
   type ListeningResult,
 } from '../core/listening'
 import { applyLanguage, buildLanguagePrompt, parseLanguage } from '../core/language'
+import {
+  accuracy,
+  addPracticeRecord,
+  PRACTICE_LABEL,
+  recentPractice,
+  type PracticeKind,
+  type PracticeRecord,
+} from '../core/practice'
 import { buildReadiness } from '../core/readiness'
 import {
   ACTIVITY_CATS,
@@ -540,6 +548,7 @@ export default function ReaderApp() {
   /** 放 speak 的引用：checkQuiz 定义在 speak 之前，用 ref 避免顺序问题 */
   const speakRef = useRef<(text: string) => void>(() => {})
   const quizAdvanceRef = useRef<number | null>(null)
+  const quizRecordedRef = useRef(false)
   /** 本轮实际是否自动切题（听写模式强制开） */
   const [quizAutoRun, setQuizAutoRun] = useState(false)
   /** 今天学过的不同单词 id（每日目标进度） */
@@ -583,6 +592,10 @@ export default function ReaderApp() {
   /** 当前填空（供 checkDict 判分用，避免声明顺序问题）与「答对自动下一句」的定时器 */
   const dictClozeRef = useRef<ClozeQuestion | null>(null)
   const dictAdvanceRef = useRef<number | null>(null)
+  /** 听写本轮结果（每题是否全对）与错题（用于重练） */
+  const [dictResults, setDictResults] = useState<boolean[]>([])
+  const [dictWrongItems, setDictWrongItems] = useState<{ id: string; text: string }[]>([])
+  const dictRecordedRef = useRef(false)
   /** 听写模式：整句 / 填空 */
   const [dictMode, setDictMode] = useState<'full' | 'cloze'>(() => {
     try {
@@ -613,6 +626,7 @@ export default function ReaderApp() {
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
+  const [listenWrongIds, setListenWrongIds] = useState<string[] | null>(null)
   const [listenAnswers, setListenAnswers] = useState<Record<string, string>>({})
   const [listenSubmitted, setListenSubmitted] = useState(false)
   const [listenResult, setListenResult] = useState<ListeningResult | null>(null)
@@ -653,6 +667,15 @@ export default function ReaderApp() {
     try {
       const raw = JSON.parse(localStorage.getItem('reader:activity') ?? '[]')
       return Array.isArray(raw) ? (raw as DayActivity[]) : []
+    } catch {
+      return []
+    }
+  })
+  /** 练习成绩记录（考试 / 听写 / 听力理解） */
+  const [practice, setPractice] = useState<PracticeRecord[]>(() => {
+    try {
+      const raw = JSON.parse(localStorage.getItem('reader:practice') ?? '[]')
+      return Array.isArray(raw) ? (raw as PracticeRecord[]) : []
     } catch {
       return []
     }
@@ -960,6 +983,13 @@ export default function ReaderApp() {
   }, [activity])
   useEffect(() => {
     try {
+      localStorage.setItem('reader:practice', JSON.stringify(practice))
+    } catch {
+      // 忽略
+    }
+  }, [practice])
+  useEffect(() => {
+    try {
       localStorage.setItem(
         'reader:writingDraft',
         JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
@@ -1202,6 +1232,20 @@ export default function ReaderApp() {
     setActivity((prev) => addActivity(prev, dayKeyLocal(new Date()), cat, n))
   }, [])
 
+  /** 记一次练习成绩（考试 / 听写 / 听力理解）。 */
+  const recordPractice = useCallback((kind: PracticeKind, total: number, correct: number) => {
+    if (total <= 0) return
+    setPractice((prev) => addPracticeRecord(prev, { at: new Date().toISOString(), kind, total, correct }))
+  }, [])
+
+  /** 听力理解题：当前要作答的题（「重做错题」时只含错题） */
+  const listenQuestions = useMemo(() => {
+    if (!listenQuiz) return []
+    if (!listenWrongIds) return listenQuiz.questions
+    const set = new Set(listenWrongIds)
+    return listenQuiz.questions.filter((q) => set.has(q.id))
+  }, [listenQuiz, listenWrongIds])
+
   const gradeStudy = useCallback(
     (grade: ReviewGrade) => {
       if (!studyQueue) return
@@ -1365,6 +1409,7 @@ export default function ReaderApp() {
     setQuizChecked(false)
     setQuizResult(null)
     setQuizResults([])
+    quizRecordedRef.current = false
     setQuizAutoRun(quizAuto)
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
@@ -1438,6 +1483,9 @@ export default function ReaderApp() {
       setDictChecked(false)
       setDictDiff(null)
       setDictBlanks([])
+      setDictResults([])
+      setDictWrongItems([])
+      dictRecordedRef.current = false
     },
     [doc, dictMode, dictWords, dictBlankCount, flash],
   )
@@ -1458,6 +1506,21 @@ export default function ReaderApp() {
     setDictIndex((i) => i + 1)
   }, [clearDictAdvance])
 
+  /** 听写「重练错题」：只重练本轮错的那些段。 */
+  const retryDictWrong = useCallback(() => {
+    if (!dictWrongItems.length) return
+    clearDictAdvance()
+    setDictQueue(dictWrongItems)
+    setDictIndex(0)
+    setDictInput('')
+    setDictChecked(false)
+    setDictDiff(null)
+    setDictBlanks([])
+    setDictResults([])
+    setDictWrongItems([])
+    dictRecordedRef.current = false
+  }, [dictWrongItems, clearDictAdvance])
+
   const checkDict = useCallback(() => {
     if (!dictQueue) return
     const item = dictQueue[dictIndex]
@@ -1472,6 +1535,10 @@ export default function ReaderApp() {
     }
     setDictChecked(true)
     recordActivity('listen', 1)
+    setDictResults((r) => [...r, ok])
+    if (!ok) {
+      setDictWrongItems((w) => (w.some((x) => x.id === item.id) ? w : [...w, { id: item.id, text: item.text }]))
+    }
     // 全对 → 自动下一句；有错 → 停下（显示原文，等你手动下一句）
     if (ok) {
       clearDictAdvance()
@@ -1544,6 +1611,7 @@ export default function ReaderApp() {
     setQuizChecked(false)
     setQuizResult(null)
     setQuizResults([])
+    quizRecordedRef.current = false
   }, [quizResults, library.items, buildQuizSet, flash])
 
   /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
@@ -1832,6 +1900,7 @@ export default function ReaderApp() {
       setListenAnswers({})
       setListenSubmitted(false)
       setListenResult(null)
+      setListenWrongIds(null)
       setListenOpen(true)
     } else {
       void copyListeningPrompt()
@@ -1839,11 +1908,32 @@ export default function ReaderApp() {
   }, [listenQuiz, copyListeningPrompt])
 
   const submitListening = useCallback(() => {
-    if (!listenQuiz) return
-    setListenResult(gradeListening(listenQuiz.questions, listenAnswers))
+    if (!listenQuestions.length) return
+    const res = gradeListening(listenQuestions, listenAnswers)
+    setListenResult(res)
     setListenSubmitted(true)
-    recordActivity('listen', listenQuiz.questions.length)
-  }, [listenQuiz, listenAnswers, recordActivity])
+    recordActivity('listen', listenQuestions.length)
+    recordPractice('listening', res.total, res.correct)
+  }, [listenQuestions, listenAnswers, recordActivity, recordPractice])
+
+  /** 听力理解题：只重做错题。 */
+  const retryListenWrong = useCallback(() => {
+    if (!listenResult) return
+    const ids = listenResult.per.filter((p) => !p.correct).map((p) => p.id)
+    if (!ids.length) return
+    setListenWrongIds(ids)
+    setListenAnswers({})
+    setListenSubmitted(false)
+    setListenResult(null)
+  }, [listenResult])
+
+  /** 听力理解题：恢复全部题。 */
+  const showAllListen = useCallback(() => {
+    setListenWrongIds(null)
+    setListenAnswers({})
+    setListenSubmitted(false)
+    setListenResult(null)
+  }, [])
 
   /** 复制逐句语言点分析提示词。 */
   const copyLanguagePrompt = useCallback(async () => {
@@ -2156,6 +2246,27 @@ export default function ReaderApp() {
     if (!dictQueue || dictIndex >= dictQueue.length) return
     if (dictMode === 'cloze' && (!dictCloze || dictCloze.blanks.length === 0)) nextDict()
   }, [dictQueue, dictIndex, dictMode, dictCloze, nextDict])
+
+  // 听写完成 → 记一次成绩
+  useEffect(() => {
+    if (!dictQueue) return
+    if (dictIndex >= dictQueue.length && dictResults.length > 0 && !dictRecordedRef.current) {
+      dictRecordedRef.current = true
+      recordPractice('dictation', dictResults.length, dictResults.filter(Boolean).length)
+    }
+  }, [dictQueue, dictIndex, dictResults, recordPractice])
+
+  // 考试完成 → 记一次成绩
+  useEffect(() => {
+    if (!quizQueue) {
+      quizRecordedRef.current = false
+      return
+    }
+    if (quizIndex >= quizQueue.length && quizResults.length > 0 && !quizRecordedRef.current) {
+      quizRecordedRef.current = true
+      recordPractice('quiz', quizResults.length, quizResults.filter((r) => r.correct).length)
+    }
+  }, [quizQueue, quizIndex, quizResults, recordPractice])
 
   // 卸载时清掉「自动下一句」的定时器
   useEffect(() => {
@@ -3612,10 +3723,11 @@ export default function ReaderApp() {
       studyStats: studyDays,
       activity,
       writingHistory,
+      practice,
     }
     const day = new Date().toISOString().slice(0, 10)
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
-  }, [library, saved, sessions, studyDays, activity, writingHistory, download])
+  }, [library, saved, sessions, studyDays, activity, writingHistory, practice, download])
 
   /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
   const onImportBackup = useCallback(
@@ -3657,6 +3769,9 @@ export default function ReaderApp() {
           }
           if (Array.isArray(obj.writingHistory)) {
             setWritingHistory(obj.writingHistory as WritingRecord[])
+          }
+          if (Array.isArray(obj.practice)) {
+            setPractice(obj.practice as PracticeRecord[])
           }
           if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
         }
@@ -4738,9 +4853,32 @@ export default function ReaderApp() {
               </>
             ) : (
               <div className="study-done">
-                <p>听写完成，共 {dictQueue.length} 段。</p>
+                <p>
+                  听写完成：答对 <b>{dictResults.filter(Boolean).length}</b> / {dictResults.length}
+                  {dictResults.length
+                    ? `（${Math.round((dictResults.filter(Boolean).length / dictResults.length) * 100)}%）`
+                    : ''}
+                </p>
+                {dictWrongItems.length > 0 && (
+                  <div className="dict-wrong">
+                    <div className="muted">错题（{dictWrongItems.length}）：</div>
+                    {dictWrongItems.map((w) => (
+                      <div key={w.id} className="dict-wrong-item">
+                        {w.text}
+                      </div>
+                    ))}
+                  </div>
+                )}
                 <div className="bar">
-                  <button className="primary" onClick={() => startDictation()}>
+                  {dictWrongItems.length > 0 && (
+                    <button className="primary" onClick={retryDictWrong}>
+                      重练错题 {dictWrongItems.length}
+                    </button>
+                  )}
+                  <button
+                    className={dictWrongItems.length ? '' : 'primary'}
+                    onClick={() => startDictation()}
+                  >
                     再来一遍
                   </button>
                   <button
@@ -4768,7 +4906,9 @@ export default function ReaderApp() {
               >
                 {readingAll ? '⏹ 停止' : '🔊 播放全文'}
               </button>
-              <span className="muted">共 {listenQuiz.questions.length} 题</span>
+              <span className="muted">
+                共 {listenQuestions.length} 题{listenWrongIds ? '（只做错题）' : ''}
+              </span>
               {listenSubmitted && listenResult && (
                 <span className="muted">
                   得分 {listenResult.correct}/{listenResult.total}（
@@ -4777,7 +4917,7 @@ export default function ReaderApp() {
               )}
             </div>
             <div className="listen-list">
-              {listenQuiz.questions.map((q, qi) => {
+              {listenQuestions.map((q, qi) => {
                 const got = listenAnswers[q.id] ?? ''
                 const ok = listenSubmitted && isListeningCorrect(q, got)
                 return (
@@ -4830,16 +4970,14 @@ export default function ReaderApp() {
                   提交判分
                 </button>
               ) : (
-                <button
-                  className="primary"
-                  onClick={() => {
-                    setListenAnswers({})
-                    setListenSubmitted(false)
-                    setListenResult(null)
-                  }}
-                >
-                  重做
-                </button>
+                <>
+                  {listenResult && listenResult.correct < listenResult.total && (
+                    <button className="primary" onClick={retryListenWrong}>
+                      重做错题 {listenResult.total - listenResult.correct}
+                    </button>
+                  )}
+                  <button onClick={showAllListen}>重做全部</button>
+                </>
               )}
               <button onClick={() => void copyListeningPrompt()}>重新出题</button>
             </div>
@@ -5286,6 +5424,20 @@ export default function ReaderApp() {
                   <span className="heat-cell lv2" /> <span className="heat-cell lv3" />{' '}
                   <span className="heat-cell lv4" /> 多
                 </div>
+                <div className="side-label">最近练习（考试 / 听写 / 听力理解）</div>
+                {practice.length ? (
+                  recentPractice(practice, 8).map((r, i) => (
+                    <div className="stat-line" key={i}>
+                      <span className="stat-name">{PRACTICE_LABEL[r.kind]}</span>
+                      <span className="stat-cat">
+                        {r.correct}/{r.total}（{Math.round(accuracy(r) * 100)}%）
+                      </span>
+                      <span className="stat-total muted">{new Date(r.at).toLocaleString()}</span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="muted">还没有练习记录</div>
+                )}
               </>
             )
           })()}
