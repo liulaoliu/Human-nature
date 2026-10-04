@@ -1,4 +1,4 @@
-import { useCallback, useEffect, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, type MouseEvent, type MutableRefObject, type RefObject } from 'react'
 import { snapSelection, wordSpans } from '../../core/wordSelect'
 import { lemmaOf, markWord } from '../../core/vocab'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
@@ -110,17 +110,17 @@ export function useSelection({
   serif,
   flash,
 }: UseSelectionParams) {
-  /** 点句子：切换选中；再点同一句 = 停止朗读。 */
+  /** 点句子：切换选中；再点同一句 = 停止朗读（点新句子也先停掉「朗读全文」）。 */
+  const selectedIdRef = useRef(selectedId)
+  selectedIdRef.current = selectedId
   const selectSentence = useCallback(
     (sid: string) => {
-      if (selectedId === sid) {
-        stopReadAll()
-        resetSpoken()
-        return
-      }
-      setSelectedId(sid)
+      const same = selectedIdRef.current === sid
+      stopReadAll()
+      resetSpoken()
+      if (!same) setSelectedId(sid)
     },
-    [selectedId, stopReadAll, resetSpoken, setSelectedId],
+    [stopReadAll, resetSpoken, setSelectedId],
   )
 
   /** 点正文里的生词 → 高亮并滚到生词本对应词条。 */
