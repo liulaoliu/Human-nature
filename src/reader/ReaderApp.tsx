@@ -29,7 +29,6 @@ import {
   normalizeWord,
   relemmaLibrary,
   removeItem,
-  review,
   reviewItem,
   sortItems,
   type ReviewGrade,
@@ -133,6 +132,8 @@ import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import WritingPanel from './panels/WritingPanel'
+import StudyPanel, { type StudyScope } from './panels/StudyPanel'
+import { fmtDur, fmtInterval } from './format'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -151,9 +152,6 @@ interface Doc {
   paragraphs: Paragraph[]
   sentences: Sentence[]
 }
-
-/** 背单词的范围：全部 / 错词 / 未掌握 / 本篇。 */
-type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
 
 /** AI 任务的键：分析任务 + 各练习/整理任务。 */
 type AiTaskKey =
@@ -189,30 +187,6 @@ const EDITION_LABEL: Record<ReturnType<typeof styleOf>, string> = {
 }
 function editionOf(key: string): string {
   return EDITION_LABEL[styleOf(key)]
-}
-
-/** 秒 → `m:ss` 或 `h:mm`（用于选词模式计时与统计） */
-function fmtDur(sec: number): string {
-  const m = Math.floor(sec / 60)
-  if (m < 60) return `${m}:${String(sec % 60).padStart(2, '0')}`
-  return `${Math.floor(m / 60)}h${String(m % 60).padStart(2, '0')}m`
-}
-
-/** 复习间隔（天）→「明天 / N 天后 / N 个月后」。 */
-function fmtInterval(days: number): string {
-  if (days <= 0) return '稍后'
-  if (days === 1) return '明天'
-  if (days < 30) return `${days} 天后`
-  return `${Math.round(days / 30)} 个月后`
-}
-
-/** 到期时间（ISO）→「现在 / 明天 / N 天后」。 */
-function fmtDue(iso: string | null): string {
-  if (!iso) return ''
-  const days = Math.ceil((new Date(iso).getTime() - Date.now()) / 86400000)
-  if (days <= 0) return '现在'
-  if (days === 1) return '明天'
-  return `${days} 天后`
 }
 
 /** 请求的词里，AI 没返回的（按 lemma 比较）。 */
@@ -4024,342 +3998,60 @@ export default function ReaderApp() {
         )}
 
         {studyQueue && (
-          <div className="study">
-            <div className="bar study-bar">
-              <button onClick={closeStudy}>结束（Esc）</button>
-              <button
-                onClick={() => {
-                  setStudyQueue(null)
-                  setQuizResults([])
-                  setQuizSetupOpen(true)
-                }}
-                title="直接考试：拼写 / 例句填空 / 搭配填空 / 听力填空"
-              >
-                考试
-              </button>
-              <span
-                className="view-toggle"
-                title="新学习：还没学过的词；复习：学过且到期的词（切换会立即重开一轮）"
-              >
-                <button
-                  className={studyMode === 'learn' ? 'primary' : ''}
-                  onClick={() => switchMode('learn')}
-                >
-                  新学习 {newCount}
-                </button>
-                <button
-                  className={studyMode === 'review' ? 'primary' : ''}
-                  onClick={() => switchMode('review')}
-                >
-                  复习 {dueCount}
-                </button>
-              </span>
-              <select
-                value={studyScope}
-                onChange={(e) => switchScope(e.target.value as StudyScope)}
-                title="背词范围；改完立即按新范围重开一轮"
-              >
-                <option value="article">本篇（只背这篇）</option>
-                <option value="unmastered">未掌握</option>
-                <option value="lapses">错词</option>
-                <option value="all">全部</option>
-              </select>
-              <button
-                onClick={startArticleAll}
-                title="把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）"
-              >
-                本篇全部
-              </button>
-              <select
-                value={String(newLimit)}
-                onChange={(e) => setNewLimit(Number(e.target.value))}
-                title="每天最多引入多少新词（下一轮生效）"
-              >
-                <option value="0">新词不限</option>
-                <option value="10">新词 10/天</option>
-                <option value="20">新词 20/天</option>
-                <option value="30">新词 30/天</option>
-                <option value="50">新词 50/天</option>
-              </select>
-              <label className="check-inline" title="看中文拼英文">
-                <input
-                  type="checkbox"
-                  checked={studySpelling}
-                  onChange={(e) => {
-                    setStudySpelling(e.target.checked)
-                    setStudyChecked(false)
-                    setStudyInput('')
-                  }}
-                />
-                拼写
-              </label>
-              <span className="muted">
-                {Math.min(studyIndex + 1, studyQueue.length)} / {studyQueue.length}
-                {studyMode === 'learn' && newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
-              </span>
-              <span
-                className={
-                  'study-timer' + (cardSeconds >= 25 ? ' slow' : cardSeconds >= 12 ? ' warn' : '')
-                }
-                title="这张卡停了多久；变红就是该翻面/评分了"
-              >
-                ⏱ {cardSeconds}s{cardSeconds >= 25 ? ' · 别墨迹' : ''}
-              </span>
-              <span className="muted study-total" title="本轮 / 累计 背单词时长；累计会记入统计">
-                本轮 {fmtDur(studyLive)} · 累计 {fmtDur(studyGrandSeconds)}
-              </span>
-            </div>
-            {studyCard
-              ? (() => {
-                  const spellingFront = studySpelling && !studyChecked
-                  const canGrade = studySpelling ? studyChecked : studyRevealed
-                  const correct = studyInput.trim().toLowerCase() === studyCard.word.trim().toLowerCase()
-                  return (
-                    <>
-                      <div
-                        className="study-card"
-                        onClick={spellingFront ? undefined : () => setStudyRevealed(true)}
-                      >
-                        {spellingFront ? (
-                          <div className="study-prompt">
-                            <div className="study-meaning">
-                              {studyCard.partOfSpeech && (
-                                <span className="cell-pos">{studyCard.partOfSpeech} </span>
-                              )}
-                              {studyCard.meaning ?? '（无释义）'}
-                            </div>
-                            <input
-                              className="study-input"
-                              autoFocus
-                              placeholder="拼出这个英文单词，回车检查"
-                              value={studyInput}
-                              onChange={(e) => setStudyInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault()
-                                  setStudyChecked(true)
-                                }
-                              }}
-                            />
-                          </div>
-                        ) : (
-                          <>
-                            <div className="study-word">
-                              {studyCard.word}
-                              <button
-                                className="speak"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  speak(studyCard.word)
-                                }}
-                                title="朗读"
-                              >
-                                🔊
-                              </button>
-                            </div>
-                            {studyCard.phonetic && (
-                              <div
-                                className="study-phon"
-                                title="点读发音"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  speak(studyCard.word)
-                                }}
-                              >
-                                {studyCard.phonetic}
-                              </div>
-                            )}
-                            {studyCard.usage.length > 0 && (
-                              <div className="study-usage">{studyCard.usage.join('；')}</div>
-                            )}
-                            {studySpelling && studyChecked && (
-                              <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
-                                {correct ? '✔ 正确' : `✘ 你写的是「${studyInput || '（空）'}」`}
-                              </div>
-                            )}
-                            {(studyRevealed || (studySpelling && studyChecked)) && (
-                              <div className="study-back">
-                                <div className="study-meaning">
-                                  {studyCard.partOfSpeech && (
-                                    <span className="cell-pos">{studyCard.partOfSpeech} </span>
-                                  )}
-                                  {studyCard.meaning ?? '（无释义）'}
-                                </div>
-                                {studyCard.examples.slice(0, 1).map((ex, i) => (
-                                  <div className="ex" key={i}>
-                                    {ex.text}
-                                    {ex.translation ? ` — ${ex.translation}` : ''}
-                                  </div>
-                                ))}
-                                {studyCard.source?.sentenceText && (
-                                  <div className="muted src">来源：{studyCard.source.sentenceText}</div>
-                                )}
-                                {studyCard.confusables && studyCard.confusables.length > 0 && (
-                                  <div className="muted study-conf">
-                                    易混：
-                                    {studyCard.confusables
-                                      .map((c) => `${c.word}${c.meaning ? `（${c.meaning}）` : ''}`)
-                                      .join('；')}
-                                  </div>
-                                )}
-                                <div className="muted study-srs">
-                                  复习 {studyCard.reviewState.repetitions} 次
-                                  {(studyCard.reviewState.lapses ?? 0) > 0
-                                    ? ` · 忘记 ${studyCard.reviewState.lapses} 次`
-                                    : ''}
-                                  {studyCard.reviewState.due
-                                    ? ` · 下次 ${fmtDue(studyCard.reviewState.due)}`
-                                    : ' · 还没排期'}
-                                </div>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </div>
-
-                      {/* 卡内维护：改词形/释义、删误加的词 */}
-                      <div className="bar study-tools">
-                        <button onClick={openStudyEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
-                          ✎ 编辑
-                        </button>
-                        <button
-                          className={studyDelArmed ? 'danger' : ''}
-                          onClick={studyDelete}
-                          title="删除这个误加的词（两步确认）"
-                        >
-                          {studyDelArmed ? '确认删除' : '删除'}
-                        </button>
-                        {(!studyCard.meaning || studyCard.usage.length === 0) && (
-                          <button
-                            className="primary"
-                            onClick={openStudyEdit}
-                            title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题"
-                          >
-                            ＋ 补全释义/用法
-                          </button>
-                        )}
-                        {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-                      </div>
-
-                      {studyEditOpen && studyDraft && (
-                        <div className="study-edit">
-                          <label>
-                            单词
-                            <input
-                              value={studyDraft.word}
-                              onChange={(e) => setStudyDraft({ ...studyDraft, word: e.target.value })}
-                            />
-                          </label>
-                          <label>
-                            音标
-                            <input
-                              value={studyDraft.phonetic}
-                              onChange={(e) => setStudyDraft({ ...studyDraft, phonetic: e.target.value })}
-                              placeholder="/.../"
-                            />
-                          </label>
-                          <label>
-                            词性
-                            <input
-                              value={studyDraft.partOfSpeech}
-                              onChange={(e) => setStudyDraft({ ...studyDraft, partOfSpeech: e.target.value })}
-                              placeholder="n. / v. / adj."
-                            />
-                          </label>
-                          <label className="wide">
-                            释义
-                            <textarea
-                              value={studyDraft.meaning}
-                              onChange={(e) => setStudyDraft({ ...studyDraft, meaning: e.target.value })}
-                              rows={2}
-                            />
-                          </label>
-                          <label className="wide">
-                            用法（分号分隔）
-                            <input
-                              value={studyDraft.usage}
-                              onChange={(e) => setStudyDraft({ ...studyDraft, usage: e.target.value })}
-                              placeholder="run a business；run out"
-                            />
-                          </label>
-                          <div className="bar">
-                            <button className="primary" onClick={saveStudyEdit}>
-                              保存
-                            </button>
-                            <button
-                              onClick={() => {
-                                setStudyEditOpen(false)
-                                setStudyDraft(null)
-                              }}
-                            >
-                              取消
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {canGrade ? (
-                        <>
-                          <div className="muted grade-preview">
-                            预计下次：认识 {fmtInterval(review(studyCard.reviewState, 'good').interval)} ·
-                            模糊 {fmtInterval(review(studyCard.reviewState, 'hard').interval)} · 忘记了{' '}
-                            {fmtInterval(review(studyCard.reviewState, 'again').interval)}
-                          </div>
-                          <div className="bar study-actions">
-                            <button className="primary" onClick={() => gradeStudy('good')}>
-                              认识 <kbd>1</kbd>
-                            </button>
-                            <button onClick={() => gradeStudy('hard')}>
-                              模糊 <kbd>2</kbd>
-                            </button>
-                            <button onClick={() => gradeStudy('again')}>
-                              忘记了 <kbd>3</kbd>
-                            </button>
-                          </div>
-                        </>
-                      ) : spellingFront ? (
-                        <button className="primary" onClick={() => setStudyChecked(true)}>
-                          检查（回车）
-                        </button>
-                      ) : (
-                        <button className="primary" onClick={() => setStudyRevealed(true)}>
-                          显示释义（空格）
-                        </button>
-                      )}
-                    </>
-                  )
-                })()
-              : (
-              <div className="study-done">
-                <p>
-                  本轮完成：认识 <b>{studyCounts.know}</b> · 模糊 <b>{studyCounts.fuzzy}</b> · 忘记了{' '}
-                  <b>{studyCounts.forgot}</b>，用时 {fmtDur(studyLive)}。
-                </p>
-                <div className="bar">
-                  {studyForgotRef.current.length > 0 && (
-                    <button className="primary" onClick={retryForgot}>
-                      重练忘记的 {studyForgotRef.current.length} 个
-                    </button>
-                  )}
-                  <button
-                    className={studyForgotRef.current.length ? '' : 'primary'}
-                    onClick={() => startStudy()}
-                  >
-                    再来一轮（{studyMode === 'review' ? '复习' : '新学习'}）
-                  </button>
-                  <button
-                    onClick={() => {
-                      setQuizResults([])
-                      setQuizSetupOpen(true)
-                    }}
-                  >
-                    考试
-                  </button>
-                  <button onClick={closeStudy}>回到阅读</button>
-                </div>
-              </div>
-            )}
-          </div>
+          <StudyPanel
+            card={studyCard}
+            queueLength={studyQueue.length}
+            index={studyIndex}
+            mode={studyMode}
+            scope={studyScope}
+            spelling={studySpelling}
+            revealed={studyRevealed}
+            checked={studyChecked}
+            input={studyInput}
+            counts={studyCounts}
+            cardSeconds={cardSeconds}
+            liveSeconds={studyLive}
+            grandSeconds={studyGrandSeconds}
+            newCount={newCount}
+            dueCount={dueCount}
+            newLimit={newLimit}
+            newToday={newToday}
+            gradeInfo={gradeInfo}
+            editOpen={studyEditOpen}
+            draft={studyDraft}
+            delArmed={studyDelArmed}
+            forgotCount={studyForgotRef.current.length}
+            onClose={closeStudy}
+            onExam={() => {
+              setStudyQueue(null)
+              setQuizResults([])
+              setQuizSetupOpen(true)
+            }}
+            onSwitchMode={switchMode}
+            onSwitchScope={switchScope}
+            onStartArticleAll={startArticleAll}
+            onNewLimitChange={setNewLimit}
+            onSpellingChange={(on) => {
+              setStudySpelling(on)
+              setStudyChecked(false)
+              setStudyInput('')
+            }}
+            onReveal={() => setStudyRevealed(true)}
+            onInputChange={setStudyInput}
+            onCheckSpelling={() => setStudyChecked(true)}
+            onSpeak={speak}
+            onOpenEdit={openStudyEdit}
+            onDelete={studyDelete}
+            onDraftChange={setStudyDraft}
+            onSaveEdit={saveStudyEdit}
+            onCancelEdit={() => {
+              setStudyEditOpen(false)
+              setStudyDraft(null)
+            }}
+            onGrade={gradeStudy}
+            onRetryForgot={retryForgot}
+            onRestart={() => startStudy()}
+          />
         )}
 
         {quizSetupOpen && !quizQueue && (
