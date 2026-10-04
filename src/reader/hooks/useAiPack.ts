@@ -179,14 +179,14 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     }
   }, [round.length, pending, webBatchSize, setAskedIds, flash])
 
-  /** 应用网页版整段回复（可能截断），更新进度并报告缺项。 */
+  /** 应用网页版整段回复（可能截断），更新进度并报告缺项。返回是否解析到结果。 */
   const applyWeb = useCallback(
-    (text: string) => {
+    (text: string): boolean => {
       const results = parseWebPackResults(text)
       if (!results.length) {
         onReport(['没解析出结果：确认粘贴的是 AI 的整段回复（含 @@@ANSWER 行，或严格 JSON）'])
         flash('没解析出结果')
-        return
+        return false
       }
       const { okCount, failCount, lines, appliedIds } = applyResults(results, round)
       const nextDone = new Set([...doneSet, ...appliedIds])
@@ -201,6 +201,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         ...lines.slice(0, 40),
       ])
       flash(`本批成功 ${okCount}，失败 ${failCount}；还差 ${left} 项`)
+      return true
     },
     [applyResults, round, doneSet, askedSet, setDoneIds, onReport, flash],
   )

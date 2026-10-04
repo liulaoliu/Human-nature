@@ -2660,6 +2660,21 @@ export default function ReaderApp() {
     onReport: setPasteReport,
   })
 
+  /**
+   * 统一的「应用结果」：先按网页版工作包（@@@ANSWER / JSON results）解析，
+   * 认得出就应用并清空输入栏；否则退回单任务（lastTask）解析。
+   */
+  const applyAnyPaste = useCallback(() => {
+    const text = pasted.trim()
+    if (!text) return
+    const isPack = text.includes('@@@ANSWER') || /"results"\s*:/.test(text)
+    if (isPack) {
+      if (applyAiWeb(text)) setPasted('')
+      return
+    }
+    applyPaste()
+  }, [pasted, applyAiWeb, applyPaste])
+
   const doExportAnki = useCallback(
     (items: VocabItem[]) =>
       download('vocab-anki.csv', toAnkiCSV(sortItems(items, 'word')), 'text/csv;charset=utf-8'),
@@ -3277,7 +3292,7 @@ export default function ReaderApp() {
           }}
           pasteReport={pasteReport}
           pasteMissingCount={pasteMissing?.words.length ?? 0}
-          onApplyPaste={applyPaste}
+          onApplyPaste={applyAnyPaste}
           onCopyMissingAgain={() => void copyMissingAgain()}
           aiJobCount={aiJobCount}
           onExportAiJobs={exportAiJobs}
@@ -3286,7 +3301,6 @@ export default function ReaderApp() {
           aiWebBatchSize={aiWebBatchSize}
           onAiWebBatchSizeChange={setAiWebBatchSize}
           onCopyWebPrompt={() => void copyAiWebPrompt()}
-          onApplyWeb={() => applyAiWeb(pasted)}
           onCopyWebMissing={() => void copyAiWebMissing()}
           onRefreshWeb={refreshAiWebRound}
           webTotal={aiWebTotal}

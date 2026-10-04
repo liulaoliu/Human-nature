@@ -49,7 +49,6 @@ export interface SidePickProps {
   aiWebBatchSize: number
   onAiWebBatchSizeChange: (n: number) => void
   onCopyWebPrompt: () => void
-  onApplyWeb: () => void
   onCopyWebMissing: () => void
   onRefreshWeb: () => void
   webTotal: number
@@ -103,7 +102,6 @@ export default function SidePick({
   aiWebBatchSize,
   onAiWebBatchSizeChange,
   onCopyWebPrompt,
-  onApplyWeb,
   onCopyWebMissing,
   onRefreshWeb,
   webTotal,
@@ -263,10 +261,10 @@ export default function SidePick({
             <option value="12">12/批</option>
             <option value="0">全部/批</option>
           </select>
+          <div className="muted web-pending">
+              复制一批 → 网页问一次 → 把回复整段贴到上面的框 → 点「应用结果」。
+          </div>
           <div className="bar" style={{ marginTop: 6 }}>
-            <button className="primary" onClick={onApplyWeb} disabled={!pasted.trim()}>
-              ✅ 应用网页版结果
-            </button>
             {webMissing > 0 && (
               <button onClick={onCopyWebMissing} title="只重发「问过但没成功」的项">
                 🔁 重发缺项 {webMissing}
