@@ -600,6 +600,15 @@ export default function ReaderApp() {
       return 12
     }
   })
+  /** 填空模式下每题的挖空数量 */
+  const [dictBlankCount, setDictBlankCount] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:dictBlankCount') ?? '2')
+      return Number.isFinite(n) && n >= 1 && n <= 8 ? n : 2
+    } catch {
+      return 2
+    }
+  })
   const libraryLemmasRef = useRef<Set<string>>(new Set())
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
@@ -973,6 +982,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [dictWords])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:dictBlankCount', String(dictBlankCount))
+    } catch {
+      // 忽略
+    }
+  }, [dictBlankCount])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1373,7 +1389,7 @@ export default function ReaderApp() {
           const t = chunk.trim()
           if (!t) return
           // 填空模式：这一题挖不出空，就不出（别算作一题）
-          if (mode === 'cloze' && pickBlankTargets(t, libraryLemmasRef.current, 2).length === 0) return
+          if (mode === 'cloze' && pickBlankTargets(t, libraryLemmasRef.current, dictBlankCount).length === 0) return
           items.push({ id: `${s.id}-${ci}`, text: t })
         })
       })
@@ -1393,7 +1409,7 @@ export default function ReaderApp() {
       setDictDiff(null)
       setDictBlanks([])
     },
-    [doc, dictMode, dictWords, flash],
+    [doc, dictMode, dictWords, dictBlankCount, flash],
   )
 
   const clearDictAdvance = useCallback(() => {
@@ -2090,8 +2106,8 @@ export default function ReaderApp() {
   const dictCloze = useMemo(() => {
     if (dictMode !== 'cloze' || !dictQueue || dictIndex >= dictQueue.length) return null
     const text = dictQueue[dictIndex].text
-    return makeCloze(text, pickBlankTargets(text, libraryLemmas, 2))
-  }, [dictMode, dictQueue, dictIndex, libraryLemmas])
+    return makeCloze(text, pickBlankTargets(text, libraryLemmas, dictBlankCount))
+  }, [dictMode, dictQueue, dictIndex, libraryLemmas, dictBlankCount])
 
   // 换题后把焦点送回输入框（autoFocus 只首次生效，换题必须手动聚焦）
   useEffect(() => {
@@ -4598,6 +4614,23 @@ export default function ReaderApp() {
                 <option value="12">每句 12 词</option>
                 <option value="20">每句 20 词</option>
               </select>
+              {dictMode === 'cloze' && (
+                <select
+                  value={String(dictBlankCount)}
+                  onChange={(e) => {
+                    setDictBlankCount(Number(e.target.value))
+                    setDictChecked(false)
+                    setDictBlanks([])
+                    setDictDiff(null)
+                  }}
+                  title="填空模式下每题挖几个空"
+                >
+                  <option value="1">填空 1 个/题</option>
+                  <option value="2">填空 2 个/题</option>
+                  <option value="3">填空 3 个/题</option>
+                  <option value="5">填空 5 个/题</option>
+                </select>
+              )}
               <span className="muted">
                 {Math.min(dictIndex + 1, dictQueue.length)} / {dictQueue.length}
               </span>
