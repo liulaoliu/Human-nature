@@ -37,13 +37,6 @@ import { buildReadiness } from '../core/readiness'
 import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
-import {
-  buildImitationTaskPrompt,
-  buildWritingFeedbackPrompt,
-  type ImitationTask,
-  type WritingFeedback,
-  type WritingRecord,
-} from '../core/writing'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import VocabList, { type VocabEditPatch } from './VocabList'
@@ -74,6 +67,7 @@ import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
+import { useWriting } from './hooks/useWriting'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -116,22 +110,6 @@ function loadBatchMap(): Record<string, BatchItem[]> {
   } catch {
     return {}
   }
-}
-
-/** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
-function loadWritingDraft(): {
-  model: string
-  text: string
-  task: ImitationTask | null
-} {
-  try {
-    const raw = localStorage.getItem('reader:writingDraft')
-    const v = raw ? (JSON.parse(raw) as { model?: string; text?: string; task?: ImitationTask | null }) : null
-    if (v && typeof v === 'object') return { model: v.model ?? '', text: v.text ?? '', task: v.task ?? null }
-  } catch {
-    // 忽略
-  }
-  return { model: '', text: '', task: null }
 }
 
 export default function ReaderApp() {
@@ -277,14 +255,6 @@ export default function ReaderApp() {
   const listenApiRef = useRef<ReturnType<typeof useListening> | null>(null)
   /** 是否在正文里显示语言点 */
   const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
-  /** 仿写训练：范句 / 任务 / 作答 / 批改 */
-  const [writingOpen, setWritingOpen] = useState(false)
-  const [writingModel, setWritingModel] = useState(() => loadWritingDraft().model)
-  const [writingTask, setWritingTask] = useState<ImitationTask | null>(() => loadWritingDraft().task)
-  const [writingText, setWritingText] = useState(() => loadWritingDraft().text)
-  const [writingFeedback, setWritingFeedback] = useState<WritingFeedback | null>(null)
-  /** 仿写练习历史（存本机） */
-  const [writingHistory, setWritingHistory] = useLocalStorageState<WritingRecord[]>('reader:writingHistory', [])
   /** 学习活动统计（按天，落 localStorage） */
   const [activity, setActivity] = useLocalStorageState<DayActivity[]>('reader:activity', [])
   /** 练习成绩记录（考试 / 听写 / 听力理解） */
@@ -446,18 +416,6 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [batch, articleIdentity])
-  // 仿写草稿（范句 / 作答 / 任务）持久化
-  useEffect(() => {
-    try {
-      localStorage.setItem(
-        'reader:writingDraft',
-        JSON.stringify({ model: writingModel, text: writingText, task: writingTask }),
-      )
-    } catch {
-      // 忽略
-    }
-  }, [writingModel, writingText, writingTask])
-
   const flash = useCallback((message: string) => {
     setToast(message)
     window.setTimeout(() => setToast(''), 1900)
@@ -764,19 +722,6 @@ export default function ReaderApp() {
     grade: gradeQuick,
   } = quickApi
 
-  // 听力理解题 / 仿写：Esc 退出
-  useEffect(() => {
-    if (!listenOpen && !writingOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        setListenOpen(false)
-        setWritingOpen(false)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [listenOpen, writingOpen])
-
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
     setBatch((prev) => {
@@ -837,73 +782,53 @@ export default function ReaderApp() {
     }
   }, [doc, flash])
 
-  /** 打开仿写训练（范句默认用当前选中句）。 */
-  const openWriting = useCallback(() => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    const start = doc.sentences.find((s) => s.id === selectedId) ?? doc.sentences[0]
-    closeStudy()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(null)
-    dictApiRef.current?.close()
-    setListenOpen(false)
-    setWritingOpen(true)
-    setWritingModel(start.text)
-    setWritingTask(null)
-    setWritingText('')
-    setWritingFeedback(null)
-  }, [doc, selectedId, flash])
+  /** 仿写训练（逻辑在 hooks/useWriting）。 */
+  const {
+    open: writingOpen,
+    setOpen: setWritingOpen,
+    model: writingModel,
+    setModel: setWritingModel,
+    task: writingTask,
+    setTask: setWritingTask,
+    text: writingText,
+    setText: setWritingText,
+    feedback: writingFeedback,
+    setFeedback: setWritingFeedback,
+    history: writingHistory,
+    setHistory: setWritingHistory,
+    start: openWriting,
+    copyImitationTask,
+    copyFeedback,
+    loadRecord: loadWritingRecord,
+  } = useWriting({
+    doc,
+    selectedId,
+    flash,
+    setLastTask,
+    askedWordsRef,
+    askedIdsRef,
+    closeOthers: () => {
+      closeStudy()
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      quickApiRef.current?.close()
+      dictApiRef.current?.close()
+      setListenOpen(false)
+    },
+  })
 
-  const copyImitationTask = useCallback(async () => {
-    const model = writingModel.trim()
-    if (!model) {
-      flash('先选一句范句')
-      return
+  // 听力理解题 / 仿写：Esc 退出
+  useEffect(() => {
+    if (!listenOpen && !writingOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setListenOpen(false)
+        setWritingOpen(false)
+      }
     }
-    const s = doc?.sentences.find((x) => x.text === model)
-    setLastTask('imitation')
-    askedWordsRef.current = []
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(
-        buildImitationTaskPrompt({ model, structure: s?.language?.structure, mustUse: s?.language?.phrases }),
-      )
-      flash('已复制仿写任务提示词；把 AI 的 JSON 粘回「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [writingModel, doc, flash])
-
-  const copyFeedback = useCallback(async () => {
-    if (!writingTask) {
-      flash('先生成仿写任务')
-      return
-    }
-    if (!writingText.trim()) {
-      flash('先写点东西再批改')
-      return
-    }
-    setLastTask('feedback')
-    askedWordsRef.current = []
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(buildWritingFeedbackPrompt(writingTask, writingText))
-      flash('已复制批改提示词；把 AI 的 JSON 粘回「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [writingTask, writingText, flash])
-
-  /** 载入一条历史记录回看。 */
-  const loadWritingRecord = useCallback((rec: WritingRecord) => {
-    setWritingModel(rec.model)
-    setWritingText(rec.text)
-    setWritingFeedback(rec.feedback)
-    setWritingTask(rec.task ?? null)
-  }, [])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [listenOpen, writingOpen])
 
   /** 记一次选词模式会话（sessions 由 useLocalStorageState 落盘，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
