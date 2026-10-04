@@ -1369,9 +1369,13 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
 
-  /** 逐句听写：长句按「每句词数」切短；填空模式下挖不出空的句子不出。 */
+  /**
+   * 逐句听写。
+   *   - 整句模式：长句按「每句词数」切短（听写整句）。
+   *   - 填空模式：**不硬切句子**，用整句；一句凑不够空就并下一句，直到够空（最多 3 句 / 60 词）。
+   */
   const startDictation = useCallback(
-    (modeOverride?: 'full' | 'cloze', wordsOverride?: number) => {
+    (opts?: { mode?: 'full' | 'cloze'; words?: number; blanks?: number }) => {
       if (dictAdvanceRef.current) {
         window.clearTimeout(dictAdvanceRef.current)
         dictAdvanceRef.current = null
@@ -1380,19 +1384,45 @@ export default function ReaderApp() {
         flash('先打开一篇文章')
         return
       }
-      const mode = modeOverride ?? dictMode
-      const maxWords = wordsOverride ?? dictWords
-      if (wordsOverride != null) setDictWords(wordsOverride)
+      const mode = opts?.mode ?? dictMode
+      const maxWords = opts?.words ?? dictWords
+      const blankCount = opts?.blanks ?? dictBlankCount
+      if (opts?.words != null) setDictWords(opts.words)
+      if (opts?.blanks != null) setDictBlankCount(opts.blanks)
+
+      const pool = libraryLemmasRef.current
       const items: { id: string; text: string }[] = []
-      doc.sentences.forEach((s) => {
-        splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
-          const t = chunk.trim()
-          if (!t) return
-          // 填空模式：这一题挖不出空，就不出（别算作一题）
-          if (mode === 'cloze' && pickBlankTargets(t, libraryLemmasRef.current, dictBlankCount).length === 0) return
-          items.push({ id: `${s.id}-${ci}`, text: t })
+
+      if (mode === 'cloze') {
+        // 填空：用整句；不够空就并下一句
+        let i = 0
+        const sents = doc.sentences
+        while (i < sents.length) {
+          let text = sents[i].text.trim()
+          let j = i + 1
+          while (
+            j < sents.length &&
+            pickBlankTargets(text, pool, blankCount).length < blankCount &&
+            j - i < 3 &&
+            text.split(/\s+/).length < 60
+          ) {
+            text = `${text} ${sents[j].text.trim()}`.trim()
+            j += 1
+          }
+          if (pickBlankTargets(text, pool, blankCount).length > 0) {
+            items.push({ id: `${sents[i].id}-c`, text })
+          }
+          i = j
+        }
+      } else {
+        doc.sentences.forEach((s) => {
+          splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
+            const t = chunk.trim()
+            if (t) items.push({ id: `${s.id}-${ci}`, text: t })
+          })
         })
-      })
+      }
+
       if (!items.length) {
         flash(mode === 'cloze' ? '这篇没有可用于填空的句子' : '这篇没有可听写的句子')
         return
@@ -4590,21 +4620,21 @@ export default function ReaderApp() {
               <span className="view-toggle" title="整句：听写整句；填空：句中挖掉几个词来填">
                 <button
                   className={dictMode === 'full' ? 'primary' : ''}
-                  onClick={() => startDictation('full')}
+                  onClick={() => startDictation({ mode: 'full' })}
                 >
                   整句
                 </button>
                 <button
                   className={dictMode === 'cloze' ? 'primary' : ''}
-                  onClick={() => startDictation('cloze')}
+                  onClick={() => startDictation({ mode: 'cloze' })}
                 >
                   填空
                 </button>
               </span>
               <select
                 value={String(dictWords)}
-                onChange={(e) => startDictation(undefined, Number(e.target.value))}
-                title="每句最多多少词（越长越难）；改完立即重开一轮"
+                onChange={(e) => startDictation({ words: Number(e.target.value) })}
+                title="整句模式下每句最多多少词（越长越难）；改完立即重开一轮"
               >
                 <option value="1">每句 1 词</option>
                 <option value="2">每句 2 词</option>
@@ -4617,13 +4647,8 @@ export default function ReaderApp() {
               {dictMode === 'cloze' && (
                 <select
                   value={String(dictBlankCount)}
-                  onChange={(e) => {
-                    setDictBlankCount(Number(e.target.value))
-                    setDictChecked(false)
-                    setDictBlanks([])
-                    setDictDiff(null)
-                  }}
-                  title="填空模式下每题挖几个空"
+                  onChange={(e) => startDictation({ blanks: Number(e.target.value) })}
+                  title="填空模式下每题挖几个空；不够空会自动并长句子"
                 >
                   <option value="1">填空 1 个/题</option>
                   <option value="2">填空 2 个/题</option>
