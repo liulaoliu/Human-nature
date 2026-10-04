@@ -2,12 +2,15 @@ import { describe, it, expect } from 'vitest'
 import {
   buildAiJobs,
   buildJobPack,
+  buildWebPackPrompt,
   chunk,
   countAiJobs,
   isAiJobTask,
   makeJobId,
+  missingJobIds,
   parseAiResultPack,
   parseJobPack,
+  parseWebPackResults,
   type AiJob,
   type AiJobsInput,
 } from './aiPackage'
@@ -224,5 +227,53 @@ describe('buildAiJobs / countAiJobs', () => {
     const jobs = buildAiJobs(emptyInput({ batch: [{ word: 'a' }], lemmaCandidates: [mkItem()], posCandidates: [mkItem()] }))
     const ids = jobs.map((j) => j.id)
     expect(new Set(ids).size).toBe(ids.length)
+  })
+})
+
+describe('buildWebPackPrompt / parseWebPackResults', () => {
+  it('拼出一条含任务与分隔符说明的提示词', () => {
+    const p = buildWebPackPrompt([job({ id: 'lookup-1' }), job({ id: 'confusable-2', task: 'confusable' })])
+    expect(p).toContain('@@@ANSWER 任务id')
+    expect(p).toContain('----- 任务 lookup-1')
+    expect(p).toContain('----- 任务 confusable-2')
+    expect(p).toContain('PROMPT')
+  })
+  it('分批时标注第几批', () => {
+    const p = buildWebPackPrompt([job()], { batchIndex: 2, batchCount: 3, remaining: 5 })
+    expect(p).toContain('第 2 / 3 批')
+    expect(p).toContain('还有 5 个任务')
+  })
+  it('按 @@@ANSWER 切出各任务答案', () => {
+    const text = [
+      '好的，这是结果：',
+      '@@@ANSWER lookup-1',
+      'abandon | v. 放弃',
+      '@@@END',
+      '@@@ANSWER confusable-2',
+      'run | 跑；经营',
+      '@@@END',
+    ].join('\n')
+    const r = parseWebPackResults(text)
+    expect(r).toEqual([
+      { id: 'lookup-1', raw: 'abandon | v. 放弃' },
+      { id: 'confusable-2', raw: 'run | 跑；经营' },
+    ])
+  })
+  it('容忍缺 @@@END（截断）与代码围栏', () => {
+    const text = '@@@ANSWER a-1\n```\nX\n```\n@@@ANSWER a-2\nY'
+    const r = parseWebPackResults(text)
+    expect(r).toEqual([
+      { id: 'a-1', raw: 'X' },
+      { id: 'a-2', raw: 'Y' },
+    ])
+  })
+  it('没有分隔符时退回严格 JSON', () => {
+    const r = parseWebPackResults('{"results":[{"id":"z-1","raw":"ok"}]}')
+    expect(r).toEqual([{ id: 'z-1', raw: 'ok' }])
+  })
+  it('missingJobIds 找出没返回的', () => {
+    const jobs = [job({ id: 'a-1' }), job({ id: 'b-2' })]
+    expect(missingJobIds(jobs, [{ id: 'a-1' }])).toEqual(['b-2'])
+    expect(missingJobIds(jobs, [])).toEqual(['a-1', 'b-2'])
   })
 })

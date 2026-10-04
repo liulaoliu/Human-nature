@@ -3186,8 +3186,19 @@ export default function ReaderApp() {
     ],
   )
 
-  /** AI 工作包：导出待办 / 导入结果。 */
-  const { jobCount: aiJobCount, exportJobs: exportAiJobs, fileRef: aiFileRef, onFile: onAiFile } = useAiPack({
+  /** AI 工作包：导出待办 / 导入结果（agent）+ 网页版提示词 / 应用 / 重问缺项。 */
+  const {
+    jobCount: aiJobCount,
+    exportJobs: exportAiJobs,
+    fileRef: aiFileRef,
+    onFile: onAiFile,
+    webBatchSize: aiWebBatchSize,
+    setWebBatchSize: setAiWebBatchSize,
+    copyWebPrompt: copyAiWebPrompt,
+    applyWeb: applyAiWeb,
+    copyWebMissing: copyAiWebMissing,
+    missingCount: aiMissingCount,
+  } = useAiPack({
     jobsInput: aiJobsInput,
     applyTaskResult,
     download,
@@ -4032,6 +4043,12 @@ export default function ReaderApp() {
           onExportAiJobs={exportAiJobs}
           aiFileRef={aiFileRef}
           onAiFile={onAiFile}
+          aiWebBatchSize={aiWebBatchSize}
+          onAiWebBatchSizeChange={setAiWebBatchSize}
+          onCopyWebPrompt={() => void copyAiWebPrompt()}
+          onApplyWeb={() => applyAiWeb(pasted)}
+          aiMissingCount={aiMissingCount}
+          onCopyWebMissing={() => void copyAiWebMissing()}
           confusableBatchCount={confusableBatch.length}
           confusableTodoCount={confusableTodo.length}
           onCopyConfusable={() => void copyConfusablePrompt()}

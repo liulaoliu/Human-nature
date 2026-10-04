@@ -39,11 +39,19 @@ export interface SidePickProps {
   onApplyPaste: () => void
   onCopyMissingAgain: () => void
 
-  /** AI 工作包。 */
+  /** AI 工作包（agent 路径）。 */
   aiJobCount: number
   onExportAiJobs: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
+
+  /** AI 工作包（网页版 / DeepSeek 路径）。 */
+  aiWebBatchSize: number
+  onAiWebBatchSizeChange: (n: number) => void
+  onCopyWebPrompt: () => void
+  onApplyWeb: () => void
+  aiMissingCount: number
+  onCopyWebMissing: () => void
 
   /** 混淆项 / 原形 / -ing-ed / 去重。 */
   confusableBatchCount: number
@@ -87,6 +95,12 @@ export default function SidePick({
   onExportAiJobs,
   aiFileRef,
   onAiFile,
+  aiWebBatchSize,
+  onAiWebBatchSizeChange,
+  onCopyWebPrompt,
+  onApplyWeb,
+  aiMissingCount,
+  onCopyWebMissing,
   confusableBatchCount,
   confusableTodoCount,
   onCopyConfusable,
@@ -194,6 +208,37 @@ export default function SidePick({
           📥 导入 AI 结果
         </button>
         <input ref={aiFileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={onAiFile} />
+
+        <div className="ai-web">
+          <div className="muted">
+            网页版（DeepSeek 等）：复制提示词 → 网页粘贴 → 整段回复贴回上面的框 → 应用；漏答的会提示重问。
+          </div>
+          <button onClick={onCopyWebPrompt} disabled={!aiJobCount} title="复制一条含全部待办的工作包提示词；可分批，避免网页端截断">
+            📋 复制网页版提示词
+          </button>
+          <select
+            value={String(aiWebBatchSize)}
+            onChange={(e) => onAiWebBatchSizeChange(Number(e.target.value))}
+            style={{ marginLeft: 6 }}
+            title="每批几个任务（网页端回复容易截断，分批更稳；分批时要一批批复制/应用）"
+          >
+            <option value="4">4/批</option>
+            <option value="6">6/批</option>
+            <option value="8">8/批</option>
+            <option value="12">12/批</option>
+            <option value="0">全部/批</option>
+          </select>
+          <div className="bar" style={{ marginTop: 6 }}>
+            <button className="primary" onClick={onApplyWeb} disabled={!pasted.trim()}>
+              ✅ 应用网页版结果
+            </button>
+            {aiMissingCount > 0 && (
+              <button onClick={onCopyWebMissing} title="把上次没返回的任务再问一遍">
+                🔁 复制未返回的 {aiMissingCount} 项
+              </button>
+            )}
+          </div>
+        </div>
       </div>
       <button className="primary" onClick={onApplyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
         应用结果
