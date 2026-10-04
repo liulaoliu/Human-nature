@@ -111,12 +111,14 @@ export function dictationWrongWords(result: DiffResult): string[] {
 /**
  * 把长句按标点（, ; : — –）切成更适合听写的短块；单块仍超过 maxWords 就按词硬切。
  * 用于「一句话好几十秒」听不下来的情况。
+ *
+ * 注意：**逗号后面紧跟数字时不切**，避免把 `1,234,567` 这种长数字切断。
  */
 export function splitForDictation(text: string, maxWords = 12): string[] {
   const t = text.trim()
   if (!t) return []
   const out: string[] = []
-  for (const part of t.split(/(?<=[,;:—–])/)) {
+  for (const part of t.split(/(?<=[,;:—–])(?!\d)/)) {
     const p = part.trim()
     if (!p) continue
     const words = p.split(/\s+/)
@@ -173,7 +175,12 @@ export function pickBlankTargets(
     if (pool.has(low) || pool.has(lemmaOf(bare))) lib.push(w.text)
     else if (bare.length >= 5 && !STOPWORDS.has(low)) cands.push(w.text)
   }
-  const source = lib.length ? lib : cands
+  const source = lib.length
+    ? lib
+    : // 没有生词本词时退而挑「较长」的实词（更难一点），再随机
+      [...cands]
+        .sort((a, b) => b.replace(/[^A-Za-z'-]/g, '').length - a.replace(/[^A-Za-z'-]/g, '').length)
+        .slice(0, Math.max(n, 6))
   if (!source.length) return []
   const chosen: string[] = []
   const shuffled = shuffleQuiz(source, rnd)

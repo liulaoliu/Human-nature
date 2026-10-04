@@ -66,6 +66,9 @@ describe('splitForDictation', () => {
     const words = Array.from({ length: 25 }, (_, i) => `w${i}`).join(' ')
     expect(splitForDictation(words, 10).map((s) => s.split(' ').length)).toEqual([10, 10, 5])
   })
+  it('长数字不被逗号切断', () => {
+    expect(splitForDictation('Sales rose to 1,234,567 last year.')).toEqual(['Sales rose to 1,234,567 last year.'])
+  })
   it('空串 → []', () => {
     expect(splitForDictation('   ')).toEqual([])
   })

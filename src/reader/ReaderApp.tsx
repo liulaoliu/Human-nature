@@ -591,6 +591,16 @@ export default function ReaderApp() {
       return 'full'
     }
   })
+  /** 每句最多多少词（长句按此切短，用户可调） */
+  const [dictWords, setDictWords] = useState(() => {
+    try {
+      const n = Number(localStorage.getItem('reader:dictWords') ?? '12')
+      return Number.isFinite(n) && n >= 1 && n <= 30 ? n : 12
+    } catch {
+      return 12
+    }
+  })
+  const libraryLemmasRef = useRef<Set<string>>(new Set())
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
@@ -956,6 +966,13 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [dictMode])
+  useEffect(() => {
+    try {
+      localStorage.setItem('reader:dictWords', String(dictWords))
+    } catch {
+      // 忽略
+    }
+  }, [dictWords])
   // 换文章时载入该篇已生成的听力理解题
   useEffect(() => {
     try {
@@ -1336,37 +1353,48 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
 
-  /** 逐句听写：长句自动切短，按文章顺序播放。 */
-  const startDictation = useCallback(() => {
-    if (dictAdvanceRef.current) {
-      window.clearTimeout(dictAdvanceRef.current)
-      dictAdvanceRef.current = null
-    }
-    if (!doc) {
-      flash('先打开一篇文章')
-      return
-    }
-    const items: { id: string; text: string }[] = []
-    doc.sentences.forEach((s) => {
-      splitForDictation(s.text, 12).forEach((chunk, ci) => {
-        if (chunk.trim()) items.push({ id: `${s.id}-${ci}`, text: chunk })
+  /** 逐句听写：长句按「每句词数」切短；填空模式下挖不出空的句子不出。 */
+  const startDictation = useCallback(
+    (modeOverride?: 'full' | 'cloze', wordsOverride?: number) => {
+      if (dictAdvanceRef.current) {
+        window.clearTimeout(dictAdvanceRef.current)
+        dictAdvanceRef.current = null
+      }
+      if (!doc) {
+        flash('先打开一篇文章')
+        return
+      }
+      const mode = modeOverride ?? dictMode
+      const maxWords = wordsOverride ?? dictWords
+      if (wordsOverride != null) setDictWords(wordsOverride)
+      const items: { id: string; text: string }[] = []
+      doc.sentences.forEach((s) => {
+        splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
+          const t = chunk.trim()
+          if (!t) return
+          // 填空模式：这一题挖不出空，就不出（别算作一题）
+          if (mode === 'cloze' && pickBlankTargets(t, libraryLemmasRef.current, 2).length === 0) return
+          items.push({ id: `${s.id}-${ci}`, text: t })
+        })
       })
-    })
-    if (!items.length) {
-      flash('这篇没有可听写的句子')
-      return
-    }
-    setStudyQueue(null)
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(null)
-    setDictQueue(items)
-    setDictIndex(0)
-    setDictInput('')
-    setDictChecked(false)
-    setDictDiff(null)
-    setDictBlanks([])
-  }, [doc, flash])
+      if (!items.length) {
+        flash(mode === 'cloze' ? '这篇没有可用于填空的句子' : '这篇没有可听写的句子')
+        return
+      }
+      setDictMode(mode)
+      setStudyQueue(null)
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      setQuickQueue(null)
+      setDictQueue(items)
+      setDictIndex(0)
+      setDictInput('')
+      setDictChecked(false)
+      setDictDiff(null)
+      setDictBlanks([])
+    },
+    [doc, dictMode, dictWords, flash],
+  )
 
   const clearDictAdvance = useCallback(() => {
     if (dictAdvanceRef.current) {
@@ -2053,6 +2081,11 @@ export default function ReaderApp() {
     return s
   }, [library.items])
 
+  // 供更早的回调（如 startDictation）读取，避开声明顺序
+  useEffect(() => {
+    libraryLemmasRef.current = libraryLemmas
+  }, [libraryLemmas])
+
   /** 听写·填空模式：当前短块的挖空题（每块稳定，不随重渲染乱跳）。 */
   const dictCloze = useMemo(() => {
     if (dictMode !== 'cloze' || !dictQueue || dictIndex >= dictQueue.length) return null
@@ -2071,6 +2104,12 @@ export default function ReaderApp() {
   useEffect(() => {
     dictClozeRef.current = dictCloze
   }, [dictCloze])
+
+  // 填空模式下万一遇到「没空可填」的题，自动跳过（理论上 startDictation 已过滤）
+  useEffect(() => {
+    if (!dictQueue || dictIndex >= dictQueue.length) return
+    if (dictMode === 'cloze' && (!dictCloze || dictCloze.blanks.length === 0)) nextDict()
+  }, [dictQueue, dictIndex, dictMode, dictCloze, nextDict])
 
   // 卸载时清掉「自动下一句」的定时器
   useEffect(() => {
@@ -4535,31 +4574,30 @@ export default function ReaderApp() {
               <span className="view-toggle" title="整句：听写整句；填空：句中挖掉几个词来填">
                 <button
                   className={dictMode === 'full' ? 'primary' : ''}
-                  onClick={() => {
-                    clearDictAdvance()
-                    setDictMode('full')
-                    setDictChecked(false)
-                    setDictInput('')
-                    setDictBlanks([])
-                    setDictDiff(null)
-                  }}
+                  onClick={() => startDictation('full')}
                 >
                   整句
                 </button>
                 <button
                   className={dictMode === 'cloze' ? 'primary' : ''}
-                  onClick={() => {
-                    clearDictAdvance()
-                    setDictMode('cloze')
-                    setDictChecked(false)
-                    setDictInput('')
-                    setDictBlanks([])
-                    setDictDiff(null)
-                  }}
+                  onClick={() => startDictation('cloze')}
                 >
                   填空
                 </button>
               </span>
+              <select
+                value={String(dictWords)}
+                onChange={(e) => startDictation(undefined, Number(e.target.value))}
+                title="每句最多多少词（越长越难）；改完立即重开一轮"
+              >
+                <option value="1">每句 1 词</option>
+                <option value="2">每句 2 词</option>
+                <option value="3">每句 3 词</option>
+                <option value="5">每句 5 词</option>
+                <option value="8">每句 8 词</option>
+                <option value="12">每句 12 词</option>
+                <option value="20">每句 20 词</option>
+              </select>
               <span className="muted">
                 {Math.min(dictIndex + 1, dictQueue.length)} / {dictQueue.length}
               </span>
@@ -4644,7 +4682,7 @@ export default function ReaderApp() {
               <div className="study-done">
                 <p>听写完成，共 {dictQueue.length} 段。</p>
                 <div className="bar">
-                  <button className="primary" onClick={startDictation}>
+                  <button className="primary" onClick={() => startDictation()}>
                     再来一遍
                   </button>
                   <button
@@ -5397,9 +5435,9 @@ export default function ReaderApp() {
             快刷
           </button>
           <button
-            onClick={startDictation}
+            onClick={() => startDictation()}
             disabled={!doc}
-            title="逐句听写：按文章顺序播句子，听写整句，逐词 diff；Tab 重听，回车检查"
+            title="逐句听写：按文章顺序播句子，听写整句或听音填空；Tab 重听，回车检查"
           >
             听写
           </button>
