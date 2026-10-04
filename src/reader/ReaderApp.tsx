@@ -4,7 +4,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ChangeEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react'
@@ -97,16 +96,7 @@ import {
   type MistakeEntry,
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
-import {
-  buildAiJobs,
-  buildJobPack,
-  countAiJobs,
-  isAiJobTask,
-  parseAiResultPack,
-  parseJobPack,
-  type AiJob,
-  type AiJobsInput,
-} from '../core/aiPackage'
+import { type AiJobsInput } from '../core/aiPackage'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
 import {
   addWritingRecord,
@@ -135,6 +125,8 @@ import SideOverview from './panels/SideOverview'
 import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
 import { fmtDur, fmtInterval } from './format'
+import { useSpeaking } from './hooks/useSpeaking'
+import { useAiPack } from './hooks/useAiPack'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -310,10 +302,6 @@ export default function ReaderApp() {
   const askedWordsRef = useRef<string[]>([])
   /** 上次「全文翻译」请求的句子 id（用于校验是否逐句返回） */
   const askedIdsRef = useRef<string[]>([])
-  /** 最近一次导出的 AI 工作包（导入结果时按 id 找回 askedWords / askedIds） */
-  const aiPackRef = useRef<AiJob[]>([])
-  /** 「导入 AI 结果」的隐藏文件选择框 */
-  const aiFileRef = useRef<HTMLInputElement | null>(null)
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
@@ -393,6 +381,12 @@ export default function ReaderApp() {
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
+  /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
+  const { speak, startReadAll, stopReadAll, resetSpoken, readingAll } = useSpeaking({
+    doc,
+    selectedId,
+    autoSpeak,
+  })
   /** 背单词模式：本轮队列 / 当前序号 / 是否已翻面 */
   const [studyQueue, setStudyQueue] = useState<VocabItem[] | null>(null)
   const [studyIndex, setStudyIndex] = useState(0)
@@ -482,8 +476,6 @@ export default function ReaderApp() {
   const [quizUnique, setQuizUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
   /** 答完朗读正确答案（默认开） */
   const [quizSpeak, setQuizSpeak] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
-  /** 放 speak 的引用：checkQuiz 定义在 speak 之前，用 ref 避免顺序问题 */
-  const speakRef = useRef<(text: string) => void>(() => {})
   const quizAdvanceRef = useRef<number | null>(null)
   const quizRecordedRef = useRef(false)
   /** 本轮实际是否自动切题（听写模式强制开） */
@@ -643,13 +635,8 @@ export default function ReaderApp() {
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
   const saveDelTimerRef = useRef<number | null>(null)
-  const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
-  /** 是否正在「朗读全文」（TTS 逐句） */
-  const readAllRef = useRef(false)
-  const [readingAll, setReadingAll] = useState(false)
   /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
   const rightDownRef = useRef(false)
-  const lastSpokenRef = useRef<string | null>(null)
 
   useEffect(() => {
     const r = createVocabRepo()
@@ -1336,7 +1323,7 @@ export default function ReaderApp() {
       markStudied(q.itemId)
       recordActivity(q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
-      if (quizSpeak) speakRef.current(q.kind === 'meaning' ? q.word : q.answer)
+      if (quizSpeak) speak(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
       if (quizAutoRun) {
         if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
@@ -1547,7 +1534,7 @@ export default function ReaderApp() {
         if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) {
           e.preventDefault()
           const s = dictQueue[dictIndex]
-          if (s) speakRef.current(s.text)
+          if (s) speak(s.text)
         }
         return
       }
@@ -2187,86 +2174,6 @@ export default function ReaderApp() {
   }, [doc, sentenceLemmas, activeLemmas, batch])
   const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
 
-  /** 浏览器 TTS：只读一遍，不循环；同一句正在读时不重开。 */
-  const speak = useCallback((text: string) => {
-    readAllRef.current = false
-    setReadingAll(false)
-    try {
-      if (typeof speechSynthesis === 'undefined') return
-      const t = text.trim()
-      if (!t) return
-      // 同一句正在读就别重开（避免重复 / 叠读）
-      if (speechSynthesis.speaking && utterRef.current && utterRef.current.text === t) return
-      speechSynthesis.cancel()
-      const u = new SpeechSynthesisUtterance(t)
-      u.lang = 'en-US'
-      u.onend = () => {
-        if (utterRef.current === u) utterRef.current = null
-      }
-      utterRef.current = u // 持有引用，避免被 GC 导致中断/重读
-      speechSynthesis.speak(u)
-    } catch {
-      // 忽略
-    }
-  }, [])
-
-  /** 停止「朗读全文」。 */
-  const stopReadAll = useCallback(() => {
-    readAllRef.current = false
-    setReadingAll(false)
-    try {
-      if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
-    } catch {
-      // 忽略
-    }
-  }, [])
-
-  /** 逐句朗读整篇（TTS）；再点一次停止。 */
-  const startReadAll = useCallback(() => {
-    if (!doc) return
-    stopReadAll()
-    const list = doc.sentences.filter((s) => s.text.trim())
-    if (!list.length) return
-    readAllRef.current = true
-    setReadingAll(true)
-    let i = 0
-    const next = () => {
-      if (!readAllRef.current || i >= list.length) {
-        readAllRef.current = false
-        setReadingAll(false)
-        return
-      }
-      const s = list[i++]
-      try {
-        const u = new SpeechSynthesisUtterance(s.text)
-        u.lang = 'en-US'
-        u.rate = 0.95
-        u.onend = () => next()
-        u.onerror = () => next()
-        utterRef.current = u
-        speechSynthesis.speak(u)
-      } catch {
-        readAllRef.current = false
-        setReadingAll(false)
-      }
-    }
-    next()
-  }, [doc, stopReadAll])
-
-  // 选中句子后自动朗读（可选）
-  useEffect(() => {
-    if (!autoSpeak || !selectedId || !doc) return
-    if (lastSpokenRef.current === selectedId) return
-    lastSpokenRef.current = selectedId
-    const s = doc.sentences.find((x) => x.id === selectedId)
-    if (s && s.text.trim()) speak(s.text)
-  }, [selectedId, autoSpeak, doc, speak])
-
-  // 把 speak 存到 ref，供定义更早的回调（如 checkQuiz）调用
-  useEffect(() => {
-    speakRef.current = speak
-  }, [speak])
-
   // 考试听力题出现时自动朗读（句子 / 单词）
   useEffect(() => {
     if (!quizQueue) return
@@ -2284,17 +2191,13 @@ export default function ReaderApp() {
   const selectSentence = useCallback(
     (sid: string) => {
       if (selectedId === sid) {
-        try {
-          if (typeof speechSynthesis !== 'undefined') speechSynthesis.cancel()
-        } catch {
-          // 忽略
-        }
-        lastSpokenRef.current = null
+        stopReadAll()
+        resetSpoken()
         return
       }
       setSelectedId(sid)
     },
-    [selectedId],
+    [selectedId, stopReadAll, resetSpoken],
   )
 
   /** 点正文里的生词 → 高亮并滚到生词本对应词条。 */
@@ -3528,82 +3431,14 @@ export default function ReaderApp() {
     ],
   )
 
-  /** 待办任务数（只数，不生成提示词），给按钮显示用。 */
-  const aiJobCount = useMemo(() => countAiJobs(aiJobsInput), [aiJobsInput])
-
-  /** 导出 AI 工作包：一个 JSON 文件，整包交给 AI 或本机 agent。 */
-  const exportAiJobs = useCallback(() => {
-    const jobs = buildAiJobs(aiJobsInput)
-    if (!jobs.length) {
-      flash('没有待办（生词本已齐，也没有缺译文/语言点/听力题）')
-      return
-    }
-    aiPackRef.current = jobs
-    const pack = buildJobPack(jobs)
-    try {
-      localStorage.setItem('reader:aiJobPack', JSON.stringify(pack))
-    } catch {
-      // 忽略
-    }
-    download(`ai-jobs-${dayKeyLocal(new Date())}.json`, JSON.stringify(pack, null, 2), 'application/json')
-    flash(`已导出 ${jobs.length} 项待办；整包交给 AI 后，把结果 JSON 导回`)
-  }, [aiJobsInput, download, flash])
-
-  /** 导入 AI 结果包：按 job id 找回任务与上下文，逐条应用，汇总回执。 */
-  const readAiResults = useCallback(
-    async (file: File) => {
-      const text = await file.text()
-      const { results, error } = parseAiResultPack(text)
-      if (error) {
-        flash('导入失败：' + error)
-        return
-      }
-      // 找回最近一次的 job 列表（内存优先，其次 localStorage）
-      let pool = aiPackRef.current
-      if (!pool.length) {
-        try {
-          const raw = localStorage.getItem('reader:aiJobPack')
-          if (raw) pool = parseJobPack(raw)?.jobs ?? []
-        } catch {
-          // 忽略
-        }
-      }
-      const byId = new Map(pool.map((j) => [j.id, j]))
-      const lines: string[] = []
-      let okCount = 0
-      let failCount = 0
-      for (const r of results) {
-        const job = r.id ? byId.get(r.id) : undefined
-        const task = job?.task ?? (isAiJobTask(r.task) ? r.task : null)
-        if (!task) {
-          lines.push(`跳过：找不到任务（id=${r.id || '无'}）`)
-          failCount++
-          continue
-        }
-        const res = applyTaskResult(
-          task,
-          r.raw,
-          job?.askedWords ?? r.askedWords ?? [],
-          job?.askedIds ?? r.askedIds ?? [],
-        )
-        if (res.ok) okCount++
-        else failCount++
-        lines.push(`【${job?.label ?? task}】${res.report[0] ?? (res.ok ? '已应用' : '未解析')}`)
-      }
-      setPasteReport([`导入完成：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)])
-      flash(`导入完成：成功 ${okCount}，失败 ${failCount}`)
-    },
-    [applyTaskResult, flash],
-  )
-
-  const onAiFile = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const f = e.target.files?.[0]
-      e.target.value = ''
-      if (f) void readAiResults(f)
-    },
-    [readAiResults],
-  )
+  /** AI 工作包：导出待办 / 导入结果。 */
+  const { jobCount: aiJobCount, exportJobs: exportAiJobs, fileRef: aiFileRef, onFile: onAiFile } = useAiPack({
+    jobsInput: aiJobsInput,
+    applyTaskResult,
+    download,
+    flash,
+    onReport: setPasteReport,
+  })
 
   const doExportAnki = useCallback(
     (items: VocabItem[]) =>
