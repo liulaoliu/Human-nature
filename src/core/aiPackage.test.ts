@@ -54,10 +54,9 @@ const mkSentence = (over: Partial<Sentence> = {}): Sentence => ({
 const emptyInput = (over: Partial<AiJobsInput> = {}): AiJobsInput => ({
   batch: [],
   items: [],
-  confusableTodo: [],
+  articleWords: [],
+  scope: 'all',
   confusableBatchSize: 0,
-  lemmaCandidates: [],
-  posCandidates: [],
   sentences: [],
   vocabLevel: 'cet6',
   hasListenQuiz: false,
@@ -177,22 +176,34 @@ describe('buildAiJobs / countAiJobs', () => {
   })
 
   it('有音标有释义的词不算待办', () => {
-    const items = [mkItem({ word: 'ok', phonetic: '/o/', meaning: '行了' })]
+    const items = [mkItem({ word: 'ok', lemma: 'ok', phonetic: '/o/', meaning: '行了', confusables: [{ word: 'x' }] })]
     const jobs = buildAiJobs(emptyInput({ items }))
     expect(jobs).toHaveLength(0)
   })
 
   it('混淆项按 batchSize 分批；0 表示全部一批', () => {
-    const todo = Array.from({ length: 5 }, (_, i) => mkItem({ word: `c${i}` }))
-    expect(buildAiJobs(emptyInput({ confusableTodo: todo, confusableBatchSize: 2 })).filter((j) => j.task === 'confusable')).toHaveLength(3)
-    expect(buildAiJobs(emptyInput({ confusableTodo: todo, confusableBatchSize: 0 })).filter((j) => j.task === 'confusable')).toHaveLength(1)
+    const todo = Array.from({ length: 5 }, (_, i) => mkItem({ word: `c${i}`, lemma: `c${i}` }))
+    expect(
+      buildAiJobs(emptyInput({ items: todo, confusableBatchSize: 2 })).filter((j) => j.task === 'confusable'),
+    ).toHaveLength(3)
+    expect(
+      buildAiJobs(emptyInput({ items: todo, confusableBatchSize: 0 })).filter((j) => j.task === 'confusable'),
+    ).toHaveLength(1)
   })
 
   it('原形 / -ing-ed 各一条', () => {
-    const jobs = buildAiJobs(
-      emptyInput({ lemmaCandidates: [mkItem({ word: 'running' })], posCandidates: [mkItem({ word: 'bored' })] }),
-    )
+    const jobs = buildAiJobs(emptyInput({ items: [mkItem({ word: 'running', lemma: 'run', confusables: [{ word: 'x' }] })] }))
     expect(jobs.map((j) => j.task).sort()).toEqual(['lemma', 'pos'])
+  })
+
+  it('scope=article 只看本篇，scope=all 看全库', () => {
+    const lib = [mkItem({ word: 'libword', lemma: 'libword', meaning: null })]
+    const art = [mkItem({ word: 'artword', lemma: 'artword', meaning: null })]
+    const onlyArticle = buildAiJobs(emptyInput({ items: lib, articleWords: art, scope: 'article' }))
+    const all = buildAiJobs(emptyInput({ items: lib, articleWords: art, scope: 'all' }))
+    expect(onlyArticle.flatMap((j) => j.askedWords)).toContain('artword')
+    expect(onlyArticle.flatMap((j) => j.askedWords)).not.toContain('libword')
+    expect(all.flatMap((j) => j.askedWords)).toContain('libword')
   })
 
   it('缺译文/语言点/听力各生成一条，带句子 id', () => {
@@ -231,9 +242,6 @@ describe('buildAiJobs / countAiJobs', () => {
     const input = emptyInput({
       batch: [{ word: 'a' }],
       items: Array.from({ length: 40 }, (_, i) => mkItem({ word: `w${i}`, meaning: null })),
-      confusableTodo: [mkItem({ word: 'x' })],
-      lemmaCandidates: [mkItem({ word: 'y' })],
-      posCandidates: [mkItem({ word: 'z' })],
       sentences: [mkSentence()],
       listenCount: 8,
     })
@@ -241,7 +249,9 @@ describe('buildAiJobs / countAiJobs', () => {
   })
 
   it('id 在各任务内递增且唯一', () => {
-    const jobs = buildAiJobs(emptyInput({ batch: [{ word: 'a' }], lemmaCandidates: [mkItem()], posCandidates: [mkItem()] }))
+    const jobs = buildAiJobs(
+      emptyInput({ batch: [{ word: 'a' }], items: [mkItem({ word: 'running', lemma: 'run' })] }),
+    )
     const ids = jobs.map((j) => j.id)
     expect(new Set(ids).size).toBe(ids.length)
   })

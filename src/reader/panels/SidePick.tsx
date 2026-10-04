@@ -41,6 +41,8 @@ export interface SidePickProps {
 
   /** AI 工作包（agent 路径）。 */
   aiJobCount: number
+  aiScope: 'article' | 'all'
+  onAiScopeChange: (scope: 'article' | 'all') => void
   onExportAiJobs: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
@@ -96,6 +98,8 @@ export default function SidePick({
   onApplyPaste,
   onCopyMissingAgain,
   aiJobCount,
+  aiScope,
+  onAiScopeChange,
   onExportAiJobs,
   aiFileRef,
   onAiFile,
@@ -200,6 +204,15 @@ export default function SidePick({
       <div className="ai-pack">
         <div className="muted">
           ⚡ 一键打包：导出待办文件 → 整包交给 AI（网页版也行，喂给本机 agent 更快）→ 把结果 JSON 导回，一次应用全部，不用一条条复制粘贴。
+        </div>
+        <div className="ai-scope">
+          <span className="muted">范围</span>
+          <button className={aiScope === 'article' ? 'primary' : ''} onClick={() => onAiScopeChange('article')} title="只处理这篇的生词 / 翻译 / 语言点">
+            本篇
+          </button>
+          <button className={aiScope === 'all' ? 'primary' : ''} onClick={() => onAiScopeChange('all')} title="处理整个词库（补齐 / 混淆项等会覆盖所有生词）">
+            全库
+          </button>
         </div>
         <button
           onClick={onExportAiJobs}

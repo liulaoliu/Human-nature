@@ -387,6 +387,12 @@ export default function ReaderApp() {
     60,
     persistentNumber,
   )
+  /** AI 工作包范围：只处理本篇 / 整个词库 */
+  const [aiPackScope, setAiPackScope] = useLocalStorageState<'article' | 'all'>(
+    'reader:aiPackScope',
+    'article',
+    persistentEnum(['article', 'all'] as const, 'article'),
+  )
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useLocalStorageState('reader:newLimit', 20, persistentNumber)
   const [newToday, setNewToday] = useLocalStorageState('reader:newToday', 0, {
@@ -2614,10 +2620,9 @@ export default function ReaderApp() {
     () => ({
       batch: visibleBatch.map((b) => ({ word: b.word, sentence: b.sentence })),
       items: library.items,
-      confusableTodo,
+      articleWords,
+      scope: aiPackScope,
       confusableBatchSize,
-      lemmaCandidates,
-      posCandidates,
       sentences: doc?.sentences ?? [],
       vocabLevel,
       hasListenQuiz: !!listenQuiz,
@@ -2626,10 +2631,9 @@ export default function ReaderApp() {
     [
       visibleBatch,
       library,
-      confusableTodo,
+      articleWords,
+      aiPackScope,
       confusableBatchSize,
-      lemmaCandidates,
-      posCandidates,
       doc,
       vocabLevel,
       listenQuiz,
@@ -3297,6 +3301,8 @@ export default function ReaderApp() {
           onApplyPaste={applyAnyPaste}
           onCopyMissingAgain={() => void copyMissingAgain()}
           aiJobCount={aiJobCount}
+          aiScope={aiPackScope}
+          onAiScopeChange={setAiPackScope}
           onExportAiJobs={exportAiJobs}
           aiFileRef={aiFileRef}
           onAiFile={onAiFile}

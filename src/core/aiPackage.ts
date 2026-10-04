@@ -17,6 +17,7 @@ import {
 } from './analyzer'
 import { buildLanguagePrompt } from './language'
 import { buildListeningQuizPrompt } from './listening'
+import { normalizeWord } from './vocab'
 import type { Sentence, VocabItem } from '../types/document'
 
 /** 可以打包的 AI 任务类型（与 ReaderApp 的 lastTask 对齐）。 */
@@ -174,14 +175,12 @@ export interface AiJobsInput {
   batch: { word: string; sentence?: string }[]
   /** 整个词库。 */
   items: VocabItem[]
-  /** 缺混淆项、已入库的词。 */
-  confusableTodo: VocabItem[]
+  /** 本篇的词（来源属于本文）。 */
+  articleWords: VocabItem[]
+  /** 打包范围：只处理本篇，还是整个词库。 */
+  scope: 'article' | 'all'
   /** 每次生成混淆项的批量大小（0=全部）。 */
   confusableBatchSize: number
-  /** 疑似非原型、待校正的词。 */
-  lemmaCandidates: VocabItem[]
-  /** 含 -ing/-ed、待辨析的词。 */
-  posCandidates: VocabItem[]
   /** 当前文章的句子。 */
   sentences: Sentence[]
   /** 自动标词的词汇标准。 */
@@ -195,6 +194,11 @@ export interface AiJobsInput {
 const LOOKUP_CHUNK = 30
 /** 翻译 / 语言点每次带多少句（一条太长会在网页端被截断）。 */
 const SENTENCE_CHUNK = 6
+
+/** 含 -ing / -ed 形式的词（用于语法辨析候选）。 */
+function hasIngEd(s: string): boolean {
+  return s.split(/\s+/).some((t) => /(ing|ed)$/i.test(t))
+}
 
 /**
  * 由当前数据推导出所有「待办」：每条 = 一条完整提示词 + 应用时需要的上下文。
@@ -234,8 +238,9 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       ),
     )
   }
-  // 生词本缺音标/释义 → 批量查词（每 N 个一份，避免 AI 回复被截断）
-  const needInfo = input.items.filter((it) => !it.phonetic || !it.meaning)
+  // 生词本缺音标/释义 → 批量查词（按范围：本篇 / 全库；每 N 个一份，避免 AI 回复被截断）
+  const base = input.scope === 'article' ? input.articleWords : input.items
+  const needInfo = base.filter((it) => !it.phonetic || !it.meaning)
   for (const part of chunk(needInfo, LOOKUP_CHUNK)) {
     push(
       'lookup',
@@ -245,8 +250,9 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 缺混淆项 → 生成混淆项（按设置分批）
-  const confSize = input.confusableBatchSize > 0 ? input.confusableBatchSize : input.confusableTodo.length || 1
-  for (const part of chunk(input.confusableTodo, confSize)) {
+  const confusableTodo = base.filter((it) => it.meaning && !it.confusables?.length)
+  const confSize = input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1
+  for (const part of chunk(confusableTodo, confSize)) {
     push(
       'confusable',
       `生成混淆项（${part.length}）`,
@@ -255,21 +261,25 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 疑似非原型 → 校正原形
-  if (input.lemmaCandidates.length) {
+  const lemmaCandidates = base.filter((it) => normalizeWord(it.word) !== it.lemma).slice(0, 100)
+  if (lemmaCandidates.length) {
     push(
       'lemma',
-      `校正原形（${input.lemmaCandidates.length}）`,
-      buildLemmaPrompt(input.lemmaCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
-      input.lemmaCandidates.map((it) => it.word),
+      `校正原形（${lemmaCandidates.length}）`,
+      buildLemmaPrompt(lemmaCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
+      lemmaCandidates.map((it) => it.word),
     )
   }
   // -ing/-ed → 语法辨析
-  if (input.posCandidates.length) {
+  const posCandidates = base
+    .filter((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)
+    .slice(0, 60)
+  if (posCandidates.length) {
     push(
       'pos',
-      `-ing/-ed 辨析（${input.posCandidates.length}）`,
-      buildPosPrompt(input.posCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
-      input.posCandidates.map((it) => it.word),
+      `-ing/-ed 辨析（${posCandidates.length}）`,
+      buildPosPrompt(posCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
+      posCandidates.map((it) => it.word),
     )
   }
   // 缺译文 → 全文翻译（按句分块：一条塞几十句最容易在网页端被截断）
@@ -405,19 +415,21 @@ export function missingJobIds(jobs: AiJob[], results: { id: string }[]): string[
 
 /** 待办任务数（只数，不生成提示词，便宜）。 */
 export function countAiJobs(input: AiJobsInput): number {
+  const base = input.scope === 'article' ? input.articleWords : input.items
   let n = 0
   if (input.batch.length) n++
   n += chunk(
-    input.items.filter((it) => !it.phonetic || !it.meaning),
+    base.filter((it) => !it.phonetic || !it.meaning),
     LOOKUP_CHUNK,
   ).length
+  const confusableTodo = base.filter((it) => it.meaning && !it.confusables?.length)
   n += chunk(
-    input.confusableTodo,
-    input.confusableBatchSize > 0 ? input.confusableBatchSize : input.confusableTodo.length || 1,
+    confusableTodo,
+    input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
   if (input.sentences.length) n++
-  if (input.lemmaCandidates.length) n++
-  if (input.posCandidates.length) n++
+  if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
+  if (base.some((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)) n++
   n += chunk(
     input.sentences.filter((s) => !s.translation),
     SENTENCE_CHUNK,
