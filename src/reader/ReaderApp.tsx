@@ -21,14 +21,7 @@ import {
   type AnalysisTask,
   type VocabLevel,
 } from '../core/analyzer'
-import {
-  buildListeningQuizPrompt,
-  gradeListening,
-  isListeningCorrect,
-  type ListeningQuestion,
-  type ListeningQuiz,
-  type ListeningResult,
-} from '../core/listening'
+import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt } from '../core/language'
 import {
   addPracticeRecord,
@@ -36,7 +29,6 @@ import {
   type PracticeRecord,
 } from '../core/practice'
 import {
-  listenMistake,
   removeMistake,
   upsertMistake,
   type MistakeEntry,
@@ -81,6 +73,7 @@ import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useQuickSession } from './hooks/useQuickSession'
+import { useListening } from './hooks/useListening'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -280,14 +273,8 @@ export default function ReaderApp() {
   const quizApiRef = useRef<ReturnType<typeof useQuizSession> | null>(null)
   /** 快刷会话 API 的引用：供定义在 useQuickSession 之前的少数回调使用。 */
   const quickApiRef = useRef<ReturnType<typeof useQuickSession> | null>(null)
-  /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
-  const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
-  const [listenOpen, setListenOpen] = useState(false)
-  const [listenWrongIds, setListenWrongIds] = useState<string[] | null>(null)
-  const [listenAnswers, setListenAnswers] = useState<Record<string, string>>({})
-  const [listenSubmitted, setListenSubmitted] = useState(false)
-  const [listenResult, setListenResult] = useState<ListeningResult | null>(null)
-  const [listenCount, setListenCount] = useLocalStorageState('reader:listenCount', 8, persistentNumber)
+  /** 听力理解会话 API 的引用：供定义在 useListening 之前的少数回调（错题本重练）使用。 */
+  const listenApiRef = useRef<ReturnType<typeof useListening> | null>(null)
   /** 是否在正文里显示语言点 */
   const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
   /** 仿写训练：范句 / 任务 / 作答 / 批改 */
@@ -450,19 +437,6 @@ export default function ReaderApp() {
     document.documentElement.dataset.theme = eye ? 'green' : 'dark'
   }, [eye])
 
-  // 换文章时载入该篇已生成的听力理解题
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem('reader:listening:' + articleIdentity)
-      setListenQuiz(raw ? (JSON.parse(raw) as ListeningQuiz) : null)
-    } catch {
-      setListenQuiz(null)
-    }
-    setListenOpen(false)
-    setListenAnswers({})
-    setListenSubmitted(false)
-    setListenResult(null)
-  }, [articleIdentity])
   // 待选清单按文章持久化
   useEffect(() => {
     batchMapRef.current[articleIdentity] = batch
@@ -577,14 +551,6 @@ export default function ReaderApp() {
     setMistakes((prev) => removeMistake(prev, id))
   }, [])
 
-  /** 听力理解题：当前要作答的题（「重做错题」时只含错题） */
-  const listenQuestions = useMemo(() => {
-    if (!listenQuiz) return []
-    if (!listenWrongIds) return listenQuiz.questions
-    const set = new Set(listenWrongIds)
-    return listenQuiz.questions.filter((q) => set.has(q.id))
-  }, [listenQuiz, listenWrongIds])
-
   // ===== 背单词会话（hooks/useStudySession）=====
   const studyApi = useStudySession({
     library,
@@ -691,21 +657,47 @@ export default function ReaderApp() {
     retryWrong: retryQuizWrong,
   } = quizApi
 
-  /** 用指定题目开一轮听力理解（错题本「重练听力」用）。 */
-  const startListenQuestions = useCallback((questions: ListeningQuestion[]) => {
-    if (!questions.length) return
-    closeStudy()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    quickApiRef.current?.close()
-    dictApiRef.current?.close()
-    setListenQuiz({ questions })
-    setListenWrongIds(null)
-    setListenAnswers({})
-    setListenSubmitted(false)
-    setListenResult(null)
-    setListenOpen(true)
-  }, [])
+  // ===== 听力理解会话（hooks/useListening）=====
+  const listenApi = useListening({
+    doc,
+    articleIdentity,
+    flash,
+    setLastTask,
+    askedWordsRef,
+    askedIdsRef,
+    recordActivity,
+    recordPractice,
+    addMistake,
+    dropMistake,
+    closeOthers: () => {
+      closeStudy()
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      quickApiRef.current?.close()
+      dictApiRef.current?.close()
+    },
+  })
+  listenApiRef.current = listenApi
+  const {
+    quiz: listenQuiz,
+    setQuiz: setListenQuiz,
+    open: listenOpen,
+    setOpen: setListenOpen,
+    questions: listenQuestions,
+    answers: listenAnswers,
+    setAnswers: setListenAnswers,
+    submitted: listenSubmitted,
+    result: listenResult,
+    wrongIds: listenWrongIds,
+    count: listenCount,
+    setCount: setListenCount,
+    copyPrompt: copyListeningPrompt,
+    start: openListening,
+    startQuestions: startListenQuestions,
+    submit: submitListening,
+    retryWrong: retryListenWrong,
+    showAll: showAllListen,
+  } = listenApi
 
   /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
   const startDictItems = useCallback((items: { id: string; text: string }[]) => {
@@ -827,84 +819,6 @@ export default function ReaderApp() {
   )
 
   /** 复制听力理解题出题提示词。 */
-  const copyListeningPrompt = useCallback(async () => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    const text = doc.sentences.map((s) => s.text).join(' ')
-    setLastTask('listening')
-    askedWordsRef.current = []
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(buildListeningQuizPrompt(text, { count: listenCount }))
-      flash('已复制听力理解题提示词；把 AI 的 JSON 粘回「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [doc, listenCount, flash])
-
-  /** 打开听力理解题：没有题目就先复制出题提示词。 */
-  const openListening = useCallback(() => {
-    if (listenQuiz && listenQuiz.questions.length) {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      setQuickQueue(null)
-      dictApiRef.current?.close()
-      setListenAnswers({})
-      setListenSubmitted(false)
-      setListenResult(null)
-      setListenWrongIds(null)
-      setListenOpen(true)
-    } else {
-      void copyListeningPrompt()
-    }
-  }, [listenQuiz, copyListeningPrompt])
-
-  const submitListening = useCallback(() => {
-    if (!listenQuestions.length) return
-    const res = gradeListening(listenQuestions, listenAnswers)
-    setListenResult(res)
-    setListenSubmitted(true)
-    recordActivity('listen', listenQuestions.length)
-    recordPractice('listening', res.total, res.correct)
-    // 错题本：听力错题（对→清掉，错→记上）
-    for (const q of listenQuestions) {
-      const id = listenMistake(articleIdentity, q, '').id
-      if (isListeningCorrect(q, listenAnswers[q.id] ?? '')) dropMistake(id)
-      else addMistake(listenMistake(articleIdentity, q, new Date().toISOString()))
-    }
-  }, [
-    listenQuestions,
-    listenAnswers,
-    recordActivity,
-    recordPractice,
-    articleIdentity,
-    addMistake,
-    dropMistake,
-  ])
-
-  /** 听力理解题：只重做错题。 */
-  const retryListenWrong = useCallback(() => {
-    if (!listenResult) return
-    const ids = listenResult.per.filter((p) => !p.correct).map((p) => p.id)
-    if (!ids.length) return
-    setListenWrongIds(ids)
-    setListenAnswers({})
-    setListenSubmitted(false)
-    setListenResult(null)
-  }, [listenResult])
-
-  /** 听力理解题：恢复全部题。 */
-  const showAllListen = useCallback(() => {
-    setListenWrongIds(null)
-    setListenAnswers({})
-    setListenSubmitted(false)
-    setListenResult(null)
-  }, [])
-
-  /** 复制逐句语言点分析提示词。 */
   const copyLanguagePrompt = useCallback(async () => {
     if (!doc || !doc.sentences.length) {
       flash('先打开一篇文章')
