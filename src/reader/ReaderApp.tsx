@@ -63,16 +63,6 @@ import {
   type QuizQuestion,
 } from '../core/quiz'
 import {
-  diffWords,
-  dictationWrongWords,
-  isClozeBlankCorrect,
-  makeCloze,
-  pickBlankTargets,
-  splitForDictation,
-  type ClozeQuestion,
-  type DiffToken,
-} from '../core/dictation'
-import {
   buildListeningQuizPrompt,
   gradeListening,
   isListeningCorrect,
@@ -88,7 +78,6 @@ import {
   type PracticeRecord,
 } from '../core/practice'
 import {
-  dictMistake,
   listenMistake,
   removeMistake,
   upsertMistake,
@@ -127,6 +116,7 @@ import SideVocab from './panels/SideVocab'
 import { fmtDur, fmtInterval } from './format'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
+import { useDictation } from './hooks/useDictation'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -506,32 +496,8 @@ export default function ReaderApp() {
   const [quickQueue, setQuickQueue] = useState<VocabItem[] | null>(null)
   const [quickIndex, setQuickIndex] = useState(0)
   const [quickRevealed, setQuickRevealed] = useState(false)
-  /** 逐句听写：按文章顺序播句子（长句自动切短），听写整句或听音填空 */
-  const [dictQueue, setDictQueue] = useState<{ id: string; text: string }[] | null>(null)
-  const [dictIndex, setDictIndex] = useState(0)
-  const [dictInput, setDictInput] = useState('')
-  const [dictChecked, setDictChecked] = useState(false)
-  const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
-  /** 填空模式的作答（每空一个输入） */
-  const [dictBlanks, setDictBlanks] = useState<string[]>([])
-  /** 当前填空（供 checkDict 判分用，避免声明顺序问题）与「答对自动下一句」的定时器 */
-  const dictClozeRef = useRef<ClozeQuestion | null>(null)
-  const dictAdvanceRef = useRef<number | null>(null)
-  /** 听写本轮结果（每题是否全对）与错题（用于重练） */
-  const [dictResults, setDictResults] = useState<boolean[]>([])
-  const [dictWrongItems, setDictWrongItems] = useState<{ id: string; text: string }[]>([])
-  const dictRecordedRef = useRef(false)
-  /** 听写模式：整句 / 填空 */
-  const [dictMode, setDictMode] = useLocalStorageState<'full' | 'cloze'>(
-    'reader:dictMode',
-    'full',
-    persistentEnum(['full', 'cloze'] as const, 'full'),
-  )
-  /** 每句最多多少词（长句按此切短，用户可调） */
-  const [dictWords, setDictWords] = useLocalStorageState('reader:dictWords', 12, persistentNumber)
-  /** 填空模式下每题的挖空数量 */
-  const [dictBlankCount, setDictBlankCount] = useLocalStorageState('reader:dictBlankCount', 2, persistentNumber)
-  const libraryLemmasRef = useRef<Set<string>>(new Set())
+  /** 听写会话 API 的引用：供定义在 useDictation 之前的少数回调（打开听力/仿写、错题重练）使用。 */
+  const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
@@ -691,20 +657,6 @@ export default function ReaderApp() {
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
   const toggleVocabRef = useRef<() => void>(() => {})
   const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (studyQueue || quizQueue || quickQueue || dictQueue) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      const k = e.key.toLowerCase()
-      if (k === 'w') toggleVocabRef.current()
-      else if (k === 'a') navVocabRef.current(-1)
-      else if (k === 'd') navVocabRef.current(1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue, quizQueue])
 
   // 护眼主题：eye 已由 useLocalStorageState 存成 'green'/'dark'，这里只负责应用到 DOM
   useEffect(() => {
@@ -1145,156 +1097,6 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
   }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
 
-  /**
-   * 逐句听写。
-   *   - 整句模式：长句按「每句词数」切短（听写整句）。
-   *   - 填空模式：**不硬切句子**，用整句；一句凑不够空就并下一句，直到够空（最多 3 句 / 60 词）。
-   */
-  const startDictation = useCallback(
-    (opts?: { mode?: 'full' | 'cloze'; words?: number; blanks?: number }) => {
-      if (dictAdvanceRef.current) {
-        window.clearTimeout(dictAdvanceRef.current)
-        dictAdvanceRef.current = null
-      }
-      if (!doc) {
-        flash('先打开一篇文章')
-        return
-      }
-      const mode = opts?.mode ?? dictMode
-      const maxWords = opts?.words ?? dictWords
-      const blankCount = opts?.blanks ?? dictBlankCount
-      if (opts?.words != null) setDictWords(opts.words)
-      if (opts?.blanks != null) setDictBlankCount(opts.blanks)
-
-      const pool = libraryLemmasRef.current
-      const items: { id: string; text: string }[] = []
-
-      if (mode === 'cloze') {
-        // 填空：用整句；不够空就并下一句
-        let i = 0
-        const sents = doc.sentences
-        while (i < sents.length) {
-          let text = sents[i].text.trim()
-          let j = i + 1
-          while (
-            j < sents.length &&
-            pickBlankTargets(text, pool, blankCount).length < blankCount &&
-            j - i < 3 &&
-            text.split(/\s+/).length < 60
-          ) {
-            text = `${text} ${sents[j].text.trim()}`.trim()
-            j += 1
-          }
-          if (pickBlankTargets(text, pool, blankCount).length > 0) {
-            items.push({ id: `${sents[i].id}-c`, text })
-          }
-          i = j
-        }
-      } else {
-        doc.sentences.forEach((s) => {
-          splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
-            const t = chunk.trim()
-            if (t) items.push({ id: `${s.id}-${ci}`, text: t })
-          })
-        })
-      }
-
-      if (!items.length) {
-        flash(mode === 'cloze' ? '这篇没有可用于填空的句子' : '这篇没有可听写的句子')
-        return
-      }
-      setDictMode(mode)
-      setStudyQueue(null)
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      setQuickQueue(null)
-      setDictQueue(items)
-      setDictIndex(0)
-      setDictInput('')
-      setDictChecked(false)
-      setDictDiff(null)
-      setDictBlanks([])
-      setDictResults([])
-      setDictWrongItems([])
-      dictRecordedRef.current = false
-    },
-    [doc, dictMode, dictWords, dictBlankCount, flash],
-  )
-
-  const clearDictAdvance = useCallback(() => {
-    if (dictAdvanceRef.current) {
-      window.clearTimeout(dictAdvanceRef.current)
-      dictAdvanceRef.current = null
-    }
-  }, [])
-
-  const nextDict = useCallback(() => {
-    clearDictAdvance()
-    setDictInput('')
-    setDictChecked(false)
-    setDictDiff(null)
-    setDictBlanks([])
-    setDictIndex((i) => i + 1)
-  }, [clearDictAdvance])
-
-  /** 听写「重练错题」：只重练本轮错的那些段。 */
-  const retryDictWrong = useCallback(() => {
-    if (!dictWrongItems.length) return
-    clearDictAdvance()
-    setDictQueue(dictWrongItems)
-    setDictIndex(0)
-    setDictInput('')
-    setDictChecked(false)
-    setDictDiff(null)
-    setDictBlanks([])
-    setDictResults([])
-    setDictWrongItems([])
-    dictRecordedRef.current = false
-  }, [dictWrongItems, clearDictAdvance])
-
-  const checkDict = useCallback(() => {
-    if (!dictQueue) return
-    const item = dictQueue[dictIndex]
-    if (!item) return
-    let ok = false
-    if (dictMode === 'cloze' && dictClozeRef.current) {
-      ok = dictClozeRef.current.blanks.every((b, i) => isClozeBlankCorrect(b, dictBlanks[i] ?? ''))
-    } else {
-      const diff = diffWords(item.text, dictInput)
-      ok = diff.correct
-      setDictDiff(diff.tokens)
-    }
-    setDictChecked(true)
-    recordActivity('listen', 1)
-    setDictResults((r) => [...r, ok])
-    if (!ok) {
-      setDictWrongItems((w) => (w.some((x) => x.id === item.id) ? w : [...w, { id: item.id, text: item.text }]))
-    }
-    // 错题本：听写漏词（对→清掉，错→记上）
-    const dictId = dictMistake(item.text, '').id
-    if (ok) dropMistake(dictId)
-    else addMistake(dictMistake(item.text, new Date().toISOString()))
-    // 全对 → 自动下一句；有错 → 停下（显示原文，等你手动下一句）
-    if (ok) {
-      clearDictAdvance()
-      dictAdvanceRef.current = window.setTimeout(() => {
-        dictAdvanceRef.current = null
-        nextDict()
-      }, 700)
-    }
-  }, [
-    dictQueue,
-    dictIndex,
-    dictInput,
-    dictMode,
-    dictBlanks,
-    recordActivity,
-    nextDict,
-    clearDictAdvance,
-    addMistake,
-    dropMistake,
-  ])
-
   const nextQuiz = useCallback(() => {
     if (quizAdvanceRef.current) {
       window.clearTimeout(quizAdvanceRef.current)
@@ -1396,7 +1198,7 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(null)
-    setDictQueue(null)
+    dictApiRef.current?.close()
     setListenQuiz({ questions })
     setListenWrongIds(null)
     setListenAnswers({})
@@ -1407,25 +1209,7 @@ export default function ReaderApp() {
 
   /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
   const startDictItems = useCallback((items: { id: string; text: string }[]) => {
-    if (!items.length) return
-    if (dictAdvanceRef.current) {
-      window.clearTimeout(dictAdvanceRef.current)
-      dictAdvanceRef.current = null
-    }
-    setDictMode('full')
-    setStudyQueue(null)
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(null)
-    setDictQueue(items)
-    setDictIndex(0)
-    setDictInput('')
-    setDictChecked(false)
-    setDictDiff(null)
-    setDictBlanks([])
-    setDictResults([])
-    setDictWrongItems([])
-    dictRecordedRef.current = false
+    dictApiRef.current?.startItems(items)
   }, [])
 
   /** 错题本：重练考试错词。 */
@@ -1518,35 +1302,6 @@ export default function ReaderApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [quickQueue, quickIndex, gradeQuick])
-
-  // 听写快捷键：回车 检查 / 下一句，Tab 重听，Esc 退出
-  useEffect(() => {
-    if (!dictQueue) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        clearDictAdvance()
-        setDictQueue(null)
-        return
-      }
-      if (e.key === 'Tab') {
-        const t = e.target as HTMLElement | null
-        // 填空模式里有多个输入框，Tab 要用来切换输入框，别抢
-        if (!t || (t.tagName !== 'INPUT' && t.tagName !== 'TEXTAREA')) {
-          e.preventDefault()
-          const s = dictQueue[dictIndex]
-          if (s) speak(s.text)
-        }
-        return
-      }
-      if (e.key !== 'Enter') return
-      e.preventDefault()
-      if (dictIndex >= dictQueue.length) return
-      if (!dictChecked) checkDict()
-      else nextDict()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [dictQueue, dictIndex, dictChecked, checkDict, nextDict, clearDictAdvance])
 
   // 听力理解题 / 仿写：Esc 退出
   useEffect(() => {
@@ -1738,7 +1493,7 @@ export default function ReaderApp() {
       setQuizSetupOpen(false)
       setQuizQueue(null)
       setQuickQueue(null)
-      setDictQueue(null)
+      dictApiRef.current?.close()
       setListenAnswers({})
       setListenSubmitted(false)
       setListenResult(null)
@@ -1821,7 +1576,7 @@ export default function ReaderApp() {
     setQuizSetupOpen(false)
     setQuizQueue(null)
     setQuickQueue(null)
-    setDictQueue(null)
+    dictApiRef.current?.close()
     setListenOpen(false)
     setWritingOpen(true)
     setWritingModel(start.text)
@@ -2064,37 +1819,65 @@ export default function ReaderApp() {
     return s
   }, [library.items])
 
-  // 供更早的回调（如 startDictation）读取，避开声明顺序
-  useEffect(() => {
-    libraryLemmasRef.current = libraryLemmas
-  }, [libraryLemmas])
+  /** 听写会话（队列 / 判分 / 自动下一句 / 错题重练）；逻辑在 hooks/useDictation。 */
+  const dictApi = useDictation({
+    doc,
+    libraryLemmas,
+    speak,
+    flash,
+    mergeBatch,
+    batchItemsFromWords,
+    recordActivity,
+    recordPractice,
+    addMistake,
+    dropMistake,
+    closeOthers: () => {
+      setStudyQueue(null)
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      setQuickQueue(null)
+    },
+  })
+  // 供定义在 hook 之前的少数回调（打开听力/仿写、错题重练）通过 ref 调用
+  dictApiRef.current = dictApi
+  const {
+    mode: dictMode,
+    words: dictWords,
+    blankCount: dictBlankCount,
+    queue: dictQueue,
+    index: dictIndex,
+    input: dictInput,
+    checked: dictChecked,
+    diff: dictDiff,
+    blanks: dictBlanks,
+    results: dictResults,
+    wrongItems: dictWrongItems,
+    cloze: dictCloze,
+    setInput: setDictInput,
+    setBlank: setDictBlank,
+    start: startDictation,
+    check: checkDict,
+    next: nextDict,
+    retryWrong: retryDictWrong,
+    wrongNow: dictWrongNow,
+    close: closeDict,
+  } = dictApi
 
-  /** 听写·填空模式：当前短块的挖空题（每块稳定，不随重渲染乱跳）。 */
-  const dictCloze = useMemo(() => {
-    if (dictMode !== 'cloze' || !dictQueue || dictIndex >= dictQueue.length) return null
-    const text = dictQueue[dictIndex].text
-    return makeCloze(text, pickBlankTargets(text, libraryLemmas, dictBlankCount))
-  }, [dictMode, dictQueue, dictIndex, libraryLemmas, dictBlankCount])
-
-  // 把当前填空存进 ref，供 checkDict 判分（checkDict 定义更早，不能直接引用 dictCloze）
+  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useEffect(() => {
-    dictClozeRef.current = dictCloze
-  }, [dictCloze])
-
-  // 填空模式下万一遇到「没空可填」的题，自动跳过（理论上 startDictation 已过滤）
-  useEffect(() => {
-    if (!dictQueue || dictIndex >= dictQueue.length) return
-    if (dictMode === 'cloze' && (!dictCloze || dictCloze.blanks.length === 0)) nextDict()
-  }, [dictQueue, dictIndex, dictMode, dictCloze, nextDict])
-
-  // 听写完成 → 记一次成绩
-  useEffect(() => {
-    if (!dictQueue) return
-    if (dictIndex >= dictQueue.length && dictResults.length > 0 && !dictRecordedRef.current) {
-      dictRecordedRef.current = true
-      recordPractice('dictation', dictResults.length, dictResults.filter(Boolean).length)
+    const onKey = (e: KeyboardEvent) => {
+      if (studyQueue || quizQueue || quickQueue || dictQueue) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      const k = e.key.toLowerCase()
+      if (k === 'w') toggleVocabRef.current()
+      else if (k === 'a') navVocabRef.current(-1)
+      else if (k === 'd') navVocabRef.current(1)
     }
-  }, [dictQueue, dictIndex, dictResults, recordPractice])
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [studyQueue, quizQueue])
 
   // 考试完成 → 记一次成绩
   useEffect(() => {
@@ -2107,34 +1890,6 @@ export default function ReaderApp() {
       recordPractice('quiz', quizResults.length, quizResults.filter((r) => r.correct).length)
     }
   }, [quizQueue, quizIndex, quizResults, recordPractice])
-
-  // 卸载时清掉「自动下一句」的定时器
-  useEffect(() => {
-    return () => {
-      if (dictAdvanceRef.current) window.clearTimeout(dictAdvanceRef.current)
-    }
-  }, [])
-
-  /** 把本句漏写 / 填错的词加入待选，之后统一查词。 */
-  const dictWrongNow = useCallback(() => {
-    if (!dictQueue) return
-    const item = dictQueue[dictIndex]
-    if (!item) return
-    let words: string[] = []
-    if (dictMode === 'cloze' && dictCloze) {
-      words = dictCloze.blanks
-        .filter((b, i) => !isClozeBlankCorrect(b, dictBlanks[i] ?? ''))
-        .map((b) => b.answer)
-    } else {
-      words = dictationWrongWords(diffWords(item.text, dictInput))
-    }
-    if (!words.length) {
-      flash('没有漏写 / 填错的词')
-      return
-    }
-    mergeBatch(batchItemsFromWords(words))
-    flash(`已把 ${words.length} 个词加入待选`)
-  }, [dictQueue, dictIndex, dictMode, dictCloze, dictBlanks, dictInput, mergeBatch, batchItemsFromWords, flash])
 
   /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
   const visibleBatch = useMemo(
@@ -3959,19 +3714,10 @@ export default function ReaderApp() {
             onNext={nextDict}
             onWrongNow={dictWrongNow}
             onRetryWrong={retryDictWrong}
-            onClose={() => {
-              clearDictAdvance()
-              setDictQueue(null)
-            }}
+            onClose={closeDict}
             onSpeak={speak}
             onInputChange={setDictInput}
-            onBlankChange={(i, v) =>
-              setDictBlanks((arr) => {
-                const next = [...arr]
-                next[i] = v
-                return next
-              })
-            }
+            onBlankChange={setDictBlank}
           />
         )}
 
