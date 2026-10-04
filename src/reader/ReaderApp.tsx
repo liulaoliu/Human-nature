@@ -53,16 +53,6 @@ import {
 } from '../core/analyzer'
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../core/exports'
 import {
-  buildQuizQuestions,
-  countQuestions,
-  isCorrect,
-  isQuizKind,
-  makeQuestion,
-  shuffleQuiz,
-  type QuizKind,
-  type QuizQuestion,
-} from '../core/quiz'
-import {
   buildListeningQuizPrompt,
   gradeListening,
   isListeningCorrect,
@@ -81,7 +71,6 @@ import {
   listenMistake,
   removeMistake,
   upsertMistake,
-  vocabMistake,
   type MistakeEntry,
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
@@ -117,10 +106,10 @@ import { fmtDur, fmtInterval } from './format'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
+import { useQuizSession } from './hooks/useQuizSession'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
-  persistentBoolTrue,
   persistentEnum,
   persistentNumber,
   persistentString,
@@ -427,49 +416,6 @@ export default function ReaderApp() {
   /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
   const studyBumpedRef = useRef<Set<string>>(new Set())
 
-  /** 考试（检验掌握）：设置 + 一轮题目 + 作答状态 */
-  const [quizSetupOpen, setQuizSetupOpen] = useState(false)
-  const [quizKinds, setQuizKinds] = useLocalStorageState<QuizKind[]>(
-    'reader:quizKinds',
-    ['spell', 'cloze', 'usage'],
-    {
-      parse: (raw) => {
-        try {
-          const arr = JSON.parse(raw)
-          if (Array.isArray(arr)) {
-            const valid = arr.filter(isQuizKind)
-            if (valid.length) return valid
-          }
-        } catch {
-          // 忽略
-        }
-        return ['spell', 'cloze', 'usage']
-      },
-    },
-  )
-  const [quizScope, setQuizScope] = useLocalStorageState<'all' | 'article' | 'unmastered' | 'due' | 'lapses'>(
-    'reader:quizScope',
-    'unmastered',
-    persistentEnum(['all', 'article', 'unmastered', 'due', 'lapses'] as const, 'unmastered'),
-  )
-  const [quizLimit, setQuizLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
-  const [quizQueue, setQuizQueue] = useState<QuizQuestion[] | null>(null)
-  const [quizIndex, setQuizIndex] = useState(0)
-  const [quizInput, setQuizInput] = useState('')
-  const [quizChecked, setQuizChecked] = useState(false)
-  const [quizResult, setQuizResult] = useState<boolean | null>(null)
-  const [quizResults, setQuizResults] = useState<{ id: string; itemId: string; correct: boolean }[]>([])
-  const [quizSeconds, setQuizSeconds] = useState(0)
-  /** 答完自动下一题（默认关，保持手动回车） */
-  const [quizAuto, setQuizAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
-  /** 每个单词只出一题、题型随机（避免同一词连出几题） */
-  const [quizUnique, setQuizUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
-  /** 答完朗读正确答案（默认开） */
-  const [quizSpeak, setQuizSpeak] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
-  const quizAdvanceRef = useRef<number | null>(null)
-  const quizRecordedRef = useRef(false)
-  /** 本轮实际是否自动切题（听写模式强制开） */
-  const [quizAutoRun, setQuizAutoRun] = useState(false)
   /** 今天学过的不同单词 id（每日目标进度） */
   const [studiedToday, setStudiedToday] = useLocalStorageState<{ day: string; ids: string[] }>(
     'reader:studiedToday',
@@ -498,6 +444,8 @@ export default function ReaderApp() {
   const [quickRevealed, setQuickRevealed] = useState(false)
   /** 听写会话 API 的引用：供定义在 useDictation 之前的少数回调（打开听力/仿写、错题重练）使用。 */
   const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
+  /** 考试会话 API 的引用：供定义在 useQuizSession 之前的少数回调（背单词开始时关闭考试）使用。 */
+  const quizApiRef = useRef<ReturnType<typeof useQuizSession> | null>(null)
   /** 听力理解题：AI 出的题（严格 JSON）+ 作答 + 判分 */
   const [listenQuiz, setListenQuiz] = useState<ListeningQuiz | null>(null)
   const [listenOpen, setListenOpen] = useState(false)
@@ -755,29 +703,6 @@ export default function ReaderApp() {
   )
   const studyPool = useMemo(() => studyPoolFor(studyScope), [studyPoolFor, studyScope])
 
-  /** 考试的候选池（范围与背单词类似，但多一个「到期」「错词」）。 */
-  const quizPool = useMemo(() => {
-    if (quizScope === 'all') return library.items
-    if (quizScope === 'due') return library.items.filter((it) => isDue(it))
-    if (quizScope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-    if (quizScope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-    return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
-  }, [library.items, quizScope, articleIdentity, docLemmas])
-
-  /** 各范围下能出的题数（用于设置面板提示）。 */
-  const quizPoolSizes = useMemo(() => {
-    // 用廉价计数（不生成干扰项），避免每次改词库都跑 O(N²) 的 buildQuizQuestions
-    const count = (items: VocabItem[]) => countQuestions(items, quizKinds)
-    return {
-      all: count(library.items),
-      due: count(library.items.filter((it) => isDue(it))),
-      unmastered: count(library.items.filter((it) => it.status !== 'mastered')),
-    }
-  }, [library.items, quizKinds])
-
-  /** 当前范围大致能出多少题（廉价计数，供设置面板提示；别用 buildQuizSet，太贵）。 */
-  const quizAvailableCount = useMemo(() => countQuestions(quizPool, quizKinds), [quizPool, quizKinds])
-
   /** 待复习（已学过且到期）数量——用于「复习」模式的角标。 */
   const dueCount = useMemo(
     () => studyPool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length,
@@ -825,8 +750,7 @@ export default function ReaderApp() {
       studyRequeueRef.current = new Map()
       studyForgotRef.current = []
       studyBumpedRef.current = new Set()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
+      quizApiRef.current?.close()
       setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
       setStudyQueue(q)
       setStudyIndex(0)
@@ -860,8 +784,7 @@ export default function ReaderApp() {
     studyRequeueRef.current = new Map()
     studyForgotRef.current = []
     studyBumpedRef.current = new Set()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
+    quizApiRef.current?.close()
     setStudyCounts({ know: 0, fuzzy: 0, forgot: 0 })
     setStudyQueue(sortItems(pool, 'due'))
     setStudyIndex(0)
@@ -1056,140 +979,56 @@ export default function ReaderApp() {
     setStudyDelArmed(false)
   }, [library.items])
 
-  /** 出题：默认每个单词只考一次、题型随机；可关掉以允许同一词多题型。 */
-  const buildQuizSet = useCallback(
-    (items: VocabItem[]): QuizQuestion[] => {
-      if (!quizUnique) return buildQuizQuestions(items, quizKinds)
-      return shuffleQuiz(items)
-        .map((it) => {
-          for (const k of shuffleQuiz(quizKinds)) {
-            const q = makeQuestion(it, k, items)
-            if (q) return q
-          }
-          return null
-        })
-        .filter((q): q is QuizQuestion => q !== null)
-    },
-    [quizUnique, quizKinds],
-  )
-
-  /** 用当前设置出一份考卷（洗牌 + 限量）。 */
-  const startQuiz = useCallback(() => {
-    const qs = buildQuizSet(quizPool)
-    if (!qs.length) {
-      flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
-      return
-    }
-    if (quizAdvanceRef.current) {
-      window.clearTimeout(quizAdvanceRef.current)
-      quizAdvanceRef.current = null
-    }
-    const picked = shuffleQuiz(qs).slice(0, quizLimit > 0 ? quizLimit : qs.length)
-    setStudyQueue(null)
-    setQuizQueue(picked)
-    setQuizIndex(0)
-    setQuizInput('')
-    setQuizChecked(false)
-    setQuizResult(null)
-    setQuizResults([])
-    quizRecordedRef.current = false
-    setQuizAutoRun(quizAuto)
-    setQuizSetupOpen(false)
-  }, [buildQuizSet, quizPool, quizLimit, quizAuto, flash])
-
-  const nextQuiz = useCallback(() => {
-    if (quizAdvanceRef.current) {
-      window.clearTimeout(quizAdvanceRef.current)
-      quizAdvanceRef.current = null
-    }
-    setQuizInput('')
-    setQuizChecked(false)
-    setQuizResult(null)
-    setQuizIndex((i) => i + 1)
-  }, [])
-
-  /** 提交本题并判分；对 → SRS good，错 → SRS again（记 lapse）。 */
-  const checkQuiz = useCallback(
-    (answerOverride?: string) => {
-      if (!quizQueue) return
-      const q = quizQueue[quizIndex]
-      if (!q || quizChecked) return
-      const ans = answerOverride ?? quizInput
-      const ok = isCorrect(q, ans)
-      setQuizChecked(true)
-      setQuizResult(ok)
-      setQuizResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
-      if (ok) dropMistake(`vocab:${q.itemId}`)
-      else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
-      persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
-      markStudied(q.itemId)
-      recordActivity(q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
-      // 答完朗读一下（看词选义读英文单词；其余读答案词形）
-      if (quizSpeak) speak(q.kind === 'meaning' ? q.word : q.answer)
-      // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
-      if (quizAutoRun) {
-        if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
-        quizAdvanceRef.current = window.setTimeout(() => {
-          quizAdvanceRef.current = null
-          nextQuiz()
-        }, ok ? 650 : 1400)
-      }
-    },
-    [quizQueue, quizIndex, quizChecked, quizInput, library, persist, quizAutoRun, nextQuiz, markStudied, quizSpeak, recordActivity, addMistake, dropMistake],
-  )
-
-  /** 关闭考试并清掉待触发的自动切题。 */
-  const closeQuiz = useCallback(() => {
-    if (quizAdvanceRef.current) {
-      window.clearTimeout(quizAdvanceRef.current)
-      quizAdvanceRef.current = null
-    }
-    setQuizQueue(null)
-  }, [])
-
-  const retryQuizWrong = useCallback(() => {
-    const wrongIds = new Set(quizResults.filter((r) => !r.correct).map((r) => r.itemId))
-    const items = library.items.filter((it) => wrongIds.has(it.id))
-    const qs = buildQuizSet(items)
-    if (!qs.length) {
-      flash('没有可重做的错题')
-      return
-    }
-    setQuizQueue(shuffleQuiz(qs))
-    setQuizIndex(0)
-    setQuizInput('')
-    setQuizChecked(false)
-    setQuizResult(null)
-    setQuizResults([])
-    quizRecordedRef.current = false
-  }, [quizResults, library.items, buildQuizSet, flash])
-
-  /** 从指定词条开一轮考试（错题本「重练词汇」用）。 */
-  const startQuizItems = useCallback(
-    (ids: string[]) => {
-      const items = library.items.filter((it) => ids.includes(it.id))
-      const qs = buildQuizSet(items)
-      if (!qs.length) {
-        flash('这些词暂时出不了题（缺释义 / 例句）')
-        return
-      }
-      if (quizAdvanceRef.current) {
-        window.clearTimeout(quizAdvanceRef.current)
-        quizAdvanceRef.current = null
-      }
-      setStudyQueue(null)
-      setQuizQueue(shuffleQuiz(qs))
-      setQuizIndex(0)
-      setQuizInput('')
-      setQuizChecked(false)
-      setQuizResult(null)
-      setQuizResults([])
-      quizRecordedRef.current = false
-      setQuizAutoRun(quizAuto)
-      setQuizSetupOpen(false)
-    },
-    [library.items, buildQuizSet, quizAuto, flash],
-  )
+  // ===== 考试会话（hooks/useQuizSession）=====
+  const quizApi = useQuizSession({
+    library,
+    articleIdentity,
+    docLemmas,
+    closeOthers: () => setStudyQueue(null),
+    speak,
+    flash,
+    persist,
+    markStudied,
+    recordActivity,
+    recordPractice,
+    addMistake,
+    dropMistake,
+  })
+  quizApiRef.current = quizApi
+  const {
+    kinds: quizKinds,
+    setKinds: setQuizKinds,
+    scope: quizScope,
+    setScope: setQuizScope,
+    limit: quizLimit,
+    setLimit: setQuizLimit,
+    auto: quizAuto,
+    setAuto: setQuizAuto,
+    unique: quizUnique,
+    setUnique: setQuizUnique,
+    speakAfter: quizSpeak,
+    setSpeakAfter: setQuizSpeak,
+    setupOpen: quizSetupOpen,
+    setSetupOpen: setQuizSetupOpen,
+    queue: quizQueue,
+    setQueue: setQuizQueue,
+    index: quizIndex,
+    input: quizInput,
+    setInput: setQuizInput,
+    checked: quizChecked,
+    result: quizResult,
+    results: quizResults,
+    setResults: setQuizResults,
+    seconds: quizSeconds,
+    poolSizes: quizPoolSizes,
+    availableCount: quizAvailableCount,
+    start: startQuiz,
+    startItems: startQuizItems,
+    check: checkQuiz,
+    next: nextQuiz,
+    close: closeQuiz,
+    retryWrong: retryQuizWrong,
+  } = quizApi
 
   /** 用指定题目开一轮听力理解（错题本「重练听力」用）。 */
   const startListenQuestions = useCallback((questions: ListeningQuestion[]) => {
@@ -1381,51 +1220,6 @@ export default function ReaderApp() {
       }
     }
   }, [studyQueue, studyFlush])
-
-  // 考试计时：开考清零，每秒 +1
-  useEffect(() => {
-    if (!quizQueue) return
-    setQuizSeconds(0)
-    const id = window.setInterval(() => setQuizSeconds((s) => s + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [quizQueue])
-
-  // 考试快捷键：回车 提交 / 下一题；词形辨析可用 1/2/3 选选项；Esc 退出
-  useEffect(() => {
-    if (!quizQueue) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        closeQuiz()
-        return
-      }
-      const q = quizQueue[quizIndex]
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        if (quizIndex >= quizQueue.length) return
-        if (!quizChecked) checkQuiz()
-        else nextQuiz()
-        return
-      }
-      if ((q?.kind === 'choice' || q?.kind === 'meaning') && !quizChecked && q.options) {
-        const n = Number(e.key)
-        if (n >= 1 && n <= q.options.length) {
-          e.preventDefault()
-          const opt = q.options[n - 1]
-          setQuizInput(opt)
-          checkQuiz(opt)
-        }
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [quizQueue, quizIndex, quizChecked, checkQuiz, nextQuiz, closeQuiz])
-
-  // 组件卸载时清掉待触发的自动切题
-  useEffect(() => {
-    return () => {
-      if (quizAdvanceRef.current) window.clearTimeout(quizAdvanceRef.current)
-    }
-  }, [])
 
   /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
   const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
@@ -1878,18 +1672,6 @@ export default function ReaderApp() {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [studyQueue, quizQueue])
-
-  // 考试完成 → 记一次成绩
-  useEffect(() => {
-    if (!quizQueue) {
-      quizRecordedRef.current = false
-      return
-    }
-    if (quizIndex >= quizQueue.length && quizResults.length > 0 && !quizRecordedRef.current) {
-      quizRecordedRef.current = true
-      recordPractice('quiz', quizResults.length, quizResults.filter((r) => r.correct).length)
-    }
-  }, [quizQueue, quizIndex, quizResults, recordPractice])
 
   /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
   const visibleBatch = useMemo(
