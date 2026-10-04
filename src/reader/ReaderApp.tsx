@@ -5,7 +5,6 @@ import {
   useRef,
   useState,
   type MouseEvent,
-  type ReactNode,
 } from 'react'
 import { styleOf, type ArticleBook } from '../core/matchArticle'
 import { cleanText } from '../core/cleaner'
@@ -99,6 +98,7 @@ import QuickPanel from './panels/QuickPanel'
 import SideOverview from './panels/SideOverview'
 import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
+import ReaderBody from './panels/ReaderBody'
 import { fmtDur } from './format'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useAiPack } from './hooks/useAiPack'
@@ -169,49 +169,6 @@ function missingWords(requested: string[], returned: string[]): string[] {
 function localDayKey(d: Date = new Date()): string {
   const p = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
-/**
- * 把一句话渲染成"词 span + 标点文本"，落在 active 词区间内的词包上 `.hl`（圆角高亮）。
- * 用 wordSpans 切，保证和 snapSelection 的词序号一致。
- */
-function sentenceNodes(
-  text: string,
-  active: Set<number> | null,
-  lemmas: Set<string>,
-  onWord: (word: string) => void,
-  sid?: string,
-  nums?: Map<string, number> | null,
-  firstNums?: Set<string> | null,
-): ReactNode[] {
-  const spans = wordSpans(text)
-  const out: ReactNode[] = []
-  let pos = 0
-  spans.forEach((w, i) => {
-    if (w.start > pos) out.push(text.slice(pos, w.start))
-    const on = active !== null && active.has(i)
-    if (on) {
-      out.push(<span key={`w${i}`} className="hl">{w.text}</span>)
-    } else {
-      const key = w.text.toLowerCase()
-      const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
-      const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
-      const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
-      out.push(
-        isVocab ? (
-          <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
-            {w.text}
-            {showNum && <sup className="wnum">{num}</sup>}
-          </span>
-        ) : (
-          w.text
-        ),
-      )
-    }
-    pos = w.end
-  })
-  if (pos < text.length) out.push(text.slice(pos))
-  return out
 }
 
 /** container/offset 相对 root 起点、按字符算的偏移量。 */
@@ -3406,68 +3363,26 @@ export default function ReaderApp() {
             ) : (
               <>
                 <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
-                <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
-                  {vocabMode && lastPicked && bubblePos && (
-                    <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
-                      {lastPicked.word}
-                    </div>
-                  )}
-                  {doc.paragraphs.map((p) => (
-                    <p className="para" key={p.id}>
-                      {p.sentenceIds.map((sid) => {
-                        const s = doc.sentences.find((x) => x.id === sid)
-                        if (!s) return null
-                        return (
-                          <span key={sid} className="s-pair">
-                            <span
-                              data-sid={sid}
-                              className={
-                                'sent' +
-                                (selectedId === sid ? ' sel' : '') +
-                                (peekSid === sid && selectedId !== sid ? ' peek' : '') +
-                                (vocabSidSet.has(sid) ? ' has-vocab' : '')
-                              }
-                              onClick={() => selectSentence(sid)}
-                            >
-                              {sentenceNodes(
-                                s.text,
-                                selSid === sid && selIndices.length ? new Set(selIndices) : null,
-                                libraryLemmas,
-                                focusEntry,
-                                sid,
-                                articleNums,
-                                articleFirst,
-                              )}{' '}
-                            </span>
-                            {translateView !== 'off' && (s.translation || translateView === 'only') && (
-                              <span
-                                data-sid={sid}
-                                className={'tr-block' + (selectedId === sid ? ' sel' : '')}
-                                onClick={() => selectSentence(sid)}
-                                title="点这里等价于选中这句"
-                              >
-                                {s.translation ?? '（未翻译）'}
-                              </span>
-                            )}
-                            {showLanguage && s.language && (
-                              <span className="lang-block">
-                                {s.language.structure && <div>结构：{s.language.structure}</div>}
-                                {s.language.grammar && <div>语法：{s.language.grammar}</div>}
-                                {s.language.idioms?.length ? (
-                                  <div>习语：{s.language.idioms.join('；')}</div>
-                                ) : null}
-                                {s.language.phrases?.length ? (
-                                  <div>词组：{s.language.phrases.join('；')}</div>
-                                ) : null}
-                                {s.language.usage?.length ? <div>用法：{s.language.usage.join('；')}</div> : null}
-                              </span>
-                            )}
-                          </span>
-                        )
-                      })}
-                    </p>
-                  ))}
-                </article>
+                <ReaderBody
+                  paragraphs={doc.paragraphs}
+                  sentences={doc.sentences}
+                  translateView={translateView}
+                  selectedId={selectedId}
+                  peekSid={peekSid}
+                  vocabSidSet={vocabSidSet}
+                  selSid={selSid}
+                  selIndices={selIndices}
+                  libraryLemmas={libraryLemmas}
+                  articleNums={articleNums}
+                  articleFirst={articleFirst}
+                  showLanguage={showLanguage}
+                  vocabMode={vocabMode}
+                  lastPicked={lastPicked}
+                  bubblePos={bubblePos}
+                  articleRef={articleRef}
+                  onSelectSentence={selectSentence}
+                  onFocusEntry={focusEntry}
+                />
               </>
             )}
           </>
