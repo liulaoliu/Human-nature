@@ -23,7 +23,6 @@ import {
   lemmaOf,
   markWord,
   normalizeWord,
-  relemmaLibrary,
   removeItem,
   reviewItem,
   sortItems,
@@ -31,13 +30,10 @@ import {
 } from '../core/vocab'
 import {
   applyToSentence,
-  buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildConfusablePrompt,
   buildLemmaPrompt,
   buildPosPrompt,
-  buildPrompt,
-  buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
   parseLemmaTable,
@@ -105,6 +101,7 @@ import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
 import { useStudySession } from './hooks/useStudySession'
 import { useArticleImport } from './hooks/useArticleImport'
+import { useAiTasks } from './hooks/useAiTasks'
 import FishLayer from '../ui/FishLayer'
 import {
   persistentBool,
@@ -1908,194 +1905,40 @@ export default function ReaderApp() {
     flash(result.created ? `已加入：${result.item.word}` : `已合并：${result.item.word}`)
   }, [exact, library, articleIdentity, articleTitle, articleKey, sentence, persist, flash])
 
-  const copyPrompt = useCallback(
-    async (task: AnalysisTask) => {
-      const text = useExact && exact ? exact : sentence?.text || exact
-      if (!text) {
-        flash('先划一段文字或点一句')
-        return
-      }
-      setLastTask(task)
-      askedWordsRef.current = task === 'lookup' && exact && !exact.includes(' ') ? [exact] : []
-      askedIdsRef.current = []
-      const prompt = buildPrompt({
-        task,
-        text,
-        words: task === 'lookup' && exact && !exact.includes(' ') ? [exact] : undefined,
-      })
-      try {
-        await navigator.clipboard.writeText(prompt)
-        flash('提示词已复制，去 chat.deepseek.com 粘贴')
-      } catch {
-        flash('复制失败：浏览器需要 localhost 或 https')
-      }
-    },
-    [exact, useExact, sentence, flash],
-  )
-
-  /** 待选词一次性加入生词本。 */
-  const commitBatch = useCallback(() => {
-    if (!visibleBatch.length) return
-    let lib = library
-    for (const b of visibleBatch) {
-      lib = markWord(lib, {
-        word: b.word,
-        articleId: articleTitle || articleKey || '手动粘贴',
-        fileName: articleIdentity,
-        sentenceId: b.sentenceId,
-        sentenceText: b.sentence,
-      }).library
-    }
-    persist(lib)
-    flash(`已加入 ${visibleBatch.length} 个生词`)
-    setBatch([])
-  }, [visibleBatch, library, articleIdentity, articleTitle, articleKey, persist, flash])
-
-  /** 待选词一键生成批量查词提示词，复制到网页版 DeepSeek。 */
-  const copyBatchPrompt = useCallback(async () => {
-    if (!visibleBatch.length) return
-    const prompt = buildBatchLookupPrompt(
-      visibleBatch.map((b) => ({ word: b.word, context: b.sentence })),
-    )
-    setLastTask('lookup')
-    askedWordsRef.current = visibleBatch.map((b) => b.word)
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(prompt)
-      flash(`已复制 ${visibleBatch.length} 个词的查词提示词`)
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [visibleBatch, flash])
-
-  /** 从生词本里挑出缺音标的词，生成查词提示词（补齐用）。 */
-  const copyMissingPhonetic = useCallback(
-    async (only: 'missing' | 'all') => {
-      const todo = only === 'missing' ? library.items.filter((it) => !it.phonetic) : library.items
-      if (!todo.length) {
-        flash(only === 'missing' ? '生词都有音标了' : '生词本是空的')
-        return
-      }
-      const prompt = buildBatchLookupPrompt(
-        todo.map((it) => ({ word: it.word, context: it.source?.sentenceText })),
-      )
-      setLastTask('lookup')
-      askedWordsRef.current = todo.map((it) => it.word)
-      askedIdsRef.current = []
-      try {
-        await navigator.clipboard.writeText(prompt)
-        flash(`已复制 ${todo.length} 个词，去 AI 粘贴后把结果贴回「应用结果」`)
-      } catch {
-        flash('复制失败：浏览器需要 localhost 或 https')
-      }
-    },
-    [library.items, flash],
-  )
-
-  /** 全文翻译：按句子 id 逐句翻译，位置天然对齐。 */
-  const copyTranslateAll = useCallback(async () => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    const prompt = buildTranslateAllPrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text })))
-    setLastTask('translate')
-    askedIdsRef.current = doc.sentences.map((s) => s.id)
-    askedWordsRef.current = []
-    try {
-      await navigator.clipboard.writeText(prompt)
-      flash('已复制全文翻译提示词；把结果贴回「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [doc, flash])
-
-  /** 自动标词：按词汇标准让 AI 从全文挑词，结果进「待选」。 */
-  const copyAutoVocab = useCallback(async () => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    const text = doc.sentences.map((s) => s.text).join(' ')
-    setLastTask('auto_vocab')
-    try {
-      await navigator.clipboard.writeText(buildAutoVocabPrompt(text, vocabLevel))
-      flash('已复制自动标词提示词；把 AI 返回的词表粘到「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [doc, vocabLevel, flash])
-
-  /** 生成混淆项：让 AI 为缺混淆项的词产出形近/义近干扰词，结果粘回「应用结果」。 */
-  const copyConfusablePrompt = useCallback(async () => {
-    if (!confusableBatch.length) {
-      flash('没有需要生成混淆项的词（需有释义）')
-      return
-    }
-    setLastTask('confusable')
-    askedWordsRef.current = confusableBatch.map((it) => it.word)
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(
-        buildConfusablePrompt(confusableBatch.map((it) => ({ word: it.word, meaning: it.meaning }))),
-      )
-      const rest = confusableTodo.length - confusableBatch.length
-      flash(
-        rest > 0
-          ? `已复制本批 ${confusableBatch.length} 个（还剩 ${rest}）；应用后再点一次继续`
-          : `已复制 ${confusableBatch.length} 个词的混淆项提示词；结果粘回「应用结果」`,
-      )
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [confusableBatch, confusableTodo, flash])
-
-  /** 去重整理（程序）：重算 lemma 后按 lemma 合并重复词条。 */
-  const dedupeNow = useCallback(() => {
-    const before = library.items.length
-    const next = dedupeLibrary(relemmaLibrary(library))
-    persist(next)
-    const removed = before - next.items.length
-    flash(removed > 0 ? `已合并 ${removed} 个重复词` : '没有发现重复词')
-  }, [library, persist, flash])
-
-  /** 生成原形校正提示词：带来源语境，让 AI 判断原形。 */
-  const copyLemmaPrompt = useCallback(async () => {
-    if (!lemmaCandidates.length) {
-      flash('没有疑似非原型的词（word 与原形一致）')
-      return
-    }
-    setLastTask('lemma')
-    askedWordsRef.current = lemmaCandidates.map((it) => it.word)
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(
-        buildLemmaPrompt(lemmaCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
-      )
-      flash(`已复制 ${lemmaCandidates.length} 个词的原形校正提示词；结果粘回「应用结果」`)
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [lemmaCandidates, flash])
-
-  /** 生成 -ing/-ed 语法辨析提示词。 */
-  const copyPosPrompt = useCallback(async () => {
-    if (!posCandidates.length) {
-      flash('没有含 -ing/-ed 的词')
-      return
-    }
-    setLastTask('pos')
-    askedWordsRef.current = posCandidates.map((it) => it.word)
-    askedIdsRef.current = []
-    try {
-      await navigator.clipboard.writeText(
-        buildPosPrompt(posCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
-      )
-      flash(`已复制 ${posCandidates.length} 条 -ing/-ed 辨析提示词；结果粘回「应用结果」`)
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [posCandidates, flash])
+  /** 各类「复制提示词给 AI」的动作（逻辑在 hooks/useAiTasks）。 */
+  const {
+    copyPrompt,
+    commitBatch,
+    copyBatchPrompt,
+    copyMissingPhonetic,
+    copyTranslateAll,
+    copyAutoVocab,
+    copyConfusablePrompt,
+    copyLemmaPrompt,
+    copyPosPrompt,
+    dedupeNow,
+  } = useAiTasks({
+    exact,
+    useExact,
+    sentence,
+    visibleBatch,
+    library,
+    persist,
+    articleIdentity,
+    articleTitle,
+    articleKey,
+    doc,
+    vocabLevel,
+    confusableBatch,
+    confusableTodo,
+    lemmaCandidates,
+    posCandidates,
+    flash,
+    setLastTask,
+    setBatch,
+    askedWordsRef,
+    askedIdsRef,
+  })
 
   /**
    * 应用一份 AI 结果（按任务分派）。单条「应用结果」与整包导入都走这里。
