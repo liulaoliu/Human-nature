@@ -101,8 +101,8 @@ core 覆盖很好，但没有一个组件/hook 的测试。至少给"抽出来�
 - [x] 逻辑下沉到 feature hooks：`useSpeaking` / `useAiPack` / `useDictation` / `useQuizSession` / `useStudySession`（会话状态 + 效应都进 hook）。
 - [x] 视图拆成 `panels/`：会话面板 7 个 + 侧栏 3 个 + 统计 + 阅读正文 `ReaderBody` + 新建 `Composer` + 顶栏 `ReaderToolbar`（共 14 个）。
 - [x] AI 工作包加「网页版（DeepSeek）」路径：复制提示词 / 应用 / 缺项重问 / 分块；长任务（翻译/语言点）按句分块；「全流程」进度面板（持久化）；「范围：本篇/全库」；含自动标词（`core/aiPackage`）。
-- [x] 其它纯逻辑与视图拆分：`core/vocabStats`（统计派生）、`useArticleImport`（新建/导入）、`useAiTasks`（提示词复制）、`useReaderDoc`（文章加载/保存/编辑）、`useApplyTaskResult`（AI 回执）、`ReaderBody` / `Composer` / `ReaderToolbar`。
-- [ ] 下一阶段：`useSelection`（选区/划词/鼠标事件）。
+- [x] 其它纯逻辑与视图拆分：`core/vocabStats`（统计派生）、`useArticleImport`（新建/导入）、`useAiTasks`（提示词复制）、`useReaderDoc`（文章加载/保存/编辑）、`useApplyTaskResult`（AI 回执）、`useExport`（导出/打印/备份）、`ReaderBody` / `Composer` / `ReaderToolbar`。
+- [ ] 剩下最大一块：`useSelection`（选区/划词/鼠标事件/词高亮——DOM 重、耦合深，建议配合真机验收再动）。
 参照已有的 `state/session.ts` 思路，做一个 **`src/reader/store.ts`**（不依赖 React）：
 - 持有 `library / doc / saved / prefs`，以及各练习模式的队列/进度；
 - 暴露 `actions`（`grade`、`startStudy`、`applyPaste`、`saveArticle`…）与 `selectors`（`articleWords`、`studyPool`、`readyRows`、`stats`…）；
