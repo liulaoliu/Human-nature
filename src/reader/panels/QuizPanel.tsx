@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { formatAnswerInput, maskAnswer, QUIZ_KIND_LABEL, type QuizQuestion } from '../../core/quiz'
 import type { VocabItem } from '../../types/document'
 import { fmtDur } from '../format'
+import { QUIZ_SCOPE_LABEL, type QuizScope } from './QuizSetupPanel'
 
 export interface QuizResultRow {
   id: string
@@ -12,6 +13,8 @@ export interface QuizResultRow {
 export interface QuizPanelProps {
   /** 当前题；为 null 或 index 越界时显示结算。 */
   question: QuizQuestion | null
+  /** 本轮考试范围（页面上给个提示）。 */
+  scope: QuizScope
   queueLength: number
   index: number
   seconds: number
@@ -34,6 +37,7 @@ export interface QuizPanelProps {
 /** 考试答题 + 结算。 */
 export default function QuizPanel({
   question,
+  scope,
   queueLength,
   index,
   seconds,
@@ -66,6 +70,9 @@ export default function QuizPanel({
     <div className="study quiz">
       <div className="bar study-bar">
         <button onClick={onClose}>结束（Esc）</button>
+        <span className="muted" title="本轮考试范围">
+          范围：{QUIZ_SCOPE_LABEL[scope]}
+        </span>
         <span className="muted">
           {Math.min(index + 1, queueLength)} / {queueLength}
         </span>

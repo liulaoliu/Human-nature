@@ -78,8 +78,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
   })
   const [scope, setScope] = useLocalStorageState<QuizScope>(
     'reader:quizScope',
-    'unmastered',
-    persistentEnum(['all', 'article', 'unmastered', 'due', 'lapses'] as const, 'unmastered'),
+    'article',
+    persistentEnum(['all', 'article', 'unmastered', 'due', 'lapses'] as const, 'article'),
   )
   const [limit, setLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
   const [auto, setAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)

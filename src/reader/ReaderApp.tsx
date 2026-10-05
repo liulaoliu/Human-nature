@@ -1664,6 +1664,7 @@ export default function ReaderApp() {
         {quizQueue && (
           <QuizPanel
             question={quizIndex < quizQueue.length ? quizQueue[quizIndex] : null}
+            scope={quizScope}
             queueLength={quizQueue.length}
             index={quizIndex}
             seconds={quizSeconds}

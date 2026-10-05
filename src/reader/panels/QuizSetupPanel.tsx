@@ -3,6 +3,15 @@ import { QUIZ_KIND_LABEL, type QuizKind } from '../../core/quiz'
 /** 考试范围。 */
 export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
 
+/** 范围的中文名（设置页与考试页共用）。 */
+export const QUIZ_SCOPE_LABEL: Record<QuizScope, string> = {
+  article: '本篇',
+  unmastered: '未掌握',
+  due: '到期',
+  lapses: '错词',
+  all: '全库',
+}
+
 const KIND_ORDER: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
 
 export interface QuizSetupPanelProps {
@@ -102,7 +111,7 @@ export default function QuizSetupPanel({
           </div>
         </div>
         <p className="muted">
-          当前范围可出 {availableCount} 题（未掌握约 {poolUnmastered} 题）。答对按「认识」、答错按「忘记了」计入复习排期。
+          本次范围：<b>{QUIZ_SCOPE_LABEL[scope]}</b> · 可出 {availableCount} 题（未掌握约 {poolUnmastered} 题）。答对按「认识」、答错按「忘记了」计入复习排期。
         </p>
         <div className="bar">
           <button className="primary" onClick={onStart} disabled={!kinds.length}>
