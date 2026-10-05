@@ -21,6 +21,8 @@ import {
 } from '../../core/vocab'
 import type { Sentence, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
+import { dictLemmaOf, firstLine, isAboveLevel, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import { dictionary } from '../dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 
@@ -45,6 +47,8 @@ export interface UseApplyTaskResultParams {
   writingText: string
   writingTask: ImitationTask | null
   recordActivity: (cat: ActivityCat, n?: number) => void
+  /** 自动标词的词汇水平（用离线词典按 tag 过滤超纲词）。 */
+  ecdictLevel: EcdictLevel
   setDoc: Dispatch<SetStateAction<ReaderDoc | null>>
   setPendingSave: (v: boolean) => void
   setListenQuiz: (q: ListeningQuiz | null) => void
@@ -77,6 +81,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     writingText,
     writingTask,
     recordActivity,
+    ecdictLevel,
     setDoc,
     setPendingSave,
     setListenQuiz,
@@ -90,13 +95,35 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       const text = raw.trim()
       if (!text) return { report: [], missing: null, ok: false }
 
-      // 自动标词：AI 返回的是一串单词 → 进「待选」清单（可增删，不直接落库）
+      // 自动标词：AI 返回的是一串单词 → 用离线词典归一到原形、按级别过滤 → 进「待选」
       if (task === 'auto_vocab') {
-        const words = parseWordList(text)
+        let words = parseWordList(text)
         if (!words.length)
           return { report: ['没解析出单词（应为一行一个，或逗号/顿号分隔）'], missing: null, ok: false }
+        let dropped = 0
+        const dict = dictionary()
+        if (dict) {
+          const byLemma = new Map<string, string>()
+          for (const w of words) {
+            const lemma = dictLemmaOf(dict, w) ?? w
+            const key = lemma.toLowerCase()
+            if (!byLemma.has(key)) byLemma.set(key, lemma)
+          }
+          const kept: string[] = []
+          for (const w of byLemma.values()) {
+            if (isAboveLevel(dict, w, ecdictLevel)) kept.push(w)
+            else dropped++
+          }
+          words = kept
+        }
+        if (!words.length)
+          return { report: [`词典筛完后没有超纲词（已滤掉 ${dropped} 个非超纲）`], missing: null, ok: true }
         mergeBatch(batchItemsFromWords(words))
-        return { report: [`已加入待选 ${words.length} 个词，可增删后再查词`], missing: null, ok: true }
+        return {
+          report: [`已加入待选 ${words.length} 个词${dropped ? `（词典筛掉 ${dropped} 个非超纲）` : ''}，可增删后再查词`],
+          missing: null,
+          ok: true,
+        }
       }
 
       // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
@@ -234,8 +261,25 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       let missing: { task: 'lookup'; words: string[] } | null = null
       let next = library
       if (result.words?.length) {
+        // 用离线词典校验/补全：归一到原形，并补齐缺失的音标/词性/中英释义
+        const dict = dictionary()
+        const wordsForApply = dict
+          ? result.words.map((w) => {
+              const hit = resolveWord(dict, w.word)
+              if (!hit) return w
+              const e = hit.entry
+              return {
+                ...w,
+                word: hit.lemma,
+                phonetic: w.phonetic || (e.phonetic ? `/${e.phonetic.replace(/^\/+|\/+$/g, '')}/` : undefined),
+                partOfSpeech: w.partOfSpeech || e.pos || undefined,
+                meaning: w.meaning || firstLine(e.zh) || undefined,
+                definition: w.definition || firstLine(e.en) || undefined,
+              }
+            })
+          : result.words
         next = dedupeLibrary(
-          applyWordAnalysis(next, result.words, new Date(), {
+          applyWordAnalysis(next, wordsForApply, new Date(), {
             articleId: articleTitle || articleKey || '手动粘贴',
             fileName: articleIdentity,
             sentenceId: null,
@@ -319,6 +363,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       writingText,
       writingTask,
       recordActivity,
+      ecdictLevel,
       setDoc,
       setPendingSave,
       setListenQuiz,

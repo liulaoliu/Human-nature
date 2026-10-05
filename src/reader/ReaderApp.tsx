@@ -1265,6 +1265,7 @@ export default function ReaderApp() {
     writingText,
     writingTask,
     recordActivity,
+    ecdictLevel: vocabLevel,
     setDoc,
     setPendingSave,
     setListenQuiz,

@@ -105,6 +105,15 @@ export function isAboveLevel(dict: Ecdict, word: string, level: EcdictLevel): bo
   return tags.length > 0 || hit.entry.collins >= 1 || hit.entry.oxford === 1 || hit.entry.frq > 0
 }
 
+/** 首行非空文本（ECDICT 的中英释义都是多行）。 */
+export function firstLine(s: string): string {
+  for (const line of s.split('\n')) {
+    const t = line.trim()
+    if (t) return t
+  }
+  return ''
+}
+
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g
 
 /** 从一段英文里挑"超出某水平"的词（按出现顺序、去重、返回原形）。纯本地，不用 AI。 */

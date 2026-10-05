@@ -1,5 +1,5 @@
 import { useCallback } from 'react'
-import { dictLemmaOf, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import { dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
 import { applyLemmaMap, dedupeLibrary, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary } from '../dictionary'
@@ -14,15 +14,6 @@ export interface UseDictToolsParams {
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
   flash: (message: string) => void
-}
-
-/** 首行非空文本（ECDICT 的中英释义都是多行）。 */
-function firstLine(s: string): string {
-  for (const line of s.split('\n')) {
-    const t = line.trim()
-    if (t) return t
-  }
-  return ''
 }
 
 /**
