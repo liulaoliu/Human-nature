@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "serve": "node server/appServer.js",
-    "ai:pack": "node tools/ai-pack.mjs"
+    "ai:pack": "node tools/ai-pack.mjs",
+    "ecdict:build": "node tools/build-ecdict.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",
