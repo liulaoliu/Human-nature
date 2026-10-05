@@ -255,24 +255,17 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex((i) => Math.max(0, i - 1))
   }, [queue, index, resetCardUi])
 
-  /** 「不认识」：重置为全新词（repetitions=0）并打标签，本轮末尾再出现。 */
+  /** 「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
   const markUnknown = useCallback(() => {
     if (!queue) return
     const queued = queue[index]
     if (!queued) return
     const cur = library.items.find((it) => it.id === queued.id) ?? queued
-    const now = new Date()
+    const reviewed = reviewItem(library, cur.id, 'again')
     persist({
-      ...library,
-      items: library.items.map((it) =>
-        it.id === cur.id
-          ? {
-              ...it,
-              tags: it.tags.includes('不认识') ? it.tags : [...it.tags, '不认识'],
-              reviewState: { ease: 2.5, interval: 0, repetitions: 0, due: null, lapses: 0 },
-              updatedAt: now.toISOString(),
-            }
-          : it,
+      ...reviewed,
+      items: reviewed.items.map((it) =>
+        it.id === cur.id && !it.tags.includes('不认识') ? { ...it, tags: [...it.tags, '不认识'] } : it,
       ),
     })
     if (!forgotRef.current.includes(cur.id)) {
@@ -280,17 +273,12 @@ export function useStudySession(params: UseStudySessionParams) {
       setForgotCount(forgotRef.current.length)
     }
     setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
-    const used = requeueRef.current.get(cur.id) ?? 0
-    if (used < 2) {
-      requeueRef.current.set(cur.id, used + 1)
-      setQueue((q) => (q ? [...q, cur] : q))
-    }
     addStudyTime(0, 1)
     markStudied(cur.id)
     recordActivity('vocab', 1)
-    setGradeInfo('已标为全新词 · 稍后重练')
+    setGradeInfo('已标为「不认识」· 已安排复习')
     window.setTimeout(() => setGradeInfo(''), 1600)
-    flash('已标为「不认识」的全新词')
+    flash('已标为「不认识」的全新词，已安排复习')
     resetCardUi()
     setIndex((i) => i + 1)
   }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])

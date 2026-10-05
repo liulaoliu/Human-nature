@@ -1505,7 +1505,7 @@ export default function ReaderApp() {
   const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
 
   return (
-    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}`}>
+    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}${studyQueue ? ' studying' : ''}`}>
       <FishLayer pageKey="reader" />
       <main
         className="reader-main"

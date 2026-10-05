@@ -432,6 +432,7 @@ export default function StudyPanel({
 
       {card ? (
         <>
+          {!drillOn && (
           <div className={'study-card heat-' + heat} onClick={spellingFront ? undefined : onReveal}>
             {spellingFront ? (
               <div className="study-prompt">
@@ -526,6 +527,7 @@ export default function StudyPanel({
               </>
             )}
           </div>
+          )}
 
           {/* 超时未评分 → 强制锤炼 */}
           {drillOn ? (
