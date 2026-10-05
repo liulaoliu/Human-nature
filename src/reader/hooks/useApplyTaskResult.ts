@@ -22,7 +22,7 @@ import {
 import type { Sentence, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { dictLemmaOf, firstLine, isAboveLevel, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { dictionary } from '../dictionary'
+import { dictionary, mwldLookupWord } from '../dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 
@@ -261,23 +261,23 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       let missing: { task: 'lookup'; words: string[] } | null = null
       let next = library
       if (result.words?.length) {
-        // 用离线词典校验/补全：归一到原形，并补齐缺失的音标/词性/中英释义
+        // 用离线词典校验/补全：归一到原形，并补齐缺失的音标/词性/中英释义（英文释义优先 M-W）
         const dict = dictionary()
-        const wordsForApply = dict
-          ? result.words.map((w) => {
-              const hit = resolveWord(dict, w.word)
-              if (!hit) return w
-              const e = hit.entry
-              return {
-                ...w,
-                word: hit.lemma,
-                phonetic: w.phonetic || (e.phonetic ? `/${e.phonetic.replace(/^\/+|\/+$/g, '')}/` : undefined),
-                partOfSpeech: w.partOfSpeech || e.pos || undefined,
-                meaning: w.meaning || firstLine(e.zh) || undefined,
-                definition: w.definition || firstLine(e.en) || undefined,
-              }
-            })
-          : result.words
+        const wordsForApply = result.words.map((w) => {
+          const hit = dict ? resolveWord(dict, w.word) : null
+          const mw = mwldLookupWord(w.word)
+          if (!hit && !mw) return w
+          const e = hit?.entry
+          const ph = mw?.phonetic || e?.phonetic
+          return {
+            ...w,
+            word: hit?.lemma ?? w.word,
+            phonetic: w.phonetic || (ph ? `/${ph.replace(/^\/+|\/+$/g, '')}/` : undefined),
+            partOfSpeech: w.partOfSpeech || mw?.pos || e?.pos || undefined,
+            meaning: w.meaning || (e?.zh ? firstLine(e.zh) : undefined),
+            definition: w.definition || mw?.en || (e?.en ? firstLine(e.en) : undefined),
+          }
+        })
         next = dedupeLibrary(
           applyWordAnalysis(next, wordsForApply, new Date(), {
             articleId: articleTitle || articleKey || '手动粘贴',

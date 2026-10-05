@@ -2,7 +2,7 @@ import { useCallback } from 'react'
 import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
 import { applyConfusables, applyLemmaMap, dedupeLibrary, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
-import { dictionary } from '../dictionary'
+import { dictionary, mwldLookupWord } from '../dictionary'
 
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 
@@ -31,13 +31,15 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
     let filled = 0
     const items = library.items.map((it) => {
       const hit = resolveWord(dict, it.word) ?? resolveWord(dict, it.lemma)
-      if (!hit) return it
-      const e = hit.entry
+      const mw = mwldLookupWord(it.word) ?? mwldLookupWord(it.lemma)
+      if (!hit && !mw) return it
+      const e = hit?.entry
       const patch: Partial<VocabItem> = {}
-      if (!it.phonetic && e.phonetic) patch.phonetic = `/${e.phonetic.replace(/^\/+|\/+$/g, '')}/`
-      if (!it.partOfSpeech && e.pos) patch.partOfSpeech = e.pos
-      if (!it.meaning && e.zh) patch.meaning = firstLine(e.zh)
-      if (!it.definition && e.en) patch.definition = firstLine(e.en)
+      const ph = mw?.phonetic || e?.phonetic
+      if (!it.phonetic && ph) patch.phonetic = `/${ph.replace(/^\/+|\/+$/g, '')}/`
+      if (!it.partOfSpeech && (mw?.pos || e?.pos)) patch.partOfSpeech = mw?.pos || e?.pos || undefined
+      if (!it.meaning && e?.zh) patch.meaning = firstLine(e.zh)
+      if (!it.definition && (mw?.en || e?.en)) patch.definition = mw?.en || firstLine(e?.en ?? '')
       if (!Object.keys(patch).length) return it
       filled++
       if (it.status === 'unqueried') patch.status = 'queried'

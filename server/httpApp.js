@@ -8,6 +8,7 @@ const DATA_FILES = new Set([
   'ecdict.tsv',
   'ecdict-forms.tsv',
   'ecdict-near.tsv',
+  'mwld.tsv',
 ])
 const FISH_IMG = /\.(png|jpe?g|webp|avif)$/i
 const FISH_MAX = 600 * 1024
