@@ -572,6 +572,7 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .study-phon { color: var(--dim); font-size: 18px; margin-top: 6px; }
 .study-back { margin-top: 22px; border-top: 1px dashed var(--line); padding-top: 16px; width: 100%; }
 .study-meaning { font-size: 20px; margin-bottom: 8px; }
+.study-def { font-size: 14px; color: var(--dim); font-style: italic; margin: -2px 0 8px; }
 .study-back .ex { font-size: 14px; color: var(--dim); margin-top: 6px; }
 .study-back .src { margin-top: 10px; }
 .study-actions { justify-content: center; }

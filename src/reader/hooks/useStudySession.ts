@@ -24,6 +24,7 @@ export interface StudyDraft {
   phonetic: string
   partOfSpeech: string
   meaning: string
+  definition: string
   usage: string
 }
 
@@ -291,6 +292,7 @@ export function useStudySession(params: UseStudySessionParams) {
       phonetic: card.phonetic ?? '',
       partOfSpeech: card.partOfSpeech ?? '',
       meaning: card.meaning ?? '',
+      definition: card.definition ?? '',
       usage: card.usage.join('；'),
     })
     setEditOpen(true)
@@ -310,6 +312,7 @@ export function useStudySession(params: UseStudySessionParams) {
         phonetic: draft.phonetic.trim() || null,
         partOfSpeech: draft.partOfSpeech.trim() || null,
         meaning: draft.meaning.trim() || null,
+        definition: draft.definition.trim() || null,
         usage,
       }),
     )

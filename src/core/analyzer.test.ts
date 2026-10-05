@@ -92,6 +92,14 @@ describe('parseLookupTable', () => {
   it('忽略横线分隔行', () => {
     expect(parseLookupTable('--- | --- | ---')).toHaveLength(0)
   })
+  it('第 7 列（英文释义）可选解析；旧 6 列仍兼容', () => {
+    const withDef = parseLookupTable(
+      'running | /ˈrʌnɪŋ/ | v. | 跑步 | run out | I run every day. — 我每天跑步。 | to move quickly on foot',
+    )
+    expect(withDef[0].definition).toBe('to move quickly on foot')
+    // 旧 6 列：没有第 7 列 → definition 为 undefined
+    expect(parseLookupTable(table)[0].definition).toBeUndefined()
+  })
 })
 
 describe('parseAnalysis', () => {

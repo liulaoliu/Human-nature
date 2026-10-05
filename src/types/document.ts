@@ -157,6 +157,8 @@ export interface VocabItem {
   partOfSpeech: string | null
   /** 中文含义 */
   meaning: string | null
+  /** 英英释义（学习者词典风格的一句话，可选） */
+  definition?: string | null
   /** 用法 / 搭配（v1 的 collocations 并入这里） */
   usage: string[]
   /** 例句 */
@@ -202,6 +204,8 @@ export interface WordAnalysis {
   phonetic?: string
   partOfSpeech?: string
   meaning?: string
+  /** 英英释义（学习者词典风格的一句话，可选） */
+  definition?: string
   usage?: string[]
   examples?: { text: string; translation?: string }[]
 }

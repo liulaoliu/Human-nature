@@ -13,6 +13,7 @@ export interface StudyDraft {
   phonetic: string
   partOfSpeech: string
   meaning: string
+  definition: string
   usage: string
 }
 
@@ -503,6 +504,7 @@ export default function StudyPanel({
                         不认识
                       </button>
                     </div>
+                    {card.definition && <div className="study-def">EN · {card.definition}</div>}
                     {card.examples.slice(0, 1).map((ex, i) => (
                       <div className="ex" key={i}>
                         {ex.text}
@@ -578,6 +580,14 @@ export default function StudyPanel({
                       value={draft.meaning}
                       onChange={(e) => onDraftChange({ ...draft, meaning: e.target.value })}
                       rows={2}
+                    />
+                  </label>
+                  <label className="wide">
+                    释义（英）
+                    <input
+                      value={draft.definition}
+                      onChange={(e) => onDraftChange({ ...draft, definition: e.target.value })}
+                      placeholder="to give up completely"
                     />
                   </label>
                   <label className="wide">
