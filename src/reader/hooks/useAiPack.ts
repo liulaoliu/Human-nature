@@ -44,12 +44,20 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   /** 网页版进度：已复制过、已成功应用的任务 id（持久化，刷新不丢）。 */
   const [askedIds, setAskedIds] = useLocalStorageState<string[]>('reader:aiWebAsked', [])
   const [doneIds, setDoneIds] = useLocalStorageState<string[]>('reader:aiWebDone', [])
+  /** 已应用过「自动标词」的文章 id（应用过就不再进默认待办）。 */
+  const [autoVocabDone, setAutoVocabDone] = useLocalStorageState<string[]>('reader:autoVocabDone', [])
   /** agent 路径回执里缺的词（用于「复制未返回的」重试）。 */
   const [missingIds, setMissingIds] = useState<string[]>([])
 
-  /** 当前待办（顺序稳定，id 可复现）。 */
-  const round = useMemo(() => buildAiJobs(jobsInput), [jobsInput])
-  const jobCount = useMemo(() => countAiJobs(jobsInput), [jobsInput])
+  /** 有效输入：注入本篇的「自动标词已完成」标记。 */
+  const jobsInputEff = useMemo<AiJobsInput>(
+    () => ({ ...jobsInput, autoVocabDone: autoVocabDone.includes(jobsInput.articleId) }),
+    [jobsInput, autoVocabDone],
+  )
+
+  /** 当前待办（顺序稳定，id 由内容决定、可复现）。 */
+  const round = useMemo(() => buildAiJobs(jobsInputEff), [jobsInputEff])
+  const jobCount = useMemo(() => countAiJobs(jobsInputEff), [jobsInputEff])
 
   const roundIdSet = useMemo(() => new Set(round.map((j) => j.id)), [round])
   const doneSet = useMemo(() => new Set(doneIds.filter((id) => roundIdSet.has(id))), [doneIds, roundIdSet])
@@ -100,15 +108,19 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         }
         lines.push(`【${job?.label ?? task}】${res.report[0] ?? (res.ok ? '已应用' : '未解析')}`)
       }
+      // 应用了「自动标词」→ 记下本篇已完成，之后不再进默认待办
+      if (appliedIds.some((id) => jobs.find((j) => j.id === id)?.task === 'auto_vocab')) {
+        setAutoVocabDone((prev) => (prev.includes(jobsInput.articleId) ? prev : [...prev, jobsInput.articleId]))
+      }
       return { okCount, failCount, lines, appliedIds }
     },
-    [applyTaskResult],
+    [applyTaskResult, jobsInput.articleId, setAutoVocabDone],
   )
 
   // ---------- 本机 agent 路径 ----------
 
   const exportJobs = useCallback(() => {
-    const jobs = buildAiJobs(jobsInput)
+    const jobs = buildAiJobs(jobsInputEff)
     if (!jobs.length) {
       flash('没有待办（生词本已齐，也没有缺译文/语言点/听力题）')
       return
@@ -123,7 +135,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     }
     download(`ai-jobs-${dayKeyLocal(new Date())}.json`, text, 'application/json')
     flash(`已导出 ${jobs.length} 项待办；整包交给 AI 后，把结果 JSON 导回`)
-  }, [jobsInput, download, flash])
+  }, [jobsInputEff, download, flash])
 
   const readResults = useCallback(
     async (file: File) => {
@@ -142,14 +154,14 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         }
       }
       const jobs = poolText ? (parseJobPack(poolText)?.jobs ?? []) : []
-      const target = jobs.length ? jobs : buildAiJobs(jobsInput)
+      const target = jobs.length ? jobs : buildAiJobs(jobsInputEff)
       const { okCount, failCount, lines } = applyResults(results, target)
       const miss = missingJobIds(target, results)
       setMissingIds(miss)
       onReport([`导入完成：成功 ${okCount} / 失败 ${failCount}${miss.length ? `；缺 ${miss.length}` : ''}`, ...lines.slice(0, 40)])
       flash(`导入完成：成功 ${okCount}，失败 ${failCount}${miss.length ? `，缺 ${miss.length}` : ''}`)
     },
-    [applyResults, jobsInput, flash, onReport],
+    [applyResults, jobsInputEff, flash, onReport],
   )
 
   const onFile = useCallback(
@@ -163,13 +175,15 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   // ---------- 网页版路径 ----------
 
-  /** 重置网页版进度（重新开始一轮）。 */
-  const refreshWebRound = useCallback(() => {
+  /** 重置进度：清空 done/asked，让所有待办重新显示为未做（不删成果数据）。 */
+  const resetWebProgress = useCallback(() => {
     setAskedIds([])
     setDoneIds([])
     setMissingIds([])
-    flash('已重新统计待办；已应用的进度清零')
-  }, [setAskedIds, setDoneIds, flash])
+    // 连「自动标词已完成」也清掉（这样重置后是"完整重来"）
+    setAutoVocabDone((prev) => prev.filter((id) => id !== jobsInput.articleId))
+    flash('已重置进度（成果不删；所有待办重新显示为未做）')
+  }, [jobsInput.articleId, setAskedIds, setDoneIds, setAutoVocabDone, flash])
 
   /** 复制「下一批待处理」的网页版提示词（自动跳过已完成的）。 */
   const copyWebPrompt = useCallback(async () => {
@@ -253,7 +267,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     copyWebPrompt,
     applyWeb,
     copyWebMissing,
-    refreshWebRound,
+    resetWebProgress,
     webTotal: round.length,
     webDone: doneCount,
     webPending: pending.length,

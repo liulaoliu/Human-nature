@@ -59,6 +59,7 @@ const emptyInput = (over: Partial<AiJobsInput> = {}): AiJobsInput => ({
   confusableBatchSize: 0,
   sentences: [],
   vocabLevel: 'cet6',
+  articleId: 'art-1',
   hasListenQuiz: false,
   listenCount: 8,
   ...over,
@@ -81,8 +82,10 @@ describe('isAiJobTask / makeJobId', () => {
     expect(isAiJobTask('nope')).toBe(false)
     expect(isAiJobTask(3)).toBe(false)
   })
-  it('生成稳定 id', () => {
-    expect(makeJobId('pos', 7)).toBe('pos-7')
+  it('生成稳定 id（同内容不变）', () => {
+    expect(makeJobId('pos', 'run out')).toBe(makeJobId('pos', 'run out'))
+    expect(makeJobId('pos', 'run out')).not.toBe(makeJobId('pos', 'run in'))
+    expect(makeJobId('pos', 'x')).not.toBe(makeJobId('lemma', 'x'))
   })
 })
 
@@ -163,7 +166,7 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs).toHaveLength(1)
     expect(jobs[0].task).toBe('lookup')
     expect(jobs[0].askedWords).toEqual(['alpha', 'beta'])
-    expect(jobs[0].id).toBe('lookup-1')
+    expect(jobs[0].id).toMatch(/^lookup-/)
     expect(jobs[0].prompt).toContain('alpha')
   })
 
@@ -227,6 +230,18 @@ describe('buildAiJobs / countAiJobs', () => {
     const auto = jobs.find((j) => j.task === 'auto_vocab')
     expect(auto).toBeTruthy()
     expect(auto?.label).toContain('cet6')
+  })
+
+  it('本篇应用过自动标词后不再生成该任务', () => {
+    const jobs = buildAiJobs(emptyInput({ sentences: [mkSentence({ id: 's1' })], autoVocabDone: true }))
+    expect(jobs.find((j) => j.task === 'auto_vocab')).toBeUndefined()
+  })
+
+  it('同一逻辑任务重建后 id 稳定（便于进度持久化）', () => {
+    const input = emptyInput({ items: [mkItem({ word: 'w1', meaning: null })] })
+    const a = buildAiJobs(input).map((j) => j.id)
+    const b = buildAiJobs(input).map((j) => j.id)
+    expect(a).toEqual(b)
   })
 
   it('翻译/语言点按句分块（避免单条太大被截断）', () => {

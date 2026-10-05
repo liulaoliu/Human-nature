@@ -87,8 +87,19 @@ export interface AiResultEntry {
 
 export const AI_JOB_PACK_VERSION = 1
 
-export function makeJobId(task: AiJobTask, seq: number): string {
-  return `${task}-${seq}`
+/** 稳定短哈希（FNV-1a → base36），用于由内容生成任务 id。 */
+function fnv1a(s: string): string {
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return (h >>> 0).toString(36)
+}
+
+/**
+ * 由「任务 + 内容指纹」生成**稳定** id：同一逻辑任务（同样的词/句）重建后 id 不变，
+ * 这样网页版进度（按 id 记 done）才能跨刷新 / 数据变动保持。
+ */
+export function makeJobId(task: AiJobTask, key: string): string {
+  return `${task}-${fnv1a(key)}`
 }
 
 export function buildJobPack(jobs: AiJob[], now: Date = new Date()): AiJobPack {
@@ -195,6 +206,10 @@ export interface AiJobsInput {
   scope: 'article' | 'all'
   /** 每次生成混淆项的批量大小（0=全部）。 */
   confusableBatchSize: number
+  /** 当前文章的稳定标识（用于自动标词的「已完成」标记 / 稳定 id）。 */
+  articleId: string
+  /** 本篇是否已经应用过「自动标词」（应用过就不再进默认待办）。 */
+  autoVocabDone?: boolean
   /** 当前文章的句子。 */
   sentences: Sentence[]
   /** 自动标词的词汇标准。 */
@@ -221,15 +236,17 @@ function hasIngEd(s: string): boolean {
  */
 export function buildAiJobs(input: AiJobsInput): AiJob[] {
   const jobs: AiJob[] = []
-  let seq = 0
   const push = (
     task: AiJobTask,
     label: string,
     prompt: string,
     askedWords: string[] = [],
     askedIds: string[] = [],
+    idKey?: string,
   ) => {
-    jobs.push({ id: makeJobId(task, ++seq), task, label, askedWords, askedIds, prompt })
+    // 稳定 id：默认用「问过的词/句」当内容指纹，同内容重建后 id 不变
+    const key = idKey ?? `${askedWords.join('\n')}|${askedIds.join('\n')}`
+    jobs.push({ id: makeJobId(task, key), task, label, askedWords, askedIds, prompt })
   }
 
   // 待选清单 → 批量查词
@@ -241,8 +258,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       input.batch.map((b) => b.word),
     )
   }
-  // 自动标词：让 AI 按词汇标准从全文挑词 → 结果进「待选」（应用后点「刷新」会再生成查词任务）
-  if (input.sentences.length) {
+  // 自动标词：让 AI 按词汇标准从全文挑词 → 结果进「待选」；本篇应用过一次就不再出现
+  if (input.sentences.length && !input.autoVocabDone) {
     push(
       'auto_vocab',
       `自动标词（${input.vocabLevel}）`,
@@ -441,7 +458,7 @@ export function countAiJobs(input: AiJobsInput): number {
     confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
-  if (input.sentences.length) n++
+  if (!input.autoVocabDone && input.sentences.length) n++
   if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
   if (base.some((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)) n++
   n += chunk(

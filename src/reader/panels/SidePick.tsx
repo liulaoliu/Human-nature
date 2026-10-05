@@ -298,8 +298,13 @@ export default function SidePick({
                 🔁 重发缺项 {webMissing}
               </button>
             )}
-            <button onClick={onRefreshWeb} title="数据变了就重新统计待办（会清零进度）">
-              ↺ 刷新
+            <button
+              onClick={() => {
+                if (window.confirm('重置进度？\n已应用的成果不会删除；但所有待办会重新显示为「未做」。')) onRefreshWeb()
+              }}
+              title="清空进度（不删成果数据）；所有待办重新显示为未做"
+            >
+              ↺ 重置进度
             </button>
           </div>
         </div>

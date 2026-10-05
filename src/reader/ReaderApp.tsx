@@ -1374,6 +1374,7 @@ export default function ReaderApp() {
       articleWords,
       scope: aiPackScope,
       confusableBatchSize,
+      articleId: articleIdentity,
       sentences: doc?.sentences ?? [],
       vocabLevel,
       hasListenQuiz: !!listenQuiz,
@@ -1385,6 +1386,7 @@ export default function ReaderApp() {
       articleWords,
       aiPackScope,
       confusableBatchSize,
+      articleIdentity,
       doc,
       vocabLevel,
       listenQuiz,
@@ -1403,7 +1405,7 @@ export default function ReaderApp() {
     copyWebPrompt: copyAiWebPrompt,
     applyWeb: applyAiWeb,
     copyWebMissing: copyAiWebMissing,
-    refreshWebRound: refreshAiWebRound,
+    resetWebProgress: resetAiWebProgress,
     webTotal: aiWebTotal,
     webDone: aiWebDone,
     webPending: aiWebPending,
@@ -1948,7 +1950,7 @@ export default function ReaderApp() {
           onAiWebBatchSizeChange={setAiWebBatchSize}
           onCopyWebPrompt={() => void copyAiWebPrompt()}
           onCopyWebMissing={() => void copyAiWebMissing()}
-          onRefreshWeb={refreshAiWebRound}
+          onRefreshWeb={resetAiWebProgress}
           webTotal={aiWebTotal}
           webDone={aiWebDone}
           webPending={aiWebPending}
