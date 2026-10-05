@@ -65,6 +65,8 @@ import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
+import { useDictionary } from './hooks/useDictionary'
+import { useDictTools } from './hooks/useDictTools'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
@@ -1435,6 +1437,17 @@ export default function ReaderApp() {
     applyPaste()
   }, [pasted, applyAiWeb, applyPaste])
 
+  /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
+  const dictReady = useDictionary()
+  const { enrichFromDict, fixLemmasFromDict, pickFromDict } = useDictTools({
+    library,
+    persist,
+    doc,
+    level: vocabLevel,
+    mergeBatch,
+    batchItemsFromWords,
+    flash,
+  })
 
   const articleList = sortItems(articleWords, 'updatedAt')
   const allList = sortItems(library.items, 'updatedAt')
@@ -1944,6 +1957,10 @@ export default function ReaderApp() {
           aiScope={aiPackScope}
           onAiScopeChange={setAiPackScope}
           onExportAiJobs={exportAiJobs}
+          dictReady={dictReady}
+          onPickFromDict={pickFromDict}
+          onEnrichFromDict={enrichFromDict}
+          onFixLemmasFromDict={fixLemmasFromDict}
           aiFileRef={aiFileRef}
           onAiFile={onAiFile}
           aiWebBatchSize={aiWebBatchSize}

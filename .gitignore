@@ -18,3 +18,8 @@ server/*.pid
 
 # 本地图片素材（不进仓库）
 assets/imgs/fish/
+
+# 本地词典数据（不进仓库）
+data/
+public/ecdict.tsv
+public/ecdict-forms.tsv

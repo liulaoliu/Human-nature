@@ -44,6 +44,11 @@ export interface SidePickProps {
   aiScope: 'article' | 'all'
   onAiScopeChange: (scope: 'article' | 'all') => void
   onExportAiJobs: () => void
+  /** 离线词典（ECDICT）。 */
+  dictReady: boolean
+  onPickFromDict: () => void
+  onEnrichFromDict: () => void
+  onFixLemmasFromDict: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
 
@@ -102,6 +107,10 @@ export default function SidePick({
   aiScope,
   onAiScopeChange,
   onExportAiJobs,
+  dictReady,
+  onPickFromDict,
+  onEnrichFromDict,
+  onFixLemmasFromDict,
   aiFileRef,
   onAiFile,
   aiWebBatchSize,
@@ -194,6 +203,33 @@ export default function SidePick({
         </div>
         <div className="muted">
           {lastTask ? `上一个任务：${lastTask}` : '点任务 → 复制提示词 → 去 chat.deepseek.com'}
+        </div>
+      </div>
+
+      <div className="dict-tools">
+        <div className="muted">📖 离线词典：{dictReady ? '已就绪（ECDICT）' : '未加载（跑 npm run ecdict:build）'}</div>
+        <div className="bar">
+          <button
+            onClick={onPickFromDict}
+            disabled={!dictReady}
+            title="按当前词汇标准，用词典从本篇正文挑超纲词进「待选」（不用 AI）"
+          >
+            本篇挑词
+          </button>
+          <button
+            onClick={onEnrichFromDict}
+            disabled={!dictReady}
+            title="给生词本补齐音标/词性/中英文释义（词典有的才补）"
+          >
+            补齐生词本
+          </button>
+          <button
+            onClick={onFixLemmasFromDict}
+            disabled={!dictReady}
+            title="用词典校正原形（running→run）并去重"
+          >
+            校正原形
+          </button>
         </div>
       </div>
 
