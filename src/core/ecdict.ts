@@ -27,6 +27,8 @@ export interface Ecdict {
   entries: Map<string, EcdictEntry>
   /** lower(词形) → lower(原形) */
   forms: Map<string, string>
+  /** lower(word) → 拼写近邻候选（用于本地生成混淆项） */
+  near: Map<string, string[]>
 }
 
 /** 还原转义：\\n → 换行、\\t → 制表、\\\\ → 反斜杠。 */
@@ -35,7 +37,7 @@ function unesc(s: string): string {
 }
 
 /** 解析构建脚本产出的两个 TSV。 */
-export function parseEcdict(wordsTsv: string, formsTsv: string): Ecdict {
+export function parseEcdict(wordsTsv: string, formsTsv: string, nearTsv = ''): Ecdict {
   const entries = new Map<string, EcdictEntry>()
   for (const line of wordsTsv.split('\n')) {
     if (!line) continue
@@ -62,7 +64,17 @@ export function parseEcdict(wordsTsv: string, formsTsv: string): Ecdict {
     if (i <= 0) continue
     forms.set(line.slice(0, i), line.slice(i + 1))
   }
-  return { entries, forms }
+  const near = new Map<string, string[]>()
+  for (const line of nearTsv.split('\n')) {
+    if (!line) continue
+    const i = line.indexOf('\t')
+    if (i <= 0) continue
+    near.set(
+      line.slice(0, i),
+      line.slice(i + 1).split(',').filter(Boolean),
+    )
+  }
+  return { entries, forms, near }
 }
 
 /** 查词：按词形先还原原形，再取词条。返回 { lemma, entry }，查不到为 null。 */
@@ -82,6 +94,25 @@ export function dictLemmaOf(dict: Ecdict, word: string): string | null {
   const lemma = dict.forms.get(lower)
   if (lemma) return lemma
   return dict.entries.has(lower) ? lower : null
+}
+
+export interface DictConfusable {
+  word: string
+  meaning?: string
+}
+
+/** 用词典给一个词挑拼写近邻（形近、义不同）作选择题干扰项。 */
+export function dictConfusables(dict: Ecdict, word: string, n = 3): DictConfusable[] {
+  const lemma = dictLemmaOf(dict, word) ?? word.trim().toLowerCase()
+  const cands = dict.near.get(lemma) ?? []
+  const out: DictConfusable[] = []
+  for (const c of cands) {
+    const e = dict.entries.get(c)
+    if (!e) continue
+    out.push({ word: e.word, meaning: firstLine(e.zh) || undefined })
+    if (out.length >= n) break
+  }
+  return out
 }
 
 export type EcdictLevel = 'cet4' | 'cet6' | 'kaoyan' | 'ielts' | 'ielts65'

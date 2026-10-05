@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyLemmaMap, dedupeLibrary, normalizeWord } from '../../core/vocab'
+import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import { applyConfusables, applyLemmaMap, dedupeLibrary, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary } from '../dictionary'
 
@@ -89,5 +89,26 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
     flash(`已按词典挑出 ${words.length} 个超纲词进「待选」`)
   }, [doc, level, mergeBatch, batchItemsFromWords, flash])
 
-  return { enrichFromDict, fixLemmasFromDict, pickFromDict }
+  /** 用词典给缺混淆项的词本地生成干扰项（形近、义不同）。 */
+  const confuseFromDict = useCallback(() => {
+    const dict = dictionary()
+    if (!dict) {
+      flash('词典未加载（先跑 npm run ecdict:build）')
+      return
+    }
+    const results: { word: string; confusables: { word: string; meaning?: string }[] }[] = []
+    for (const it of library.items) {
+      if (it.confusables?.length || !it.meaning) continue
+      const conf = dictConfusables(dict, it.word)
+      if (conf.length >= 3) results.push({ word: it.word, confusables: conf })
+    }
+    if (!results.length) {
+      flash('词典没生成出混淆项（这些词没有合适的拼写近邻）')
+      return
+    }
+    persist(applyConfusables(library, results))
+    flash(`已用词典给 ${results.length} 个词生成混淆项`)
+  }, [library, persist, flash])
+
+  return { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict }
 }

@@ -49,6 +49,7 @@ export interface SidePickProps {
   onPickFromDict: () => void
   onEnrichFromDict: () => void
   onFixLemmasFromDict: () => void
+  onConfuseFromDict: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
 
@@ -111,6 +112,7 @@ export default function SidePick({
   onPickFromDict,
   onEnrichFromDict,
   onFixLemmasFromDict,
+  onConfuseFromDict,
   aiFileRef,
   onAiFile,
   aiWebBatchSize,
@@ -229,6 +231,13 @@ export default function SidePick({
             title="用词典校正原形（running→run）并去重"
           >
             校正原形
+          </button>
+          <button
+            onClick={onConfuseFromDict}
+            disabled={!dictReady}
+            title="用词典给缺混淆项的词本地生成干扰项（拼写形近、含义不同）"
+          >
+            补混淆项
           </button>
         </div>
       </div>

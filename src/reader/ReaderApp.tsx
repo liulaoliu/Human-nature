@@ -1440,7 +1440,7 @@ export default function ReaderApp() {
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictReady = useDictionary()
-  const { enrichFromDict, fixLemmasFromDict, pickFromDict } = useDictTools({
+  const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
     library,
     persist,
     doc,
@@ -1962,6 +1962,7 @@ export default function ReaderApp() {
           onPickFromDict={pickFromDict}
           onEnrichFromDict={enrichFromDict}
           onFixLemmasFromDict={fixLemmasFromDict}
+          onConfuseFromDict={confuseFromDict}
           aiFileRef={aiFileRef}
           onAiFile={onAiFile}
           aiWebBatchSize={aiWebBatchSize}

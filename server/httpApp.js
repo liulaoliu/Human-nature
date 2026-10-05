@@ -2,7 +2,13 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readF
 import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 
-const DATA_FILES = new Set(['articles.json', 'shadowing-state.json', 'ecdict.tsv', 'ecdict-forms.tsv'])
+const DATA_FILES = new Set([
+  'articles.json',
+  'shadowing-state.json',
+  'ecdict.tsv',
+  'ecdict-forms.tsv',
+  'ecdict-near.tsv',
+])
 const FISH_IMG = /\.(png|jpe?g|webp|avif)$/i
 const FISH_MAX = 600 * 1024
 

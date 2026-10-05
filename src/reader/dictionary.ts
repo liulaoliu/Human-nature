@@ -23,12 +23,13 @@ export async function loadDictionary(base = ''): Promise<boolean> {
   if (loading) return loading
   loading = (async () => {
     try {
-      const [w, f] = await Promise.all([
+      const [w, f, n] = await Promise.all([
         fetch(`${base}/ecdict.tsv`).then((r) => (r.ok ? r.text() : '')),
         fetch(`${base}/ecdict-forms.tsv`).then((r) => (r.ok ? r.text() : '')),
+        fetch(`${base}/ecdict-near.tsv`).then((r) => (r.ok ? r.text() : '')),
       ])
       if (!w) return false
-      dict = parseEcdict(w, f)
+      dict = parseEcdict(w, f, n)
       return true
     } catch {
       return false
