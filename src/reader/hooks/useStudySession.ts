@@ -13,7 +13,7 @@ import {
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fmtInterval } from '../format'
-import { useLocalStorageState, persistentBool, persistentEnum } from './useLocalStorageState'
+import { useLocalStorageState, persistentBool, persistentEnum, persistentNumber } from './useLocalStorageState'
 
 /** 背单词范围。 */
 export type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
@@ -72,6 +72,8 @@ export function useStudySession(params: UseStudySessionParams) {
     persistentEnum(['all', 'article', 'unmastered', 'lapses'] as const, 'unmastered'),
   )
   const [spelling, setSpelling] = useLocalStorageState('reader:studySpelling', false, persistentBool)
+  /** 单卡停留超过多少秒进入「强制锤炼」（0=关）。时间越长说明越难记。 */
+  const [drillAfter, setDrillAfter] = useLocalStorageState('reader:studyDrillAfter', 60, persistentNumber)
   const [mode, setMode] = useLocalStorageState<StudyMode>(
     'reader:studyMode',
     'learn',
@@ -101,6 +103,8 @@ export function useStudySession(params: UseStudySessionParams) {
   const bumpedRef = useRef<Set<string>>(new Set())
   /** 供外部（收尾小结）显示「重练忘记的 N 个」 */
   const [forgotCount, setForgotCount] = useState(0)
+  /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
+  const [drillCleared, setDrillCleared] = useState(false)
 
   // ---- 候选池 ----
   const poolFor = useCallback(
@@ -121,19 +125,29 @@ export function useStudySession(params: UseStudySessionParams) {
   const card =
     queue && index < queue.length ? (library.items.find((it) => it.id === queue[index].id) ?? queue[index]) : null
 
-  const resetSession = useCallback(() => {
-    requeueRef.current = new Map()
-    forgotRef.current = []
-    bumpedRef.current = new Set()
-    setForgotCount(0)
-    setCounts({ know: 0, fuzzy: 0, forgot: 0 })
+  /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
+  const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
+  const clearDrill = useCallback(() => setDrillCleared(true), [])
+
+  /** 换卡时重置卡片 UI 状态。 */
+  const resetCardUi = useCallback(() => {
     setRevealed(false)
     setInput('')
     setChecked(false)
     setEditOpen(false)
     setDraft(null)
     setDelArmed(false)
+    setDrillCleared(false)
   }, [])
+
+  const resetSession = useCallback(() => {
+    requeueRef.current = new Map()
+    forgotRef.current = []
+    bumpedRef.current = new Set()
+    setForgotCount(0)
+    setCounts({ know: 0, fuzzy: 0, forgot: 0 })
+    resetCardUi()
+  }, [resetCardUi])
 
   /** 开始背单词：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
   const start = useCallback(
@@ -226,12 +240,60 @@ export function useStudySession(params: UseStudySessionParams) {
       setChecked(false)
       setEditOpen(false)
       setDelArmed(false)
+      setDrillCleared(false)
       setIndex((i) => i + 1)
     },
     [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity],
   )
 
   const close = useCallback(() => setQueue(null), [])
+
+  /** 回滚到上一个单词（不撤销已评分，只回看/再练）。 */
+  const back = useCallback(() => {
+    if (!queue || index <= 0) return
+    resetCardUi()
+    setIndex((i) => Math.max(0, i - 1))
+  }, [queue, index, resetCardUi])
+
+  /** 「不认识」：重置为全新词（repetitions=0）并打标签，本轮末尾再出现。 */
+  const markUnknown = useCallback(() => {
+    if (!queue) return
+    const queued = queue[index]
+    if (!queued) return
+    const cur = library.items.find((it) => it.id === queued.id) ?? queued
+    const now = new Date()
+    persist({
+      ...library,
+      items: library.items.map((it) =>
+        it.id === cur.id
+          ? {
+              ...it,
+              tags: it.tags.includes('不认识') ? it.tags : [...it.tags, '不认识'],
+              reviewState: { ease: 2.5, interval: 0, repetitions: 0, due: null, lapses: 0 },
+              updatedAt: now.toISOString(),
+            }
+          : it,
+      ),
+    })
+    if (!forgotRef.current.includes(cur.id)) {
+      forgotRef.current.push(cur.id)
+      setForgotCount(forgotRef.current.length)
+    }
+    setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
+    const used = requeueRef.current.get(cur.id) ?? 0
+    if (used < 2) {
+      requeueRef.current.set(cur.id, used + 1)
+      setQueue((q) => (q ? [...q, cur] : q))
+    }
+    addStudyTime(0, 1)
+    markStudied(cur.id)
+    recordActivity('vocab', 1)
+    setGradeInfo('已标为全新词 · 稍后重练')
+    window.setTimeout(() => setGradeInfo(''), 1600)
+    flash('已标为「不认识」的全新词')
+    resetCardUi()
+    setIndex((i) => i + 1)
+  }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])
 
   /** 打开卡内编辑，带出当前值。 */
   const openEdit = useCallback(() => {
@@ -300,12 +362,8 @@ export function useStudySession(params: UseStudySessionParams) {
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     setQueue(items)
     setIndex(0)
-    setRevealed(false)
-    setInput('')
-    setChecked(false)
-    setEditOpen(false)
-    setDelArmed(false)
-  }, [library.items])
+    resetCardUi()
+  }, [library.items, resetCardUi])
 
   // 单卡计时：换卡归零，每秒 +1（催你快点，别墨迹）
   useEffect(() => {
@@ -342,7 +400,7 @@ export function useStudySession(params: UseStudySessionParams) {
 
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
   useEffect(() => {
-    if (!queue || editOpen) return
+    if (!queue || editOpen || drillOn) return
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
@@ -371,7 +429,7 @@ export function useStudySession(params: UseStudySessionParams) {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [queue, editOpen, index, revealed, spelling, checked, grade, close])
+  }, [queue, editOpen, index, revealed, spelling, checked, grade, close, drillOn])
 
   return {
     scope,
@@ -402,6 +460,10 @@ export function useStudySession(params: UseStudySessionParams) {
     card,
     dueCount,
     newCount,
+    drillOn,
+    drillAfter,
+    setDrillAfter,
+    clearDrill,
     /** 本轮尚未落盘的秒数（用于「累计时长」显示）。 */
     unflushedSeconds: Math.max(0, live - flushedRef.current),
     start,
@@ -409,6 +471,8 @@ export function useStudySession(params: UseStudySessionParams) {
     switchScope,
     startArticleAll,
     grade,
+    back,
+    markUnknown,
     close,
     retryForgot,
     openEdit,

@@ -551,12 +551,18 @@ export default function ReaderApp() {
     card: studyCard,
     dueCount,
     newCount,
+    drillOn: studyDrillOn,
+    drillAfter: studyDrillAfter,
+    setDrillAfter: setStudyDrillAfter,
+    clearDrill: studyClearDrill,
     unflushedSeconds: studyUnflushed,
     start: startStudy,
     switchMode,
     switchScope,
     startArticleAll,
     grade: gradeStudy,
+    back: studyBack,
+    markUnknown: studyMarkUnknown,
     close: closeStudy,
     retryForgot,
     openEdit: openStudyEdit,
@@ -1573,6 +1579,7 @@ export default function ReaderApp() {
         {studyQueue && (
           <StudyPanel
             card={studyCard}
+            items={library.items}
             queueLength={studyQueue.length}
             index={studyIndex}
             mode={studyMode}
@@ -1594,6 +1601,8 @@ export default function ReaderApp() {
             draft={studyDraft}
             delArmed={studyDelArmed}
             forgotCount={studyForgotCount}
+            drillOn={studyDrillOn}
+            drillAfter={studyDrillAfter}
             onClose={closeStudy}
             onExam={() => {
               closeStudy()
@@ -1604,6 +1613,7 @@ export default function ReaderApp() {
             onSwitchScope={switchScope}
             onStartArticleAll={startArticleAll}
             onNewLimitChange={setNewLimit}
+            onDrillAfterChange={setStudyDrillAfter}
             onSpellingChange={(on) => {
               setStudySpelling(on)
               setStudyChecked(false)
@@ -1622,6 +1632,9 @@ export default function ReaderApp() {
               setStudyDraft(null)
             }}
             onGrade={gradeStudy}
+            onBack={studyBack}
+            onMarkUnknown={studyMarkUnknown}
+            onDrillCleared={studyClearDrill}
             onRetryForgot={retryForgot}
             onRestart={() => startStudy()}
           />

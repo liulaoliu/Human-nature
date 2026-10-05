@@ -572,6 +572,36 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .study-back .ex { font-size: 14px; color: var(--dim); margin-top: 6px; }
 .study-back .src { margin-top: 10px; }
 .study-actions { justify-content: center; }
+
+/* 卡片随时间"变烫"：绿→黄→橙→红（越久越难记） */
+.study-card.heat-0 { border-color: var(--line); }
+.study-card.heat-1 { border-color: #cfe3b8; box-shadow: 0 0 0 1px #cfe3b8, var(--shadow-2); }
+.study-card.heat-2 { border-color: #e6c96a; box-shadow: 0 0 0 2px #e6c96a, var(--shadow-2); }
+.study-card.heat-3 { border-color: #e08a3c; box-shadow: 0 0 0 3px #e08a3c66, var(--shadow-2); background: linear-gradient(180deg, #fff6ec, var(--panel)); }
+.study-card.heat-4 { border-color: var(--red); box-shadow: 0 0 0 4px #c0392b33, var(--shadow-2); background: linear-gradient(180deg, #fdecea, var(--panel)); }
+
+/* 释义边的「不认识（全新词）」 */
+.unknown-btn {
+  margin-left: 10px;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+/* 超时「强制锤炼」 */
+.drill {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 2px solid #e08a3c;
+  border-radius: var(--radius-lg);
+  background: #fff8f0;
+}
+.drill-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.drill-head b { color: #b5651d; }
+.drill-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.drill .study-input { width: 100%; max-width: 460px; }
+.drill .quiz-options { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
+.drill .study-result.bad { margin-top: 4px; }
 .study-done { text-align: center; padding: 40px 0; }
 
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */
