@@ -111,6 +111,8 @@ export interface DictPanelProps {
   onSpeak: (text: string) => void
   /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续做）。 */
   onResetSpeech: () => void
+  /** 朗读状态（合成中 / 朗读中），用于按钮反馈。 */
+  ttsState: 'idle' | 'loading' | 'playing'
   onInputChange: (value: string) => void
   onBlankChange: (i: number, value: string) => void
 }
@@ -141,6 +143,7 @@ export default function DictPanel({
   onClose,
   onSpeak,
   onResetSpeech,
+  ttsState,
   onInputChange,
   onBlankChange,
 }: DictPanelProps) {
@@ -255,8 +258,8 @@ export default function DictPanel({
             ? `（第 ${roundOffset + 1}–${roundOffset + queue.length} / 全篇 ${grandTotal}）`
             : ''}
         </span>
-        <button onClick={() => current && onSpeak(current.text)} title="再听一遍">
-          🔊 再听一遍
+        <button onClick={() => current && onSpeak(current.text)} title="再听一遍（已缓存则秒播）">
+          {ttsState === 'loading' ? '🔊 合成中…' : '🔊 再听一遍'}
         </button>
         <button
           onClick={() => {

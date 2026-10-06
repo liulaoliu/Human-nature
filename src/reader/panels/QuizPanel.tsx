@@ -28,6 +28,8 @@ export interface QuizPanelProps {
   onSpeak: (text: string) => void
   /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续考）。 */
   onResetSpeech: () => void
+  /** 朗读状态（合成中 / 朗读中）。 */
+  ttsState: 'idle' | 'loading' | 'playing'
   onSubmit: () => void
   onNext: () => void
   onRetryWrong: () => void
@@ -51,6 +53,7 @@ export default function QuizPanel({
   onClose,
   onSpeak,
   onResetSpeech,
+  ttsState,
   onSubmit,
   onNext,
   onRetryWrong,
@@ -104,9 +107,11 @@ export default function QuizPanel({
               <button
                 className="primary quiz-play"
                 onClick={() => onSpeak(question.audioText ?? question.context ?? question.word)}
-                title="再听一遍"
+                title="再听一遍（已缓存则秒播）"
               >
-                🔊 {question.kind === 'ear' ? '播放单词' : '播放句子'}
+                {ttsState === 'loading'
+                  ? '🔊 合成中…'
+                  : `🔊 ${question.kind === 'ear' ? '播放单词' : '播放句子'}`}
               </button>
             ) : question.kind === 'meaning' ? (
               <div className="study-word quiz-word">

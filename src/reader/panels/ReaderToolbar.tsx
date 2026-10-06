@@ -2,7 +2,7 @@ import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../adapters/articleRepo'
 import type { VocabLevel } from '../../core/analyzer'
-import { TTS_ACCENTS } from '../../core/ttsVoices'
+import type { TtsAccent } from '../../core/ttsVoices'
 import { fmtDur } from '../format'
 
 export interface ReaderToolbarProps {
@@ -41,6 +41,12 @@ export interface ReaderToolbarProps {
   ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
+  ttsAccents: TtsAccent[]
+  pregenRunning: boolean
+  pregenDone: number
+  pregenTotal: number
+  onPregenerate: () => void
+  onCancelPregenerate: () => void
   onEnterEdit: () => void
 
   // 编辑态
@@ -109,6 +115,12 @@ export default function ReaderToolbar({
   ttsState,
   ttsVoice,
   onTtsVoiceChange,
+  ttsAccents,
+  pregenRunning,
+  pregenDone,
+  pregenTotal,
+  onPregenerate,
+  onCancelPregenerate,
   onEnterEdit,
   draft,
   onCleanupEdit,
@@ -220,7 +232,7 @@ export default function ReaderToolbar({
           onChange={(e) => onTtsVoiceChange(e.target.value)}
           title="朗读口音（Edge TTS 音色）：美式 / 英式 / 澳式 / 印度…；改完下一个朗读即生效"
         >
-          {TTS_ACCENTS.map((a) => (
+          {ttsAccents.map((a) => (
             <optgroup key={a.label} label={a.label}>
               {a.voices.map((v) => (
                 <option key={v.id} value={v.id}>
@@ -249,6 +261,15 @@ export default function ReaderToolbar({
               : ttsState === 'playing'
                 ? '🔊 朗读中'
                 : '🔊 朗读全文'}
+        </button>
+      )}
+      {hasDoc && !editing && (
+        <button
+          className={pregenRunning ? 'danger' : ''}
+          onClick={pregenRunning ? onCancelPregenerate : onPregenerate}
+          title="把整篇的朗读音频一次性生成并缓存到本机；之后连播 / 点句起播零延迟"
+        >
+          {pregenRunning ? `⏳ 生成中 ${pregenDone}/${pregenTotal}（点此取消）` : '⬇ 预生成朗读'}
         </button>
       )}
       {hasDoc && !editing && (

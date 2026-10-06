@@ -55,7 +55,8 @@ import ReaderBody from './panels/ReaderBody'
 import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
 import { useSpeaking } from './hooks/useSpeaking'
-import { DEFAULT_TTS_VOICE } from '../core/ttsVoices'
+import { useTtsEngines } from './hooks/useTtsEngines'
+import { DEFAULT_TTS_VOICE, TTS_ACCENTS, type TtsAccent } from '../core/ttsVoices'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
@@ -196,6 +197,24 @@ export default function ReaderApp() {
   const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
   /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
   const [ttsVoice, setTtsVoice] = useLocalStorageState('reader:ttsVoice', DEFAULT_TTS_VOICE, persistentString)
+  // 引擎探测：发现离线的系统语音（SAPI）后，并入音色下拉
+  const ttsEngines = useTtsEngines()
+  const ttsAccents = useMemo<TtsAccent[]>(() => {
+    const sapi = ttsEngines?.sapi
+    if (!sapi?.available || !sapi.voices.length) return TTS_ACCENTS
+    const short = (n: string) => n.replace(/^Microsoft\s+/i, '').replace(/\s+Desktop$/i, '')
+    return [
+      ...TTS_ACCENTS,
+      {
+        label: '离线 · 系统语音（免下载、不联网）',
+        voices: sapi.voices.map((v) => ({
+          id: v.id,
+          name: v.lang ? `${short(v.name)}（${v.lang}）` : short(v.name),
+          gender: v.gender === 'Male' ? '男' : '女',
+        })),
+      },
+    ]
+  }, [ttsEngines])
   /** 自动标词的词汇标准 */
   const [vocabLevel, setVocabLevel] = useLocalStorageState<VocabLevel>(
     'reader:vocabLevel',
@@ -223,6 +242,42 @@ export default function ReaderApp() {
     autoSpeak,
     voice: ttsVoice,
   })
+
+  /** 预生成整篇朗读：并发跑 /api/tts 把缓存暖起来，之后整篇连播 / 点句起播零延迟。 */
+  const [pregen, setPregen] = useState<{ done: number; total: number; running: boolean }>({
+    done: 0,
+    total: 0,
+    running: false,
+  })
+  const pregenAbortRef = useRef(false)
+  const pregenerateAll = useCallback(async () => {
+    const list = doc?.sentences.map((s) => s.text.trim()).filter(Boolean) ?? []
+    if (!list.length) return
+    pregenAbortRef.current = false
+    setPregen({ done: 0, total: list.length, running: true })
+    const voice = ttsVoice
+    let next = 0
+    let done = 0
+    const worker = async () => {
+      for (;;) {
+        if (pregenAbortRef.current) return
+        const idx = next++
+        if (idx >= list.length) return
+        try {
+          await fetch(`/api/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(list[idx])}`)
+        } catch {
+          // 单句失败不打断整篇
+        }
+        done++
+        setPregen((p) => ({ ...p, done }))
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, list.length) }, () => worker()))
+    setPregen((p) => ({ ...p, running: false }))
+  }, [doc, ttsVoice])
+  const cancelPregenerate = useCallback(() => {
+    pregenAbortRef.current = true
+  }, [])
   /** 背单词时长统计：按天累计（落盘，供统计用） */
   const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
     'reader:studyStats',
@@ -1573,6 +1628,12 @@ export default function ReaderApp() {
             ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
+            ttsAccents={ttsAccents}
+            pregenRunning={pregen.running}
+            pregenDone={pregen.done}
+            pregenTotal={pregen.total}
+            onPregenerate={() => void pregenerateAll()}
+            onCancelPregenerate={cancelPregenerate}
             onEnterEdit={enterEdit}
             draft={draft}
             onCleanupEdit={() => void copyCleanupPrompt(draft, '「完成」')}
@@ -1706,6 +1767,7 @@ export default function ReaderApp() {
             onClose={closeQuiz}
             onSpeak={speak}
             onResetSpeech={resetSpeech}
+            ttsState={ttsState}
             onSubmit={() => checkQuiz()}
             onNext={nextQuiz}
             onRetryWrong={retryQuizWrong}
@@ -1762,6 +1824,7 @@ export default function ReaderApp() {
             onClose={closeDict}
             onSpeak={speak}
             onResetSpeech={resetSpeech}
+            ttsState={ttsState}
             onInputChange={setDictInput}
             onBlankChange={setDictBlank}
           />
@@ -1779,6 +1842,7 @@ export default function ReaderApp() {
             onClose={() => setListenOpen(false)}
             onToggleRead={readingAll ? stopReadAll : startReadAll}
             onResetSpeech={resetSpeech}
+            ttsState={ttsState}
             onAnswer={(id, value) => setListenAnswers((a) => ({ ...a, [id]: value }))}
             onSubmit={submitListening}
             onRetryWrong={retryListenWrong}

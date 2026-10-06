@@ -138,26 +138,39 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
 
 数据模型、模块拆解和开发路线见 [`docs/新特性开发要求.md`](docs/新特性开发要求.md)。
 
-### 朗读 / 口音（Edge TTS）
+### 朗读 / 口音 / 引擎
 
-顶栏「选中朗读 / 读本句 / 朗读全文」和所有练习页的朗读，**优先走服务端 Edge TTS**（微软神经音色）：
+顶栏「选中朗读 / 读本句 / 朗读全文」和所有练习页的朗读，走服务端 TTS：
 
 ```
 点朗读 → GET /api/tts?voice=…&text=…  →（首次）合成 → 缓存 → <audio> 播放
                               └ 服务端不可用 / 离线 → 自动退回浏览器语音
 ```
 
+**两个引擎**（用一个 `voice` 参数切换，顶栏下拉里选）：
+
+| 引擎 | voice 形如 | 联网 | 说明 |
+|---|---|---|---|
+| **edge**（默认） | `en-US-AriaNeural` | 是 | 微软 Edge 朗读的神经音色，免费但**非官方**（个人自用 OK，商用别用） |
+| **sapi**（离线） | `sapi:Microsoft Zira Desktop` | 否 | **系统自带语音**（Windows SAPI），**免下载、不联网、不白嫖**；音色少、音质一般 |
+
 - **为什么不用浏览器自带 `speechSynthesis`**：它会**假死**（`speaking` 卡在 true 却不出声），只能刷新救。
   改用 `<audio>` 播服务端音频后，这类问题从根上消失。
-- **口音可换**：顶栏有个音色下拉（**美式 / 英式 / 澳式 / 加式 / 爱尔兰 / 印度 / 新西兰 / 南非 / 新加坡…**），
-  改了下一个朗读即时生效；音色表在 `src/core/ttsVoices.ts`，可按需增删。
-  > Edge TTS 只提供 **locale 级**口音，**没有**「伦敦东区（Cockney）」「加州（West Coast）」这种次区域口音；
+- **口音可换**：顶栏音色下拉（**美式 / 英式 / 澳式 / 加式 / 爱尔兰 / 印度 / 新西兰 / 南非 / 新加坡…** +
+  本机可用的**离线系统语音**），改了下一个朗读即时生效；在线音色表在 `src/core/ttsVoices.ts`。
+  > Edge 只提供 **locale 级**口音，**没有**「伦敦东区（Cockney）」「加州（West Coast）」这种次区域口音；
   > 想更细只能上声音克隆（XTTS-v2 / ElevenLabs）。
-- **缓存**：合成结果按 `sha1(voice + text)` 存到 **`public/tts/<hash>.mp3`**（已 gitignore）。
-  同一句第二次是**本地文件、瞬发**，也不再走网络。
-- **接口由谁提供**：dev 模式走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 模式走 `server/httpApp.js`；
-  合成与缓存逻辑共用 `tools/tts-core.mjs`。用的是 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
-- 首次听每句有 0.3–1s 网络合成延迟（之后命中缓存）；批量预生成整篇是后续可选项。
+- **进度看得见**：合成阶段按钮显示「**🔊 合成中…**」，出声后「**🔊 朗读中**」。
+- **预生成整篇**：顶栏「**⬇ 预生成朗读**」把整篇音频一次性生成并缓存（带「生成中 X/N」进度，可取消）；
+  之后整篇连播 / 点句起播**零延迟**。
+- **缓存**：按 `sha1(engine + voice + text)` 存到 **`public/tts/<hash>.mp3|.wav`**（已 gitignore）。
+  同一句第二次是**本地文件、瞬发**。缓存上限 800 条，超出按最旧自动清理。
+- **逐词时间戳**：Edge 合成时顺带产出 `public/tts/<hash>.mp3.json`（`[{part,start,end}]` 毫秒），
+  可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转。
+- **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.js`；
+  引擎与缓存逻辑共用 `tools/tts-core.mjs`。在线那路用 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
+  加固：并发上限 2、硬超时 20s、失败重试 1 次、`.part` 清理。
+- **合法替代**：想彻底不碰微软又比 SAPI 好听，可换本机 Piper / Azure 语音（未内置，留作扩展点）。
 
 ### 离线词典（ECDICT + M-W）
 
@@ -386,7 +399,7 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
   vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
   vite-tts-endpoint.mjs    dev-only：/api/tts → Edge TTS（浏览器语音会假死的替代）
-  tts-core.mjs             Edge TTS 合成 + 磁盘缓存（dev / static 共用）
+  tts-core.mjs             TTS 引擎（edge 在线 / sapi 离线）+ 磁盘缓存 + 逐词时间戳（dev / static 共用）
   build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
   build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案

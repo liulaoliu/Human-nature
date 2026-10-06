@@ -16,6 +16,8 @@ export interface ListeningPanelProps {
   onToggleRead: () => void
   /** 一键尝试唤醒假死的语音。 */
   onResetSpeech: () => void
+  /** 朗读状态（合成中 / 朗读中）。 */
+  ttsState: 'idle' | 'loading' | 'playing'
   onAnswer: (id: string, value: string) => void
   onSubmit: () => void
   onRetryWrong: () => void
@@ -35,6 +37,7 @@ export default function ListeningPanel({
   onClose,
   onToggleRead,
   onResetSpeech,
+  ttsState,
   onAnswer,
   onSubmit,
   onRetryWrong,
@@ -50,7 +53,7 @@ export default function ListeningPanel({
           onClick={onToggleRead}
           title="朗读整篇（练习听力）"
         >
-          {readingAll ? '⏹ 停止' : '🔊 播放全文'}
+          {readingAll ? '⏹ 停止' : ttsState === 'loading' ? '🔊 合成中…' : '🔊 播放全文'}
         </button>
         <button
           onClick={onResetSpeech}
