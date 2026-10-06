@@ -2,6 +2,7 @@ import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../adapters/articleRepo'
 import type { VocabLevel } from '../../core/analyzer'
+import { TTS_ACCENTS } from '../../core/ttsVoices'
 import { fmtDur } from '../format'
 
 export interface ReaderToolbarProps {
@@ -37,6 +38,8 @@ export interface ReaderToolbarProps {
   onSpeakSelected: () => void
   readingAll: boolean
   onToggleReadAll: () => void
+  ttsVoice: string
+  onTtsVoiceChange: (value: string) => void
   onEnterEdit: () => void
 
   // 编辑态
@@ -102,6 +105,8 @@ export default function ReaderToolbar({
   onSpeakSelected,
   readingAll,
   onToggleReadAll,
+  ttsVoice,
+  onTtsVoiceChange,
   onEnterEdit,
   draft,
   onCleanupEdit,
@@ -206,6 +211,23 @@ export default function ReaderToolbar({
           <input type="checkbox" checked={autoSpeak} onChange={(e) => onAutoSpeakChange(e.target.checked)} />
           选中朗读
         </label>
+      )}
+      {hasDoc && !editing && (
+        <select
+          value={ttsVoice}
+          onChange={(e) => onTtsVoiceChange(e.target.value)}
+          title="朗读口音（Edge TTS 音色）：美式 / 英式 / 澳式 / 印度…；改完下一个朗读即生效"
+        >
+          {TTS_ACCENTS.map((a) => (
+            <optgroup key={a.label} label={a.label}>
+              {a.voices.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}（{v.gender}）
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
       )}
       {hasDoc && !editing && selectedId && (
         <button onClick={onSpeakSelected} title="朗读当前选中句">

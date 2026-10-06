@@ -55,6 +55,7 @@ import ReaderBody from './panels/ReaderBody'
 import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
 import { useSpeaking } from './hooks/useSpeaking'
+import { DEFAULT_TTS_VOICE } from '../core/ttsVoices'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
@@ -193,6 +194,8 @@ export default function ReaderApp() {
   const [importing, setImporting] = useState('')
   /** 选中句子后自动 TTS 朗读 */
   const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
+  /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
+  const [ttsVoice, setTtsVoice] = useLocalStorageState('reader:ttsVoice', DEFAULT_TTS_VOICE, persistentString)
   /** 自动标词的词汇标准 */
   const [vocabLevel, setVocabLevel] = useLocalStorageState<VocabLevel>(
     'reader:vocabLevel',
@@ -218,6 +221,7 @@ export default function ReaderApp() {
     doc,
     selectedId,
     autoSpeak,
+    voice: ttsVoice,
   })
   /** 背单词时长统计：按天累计（落盘，供统计用） */
   const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
@@ -1566,6 +1570,8 @@ export default function ReaderApp() {
             }}
             readingAll={readingAll}
             onToggleReadAll={readingAll ? stopReadAll : startReadAll}
+            ttsVoice={ttsVoice}
+            onTtsVoiceChange={setTtsVoice}
             onEnterEdit={enterEdit}
             draft={draft}
             onCleanupEdit={() => void copyCleanupPrompt(draft, '「完成」')}

@@ -5,6 +5,25 @@
 
 做成工具是为了省掉「拖进度条、按暂停、找刚才那句」这些动作——一块一块地过，不用管播放位置。
 
+## 亮点
+
+一个**本地优先**的英语「跟读 + 精读 + 背单词」工作台。数据全在本机（localStorage / IndexedDB），
+不需要任何后端账号或 API key 也能用核心功能。
+
+- 🎧 **跟读**：VAD 自动切块 → 标准音 / 我的录音 A/B → 响度自动对齐；手动撕块、选字定块、逐块校准
+- 📖 **精读**：划词标生词（按 lemma 去重）、逐句翻译 / 语言点、**AI 工作包**批量导入
+- 📚 **离线词典**：内置 **ECDICT**（5.2 万常用词：中英释义 / 词性 / 词频 / 超纲判断）+ **M-W 学习者词典**
+  （真 IPA + 英文释义）——**不联网**就能查词、校正原形、按词汇量挑超纲词、生成形近混淆项
+- 🗣 **朗读**：优先走**服务端 Edge TTS**（微软神经音色，免费、可换口音、磁盘缓存、**彻底绕开浏览器语音"假死"**）；
+  服务不可用时自动退回浏览器语音，不影响功能
+- 🧠 **练习**：背单词（SRS）、考试（拼写 / 填空 / 听力填空 / 看词选义 / 词形辨析）、
+  逐句**听写**（词级 diff）、听力理解、仿写
+- 💾 **刷新不丢**：考试 / 听写进度、词库、已保存文章、跟读校准全持久化
+- 🧪 纯逻辑 `core/` 层 + **596 个单测**，对齐 / 评分 / VAD 等最易错的逻辑不开浏览器就能断言
+
+> 技术栈：TypeScript · React 18 · Vite · 一个零依赖的 Node 小服务（开发 / 静态双模式）。
+> 音频切块、文本对齐、词库逻辑都在带单测的纯函数里，React 只做壳。
+
 ## 先看这一条：强相关于 The Economist
 
 这个项目**不是通用的跟读软件**，它是围着 The Economist 的杂志 PDF 和配套音频做的：
@@ -123,6 +142,37 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
 
 数据模型、模块拆解和开发路线见 [`docs/新特性开发要求.md`](docs/新特性开发要求.md)。
 
+### 朗读 / 口音（Edge TTS）
+
+顶栏「选中朗读 / 读本句 / 朗读全文」和所有练习页的朗读，**优先走服务端 Edge TTS**（微软神经音色）：
+
+```
+点朗读 → GET /api/tts?voice=…&text=…  →（首次）合成 → 缓存 → <audio> 播放
+                              └ 服务端不可用 / 离线 → 自动退回浏览器语音
+```
+
+- **为什么不用浏览器自带 `speechSynthesis`**：它会**假死**（`speaking` 卡在 true 却不出声），只能刷新救。
+  改用 `<audio>` 播服务端音频后，这类问题从根上消失。
+- **口音可换**：顶栏有个音色下拉（**美式 / 英式 / 澳式 / 加式 / 爱尔兰 / 印度 / 新西兰 / 南非 / 新加坡…**），
+  改了下一个朗读即时生效；音色表在 `src/core/ttsVoices.ts`，可按需增删。
+  > Edge TTS 只提供 **locale 级**口音，**没有**「伦敦东区（Cockney）」「加州（West Coast）」这种次区域口音；
+  > 想更细只能上声音克隆（XTTS-v2 / ElevenLabs）。
+- **缓存**：合成结果按 `sha1(voice + text)` 存到 **`public/tts/<hash>.mp3`**（已 gitignore）。
+  同一句第二次是**本地文件、瞬发**，也不再走网络。
+- **接口由谁提供**：dev 模式走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 模式走 `server/httpApp.js`；
+  合成与缓存逻辑共用 `tools/tts-core.mjs`。用的是 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
+- 首次听每句有 0.3–1s 网络合成延迟（之后命中缓存）；批量预生成整篇是后续可选项。
+
+### 离线词典（ECDICT + M-W）
+
+不联网也能查词、补全、挑词：
+
+- `npm run ecdict:build` → `public/ecdict.tsv` + `public/ecdict-forms.tsv` + `public/ecdict-near.tsv`
+  （ECDICT：5.2 万常用词条；5.9 万词形→原形；拼写近邻）
+- `npm run mwld:build` → `public/mwld.tsv`（M-W 学习者词典：真 IPA + 高质量英文释义）
+- 产物与原始数据（`data/`）都**不进仓库**（大 + 版权）。
+- 侧栏「选词·分析 → 📖 离线词典」有：按词汇量**挑超纲词**、给生词本**补齐**音标/词性/中英释义、
+  **校正原形**、**生成形近混淆项**。AI 回执也会自动用词典校验/补齐。
 
 ## 备份 / 换电脑
 
@@ -332,10 +382,17 @@ src/
     activity.ts       学习统计：按天分类累计 + 周/月汇总 + 热力图
     aligner.ts        句子级音频近似投影（复用 alignText.ts）
     vocab.ts          词库逻辑（去重/来源/筛选/分组/SRS）
+    ecdict.ts         离线词典：查词 / 原形 / 超纲判断 / 挑词 / 形近混淆项
+    mwld.ts           M-W 学习者词典：解析 + 查词（真 IPA + 英文释义）
+    ttsVoices.ts      Edge TTS 音色目录（按口音/地区分组）
     exports.ts        Anki CSV / JSON / A4 打印
-tools/              构建期脚本（Python，运行时不需要）
+tools/              构建期脚本（Python 抽取 + Node 小工具）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
   vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
+  vite-tts-endpoint.mjs    dev-only：/api/tts → Edge TTS（浏览器语音会假死的替代）
+  tts-core.mjs             Edge TTS 合成 + 磁盘缓存（dev / static 共用）
+  build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
+  build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案
   extract-articles.py  从 PDF 抽正文，带 wpm 质量闸门
   validate-articles.py 单独跑质量闸门
@@ -349,7 +406,7 @@ tools/              构建期脚本（Python，运行时不需要）
 ## 测试
 
 ```
-npm test          # 255 个（没生成 public/articles.json 时少几个，一样是绿的）
+npm test          # 596 个（没生成 public/articles.json 时少几个，一样是绿的）
 npm run build     # tsc -b && vite build
 ```
 

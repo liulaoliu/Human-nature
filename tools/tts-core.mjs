@@ -14,17 +14,11 @@ import { join } from 'node:path'
 
 export const DEFAULT_VOICE = 'en-US-AriaNeural'
 
-/** 允许的音色（防止被当成任意微软 TTS 代理）。 */
-const VOICES = new Set([
-  'en-US-AriaNeural',
-  'en-US-JennyNeural',
-  'en-US-GuyNeural',
-  'en-US-EmmaMultilingualNeural',
-  'en-US-AnaNeural',
-  'en-GB-SoniaNeural',
-  'en-GB-RyanNeural',
-  'en-GB-LibbyNeural',
-])
+/**
+ * 允许的音色形状（如 en-US-AriaNeural、en-GB-ThomasNeural）。
+ * 只做形状校验，不再固定白名单——前端目录（src/core/ttsVoices.ts）可自由增删。
+ */
+const VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/
 
 /** 单次最长字符数（一句话够用；防滥用）。 */
 const MAX_TEXT = 600
@@ -88,7 +82,7 @@ export async function handleTts(req, res, { cacheDir }) {
 
   const text = (url.searchParams.get('text') || '').trim()
   const rawVoice = url.searchParams.get('voice') || DEFAULT_VOICE
-  const voice = VOICES.has(rawVoice) ? rawVoice : DEFAULT_VOICE
+  const voice = VOICE_RE.test(rawVoice) ? rawVoice : DEFAULT_VOICE
 
   if (!text) {
     res.statusCode = 400

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
+import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
 
 export interface UseSpeakingOptions {
   /** 当前文章（只用到句子列表）；没有文章时为 null。 */
@@ -7,16 +8,8 @@ export interface UseSpeakingOptions {
   selectedId: string | null
   /** 选中句子后自动朗读。 */
   autoSpeak: boolean
-}
-
-/** 默认 Edge TTS 音色；可在 localStorage `reader:ttsVoice` 覆盖。 */
-const DEFAULT_VOICE = 'en-US-AriaNeural'
-function currentVoice(): string {
-  try {
-    return localStorage.getItem('reader:ttsVoice') || DEFAULT_VOICE
-  } catch {
-    return DEFAULT_VOICE
-  }
+  /** Edge TTS 音色 id（改口音就是改它）。 */
+  voice?: string
 }
 
 /**
@@ -25,7 +18,7 @@ function currentVoice(): string {
  *
  * `speak` 身份稳定（useCallback 空依赖），调用方可在任意位置引用。
  */
-export function useSpeaking({ doc, selectedId, autoSpeak }: UseSpeakingOptions) {
+export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VOICE }: UseSpeakingOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
   const readAllRef = useRef(false)
@@ -35,6 +28,9 @@ export function useSpeaking({ doc, selectedId, autoSpeak }: UseSpeakingOptions) 
   const tokenRef = useRef(0)
   /** 服务端 TTS 是否可用；一旦失败（非自动播放拦截）就停用，退回浏览器语音。 */
   const serverTtsRef = useRef(true)
+  /** 当前音色（改口音即时生效，且不改变 speak 身份）。 */
+  const voiceRef = useRef(voice)
+  voiceRef.current = voice
   const [readingAll, setReadingAll] = useState(false)
 
   const clearTimer = useCallback(() => {
@@ -147,7 +143,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak }: UseSpeakingOptions) 
       }
       try {
         a.pause()
-        a.src = `/api/tts?voice=${encodeURIComponent(currentVoice())}&text=${encodeURIComponent(t)}`
+        a.src = `/api/tts?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`
         a.playbackRate = rate
         const p = a.play()
         if (p && typeof p.catch === 'function') {
