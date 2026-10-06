@@ -74,8 +74,8 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
       return
     }
 
-    // Edge TTS：GET /api/tts?voice=…&text=… → audio/mpeg（带磁盘缓存）
-    if (pathname === '/api/tts') {
+    // Edge TTS：GET /api/tts?voice=…&text=… → audio/mpeg；/api/tts/words → 逐词时间戳 JSON
+    if (pathname === '/api/tts' || pathname === '/api/tts/words') {
       handleTts(req, res, { cacheDir: join(publicDir, 'tts') }).catch(() => {
         if (!res.headersSent) {
           res.statusCode = 500

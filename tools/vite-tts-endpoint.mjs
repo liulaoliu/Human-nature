@@ -15,7 +15,7 @@ export function ttsEndpointPlugin() {
       const cacheDir = resolve(server.config.root, 'public', 'tts')
       server.middlewares.use((req, res, next) => {
         const path = (req.url || '').split('?')[0]
-        if (path !== '/api/tts') return next()
+        if (path !== '/api/tts' && path !== '/api/tts/words') return next()
         handleTts(req, res, { cacheDir }).catch(() => {
           if (!res.headersSent) {
             res.statusCode = 500
