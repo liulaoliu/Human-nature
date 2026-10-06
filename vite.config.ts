@@ -5,9 +5,11 @@ import react from '@vitejs/plugin-react'
 import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
 import { fishStaticPlugin } from './tools/vite-fish-endpoint.mjs'
+// @ts-expect-error .mjs 没有类型声明
+import { ttsEndpointPlugin } from './tools/vite-tts-endpoint.mjs'
 
 export default defineConfig({
-  plugins: [react(), projectStatePlugin(), fishStaticPlugin()],
+  plugins: [react(), projectStatePlugin(), fishStaticPlugin(), ttsEndpointPlugin()],
   base: './',
   build: {
     rollupOptions: {

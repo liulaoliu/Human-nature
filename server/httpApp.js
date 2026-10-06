@@ -1,6 +1,7 @@
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
+import { handleTts } from '../tools/tts-core.mjs'
 
 const DATA_FILES = new Set([
   'articles.json',
@@ -69,6 +70,17 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
         pid: process.pid,
         uptime: (Date.now() - startedAt) / 1000,
         time: new Date().toISOString(),
+      })
+      return
+    }
+
+    // Edge TTS：GET /api/tts?voice=…&text=… → audio/mpeg（带磁盘缓存）
+    if (pathname === '/api/tts') {
+      handleTts(req, res, { cacheDir: join(publicDir, 'tts') }).catch(() => {
+        if (!res.headersSent) {
+          res.statusCode = 500
+          res.end('tts error')
+        }
       })
       return
     }
