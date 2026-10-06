@@ -165,8 +165,9 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
   之后整篇连播 / 点句起播**零延迟**。
 - **缓存**：按 `sha1(engine + voice + text)` 存到 **`public/tts/<hash>.mp3|.wav`**（已 gitignore）。
   同一句第二次是**本地文件、瞬发**。缓存上限 800 条，超出按最旧自动清理。
-- **逐词时间戳**：Edge 合成时顺带产出 `public/tts/<hash>.mp3.json`（`[{part,start,end}]` 毫秒），
-  可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转。
+- **逐词时间戳**：**两个引擎都产出**逐词 `{part, start, end}`（毫秒），与音频同目录同名（`<hash>.mp3.json` / `<hash>.wav.json`），
+  也可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转
+  （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。
 - **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.js`；
   引擎与缓存逻辑共用 `tools/tts-core.mjs`。在线那路用 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
   加固：并发上限 2、硬超时 20s、失败重试 1 次、`.part` 清理。

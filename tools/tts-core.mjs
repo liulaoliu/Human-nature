@@ -93,24 +93,49 @@ async function synthEdge(text, voice, outPath) {
 }
 
 // ---- SAPI（离线，Windows 系统语音） ----
-const SAPI_SCRIPT = [
-  'Add-Type -AssemblyName System.Speech',
-  '$s = New-Object System.Speech.Synthesis.SpeechSynthesizer',
-  'if ($env:TTS_VOICE) { try { $s.SelectVoice($env:TTS_VOICE) } catch {} }',
-  '$s.SetOutputToWaveFile($env:TTS_OUT)',
-  '$txt = [Console]::In.ReadToEnd()',
-  '$s.Speak($txt)',
-  '$s.Dispose()',
-].join('; ')
+const SAPI_SCRIPT = `
+$ErrorActionPreference = 'Stop'
+Add-Type -AssemblyName System.Speech
+$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
+if ($env:TTS_VOICE) { try { $s.SelectVoice($env:TTS_VOICE) } catch {} }
+$s.SetOutputToWaveFile($env:TTS_OUT)
+$list = New-Object System.Collections.ArrayList
+$sb = { param($sender, $e) [void]$list.Add([pscustomobject]@{ t = $e.Text; ms = [int]$e.AudioPosition.TotalMilliseconds }) }
+$s.add_SpeakProgress($sb)
+$txt = [Console]::In.ReadToEnd()
+$s.Speak($txt)
+$s.remove_SpeakProgress($sb)
+$s.Dispose()
+if ($env:TTS_WORDS) {
+  $totalMs = 0
+  try {
+    $b = [System.IO.File]::ReadAllBytes($env:TTS_OUT)
+    if ($b.Length -gt 44) {
+      $br = [BitConverter]::ToInt32($b, 28)
+      $ds = [BitConverter]::ToInt32($b, 40)
+      if ($br -gt 0) { $totalMs = [int](($ds / $br) * 1000) }
+    }
+  } catch {}
+  $parts = @()
+  for ($i = 0; $i -lt $list.Count; $i++) {
+    $start = $list[$i].ms
+    if ($i + 1 -lt $list.Count) { $end = $list[$i + 1].ms }
+    elseif ($totalMs -gt $start) { $end = $totalMs }
+    else { $end = $start + 300 }
+    $parts += [pscustomobject]@{ part = $list[$i].t; start = $start; end = $end }
+  }
+  [System.IO.File]::WriteAllText($env:TTS_WORDS, (ConvertTo-Json -InputObject $parts -Compress))
+}
+`.trim()
 
-function synthSapi(text, voiceName, outWav) {
+function synthSapi(text, voiceName, outWav, outWords) {
   return new Promise((resolve, reject) => {
     if (process.platform !== 'win32') {
       reject(new Error('sapi only on Windows'))
       return
     }
     const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', SAPI_SCRIPT], {
-      env: { ...process.env, TTS_VOICE: voiceName, TTS_OUT: outWav },
+      env: { ...process.env, TTS_VOICE: voiceName, TTS_OUT: outWav, TTS_WORDS: outWords || '' },
       stdio: ['pipe', 'ignore', 'pipe'],
     })
     let err = ''
@@ -170,8 +195,8 @@ function listSapiVoices() {
 }
 
 // ---- 通用合成到文件 ----
-async function synthOnce(text, target, outPath) {
-  if (target.engine === 'sapi') return synthSapi(text, target.voice, outPath)
+async function synthOnce(text, target, outPath, wordsPath) {
+  if (target.engine === 'sapi') return synthSapi(text, target.voice, outPath, wordsPath)
   return synthEdge(text, target.voice, outPath)
 }
 
@@ -181,10 +206,10 @@ async function synthToFile(text, target, file) {
   let lastErr
   for (let attempt = 0; attempt <= RETRIES; attempt++) {
     try {
-      await withTimeout(synthOnce(text, target, tmp), SYNTH_TIMEOUT_MS + 3000, 'tts')
+      await withTimeout(synthOnce(text, target, tmp, tmpJson), SYNTH_TIMEOUT_MS + 3000, 'tts')
       if (!existsSync(tmp) || statSync(tmp).size === 0) throw new Error('empty audio')
       renameSync(tmp, file)
-      if (target.engine === 'edge' && existsSync(tmpJson)) renameSync(tmpJson, `${file}.json`)
+      if (existsSync(tmpJson)) renameSync(tmpJson, `${file}.json`)
       return
     } catch (e) {
       lastErr = e
