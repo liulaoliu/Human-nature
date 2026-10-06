@@ -4,8 +4,10 @@ import {
   dictationWrongWords,
   isClozeBlankCorrect,
   makeCloze,
+  packSegments,
   pickBlankTargets,
   splitForDictation,
+  takeRound,
   wordTokens,
 } from './dictation'
 
@@ -101,5 +103,34 @@ describe('isClozeBlankCorrect', () => {
     expect(isClozeBlankCorrect(blank, 'Findings.')).toBe(true)
     expect(isClozeBlankCorrect(blank, 'finding')).toBe(true)
     expect(isClozeBlankCorrect(blank, 'results')).toBe(false)
+  })
+})
+
+describe('packSegments', () => {
+  it('按 maxWords 把相邻句并成一段', () => {
+    const segs = packSegments(['one two three', 'four five six', 'seven eight nine'], 6)
+    expect(segs).toEqual(['one two three four five six', 'seven eight nine'])
+  })
+  it('单句超过 maxWords 也自成一整段（不切句）', () => {
+    expect(packSegments(['a b c d e f'], 3)).toEqual(['a b c d e f'])
+  })
+  it('跳过空句', () => {
+    expect(packSegments(['hi there', '   ', 'ok go'], 10)).toEqual(['hi there ok go'])
+  })
+})
+
+describe('takeRound', () => {
+  const items = ['a', 'b', 'c', 'd', 'e']
+  it('max<=0 或总量不足 → 全取且 cursor 归零', () => {
+    expect(takeRound(items, 2, 0)).toEqual({ items, next: 0, offset: 0 })
+    expect(takeRound(items, 0, 10)).toEqual({ items, next: 0, offset: 0 })
+  })
+  it('从 cursor 取一段并给出下一个 cursor', () => {
+    expect(takeRound(items, 0, 2)).toEqual({ items: ['a', 'b'], next: 2, offset: 0 })
+    expect(takeRound(items, 2, 2)).toEqual({ items: ['c', 'd'], next: 4, offset: 2 })
+  })
+  it('到末尾 → 退回开头；越界 cursor 从 0 起', () => {
+    expect(takeRound(items, 4, 2)).toEqual({ items: ['e'], next: 0, offset: 4 })
+    expect(takeRound(items, 99, 2)).toEqual({ items: ['a', 'b'], next: 2, offset: 0 })
   })
 })

@@ -4,8 +4,10 @@ import {
   dictationWrongWords,
   isClozeBlankCorrect,
   makeCloze,
+  packSegments,
   pickBlankTargets,
   splitForDictation,
+  takeRound,
   type DiffToken,
 } from '../../core/dictation'
 import type { Sentence } from '../../types/document'
@@ -17,6 +19,31 @@ import { useLocalStorageState, persistentEnum, persistentNumber } from './useLoc
 
 /** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+
+/** 文章指纹（用于记住「上次做到哪」）。 */
+function docKeyOf(doc: { sentences: Sentence[] } | null): string {
+  if (!doc || !doc.sentences.length) return 'none'
+  const s = doc.sentences.map((x) => x.id).join('|')
+  let h = 2166136261
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
+  return (h >>> 0).toString(36)
+}
+const cursorKey = (docKey: string, mode: 'full' | 'cloze') => `reader:dictCursor:${mode}:${docKey}`
+function readCursor(k: string): number {
+  try {
+    const v = localStorage.getItem(k)
+    return v ? parseInt(v, 10) || 0 : 0
+  } catch {
+    return 0
+  }
+}
+function writeCursor(k: string, v: number): void {
+  try {
+    localStorage.setItem(k, String(v))
+  } catch {
+    /* 隐私模式等忽略 */
+  }
+}
 
 export interface UseDictationParams {
   doc: { sentences: Sentence[] } | null
@@ -71,6 +98,12 @@ export function useDictation(params: UseDictationParams) {
   const [words, setWords] = useLocalStorageState('reader:dictWords', 12, persistentNumber)
   /** 填空模式每题挖几个空。 */
   const [blankCount, setBlankCount] = useLocalStorageState('reader:dictBlankCount', 2, persistentNumber)
+  /** 填空模式每个题最多多少词（越大并得越长、题越少）。 */
+  const [clozeWords, setClozeWords] = useLocalStorageState('reader:dictClozeWords', 40, persistentNumber)
+  /** 每轮最多做多少题（0=不限）；做不完下次从断点继续。 */
+  const [maxQuestions, setMaxQuestions] = useLocalStorageState('reader:dictMaxQuestions', 20, persistentNumber)
+  /** 本轮出自全篇的哪一段（用于显示「第 X–Y / 全篇 M」）。 */
+  const [roundInfo, setRoundInfo] = useState({ offset: 0, grand: 0 })
 
   const advanceRef = useRef<number | null>(null)
   const recordedRef = useRef(false)
@@ -99,7 +132,7 @@ export function useDictation(params: UseDictationParams) {
   }, [mode, queue, index, libraryLemmas, blankCount])
 
   const start = useCallback(
-    (opts?: { mode?: 'full' | 'cloze'; words?: number; blanks?: number }) => {
+    (opts?: { mode?: 'full' | 'cloze'; words?: number; blanks?: number; clozeWords?: number; max?: number }) => {
       clearAdvance()
       if (!doc) {
         flash('先打开一篇文章')
@@ -108,31 +141,22 @@ export function useDictation(params: UseDictationParams) {
       const nextMode = opts?.mode ?? mode
       const maxWords = opts?.words ?? words
       const wantBlanks = opts?.blanks ?? blankCount
+      const segWords = opts?.clozeWords ?? clozeWords
+      const maxQ = opts?.max ?? maxQuestions
       if (opts?.words != null) setWords(opts.words)
       if (opts?.blanks != null) setBlankCount(opts.blanks)
+      if (opts?.clozeWords != null) setClozeWords(opts.clozeWords)
+      if (opts?.max != null) setMaxQuestions(opts.max)
 
       const items: { id: string; text: string }[] = []
       if (nextMode === 'cloze') {
-        // 填空：用整句；不够空就并下一句
-        let i = 0
-        const sents = doc.sentences
-        while (i < sents.length) {
-          let text = sents[i].text.trim()
-          let j = i + 1
-          while (
-            j < sents.length &&
-            pickBlankTargets(text, libraryLemmas, wantBlanks).length < wantBlanks &&
-            j - i < 3 &&
-            text.split(/\s+/).length < 60
-          ) {
-            text = `${text} ${sents[j].text.trim()}`.trim()
-            j += 1
-          }
-          if (pickBlankTargets(text, libraryLemmas, wantBlanks).length > 0) {
-            items.push({ id: `${sents[i].id}-c`, text })
-          }
-          i = j
-        }
+        // 填空：按「每段最多 segWords 词」并句成段（段越长题越少）
+        packSegments(
+          doc.sentences.map((s) => s.text),
+          segWords,
+        ).forEach((text, si) => {
+          if (pickBlankTargets(text, libraryLemmas, wantBlanks).length > 0) items.push({ id: `seg-${si}`, text })
+        })
       } else {
         doc.sentences.forEach((s) => {
           splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
@@ -146,9 +170,14 @@ export function useDictation(params: UseDictationParams) {
         flash(nextMode === 'cloze' ? '这篇没有可用于填空的句子' : '这篇没有可听写的句子')
         return
       }
+      // 每轮限题：从断点取一段，做完下次接着来（走到末尾自动回到开头）
+      const key = cursorKey(docKeyOf(doc), nextMode)
+      const { items: round, next: nextCursor, offset } = takeRound(items, readCursor(key), maxQ)
+      writeCursor(key, nextCursor)
       setMode(nextMode)
       closeOthers()
-      setQueue(items)
+      setQueue(round)
+      setRoundInfo({ offset, grand: items.length })
       setIndex(0)
       setInput('')
       setChecked(false)
@@ -158,7 +187,23 @@ export function useDictation(params: UseDictationParams) {
       setWrongItems([])
       recordedRef.current = false
     },
-    [doc, mode, words, blankCount, libraryLemmas, flash, clearAdvance, closeOthers, setMode, setWords, setBlankCount],
+    [
+      doc,
+      mode,
+      words,
+      blankCount,
+      clozeWords,
+      maxQuestions,
+      libraryLemmas,
+      flash,
+      clearAdvance,
+      closeOthers,
+      setMode,
+      setWords,
+      setBlankCount,
+      setClozeWords,
+      setMaxQuestions,
+    ],
   )
 
   /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
@@ -169,6 +214,7 @@ export function useDictation(params: UseDictationParams) {
       setMode('full')
       closeOthers()
       setQueue(items)
+      setRoundInfo({ offset: 0, grand: items.length })
       setIndex(0)
       setInput('')
       setChecked(false)
@@ -218,6 +264,7 @@ export function useDictation(params: UseDictationParams) {
     if (!wrongItems.length) return
     clearAdvance()
     setQueue(wrongItems)
+    setRoundInfo({ offset: 0, grand: wrongItems.length })
     setIndex(0)
     setInput('')
     setChecked(false)
@@ -314,6 +361,9 @@ export function useDictation(params: UseDictationParams) {
     mode,
     words,
     blankCount,
+    clozeWords,
+    maxQuestions,
+    roundInfo,
     queue,
     index,
     input,

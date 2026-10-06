@@ -984,6 +984,9 @@ export default function ReaderApp() {
     mode: dictMode,
     words: dictWords,
     blankCount: dictBlankCount,
+    clozeWords: dictClozeWords,
+    maxQuestions: dictMaxQuestions,
+    roundInfo: dictRoundInfo,
     queue: dictQueue,
     index: dictIndex,
     input: dictInput,
@@ -1732,6 +1735,10 @@ export default function ReaderApp() {
             mode={dictMode}
             words={dictWords}
             blankCount={dictBlankCount}
+            clozeWords={dictClozeWords}
+            maxQuestions={dictMaxQuestions}
+            grandTotal={dictRoundInfo.grand}
+            roundOffset={dictRoundInfo.offset}
             checked={dictChecked}
             diff={dictDiff}
             cloze={dictCloze}

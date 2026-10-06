@@ -138,6 +138,40 @@ export interface ClozeBlank {
   accept: string[]
 }
 
+/** 把相邻句子并成不超过 maxWords 词的「段」（至少一句一段）；用于填空模式减题量。 */
+export function packSegments(sentences: string[], maxWords = 40): string[] {
+  const segs: string[] = []
+  let cur = ''
+  let curWords = 0
+  for (const raw of sentences) {
+    const t = raw.trim()
+    if (!t) continue
+    const w = t.split(/\s+/).length
+    if (cur && curWords + w > maxWords) {
+      segs.push(cur)
+      cur = t
+      curWords = w
+    } else {
+      cur = cur ? `${cur} ${t}` : t
+      curWords += w
+    }
+  }
+  if (cur) segs.push(cur)
+  return segs
+}
+
+/**
+ * 取一轮：从 cursor 处取至多 max 项（max<=0 或总量不足 max 时全取）。
+ * 返回本段、下一个 cursor（到末尾则回到 0）与本段在整体中的起点。
+ */
+export function takeRound<T>(items: T[], cursor: number, max: number): { items: T[]; next: number; offset: number } {
+  if (max <= 0 || items.length <= max) return { items, next: 0, offset: 0 }
+  const start = cursor >= items.length || cursor < 0 ? 0 : cursor
+  const slice = items.slice(start, start + max)
+  const after = start + slice.length
+  return { items: slice, next: after >= items.length ? 0 : after, offset: start }
+}
+
 export interface ClozeQuestion {
   sentence: string
   /** 挖空后的展示文本（空用 ____） */
