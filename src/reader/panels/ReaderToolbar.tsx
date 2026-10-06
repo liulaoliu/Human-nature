@@ -47,6 +47,7 @@ export interface ReaderToolbarProps {
   pregenTotal: number
   onPregenerate: () => void
   onCancelPregenerate: () => void
+  pregenAllCached: boolean
   onEnterEdit: () => void
 
   // 编辑态
@@ -121,6 +122,7 @@ export default function ReaderToolbar({
   pregenTotal,
   onPregenerate,
   onCancelPregenerate,
+  pregenAllCached,
   onEnterEdit,
   draft,
   onCleanupEdit,
@@ -269,7 +271,11 @@ export default function ReaderToolbar({
           onClick={pregenRunning ? onCancelPregenerate : onPregenerate}
           title="把整篇的朗读音频一次性生成并缓存到本机；之后连播 / 点句起播零延迟"
         >
-          {pregenRunning ? `⏳ 生成中 ${pregenDone}/${pregenTotal}（点此取消）` : '⬇ 预生成朗读'}
+          {pregenRunning
+            ? `⏳ 生成中 ${pregenDone}/${pregenTotal}（点此取消）`
+            : pregenAllCached
+              ? '✅ 已全部缓存（点此重查）'
+              : '⬇ 预生成朗读'}
         </button>
       )}
       {hasDoc && !editing && (

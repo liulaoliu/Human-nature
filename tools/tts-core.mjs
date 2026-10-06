@@ -301,6 +301,15 @@ export async function handleTts(req, res, { cacheDir }) {
   const key = createHash('sha1').update(`${target.engine}\n${target.voice}\n${text}`).digest('hex')
   const file = join(cacheDir, `${key}.${target.ext}`)
 
+  // 只查缓存、不合成（增量预生成用来找「缺哪几句」）
+  if (url.searchParams.get('check') === '1') {
+    const cached = existsSync(file) && statSync(file).size > 0
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'application/json; charset=utf-8')
+    res.end(JSON.stringify({ cached }))
+    return true
+  }
+
   try {
     mkdirSync(cacheDir, { recursive: true })
     await ensureAudio(text, target, file, cacheDir)
