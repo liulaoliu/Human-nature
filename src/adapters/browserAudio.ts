@@ -12,6 +12,43 @@ const END_EPSILON = 0.02
  */
 const TAKE_BLOB_CACHE_MAX = 8
 
+/**
+ * 全局复用一个 AudioContext。
+ *
+ * 老实现每次解码/录音都 `new AudioContext()` 再 close：浏览器上跑一阵后
+ * 新 ctx 可能一直 suspended（或 decodeAudioData 挂住不返回），表现就是
+ * 「开始能播，后面录音放不出来」。复用一个、每次用前 resume，最稳。
+ */
+let sharedCtx: AudioContext | null = null
+function audioCtx(): AudioContext | null {
+  if (typeof AudioContext === 'undefined') return null
+  if (!sharedCtx) {
+    try {
+      sharedCtx = new AudioContext()
+    } catch {
+      return null
+    }
+  }
+  if (sharedCtx.state === 'suspended') void sharedCtx.resume().catch(() => {})
+  return sharedCtx
+}
+
+/** 解码音频，带超时兜底（避免 decodeAudioData 挂住导致回放整条卡死）。 */
+async function decodeAudio(ctx: AudioContext, blob: Blob, ms = 5000): Promise<AudioBuffer> {
+  const ab = await blob.arrayBuffer()
+  let timer: number | undefined
+  try {
+    return await Promise.race([
+      ctx.decodeAudioData(ab.slice(0)),
+      new Promise<AudioBuffer>((_, reject) => {
+        timer = window.setTimeout(() => reject(new Error('decode timeout')), ms)
+      }),
+    ])
+  } finally {
+    if (timer) window.clearTimeout(timer)
+  }
+}
+
 export class BrowserPlayer implements AudioPlayerPort {
   private el: HTMLAudioElement
   private takeEl: HTMLAudioElement
@@ -50,15 +87,17 @@ export class BrowserPlayer implements AudioPlayerPort {
 
   async load(blob: Blob): Promise<void> {
     this.release()
-    const ctx = new AudioContext()
-    try {
-      const buf = await ctx.decodeAudioData(await blob.arrayBuffer())
-      this._samples = toMono(buf)
-      this._sampleRate = buf.sampleRate
-      this._duration = buf.duration
-      this._refLevel = speechRms(this._samples, this._sampleRate)
-    } finally {
-      void ctx.close()
+    const ctx = audioCtx()
+    if (ctx) {
+      try {
+        const buf = await decodeAudio(ctx, blob)
+        this._samples = toMono(buf)
+        this._sampleRate = buf.sampleRate
+        this._duration = buf.duration
+        this._refLevel = speechRms(this._samples, this._sampleRate)
+      } catch {
+        // 解码失败不影响播放（只是没有响度基准 / 波形）
+      }
     }
 
     this.objectUrl = URL.createObjectURL(blob)
@@ -109,22 +148,43 @@ export class BrowserPlayer implements AudioPlayerPort {
   async playTake(take: Take, rate: number): Promise<void> {
     this.pause()
     // 先把「我的录音」缩放到和标准音一样响，重编码成 WAV 再播。
-    // 解码/编码失败就退回原文件，至少能出声。
+    // 归一化那份播不了就退回原始录音再试一次（重建 object URL），实在不行才放弃。
     const blob = await this.normalizedTake(take)
+    try {
+      await this.playBlob(blob, rate)
+    } catch (e) {
+      if (blob !== take.blob) {
+        console.warn('[shadowing] 归一化录音回放失败，退回原始录音重试', e)
+        try {
+          await this.playBlob(take.blob, rate)
+          return
+        } catch (e2) {
+          console.warn('[shadowing] 原始录音回放也失败', e2)
+          return
+        }
+      }
+      console.warn('[shadowing] 录音回放失败', e)
+    }
+  }
+
+  /** 播一个音频 Blob；播完 resolve，`play()` 失败 reject（好让上层重试）。 */
+  private playBlob(blob: Blob, rate: number): Promise<void> {
     if (this.takeUrl) URL.revokeObjectURL(this.takeUrl)
     this.takeUrl = URL.createObjectURL(blob)
     this.takeEl.src = this.takeUrl
     this.takeEl.playbackRate = rate
     setPreservesPitch(this.takeEl)
-
-    return new Promise<void>((resolve) => {
+    return new Promise<void>((resolve, reject) => {
       this.endPending = resolve
-      this.takeEl.play().catch(() => this.pause())
       this.takeEl.onended = () => {
         cancelAnimationFrame(this.raf)
         this.endPending?.()
         this.endPending = null
       }
+      this.takeEl.play().catch((e) => {
+        this.endPending = null
+        reject(e)
+      })
     })
   }
 
@@ -139,13 +199,9 @@ export class BrowserPlayer implements AudioPlayerPort {
     const cached = this.takeBlobs.get(take.id)
     if (cached) return cached
     try {
-      const ctx = new AudioContext()
-      let buf: AudioBuffer
-      try {
-        buf = await ctx.decodeAudioData(await take.blob.arrayBuffer())
-      } finally {
-        void ctx.close()
-      }
+      const ctx = audioCtx()
+      if (!ctx) return take.blob
+      const buf = await decodeAudio(ctx, take.blob)
       const channels: Float32Array[] = []
       for (let c = 0; c < buf.numberOfChannels; c++) channels.push(buf.getChannelData(c))
       const wanted =
@@ -235,7 +291,7 @@ export class BrowserRecorder implements RecorderPort {
   private stream: MediaStream | null = null
   private rec: MediaRecorder | null = null
   private chunks: Blob[] = []
-  private ctx: AudioContext | null = null
+  private src: MediaStreamAudioSourceNode | null = null
   private analyser: AnalyserNode | null = null
   private sink: GainNode | null = null
   private raf = 0
@@ -297,19 +353,21 @@ export class BrowserRecorder implements RecorderPort {
 
   private startMeter() {
     if (!this.stream) return
-    this.ctx = new AudioContext()
-    const src = this.ctx.createMediaStreamSource(this.stream)
-    this.analyser = this.ctx.createAnalyser()
+    const ctx = audioCtx()
+    if (!ctx) return
+    const src = ctx.createMediaStreamSource(this.stream)
+    this.src = src
+    this.analyser = ctx.createAnalyser()
     this.analyser.fftSize = 1024
 
     // Chrome 要求录音链路有连接到 destination 才录得到声音。
     // Gain 置 0，避免自己听到自己。
-    this.sink = this.ctx.createGain()
+    this.sink = ctx.createGain()
     this.sink.gain.value = 0
 
     src.connect(this.analyser)
     src.connect(this.sink)
-    this.sink.connect(this.ctx.destination)
+    this.sink.connect(ctx.destination)
 
     const buf = new Float32Array(this.analyser.fftSize)
     const loop = () => {
@@ -331,11 +389,27 @@ export class BrowserRecorder implements RecorderPort {
     this.stream?.getTracks().forEach((t) => t.stop())
     this.stream = null
     this.rec = null
+    try {
+      this.src?.disconnect()
+    } catch {
+      // 忽略
+    }
+    this.src = null
+    try {
+      this.analyser?.disconnect()
+    } catch {
+      // 忽略
+    }
     this.analyser = null
-    if (this.sink) this.sink.disconnect()
+    if (this.sink) {
+      try {
+        this.sink.disconnect()
+      } catch {
+        // 忽略
+      }
+    }
     this.sink = null
-    if (this.ctx) void this.ctx.close()
-    this.ctx = null
+    // 共享 AudioContext 不关（关了下一次可能就起不来了）
     this.levelCb?.(0)
   }
 
