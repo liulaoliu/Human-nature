@@ -217,7 +217,7 @@ export default function ReaderApp() {
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
-  const { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll } = useSpeaking({
+  const { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState } = useSpeaking({
     doc,
     selectedId,
     autoSpeak,
@@ -1570,6 +1570,7 @@ export default function ReaderApp() {
             }}
             readingAll={readingAll}
             onToggleReadAll={readingAll ? stopReadAll : startReadAll}
+            ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
             onEnterEdit={enterEdit}

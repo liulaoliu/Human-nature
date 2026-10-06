@@ -38,6 +38,7 @@ export interface ReaderToolbarProps {
   onSpeakSelected: () => void
   readingAll: boolean
   onToggleReadAll: () => void
+  ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
   onEnterEdit: () => void
@@ -105,6 +106,7 @@ export default function ReaderToolbar({
   onSpeakSelected,
   readingAll,
   onToggleReadAll,
+  ttsState,
   ttsVoice,
   onTtsVoiceChange,
   onEnterEdit,
@@ -230,8 +232,8 @@ export default function ReaderToolbar({
         </select>
       )}
       {hasDoc && !editing && selectedId && (
-        <button onClick={onSpeakSelected} title="朗读当前选中句">
-          🔊 读本句
+        <button onClick={onSpeakSelected} title="朗读当前选中句（已缓存则秒播）">
+          {ttsState === 'loading' ? '🔊 合成中…' : ttsState === 'playing' ? '🔊 朗读中' : '🔊 读本句'}
         </button>
       )}
       {hasDoc && !editing && (
@@ -240,7 +242,13 @@ export default function ReaderToolbar({
           onClick={onToggleReadAll}
           title="用 TTS 逐句朗读整篇；再点一次停止"
         >
-          {readingAll ? '⏹ 停止朗读' : '🔊 朗读全文'}
+          {readingAll
+            ? '⏹ 停止朗读'
+            : ttsState === 'loading'
+              ? '🔊 准备中…'
+              : ttsState === 'playing'
+                ? '🔊 朗读中'
+                : '🔊 朗读全文'}
         </button>
       )}
       {hasDoc && !editing && (

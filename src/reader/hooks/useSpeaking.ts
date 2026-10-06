@@ -32,6 +32,8 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
   const voiceRef = useRef(voice)
   voiceRef.current = voice
   const [readingAll, setReadingAll] = useState(false)
+  /** 朗读状态：idle / 正在合成（首次要等网络）/ 正在出声。 */
+  const [ttsState, setTtsState] = useState<'idle' | 'loading' | 'playing'>('idle')
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -73,6 +75,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
       // 忽略
     }
     utterRef.current = null
+    setTtsState('idle')
   }, [clearTimer])
 
   /** 浏览器语音（兜底路径）。 */
@@ -87,15 +90,20 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
       const u = new SpeechSynthesisUtterance(text)
       u.lang = 'en-US'
       u.rate = rate
+      u.onstart = () => {
+        if (utterRef.current === u) setTtsState('playing')
+      }
       u.onend = () => {
         if (utterRef.current === u) {
           utterRef.current = null
+          setTtsState('idle')
           onEnd?.()
         }
       }
       u.onerror = () => {
         if (utterRef.current === u) {
           utterRef.current = null
+          setTtsState('idle')
           onEnd?.()
         }
       }
@@ -118,6 +126,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
         return
       }
       stopMedia()
+      setTtsState('loading')
       const token = tokenRef.current
 
       const useBrowser = () => playBrowser(t, onEnd, rate)
@@ -132,8 +141,14 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
         useBrowser()
         return
       }
+      a.onplaying = () => {
+        if (token === tokenRef.current) setTtsState('playing')
+      }
       a.onended = () => {
-        if (token === tokenRef.current) onEnd?.()
+        if (token === tokenRef.current) {
+          setTtsState('idle')
+          onEnd?.()
+        }
       }
       a.onerror = () => {
         if (token !== tokenRef.current) return
@@ -256,5 +271,5 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
     if (s && s.text.trim()) speak(s.text)
   }, [doc, selectedId, autoSpeak, speak])
 
-  return { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll }
+  return { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState }
 }
