@@ -1,5 +1,63 @@
-import { useEffect, useRef } from 'react'
-import { isClozeBlankCorrect, type ClozeQuestion, type DiffToken } from '../../core/dictation'
+import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { isClozeBlankCorrect, type ClozePart, type ClozeQuestion, type DiffToken } from '../../core/dictation'
+
+/**
+ * 把一段文本按词渲染成可点击的 span：点某个词 → 从它在整句中的位置开始朗读。
+ * base 为该段文本在整句里的字符起点（来自 makeCloze 的 parts）。
+ */
+function ClickableText({
+  text,
+  base,
+  sentence,
+  onSpeak,
+}: {
+  text: string
+  base: number
+  sentence: string
+  onSpeak: (t: string) => void
+}) {
+  const nodes: ReactNode[] = []
+  const re = /[A-Za-z][A-Za-z'’-]*/g
+  let last = 0
+  let m: RegExpExecArray | null
+  while ((m = re.exec(text))) {
+    if (m.index > last) nodes.push(text.slice(last, m.index))
+    const abs = base + m.index
+    nodes.push(
+      <span key={abs} className="dict-word" title="从这里开始听" onClick={() => onSpeak(sentence.slice(abs))}>
+        {m[0]}
+      </span>,
+    )
+    last = m.index + m[0].length
+  }
+  if (last < text.length) nodes.push(text.slice(last))
+  return <>{nodes}</>
+}
+
+/** 渲染挖空后的句子：文本可点听、空位显示编号。 */
+function ClozeSentence({
+  parts,
+  sentence,
+  onSpeak,
+}: {
+  parts: ClozePart[]
+  sentence: string
+  onSpeak: (t: string) => void
+}) {
+  return (
+    <div className="dict-sentence">
+      {parts.map((p, i) =>
+        p.blank ? (
+          <span key={i} className="dict-gap">
+            [{p.index}]
+          </span>
+        ) : (
+          <ClickableText key={i} text={p.text} base={p.start} sentence={sentence} onSpeak={onSpeak} />
+        ),
+      )}
+    </div>
+  )
+}
 
 /** 听写面板的一个「题」：句子 id + 原文。 */
 export interface DictItem {
@@ -72,14 +130,23 @@ export default function DictPanel({
   onBlankChange,
 }: DictPanelProps) {
   const inputRef = useRef<HTMLTextAreaElement>(null)
-  const firstBlankRef = useRef<HTMLInputElement>(null)
+  const blankRefs = useRef<(HTMLInputElement | null)[]>([])
+
+  /** 把焦点移到第 i 个空，并把光标放到已有文本末尾（接着已有内容继续输入）。 */
+  const focusBlank = useCallback((i: number) => {
+    const el = blankRefs.current[i]
+    if (!el) return
+    el.focus()
+    const len = el.value.length
+    el.setSelectionRange(len, len)
+  }, [])
 
   // 换题后把焦点送回输入框（autoFocus 只首次生效，换题必须手动聚焦）
   useEffect(() => {
     if (index >= queue.length || checked) return
-    if (mode === 'cloze' && cloze) firstBlankRef.current?.focus()
+    if (mode === 'cloze' && cloze) focusBlank(0)
     else inputRef.current?.focus()
-  }, [index, checked, mode, cloze, queue.length])
+  }, [index, checked, mode, cloze, queue.length, focusBlank])
 
   const current = queue[index]
   const correct = results.filter(Boolean).length
@@ -168,24 +235,50 @@ export default function DictPanel({
         <>
           {mode === 'cloze' && cloze ? (
             <>
-              <div className="dict-sentence">{cloze.display}</div>
+              <ClozeSentence parts={cloze.parts} sentence={cloze.sentence} onSpeak={onSpeak} />
               <div className="dict-blanks">
                 {cloze.blanks.map((b, i) => (
-                  <input
-                    key={i}
-                    className={
-                      'study-input dict-blank' + (checked ? (isClozeBlankCorrect(b, blanks[i] ?? '') ? ' ok' : ' bad') : '')
-                    }
-                    autoFocus={i === 0}
-                    ref={i === 0 ? firstBlankRef : undefined}
-                    placeholder={`空 ${i + 1}`}
-                    value={blanks[i] ?? ''}
-                    disabled={checked}
-                    onChange={(e) => onBlankChange(i, e.target.value)}
-                  />
+                  <div className="dict-blank-row" key={i}>
+                    <span className="dict-blank-no" title={`第 ${i + 1} 个空`}>
+                      {i + 1}
+                    </span>
+                    <input
+                      ref={(el) => {
+                        blankRefs.current[i] = el
+                      }}
+                      className={
+                        'study-input dict-blank' + (checked ? (isClozeBlankCorrect(b, blanks[i] ?? '') ? ' ok' : ' bad') : '')
+                      }
+                      placeholder={`听写第 ${i + 1} 个空`}
+                      value={blanks[i] ?? ''}
+                      disabled={checked}
+                      onFocus={(e) => {
+                        const el = e.currentTarget
+                        el.setSelectionRange(el.value.length, el.value.length)
+                      }}
+                      onKeyDown={(e) => {
+                        const el = e.currentTarget
+                        const atEnd = el.selectionStart === el.value.length && el.selectionEnd === el.value.length
+                        const atStart = el.selectionStart === 0 && el.selectionEnd === 0
+                        if (e.key === 'ArrowDown' || (e.key === 'ArrowRight' && atEnd)) {
+                          e.preventDefault()
+                          focusBlank(i + 1)
+                        } else if (e.key === 'ArrowUp' || (e.key === 'ArrowLeft' && atStart)) {
+                          e.preventDefault()
+                          focusBlank(i - 1)
+                        }
+                      }}
+                      onChange={(e) => onBlankChange(i, e.target.value)}
+                    />
+                  </div>
                 ))}
               </div>
-              {checked && <div className="dict-reveal">原文：{cloze.sentence}</div>}
+              {checked && (
+                <div className="dict-reveal">
+                  原文：
+                  <ClickableText text={cloze.sentence} base={0} sentence={cloze.sentence} onSpeak={onSpeak} />
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -207,7 +300,12 @@ export default function DictPanel({
                   ))}
                 </div>
               )}
-              {checked && <div className="dict-reveal">原文：{current?.text}</div>}
+              {checked && current && (
+                <div className="dict-reveal">
+                  原文：
+                  <ClickableText text={current.text} base={0} sentence={current.text} onSpeak={onSpeak} />
+                </div>
+              )}
             </>
           )}
           <div className="bar study-actions">

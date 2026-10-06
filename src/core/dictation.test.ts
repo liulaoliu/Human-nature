@@ -90,10 +90,23 @@ describe('pickBlankTargets / makeCloze', () => {
   })
   it('makeCloze 挖空并给答案', () => {
     const q = makeCloze(sentence, ['disclose'])
-    expect(q.display).toContain('____')
+    expect(q.display).toContain('[1]')
     expect(q.display).not.toContain('disclose')
     expect(q.blanks).toHaveLength(1)
     expect(q.blanks[0].answer).toBe('disclose')
+  })
+  it('makeCloze 多处挖空带编号，parts 记录原文位置', () => {
+    const q = makeCloze('The findings disclose a major problem.', ['findings', 'disclose'])
+    expect(q.display).toContain('[1]')
+    expect(q.display).toContain('[2]')
+    expect(q.blanks.map((b) => b.answer)).toEqual(['findings', 'disclose'])
+    const blanks = q.parts.filter((p) => p.blank)
+    expect(blanks.map((p) => p.index)).toEqual([1, 2])
+    // 每个空的位置都对应原文里的那个词
+    for (const p of blanks) expect(q.sentence.slice(p.start, p.start + p.text.length)).toBe(p.text)
+    // 拼回 display：把编号换回词形应等于原文
+    const rebuilt = q.parts.map((p) => p.text).join('')
+    expect(rebuilt).toBe(q.sentence)
   })
 })
 

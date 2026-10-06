@@ -172,10 +172,22 @@ export function takeRound<T>(items: T[], cursor: number, max: number): { items: 
   return { items: slice, next: after >= items.length ? 0 : after, offset: start }
 }
 
+export interface ClozePart {
+  /** 片段文本（blank=true 时是原文里被挖掉的词形） */
+  text: string
+  blank: boolean
+  /** 在原文中的字符起点（用于「从这开始听」） */
+  start: number
+  /** 空的编号（1 起）；仅 blank=true 时有 */
+  index?: number
+}
+
 export interface ClozeQuestion {
   sentence: string
-  /** 挖空后的展示文本（空用 ____） */
+  /** 挖空后的展示文本（空用带编号的 [n]） */
   display: string
+  /** 结构化片段：文本 / 空，便于渲染编号与「点击原文位置开始听」 */
+  parts: ClozePart[]
   blanks: ClozeBlank[]
 }
 
@@ -228,26 +240,27 @@ export function pickBlankTargets(
   return chosen
 }
 
-/** 把 targets 在原句里挖成 ____，返回展示文本与答案。 */
+/** 把 targets 在原句里挖空，返回带编号的展示文本、结构化片段与答案。 */
 export function makeCloze(text: string, targets: string[]): ClozeQuestion {
   const wanted = new Set(targets.map((t) => t.trim().toLowerCase()).filter(Boolean))
   const spans = wordSpans(text)
+  const parts: ClozePart[] = []
   const blanks: ClozeBlank[] = []
-  let display = ''
   let pos = 0
   for (const w of spans) {
-    if (w.start > pos) display += text.slice(pos, w.start)
+    if (w.start > pos) parts.push({ text: text.slice(pos, w.start), blank: false, start: pos })
     if (wanted.has(w.text.toLowerCase())) {
-      display += '____'
       const set = new Set<string>([normalizeAnswer(w.text), w.text.toLowerCase(), lemmaOf(w.text)])
+      parts.push({ text: w.text, blank: true, start: w.start, index: blanks.length + 1 })
       blanks.push({ answer: w.text, accept: [...set].filter(Boolean) })
     } else {
-      display += w.text
+      parts.push({ text: w.text, blank: false, start: w.start })
     }
     pos = w.end
   }
-  if (pos < text.length) display += text.slice(pos)
-  return { sentence: text, display, blanks }
+  if (pos < text.length) parts.push({ text: text.slice(pos), blank: false, start: pos })
+  const display = parts.map((p) => (p.blank ? `[${p.index}]` : p.text)).join('')
+  return { sentence: text, display, parts, blanks }
 }
 
 /** 判一个空对不对（忽略大小写 / 首尾标点，词形还原一致也算对）。 */
