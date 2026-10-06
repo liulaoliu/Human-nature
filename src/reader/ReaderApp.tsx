@@ -214,7 +214,7 @@ export default function ReaderApp() {
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
-  const { speak, startReadAll, stopReadAll, resetSpoken, readingAll } = useSpeaking({
+  const { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll } = useSpeaking({
     doc,
     selectedId,
     autoSpeak,
@@ -1698,6 +1698,7 @@ export default function ReaderApp() {
             items={library.items}
             onClose={closeQuiz}
             onSpeak={speak}
+            onResetSpeech={resetSpeech}
             onSubmit={() => checkQuiz()}
             onNext={nextQuiz}
             onRetryWrong={retryQuizWrong}
@@ -1753,6 +1754,7 @@ export default function ReaderApp() {
             onRetryWrong={retryDictWrong}
             onClose={closeDict}
             onSpeak={speak}
+            onResetSpeech={resetSpeech}
             onInputChange={setDictInput}
             onBlankChange={setDictBlank}
           />
@@ -1769,6 +1771,7 @@ export default function ReaderApp() {
             transcript={doc ? doc.sentences.map((s) => s.text).join(' ') : null}
             onClose={() => setListenOpen(false)}
             onToggleRead={readingAll ? stopReadAll : startReadAll}
+            onResetSpeech={resetSpeech}
             onAnswer={(id, value) => setListenAnswers((a) => ({ ...a, [id]: value }))}
             onSubmit={submitListening}
             onRetryWrong={retryListenWrong}

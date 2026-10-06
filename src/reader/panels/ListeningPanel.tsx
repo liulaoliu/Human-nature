@@ -14,6 +14,8 @@ export interface ListeningPanelProps {
   transcript: string | null
   onClose: () => void
   onToggleRead: () => void
+  /** 一键尝试唤醒假死的语音。 */
+  onResetSpeech: () => void
   onAnswer: (id: string, value: string) => void
   onSubmit: () => void
   onRetryWrong: () => void
@@ -32,6 +34,7 @@ export default function ListeningPanel({
   transcript,
   onClose,
   onToggleRead,
+  onResetSpeech,
   onAnswer,
   onSubmit,
   onRetryWrong,
@@ -48,6 +51,12 @@ export default function ListeningPanel({
           title="朗读整篇（练习听力）"
         >
           {readingAll ? '⏹ 停止' : '🔊 播放全文'}
+        </button>
+        <button
+          onClick={onResetSpeech}
+          title="朗读卡住时点这里尝试唤醒；仍无效就刷新页面"
+        >
+          🔄 重启语音
         </button>
         <span className="muted">
           共 {questions.length} 题{onlyWrong ? '（只做错题）' : ''}

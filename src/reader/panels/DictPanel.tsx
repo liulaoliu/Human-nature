@@ -109,6 +109,8 @@ export interface DictPanelProps {
   onRetryWrong: () => void
   onClose: () => void
   onSpeak: (text: string) => void
+  /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续做）。 */
+  onResetSpeech: () => void
   onInputChange: (value: string) => void
   onBlankChange: (i: number, value: string) => void
 }
@@ -138,6 +140,7 @@ export default function DictPanel({
   onRetryWrong,
   onClose,
   onSpeak,
+  onResetSpeech,
   onInputChange,
   onBlankChange,
 }: DictPanelProps) {
@@ -254,6 +257,15 @@ export default function DictPanel({
         </span>
         <button onClick={() => current && onSpeak(current.text)} title="再听一遍">
           🔊 再听一遍
+        </button>
+        <button
+          onClick={() => {
+            onResetSpeech()
+            if (current) onSpeak(current.text)
+          }}
+          title="朗读卡住时点这里尝试唤醒；仍无效就刷新页面（刷新后进度会恢复）"
+        >
+          🔄 重启语音
         </button>
       </div>
 

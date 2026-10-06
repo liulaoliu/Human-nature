@@ -26,6 +26,8 @@ export interface QuizPanelProps {
   items: VocabItem[]
   onClose: () => void
   onSpeak: (text: string) => void
+  /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续考）。 */
+  onResetSpeech: () => void
   onSubmit: () => void
   onNext: () => void
   onRetryWrong: () => void
@@ -48,6 +50,7 @@ export default function QuizPanel({
   items,
   onClose,
   onSpeak,
+  onResetSpeech,
   onSubmit,
   onNext,
   onRetryWrong,
@@ -80,6 +83,17 @@ export default function QuizPanel({
         <span className="muted">
           正确 {correct} / {results.length}
         </span>
+        <button
+          onClick={() => {
+            onResetSpeech()
+            if (question && (question.kind === 'listen' || question.kind === 'ear')) {
+              onSpeak(question.audioText ?? question.context ?? question.word)
+            }
+          }}
+          title="朗读卡住时点这里尝试唤醒；仍无效就刷新页面（刷新后进度会恢复）"
+        >
+          🔄 重启语音
+        </button>
       </div>
 
       {question ? (

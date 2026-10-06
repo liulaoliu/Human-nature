@@ -58,6 +58,29 @@ export function useSpeaking({ doc, selectedId, autoSpeak }: UseSpeakingOptions) 
   }, [hardStop])
 
   /**
+   * 一键尝试唤醒「假死」的语音合成。
+   * 真·死透只有刷新页面能救，但多数轻微卡顿（`paused` 卡住 / 队列卡住）能救回来。
+   */
+  const resetSpeech = useCallback(() => {
+    clearTimer()
+    readAllRef.current = false
+    setReadingAll(false)
+    try {
+      if (typeof speechSynthesis === 'undefined') return
+      speechSynthesis.cancel()
+      if (speechSynthesis.paused) speechSynthesis.resume()
+      // 抖一下：某些卡死状态 pause→resume 就能恢复
+      speechSynthesis.pause()
+      speechSynthesis.resume()
+      // 逼引擎重新枚举声音，相当于轻量重初始化
+      speechSynthesis.getVoices()
+    } catch {
+      // 忽略
+    }
+    utterRef.current = null
+  }, [clearTimer])
+
+  /**
    * 朗读一句。**一律 cancel + 重播**：即使上一句卡死，点这里也能立刻重新出声。
    * （自动朗读的去重由调用方 / lastSpokenRef 负责，不靠这里拦截。）
    */
@@ -160,5 +183,5 @@ export function useSpeaking({ doc, selectedId, autoSpeak }: UseSpeakingOptions) 
     if (s && s.text.trim()) speak(s.text)
   }, [doc, selectedId, autoSpeak, speak])
 
-  return { speak, startReadAll, stopReadAll, resetSpoken, readingAll }
+  return { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll }
 }
