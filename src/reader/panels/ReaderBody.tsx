@@ -3,7 +3,8 @@ import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
 import type { Paragraph, Sentence } from '../../types/document'
 
-/** 把一句话渲染成「词 span（生词包成 .vw + 序号上标） + 标点文本」，选中的词加 .hl。 */
+/** 把一句话渲染成「词 span（生词包成 .vw + 序号上标） + 标点文本」，选中的词加 .hl。
+ *  朗读中（kara 非空）时：每个词都可点、并从该词起播，当前词高亮。 */
 function sentenceNodes(
   text: string,
   active: Set<number> | null,
@@ -12,6 +13,7 @@ function sentenceNodes(
   sid?: string,
   nums?: Map<string, number> | null,
   firstNums?: Set<string> | null,
+  kara?: { activeIndex: number | null; onSeek: (i: number) => void } | null,
 ): ReactNode[] {
   const spans = wordSpans(text)
   const out: ReactNode[] = []
@@ -19,27 +21,40 @@ function sentenceNodes(
   spans.forEach((w, i) => {
     if (w.start > pos) out.push(text.slice(pos, w.start))
     const on = active !== null && active.has(i)
-    if (on) {
+    const key = w.text.toLowerCase()
+    const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
+    const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
+    const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
+    if (kara) {
+      out.push(
+        <span
+          key={`w${i}`}
+          className={'kara' + (i === kara.activeIndex ? ' kara-on' : '') + (isVocab ? ' vw' : '')}
+          onClick={(e) => {
+            e.stopPropagation()
+            kara.onSeek(i)
+          }}
+          title="从这个词开始朗读"
+        >
+          {w.text}
+          {showNum && <sup className="wnum">{num}</sup>}
+        </span>,
+      )
+    } else if (on) {
       out.push(
         <span key={`w${i}`} className="hl">
           {w.text}
         </span>,
       )
-    } else {
-      const key = w.text.toLowerCase()
-      const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
-      const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
-      const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
+    } else if (isVocab) {
       out.push(
-        isVocab ? (
-          <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
-            {w.text}
-            {showNum && <sup className="wnum">{num}</sup>}
-          </span>
-        ) : (
-          w.text
-        ),
+        <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
+          {w.text}
+          {showNum && <sup className="wnum">{num}</sup>}
+        </span>,
       )
+    } else {
+      out.push(w.text)
     }
     pos = w.end
   })
@@ -70,6 +85,10 @@ export interface ReaderBodyProps {
   articleRef: RefObject<HTMLElement>
   onSelectSentence: (sid: string) => void
   onFocusEntry: (word: string) => void
+  /** 正在朗读的句子（逐词高亮）。 */
+  karaoke: { sid: string; activeIndex: number | null } | null
+  /** 点某个词 → 从该词起播。 */
+  onWordSeek: (sid: string, wordIndex: number) => void
 }
 
 /** 阅读正文：段落/句子 + 生词高亮 + 译文/语言点 + 点句选中 + 选词气泡。 */
@@ -92,6 +111,8 @@ export default function ReaderBody({
   articleRef,
   onSelectSentence,
   onFocusEntry,
+  karaoke,
+  onWordSeek,
 }: ReaderBodyProps) {
   return (
     <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
@@ -125,6 +146,9 @@ export default function ReaderBody({
                     sid,
                     articleNums,
                     articleFirst,
+                    karaoke && karaoke.sid === sid
+                      ? { activeIndex: karaoke.activeIndex, onSeek: (i) => onWordSeek(sid, i) }
+                      : null,
                   )}{' '}
                 </span>
                 {translateView !== 'off' && (s.translation || translateView === 'only') && (

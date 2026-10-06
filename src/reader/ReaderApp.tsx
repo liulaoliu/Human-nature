@@ -236,12 +236,13 @@ export default function ReaderApp() {
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
-  const { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState } = useSpeaking({
-    doc,
-    selectedId,
-    autoSpeak,
-    voice: ttsVoice,
-  })
+  const { speak, speakFromWord, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState, nowPlaying } =
+    useSpeaking({
+      doc,
+      selectedId,
+      autoSpeak,
+      voice: ttsVoice,
+    })
 
   /** 预生成整篇朗读：并发跑 /api/tts 把缓存暖起来，之后整篇连播 / 点句起播零延迟。 */
   const [pregen, setPregen] = useState<{ done: number; total: number; running: boolean }>({
@@ -278,6 +279,23 @@ export default function ReaderApp() {
   const cancelPregenerate = useCallback(() => {
     pregenAbortRef.current = true
   }, [])
+
+  /** 逐词高亮：当前朗读句 + 正读到的词下标。 */
+  const karaoke = useMemo(() => {
+    const np = nowPlaying
+    if (!np || !doc) return null
+    const s = doc.sentences.find((x) => x.text.trim() === np.text)
+    if (!s) return null
+    let activeIndex: number | null = null
+    for (let i = 0; i < np.wordTimings.length; i++) {
+      const wt = np.wordTimings[i]
+      if (np.ms >= wt.start && np.ms < wt.end) {
+        activeIndex = i
+        break
+      }
+    }
+    return { sid: s.id, activeIndex }
+  }, [nowPlaying, doc])
   /** 背单词时长统计：按天累计（落盘，供统计用） */
   const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
     'reader:studyStats',
@@ -1975,6 +1993,11 @@ export default function ReaderApp() {
                   articleRef={articleRef}
                   onSelectSentence={selectSentence}
                   onFocusEntry={focusEntry}
+                  karaoke={karaoke}
+                  onWordSeek={(sid, i) => {
+                    const s = doc?.sentences.find((x) => x.id === sid)
+                    if (s) speakFromWord(s.text, i)
+                  }}
                 />
               </>
             )}

@@ -497,6 +497,14 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 }
 .vw:hover { background: rgba(242, 181, 68, 0.2); border-radius: 3px; }
 
+/* 朗读逐词高亮 + 点词起播 */
+.kara { cursor: pointer; border-radius: 3px; }
+.kara:hover { background: rgba(127, 127, 127, 0.18); }
+.kara-on {
+  background: rgba(242, 181, 68, 0.4);
+  box-shadow: 0 0 0 1px rgba(242, 181, 68, 0.6) inset;
+}
+
 /* 生词本：卡片 / 表格切换 */
 .view-toggle { margin-left: 8px; display: inline-flex; gap: 4px; }
 .view-toggle button { padding: 1px 8px; font-size: 12px; }

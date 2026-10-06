@@ -1,6 +1,46 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
+import { wordSpans } from '../../core/wordSelect'
+
+/** 一个词的音频区间（毫秒）。 */
+export interface WordTiming {
+  start: number
+  end: number
+}
+
+/** 当前正在朗读的句子：文本 + 逐词时间 + 已播到哪（毫秒）。 */
+export interface NowPlaying {
+  text: string
+  wordTimings: WordTiming[]
+  ms: number
+}
+
+function normW(s: string): string {
+  return s.toLowerCase().normalize('NFKC').replace(/[^a-z0-9']/g, '')
+}
+
+/** 把服务端逐词时间戳对齐到该句的词序（供逐词高亮 / 点词跳播）。 */
+function alignTimings(text: string, timings: { part?: string; start: number; end: number }[]): WordTiming[] {
+  const spans = wordSpans(text)
+  const out: WordTiming[] = []
+  let j = 0
+  for (const sp of spans) {
+    const key = normW(sp.text)
+    let found = -1
+    for (let k = j; k < timings.length; k++) {
+      if (normW(timings[k].part ?? '') === key) {
+        found = k
+        break
+      }
+    }
+    const t = found >= 0 ? timings[found] : timings[j]
+    if (found >= 0) j = found + 1
+    else if (j < timings.length) j++
+    out.push(t ? { start: t.start, end: t.end } : { start: 0, end: 0 })
+  }
+  return out
+}
 
 export interface UseSpeakingOptions {
   /** 当前文章（只用到句子列表）；没有文章时为 null。 */
@@ -34,6 +74,8 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
   const [readingAll, setReadingAll] = useState(false)
   /** 朗读状态：idle / 正在合成（首次要等网络）/ 正在出声。 */
   const [ttsState, setTtsState] = useState<'idle' | 'loading' | 'playing'>('idle')
+  /** 正在朗读的句子（逐词高亮 / 点词跳播用）。 */
+  const [nowPlaying, setNowPlaying] = useState<NowPlaying | null>(null)
 
   const clearTimer = useCallback(() => {
     if (timerRef.current != null) {
@@ -60,6 +102,9 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
     if (a) {
       a.onended = null
       a.onerror = null
+      a.onplaying = null
+      a.ontimeupdate = null
+      a.onloadedmetadata = null
       try {
         a.pause()
       } catch {
@@ -76,6 +121,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
     }
     utterRef.current = null
     setTtsState('idle')
+    setNowPlaying(null)
   }, [clearTimer])
 
   /** 浏览器语音（兜底路径）。 */
@@ -119,7 +165,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
    * `onEnd` 播放结束（或失败）后调用，用于整篇连播的串联。
    */
   const playText = useCallback(
-    (text: string, onEnd?: () => void, rate = 1) => {
+    (text: string, onEnd?: () => void, rate = 1, seekMs = 0) => {
       const t = text.trim()
       if (!t) {
         onEnd?.()
@@ -127,6 +173,7 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
       }
       stopMedia()
       setTtsState('loading')
+      setNowPlaying({ text: t, wordTimings: [], ms: seekMs })
       const token = tokenRef.current
 
       const useBrowser = () => playBrowser(t, onEnd, rate)
@@ -141,12 +188,26 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
         useBrowser()
         return
       }
+      const setMs = (ms: number) => {
+        if (token === tokenRef.current) setNowPlaying((np) => (np && np.text === t ? { ...np, ms } : np))
+      }
       a.onplaying = () => {
         if (token === tokenRef.current) setTtsState('playing')
+      }
+      a.ontimeupdate = () => setMs(a.currentTime * 1000)
+      a.onloadedmetadata = () => {
+        if (seekMs > 0) {
+          try {
+            a.currentTime = seekMs / 1000
+          } catch {
+            // 忽略
+          }
+        }
       }
       a.onended = () => {
         if (token === tokenRef.current) {
           setTtsState('idle')
+          setNowPlaying(null)
           onEnd?.()
         }
       }
@@ -156,6 +217,16 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
         serverTtsRef.current = false
         useBrowser()
       }
+      // 逐词时间戳（服务端随音频一起生成，取回即可）→ 高亮 / 点词跳播
+      fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          if (token !== tokenRef.current || !Array.isArray(j)) return
+          setNowPlaying((np) => (np && np.text === t ? { ...np, wordTimings: alignTimings(t, j) } : np))
+        })
+        .catch(() => {
+          // 忽略：拿不到时间戳就不高亮
+        })
       try {
         a.pause()
         a.src = `/api/tts?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`
@@ -221,6 +292,24 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
     [playText],
   )
 
+  /** 从某个词开始朗读：取该词音频起点，在原音频里 seek（不重新合成、不改语气）。 */
+  const speakFromWord = useCallback(
+    (text: string, wordIndex: number) => {
+      readAllRef.current = false
+      setReadingAll(false)
+      const t = text.trim()
+      if (!t) return
+      fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
+        .then((r) => (r.ok ? r.json() : null))
+        .then((j) => {
+          const ms = Array.isArray(j) ? (alignTimings(t, j)[wordIndex]?.start ?? 0) : 0
+          playText(t, undefined, 1, ms)
+        })
+        .catch(() => playText(t))
+    },
+    [playText],
+  )
+
   /** 逐句朗读整篇。 */
   const startReadAll = useCallback(() => {
     stopReadAll()
@@ -271,5 +360,5 @@ export function useSpeaking({ doc, selectedId, autoSpeak, voice = DEFAULT_TTS_VO
     if (s && s.text.trim()) speak(s.text)
   }, [doc, selectedId, autoSpeak, speak])
 
-  return { speak, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState }
+  return { speak, speakFromWord, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState, nowPlaying }
 }

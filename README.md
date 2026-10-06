@@ -165,6 +165,8 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
   之后整篇连播 / 点句起播**零延迟**。
 - **缓存**：按 `sha1(engine + voice + text)` 存到 **`public/tts/<hash>.mp3|.wav`**（已 gitignore）。
   同一句第二次是**本地文件、瞬发**。缓存上限 800 条，超出按最旧自动清理。
+- **逐词高亮 / 点词起播**：朗读时**当前词实时高亮**；点句子里的**任意词 → 从该词开始播**
+  （在原音频里 seek，不重新合成、不改语气，零延迟）。
 - **逐词时间戳**：**两个引擎都产出**逐词 `{part, start, end}`（毫秒），与音频同目录同名（`<hash>.mp3.json` / `<hash>.wav.json`），
   也可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转
   （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。
