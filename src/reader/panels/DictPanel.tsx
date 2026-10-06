@@ -1,20 +1,26 @@
-import { useCallback, useEffect, useRef, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { isClozeBlankCorrect, type ClozePart, type ClozeQuestion, type DiffToken } from '../../core/dictation'
+
+/** 拼写比对用的归一化：小写、去标点（撇号保留）。 */
+const normWord = (s: string) => s.toLowerCase().normalize('NFKC').replace(/[^a-z0-9']/g, '')
 
 /**
  * 把一段文本按词渲染成可点击的 span：点某个词 → 从它在整句中的位置开始朗读。
  * base 为该段文本在整句里的字符起点（来自 makeCloze 的 parts）。
+ * isWrong 为真时给该词加「拼错」高亮（用于检查后的原文）。
  */
 function ClickableText({
   text,
   base,
   sentence,
   onSpeak,
+  isWrong,
 }: {
   text: string
   base: number
   sentence: string
   onSpeak: (t: string) => void
+  isWrong?: (word: string) => boolean
 }) {
   const nodes: ReactNode[] = []
   const re = /[A-Za-z][A-Za-z'’-]*/g
@@ -23,8 +29,14 @@ function ClickableText({
   while ((m = re.exec(text))) {
     if (m.index > last) nodes.push(text.slice(last, m.index))
     const abs = base + m.index
+    const bad = isWrong ? isWrong(m[0]) : false
     nodes.push(
-      <span key={abs} className="dict-word" title="从这里开始听" onClick={() => onSpeak(sentence.slice(abs))}>
+      <span
+        key={abs}
+        className={'dict-word' + (bad ? ' wrong' : '')}
+        title={bad ? '这个词没听对' : '从这里开始听'}
+        onClick={() => onSpeak(sentence.slice(abs))}
+      >
         {m[0]}
       </span>,
     )
@@ -151,6 +163,20 @@ export default function DictPanel({
   const current = queue[index]
   const correct = results.filter(Boolean).length
 
+  /** 检查后：本次没听对的词（原文里高亮）。填空=填错的空；整句=漏写/拼错的词。 */
+  const wrongSet = useMemo(() => {
+    const s = new Set<string>()
+    if (!checked) return s
+    if (mode === 'cloze' && cloze) {
+      cloze.blanks.forEach((b, i) => {
+        if (!isClozeBlankCorrect(b, blanks[i] ?? '')) s.add(normWord(b.answer))
+      })
+    } else if (diff) {
+      for (const t of diff) if (t.type === 'del') s.add(normWord(t.text))
+    }
+    return s
+  }, [checked, mode, cloze, blanks, diff])
+
   return (
     <div className="study dict">
       <div className="bar study-bar">
@@ -276,7 +302,13 @@ export default function DictPanel({
               {checked && (
                 <div className="dict-reveal">
                   原文：
-                  <ClickableText text={cloze.sentence} base={0} sentence={cloze.sentence} onSpeak={onSpeak} />
+                  <ClickableText
+                    text={cloze.sentence}
+                    base={0}
+                    sentence={cloze.sentence}
+                    onSpeak={onSpeak}
+                    isWrong={(w) => wrongSet.has(normWord(w))}
+                  />
                 </div>
               )}
             </>
@@ -303,7 +335,13 @@ export default function DictPanel({
               {checked && current && (
                 <div className="dict-reveal">
                   原文：
-                  <ClickableText text={current.text} base={0} sentence={current.text} onSpeak={onSpeak} />
+                  <ClickableText
+                    text={current.text}
+                    base={0}
+                    sentence={current.text}
+                    onSpeak={onSpeak}
+                    isWrong={(w) => wrongSet.has(normWord(w))}
+                  />
                 </div>
               )}
             </>

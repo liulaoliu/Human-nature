@@ -1007,6 +1007,7 @@ button.danger {
 .dict-sentence { font-size: 17px; line-height: 1.9; max-width: 760px; margin: 6px 0 10px; }
 .dict-word { cursor: pointer; border-radius: 3px; }
 .dict-word:hover { background: rgba(127, 127, 127, 0.18); }
+.dict-word.wrong { color: var(--red); font-weight: 700; text-decoration: underline wavy var(--red); }
 .dict-gap {
   display: inline-block;
   min-width: 1.9em;
