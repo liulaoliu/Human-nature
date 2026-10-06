@@ -22,6 +22,10 @@ export interface StudyPanelProps {
   /** 整个词库（「强制锤炼」里「选词义」的干扰项来源）。 */
   items: VocabItem[]
   queueLength: number
+  /** 本轮总数（进度分母，开始时冻结；忘记/模糊加练不改动它）。 */
+  roundTotal: number
+  /** 忘记/模糊触发的加练次数（单独计数，不计入分母）。 */
+  extraCount: number
   index: number
   mode: StudyMode
   scope: StudyScope
@@ -296,6 +300,8 @@ export default function StudyPanel({
   card,
   items,
   queueLength,
+  roundTotal,
+  extraCount,
   index,
   mode,
   scope,
@@ -420,7 +426,8 @@ export default function StudyPanel({
           <option value="90">90s 锤炼</option>
         </select>
         <span className="muted">
-          {Math.min(index + 1, queueLength)} / {queueLength}
+          {Math.min(index + 1, roundTotal || queueLength)} / {roundTotal || queueLength}
+          {extraCount > 0 ? ` · 加练 ×${extraCount}` : ''}
           {mode === 'learn' && newLimit > 0 ? ` · 新词 ${newToday}/${newLimit}` : ''}
         </span>
         <span className={'study-timer heat-' + heat} title="这张卡停了多久；越久越红，到点会强制锤炼">

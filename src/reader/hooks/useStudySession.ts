@@ -104,6 +104,10 @@ export function useStudySession(params: UseStudySessionParams) {
   const bumpedRef = useRef<Set<string>>(new Set())
   /** 供外部（收尾小结）显示「重练忘记的 N 个」 */
   const [forgotCount, setForgotCount] = useState(0)
+  /** 本轮总数（进度分母）——开始时冻结；忘记/模糊只加练，不撑大它。 */
+  const [roundTotal, setRoundTotal] = useState(0)
+  /** 忘记/模糊触发的「加练」次数（单独计数，不计入分母）。 */
+  const [extraCount, setExtraCount] = useState(0)
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
 
@@ -146,6 +150,7 @@ export function useStudySession(params: UseStudySessionParams) {
     forgotRef.current = []
     bumpedRef.current = new Set()
     setForgotCount(0)
+    setExtraCount(0)
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     resetCardUi()
   }, [resetCardUi])
@@ -177,6 +182,7 @@ export function useStudySession(params: UseStudySessionParams) {
       closeQuiz()
       resetSession()
       setQueue(q)
+      setRoundTotal(q.length)
       setIndex(0)
     },
     [poolFor, mode, scope, newLimit, newToday, flash, closeQuiz, resetSession, setMode, setScope],
@@ -196,6 +202,7 @@ export function useStudySession(params: UseStudySessionParams) {
     closeQuiz()
     resetSession()
     setQueue(sortItems(p, 'due'))
+    setRoundTotal(p.length)
     setIndex(0)
   }, [poolFor, flash, closeQuiz, resetSession, setScope])
 
@@ -234,6 +241,7 @@ export function useStudySession(params: UseStudySessionParams) {
         if (used < cap) {
           requeueRef.current.set(cur.id, used + 1)
           setQueue((q) => (q ? [...q, cur] : q))
+          setExtraCount((n) => n + 1)
         }
       }
       setRevealed(false)
@@ -332,6 +340,7 @@ export function useStudySession(params: UseStudySessionParams) {
     persist(removeItem(library, card.id))
     const removedBefore = queue ? queue.slice(0, index).filter((it) => it.id === card.id).length : 0
     setQueue((q) => (q ? q.filter((it) => it.id !== card.id) : q))
+    setRoundTotal((t) => Math.max(0, t - 1))
     setIndex((i) => Math.max(0, i - removedBefore))
     setDelArmed(false)
     setEditOpen(false)
@@ -350,8 +359,10 @@ export function useStudySession(params: UseStudySessionParams) {
     forgotRef.current = []
     bumpedRef.current = new Set()
     setForgotCount(0)
+    setExtraCount(0)
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     setQueue(items)
+    setRoundTotal(items.length)
     setIndex(0)
     resetCardUi()
   }, [library.items, resetCardUi])
@@ -448,6 +459,8 @@ export function useStudySession(params: UseStudySessionParams) {
     setDraft,
     delArmed,
     forgotCount,
+    roundTotal,
+    extraCount,
     card,
     dueCount,
     newCount,

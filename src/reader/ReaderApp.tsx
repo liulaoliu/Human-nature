@@ -550,6 +550,8 @@ export default function ReaderApp() {
     setDraft: setStudyDraft,
     delArmed: studyDelArmed,
     forgotCount: studyForgotCount,
+    roundTotal: studyRoundTotal,
+    extraCount: studyExtraCount,
     card: studyCard,
     dueCount,
     newCount,
@@ -1597,6 +1599,8 @@ export default function ReaderApp() {
             card={studyCard}
             items={library.items}
             queueLength={studyQueue.length}
+            roundTotal={studyRoundTotal}
+            extraCount={studyExtraCount}
             index={studyIndex}
             mode={studyMode}
             scope={studyScope}
