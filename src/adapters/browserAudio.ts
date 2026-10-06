@@ -211,7 +211,8 @@ export class BrowserPlayer implements AudioPlayerPort {
       const wav = floatToWav(channels.map((ch) => applyGain(ch, gain)), buf.sampleRate)
       this.takeBlobs.set(take.id, wav)
       return wav
-    } catch {
+    } catch (e) {
+      console.warn('[shadowing] 录音解码失败，退回原始音频', e)
       return take.blob
     }
   }
