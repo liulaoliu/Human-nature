@@ -45,6 +45,42 @@ function writeCursor(k: string, v: number): void {
   }
 }
 
+/** 听写面板的一题：句子 id + 原文；填空题额外带上「固定挖哪些空」。 */
+export interface DictItem {
+  id: string
+  text: string
+  targets?: string[]
+}
+
+/** 听写会话快照（落 localStorage，刷新后接着听写）。 */
+interface DictSessionSnapshot {
+  v: 1
+  queue: DictItem[]
+  index: number
+  mode: 'full' | 'cloze'
+  input: string
+  checked: boolean
+  diff: DiffToken[] | null
+  blanks: string[]
+  results: boolean[]
+  wrongItems: DictItem[]
+  round: { offset: number; grand: number }
+}
+
+const DICT_SESSION_KEY = 'reader:dictSession'
+
+function loadDictSession(): DictSessionSnapshot | null {
+  try {
+    const raw = localStorage.getItem(DICT_SESSION_KEY)
+    if (!raw) return null
+    const s = JSON.parse(raw) as DictSessionSnapshot
+    if (!s || s.v !== 1 || !Array.isArray(s.queue) || !s.queue.length) return null
+    return s
+  } catch {
+    return null
+  }
+}
+
 export interface UseDictationParams {
   doc: { sentences: Sentence[] } | null
   libraryLemmas: Set<string>
@@ -80,14 +116,16 @@ export function useDictation(params: UseDictationParams) {
     closeOthers,
   } = params
 
-  const [queue, setQueue] = useState<{ id: string; text: string }[] | null>(null)
-  const [index, setIndex] = useState(0)
-  const [input, setInput] = useState('')
-  const [checked, setChecked] = useState(false)
-  const [diff, setDiff] = useState<DiffToken[] | null>(null)
-  const [blanks, setBlanks] = useState<string[]>([])
-  const [results, setResults] = useState<boolean[]>([])
-  const [wrongItems, setWrongItems] = useState<{ id: string; text: string }[]>([])
+  // ---- 会话（落盘：刷新可恢复） ----
+  const [restored] = useState<DictSessionSnapshot | null>(loadDictSession)
+  const [queue, setQueue] = useState<DictItem[] | null>(restored?.queue ?? null)
+  const [index, setIndex] = useState(restored?.index ?? 0)
+  const [input, setInput] = useState(restored?.input ?? '')
+  const [checked, setChecked] = useState(restored?.checked ?? false)
+  const [diff, setDiff] = useState<DiffToken[] | null>(restored?.diff ?? null)
+  const [blanks, setBlanks] = useState<string[]>(restored?.blanks ?? [])
+  const [results, setResults] = useState<boolean[]>(restored?.results ?? [])
+  const [wrongItems, setWrongItems] = useState<DictItem[]>(restored?.wrongItems ?? [])
 
   const [mode, setMode] = useLocalStorageState<'full' | 'cloze'>(
     'reader:dictMode',
@@ -103,10 +141,44 @@ export function useDictation(params: UseDictationParams) {
   /** 每轮最多做多少题（0=不限）；做不完下次从断点继续。 */
   const [maxQuestions, setMaxQuestions] = useLocalStorageState('reader:dictMaxQuestions', 20, persistentNumber)
   /** 本轮出自全篇的哪一段（用于显示「第 X–Y / 全篇 M」）。 */
-  const [roundInfo, setRoundInfo] = useState({ offset: 0, grand: 0 })
+  const [roundInfo, setRoundInfo] = useState(restored?.round ?? { offset: 0, grand: 0 })
 
   const advanceRef = useRef<number | null>(null)
-  const recordedRef = useRef(false)
+  // 恢复的会话若已做完，别在挂载时把成绩再记一遍
+  const recordedRef = useRef(!!restored && restored.index >= restored.queue.length)
+
+  // 对齐恢复会话的模式（队列是按这个模式建的）
+  useEffect(() => {
+    if (restored) setMode(restored.mode)
+    // 只在挂载时对齐一次
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 会话落盘：刷新页面后能接着听写
+  useEffect(() => {
+    try {
+      if (queue && queue.length) {
+        const snap: DictSessionSnapshot = {
+          v: 1,
+          queue,
+          index,
+          mode,
+          input,
+          checked,
+          diff,
+          blanks,
+          results,
+          wrongItems,
+          round: roundInfo,
+        }
+        localStorage.setItem(DICT_SESSION_KEY, JSON.stringify(snap))
+      } else {
+        localStorage.removeItem(DICT_SESSION_KEY)
+      }
+    } catch {
+      // 隐私模式 / 配额满：忽略
+    }
+  }, [queue, index, mode, input, checked, diff, blanks, results, wrongItems, roundInfo])
 
   const clearAdvance = useCallback(() => {
     if (advanceRef.current) {
@@ -127,8 +199,10 @@ export function useDictation(params: UseDictationParams) {
   /** 当前短块的挖空题（每块稳定，不随重渲染乱跳）。 */
   const cloze = useMemo(() => {
     if (mode !== 'cloze' || !queue || index >= queue.length) return null
-    const text = queue[index].text
-    return makeCloze(text, pickBlankTargets(text, libraryLemmas, blankCount))
+    const item = queue[index]
+    // 优先用开轮时固定下来的目标词（刷新恢复后仍对得上）；兜底才现挑
+    const targets = item.targets ?? pickBlankTargets(item.text, libraryLemmas, blankCount)
+    return makeCloze(item.text, targets)
   }, [mode, queue, index, libraryLemmas, blankCount])
 
   const start = useCallback(
@@ -148,14 +222,15 @@ export function useDictation(params: UseDictationParams) {
       if (opts?.clozeWords != null) setClozeWords(opts.clozeWords)
       if (opts?.max != null) setMaxQuestions(opts.max)
 
-      const items: { id: string; text: string }[] = []
+      const items: DictItem[] = []
       if (nextMode === 'cloze') {
-        // 填空：按「每段最多 segWords 词」并句成段（段越长题越少）
+        // 填空：按「每段最多 segWords 词」并句成段（段越长题越少）；目标词固定下来
         packSegments(
           doc.sentences.map((s) => s.text),
           segWords,
         ).forEach((text, si) => {
-          if (pickBlankTargets(text, libraryLemmas, wantBlanks).length > 0) items.push({ id: `seg-${si}`, text })
+          const targets = pickBlankTargets(text, libraryLemmas, wantBlanks)
+          if (targets.length > 0) items.push({ id: `seg-${si}`, text, targets })
         })
       } else {
         doc.sentences.forEach((s) => {

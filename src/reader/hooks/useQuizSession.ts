@@ -25,6 +25,32 @@ export interface QuizResultRow {
   correct: boolean
 }
 
+/** 考试会话快照（落 localStorage，刷新后接着考）。 */
+interface QuizSessionSnapshot {
+  v: 1
+  queue: QuizQuestion[]
+  index: number
+  input: string
+  checked: boolean
+  result: boolean | null
+  results: QuizResultRow[]
+  autoRun: boolean
+}
+
+const QUIZ_SESSION_KEY = 'reader:quizSession'
+
+function loadQuizSession(): QuizSessionSnapshot | null {
+  try {
+    const raw = localStorage.getItem(QUIZ_SESSION_KEY)
+    if (!raw) return null
+    const s = JSON.parse(raw) as QuizSessionSnapshot
+    if (!s || s.v !== 1 || !Array.isArray(s.queue) || !s.queue.length) return null
+    return s
+  } catch {
+    return null
+  }
+}
+
 export interface UseQuizSessionParams {
   library: VocabLibrary
   articleIdentity: string
@@ -86,19 +112,35 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const [unique, setUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
   const [speakAfter, setSpeakAfter] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
 
-  // ---- 会话 ----
+  // ---- 会话（落盘：刷新可恢复，刷新也是解除 TTS 假死的办法） ----
+  const [restored] = useState<QuizSessionSnapshot | null>(loadQuizSession)
   const [setupOpen, setSetupOpen] = useState(false)
-  const [queue, setQueue] = useState<QuizQuestion[] | null>(null)
-  const [index, setIndex] = useState(0)
-  const [input, setInput] = useState('')
-  const [checked, setChecked] = useState(false)
-  const [result, setResult] = useState<boolean | null>(null)
-  const [results, setResults] = useState<QuizResultRow[]>([])
+  const [queue, setQueue] = useState<QuizQuestion[] | null>(restored?.queue ?? null)
+  const [index, setIndex] = useState(restored?.index ?? 0)
+  const [input, setInput] = useState(restored?.input ?? '')
+  const [checked, setChecked] = useState(restored?.checked ?? false)
+  const [result, setResult] = useState<boolean | null>(restored?.result ?? null)
+  const [results, setResults] = useState<QuizResultRow[]>(restored?.results ?? [])
   const [seconds, setSeconds] = useState(0)
   /** 本轮是否自动切题（开始一轮时按设置快照）。 */
-  const [autoRun, setAutoRun] = useState(false)
+  const [autoRun, setAutoRun] = useState(restored?.autoRun ?? false)
   const advanceRef = useRef<number | null>(null)
-  const recordedRef = useRef(false)
+  // 恢复的会话若已完成，别在挂载时把成绩再记一遍
+  const recordedRef = useRef(!!restored && restored.index >= restored.queue.length)
+
+  // 会话落盘：刷新页面后能接着考
+  useEffect(() => {
+    try {
+      if (queue && queue.length) {
+        const snap: QuizSessionSnapshot = { v: 1, queue, index, input, checked, result, results, autoRun }
+        localStorage.setItem(QUIZ_SESSION_KEY, JSON.stringify(snap))
+      } else {
+        localStorage.removeItem(QUIZ_SESSION_KEY)
+      }
+    } catch {
+      // 隐私模式 / 配额满：忽略
+    }
+  }, [queue, index, input, checked, result, results, autoRun])
 
   // ---- 候选池与题量 ----
   const pool = useMemo(() => {
