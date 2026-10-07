@@ -134,7 +134,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       // 忽略
     }
     download(`ai-jobs-${dayKeyLocal(new Date())}.json`, text, 'application/json')
-    flash(`已导出 ${jobs.length} 项待办；整包交给 AI 后，把结果 JSON 导回`)
+    flash(`已导出 ${jobs.length} 项待办（包内含结果格式说明）；整包交给 AI，把结果 JSON 导回`)
   }, [jobsInputEff, download, flash])
 
   const readResults = useCallback(

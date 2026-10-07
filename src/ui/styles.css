@@ -489,6 +489,22 @@ select:focus-visible { outline: none; box-shadow: var(--ring); }
 :root[data-theme='green'] button:hover:not(:disabled),
 :root[data-theme='green'] select:hover,
 :root[data-theme='green'] .navlink:hover { background: #edf5ea; }
+/* 护眼模式下高亮控件显式绿底白字：上面 `button/.navlink { background:#fff }` 的特异性
+   不低于 `.primary`/`.navlink.accent`，否则会变成白底白字（看不见）。 */
+:root[data-theme='green'] button.primary,
+:root[data-theme='green'] .navlink.accent,
+:root[data-theme='green'] .file,
+:root[data-theme='green'] .big-btn {
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  border-color: var(--accent);
+  color: var(--accent-ink);
+}
+:root[data-theme='green'] button.primary:hover:not(:disabled),
+:root[data-theme='green'] .navlink.accent:hover,
+:root[data-theme='green'] .file:hover,
+:root[data-theme='green'] .big-btn:hover {
+  background: linear-gradient(180deg, #3fb877, #2f8f5b);
+}
 :root[data-theme='green'] header { background: rgba(233, 242, 230, 0.86); }
 :root[data-theme='green'] .script.edit textarea,
 :root[data-theme='green'] code { background: #ffffff; }

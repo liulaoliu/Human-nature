@@ -15,7 +15,14 @@ import type { VocabItem } from '../types/document'
  * 判分对大小写、首尾标点、常见词形变化宽容。
  */
 
-export type QuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning' | 'ear'
+/** 词级题型（按生词出题，现有考试）。 */
+export type VocabQuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning' | 'ear'
+/** 文章级题型（按句子/段落出题，考理解与结构）。 */
+export type ArticleQuizKind = 'translate' | 'translate2' | 'functionWord' | 'ordering' | 'grammar'
+export type QuizKind = VocabQuizKind | ArticleQuizKind
+
+export const VOCAB_KINDS: VocabQuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
+export const ARTICLE_KINDS: ArticleQuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'grammar']
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
@@ -25,9 +32,14 @@ export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   choice: '词形辨析',
   meaning: '看词选义',
   ear: '听音拼词',
+  translate: '英译中',
+  translate2: '中译英',
+  functionWord: '功能词填空',
+  ordering: '句子排序',
+  grammar: '结构 / 语法',
 }
 
-const ALL_KINDS: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
+const ALL_KINDS: QuizKind[] = [...VOCAB_KINDS, ...ARTICLE_KINDS]
 
 export function isQuizKind(v: unknown): v is QuizKind {
   return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
@@ -39,6 +51,8 @@ export interface QuizQuestion {
   itemId: string
   lemma: string
   kind: QuizKind
+  /** 来源：词级考试 / 文章级测验（文章题不写 SRS）。 */
+  source?: 'vocab' | 'article'
   /** 目标词（显示形式） */
   word: string
   /** 题干：拼写=释义；填空=挖空后的句子 / 搭配 */
@@ -221,6 +235,8 @@ export function pickMeaningDistractors(
 
 /** 由词条 + 题型出一道题；数据不够（无释义 / 无句子）返回 null。 */
 export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = []): QuizQuestion | null {
+  // 文章级题型要整篇 doc（句子/段落），这里（词级）出不了
+  if ((ARTICLE_KINDS as readonly string[]).includes(kind)) return null
   const word = it.word.trim()
   if (!word) return null
 

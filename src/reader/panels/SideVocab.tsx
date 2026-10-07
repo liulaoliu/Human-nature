@@ -32,6 +32,10 @@ export interface SideVocabProps {
   onStartQuick: () => void
   onStartDictation: () => void
   onOpenListening: () => void
+  /** 阅读理解（文本模式，复用同一套理解题）。 */
+  onOpenReading: () => void
+  /** 逐句速读（一次一句，先读再揭示，超时拷打）。 */
+  onOpenSpeedRead: () => void
   listenCount: number
   onListenCountChange: (n: number) => void
   onLanguagePrompt: () => void
@@ -84,6 +88,8 @@ export default function SideVocab({
   onStartQuick,
   onStartDictation,
   onOpenListening,
+  onOpenReading,
+  onOpenSpeedRead,
   listenCount,
   onListenCountChange,
   onLanguagePrompt,
@@ -176,6 +182,20 @@ export default function SideVocab({
           title="听力理解题：AI 出题（带答案+解析）→ 本地判分；没题目时先复制出题提示词"
         >
           理解题
+        </button>
+        <button
+          onClick={onOpenReading}
+          disabled={!hasDoc}
+          title="阅读理解（文本）：先展开原文再答同一套理解题，不依赖听"
+        >
+          阅读理解
+        </button>
+        <button
+          onClick={onOpenSpeedRead}
+          disabled={!hasDoc}
+          title="逐句速读：一次一句，先自己读→空格看释义/语言点；超时算不太理解，来个填空拷打"
+        >
+          速读
         </button>
         <select
           value={String(listenCount)}

@@ -48,6 +48,8 @@ export interface UseReaderDocParams {
   setArticleTitle: (v: string) => void
   saved: SavedArticle[]
   setSaved: (v: SavedArticle[]) => void
+  /** 「已保存文章」是否已从 IndexedDB 取回（未取回前不自动恢复）。 */
+  savedLoaded: boolean
   savedId: string | null
   setSavedId: (v: string | null) => void
   pendingSave: boolean
@@ -85,6 +87,7 @@ export function useReaderDoc({
   setArticleTitle,
   saved,
   setSaved,
+  savedLoaded,
   savedId,
   setSavedId,
   pendingSave,
@@ -272,13 +275,17 @@ export function useReaderDoc({
   const restored = useRef(false)
   useEffect(() => {
     if (restored.current) return
-    if (!book && saved.length === 0) return
+    // 必须等「已保存文章」取回：否则会把已保存的正文误判成没保存，退回内置原文
+    // （翻译/语言点等分析全丢），要再点一次列表才加载出来。
+    if (!savedLoaded) return
     let last: { key: string | null; id: string | null } | null = null
     try {
       last = JSON.parse(localStorage.getItem('reader:last') ?? 'null')
     } catch {
       last = null
     }
+    // 上次是内置文章（没有 savedId）：还要等原文库到位
+    if (last && !last.id && last.key && !book) return
     restored.current = true
     if (!last) return
     if (last.id) {
@@ -289,7 +296,7 @@ export function useReaderDoc({
       }
     }
     if (last.key && book?.[last.key]) loadFromBook(last.key)
-  }, [book, saved, loadSaved, loadFromBook])
+  }, [book, saved, savedLoaded, loadSaved, loadFromBook])
 
   const onPick = useCallback(
     (value: string) => {

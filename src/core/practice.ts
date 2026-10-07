@@ -22,6 +22,8 @@ export interface PracticeRecord {
   correct: number
   /** 用时（秒），可选 */
   seconds?: number
+  /** 来源文章（用于按篇统计掌握度）；旧记录可能没有。 */
+  articleId?: string
 }
 
 /** 追加一条记录（保留最近 cap 条）。纯函数。 */
@@ -67,6 +69,12 @@ export function sumByKind(list: PracticeRecord[]): Record<PracticeKind, Practice
     out[r.kind].correct += r.correct
   }
   return out
+}
+
+/** 只看某篇文章的练习记录（用于按篇算掌握度）。 */
+export function practiceForArticle(list: PracticeRecord[], articleId: string): PracticeRecord[] {
+  if (!articleId) return []
+  return list.filter((r) => r.articleId === articleId)
 }
 
 export interface PracticeDayTotals {

@@ -1,4 +1,4 @@
-import { QUIZ_KIND_LABEL, type QuizKind } from '../../core/quiz'
+import { ARTICLE_KINDS, QUIZ_KIND_LABEL, type QuizKind } from '../../core/quiz'
 
 /** 考试范围。 */
 export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
@@ -23,7 +23,11 @@ export interface QuizSetupPanelProps {
   speakAfter: boolean
   availableCount: number
   poolUnmastered: number
+  /** 文章级测验题型与可出题数（按当前文章）。 */
+  articleKinds: QuizKind[]
+  articleAvailable: number
   onToggleKind: (kind: QuizKind, on: boolean) => void
+  onToggleArticleKind: (kind: QuizKind, on: boolean) => void
   onScopeChange: (scope: QuizScope) => void
   onLimitChange: (n: number) => void
   onAutoChange: (on: boolean) => void
@@ -31,6 +35,7 @@ export interface QuizSetupPanelProps {
   onSpeakChange: (on: boolean) => void
   onCancel: () => void
   onStart: () => void
+  onStartArticle: () => void
 }
 
 /** 考试设置：题型 / 范围 / 题量 / 答题选项。 */
@@ -43,7 +48,10 @@ export default function QuizSetupPanel({
   speakAfter,
   availableCount,
   poolUnmastered,
+  articleKinds,
+  articleAvailable,
   onToggleKind,
+  onToggleArticleKind,
   onScopeChange,
   onLimitChange,
   onAutoChange,
@@ -51,6 +59,7 @@ export default function QuizSetupPanel({
   onSpeakChange,
   onCancel,
   onStart,
+  onStartArticle,
 }: QuizSetupPanelProps) {
   return (
     <div className="study quiz-setup">
@@ -117,6 +126,37 @@ export default function QuizSetupPanel({
           <button className="primary" onClick={onStart} disabled={!kinds.length}>
             开始考试
           </button>
+        </div>
+
+        <hr className="quiz-sep" />
+        <div className="quiz-field">
+          <span className="muted">文章测验（考理解/结构，不写复习排期）</span>
+          <div className="bar">
+            {ARTICLE_KINDS.map((k) => (
+              <label className="check-inline" key={k}>
+                <input
+                  type="checkbox"
+                  checked={articleKinds.includes(k)}
+                  onChange={(e) => onToggleArticleKind(k, e.target.checked)}
+                />
+                {QUIZ_KIND_LABEL[k]}
+              </label>
+            ))}
+          </div>
+          <div className="bar">
+            <button
+              className="primary"
+              onClick={onStartArticle}
+              disabled={!articleKinds.length || articleAvailable <= 0}
+              title={
+                articleAvailable <= 0
+                  ? '这篇还没有译文 / 语言点，先在「语言点 / 全文翻译」里生成'
+                  : '按当前文章出题：英译中 / 中译英 / 功能词填空 / 句子排序 / 结构语法'
+              }
+            >
+              开始文章测验{articleAvailable > 0 ? `（约 ${articleAvailable} 题）` : ''}
+            </button>
+          </div>
         </div>
       </div>
     </div>

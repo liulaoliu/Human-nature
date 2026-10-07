@@ -15,6 +15,8 @@ export interface QuizPanelProps {
   question: QuizQuestion | null
   /** 本轮考试范围（页面上给个提示）。 */
   scope: QuizScope
+  /** 本轮是不是「文章测验」。 */
+  articleRun: boolean
   queueLength: number
   index: number
   seconds: number
@@ -42,6 +44,7 @@ export interface QuizPanelProps {
 export default function QuizPanel({
   question,
   scope,
+  articleRun,
   queueLength,
   index,
   seconds,
@@ -65,7 +68,7 @@ export default function QuizPanel({
 
   // 换题后把焦点送回输入框（词形辨析是点选项，不聚焦）
   useEffect(() => {
-    if (question && question.kind !== 'choice' && question.kind !== 'meaning' && !checked) {
+    if (question && !question.options && !checked) {
       inputRef.current?.focus()
     }
   }, [question, checked])
@@ -77,7 +80,7 @@ export default function QuizPanel({
       <div className="bar study-bar">
         <button onClick={onClose}>结束（Esc）</button>
         <span className="muted" title="本轮考试范围">
-          范围：{QUIZ_SCOPE_LABEL[scope]}
+          {articleRun ? '文章测验' : `范围：${QUIZ_SCOPE_LABEL[scope]}`}
         </span>
         <span className="muted">
           {Math.min(index + 1, queueLength)} / {queueLength}
@@ -121,7 +124,10 @@ export default function QuizPanel({
                 </button>
               </div>
             ) : (
-              <div className={question.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}>
+              <div
+                className={question.kind === 'spell' ? 'study-meaning quiz-prompt' : 'quiz-sentence'}
+                style={question.kind === 'ordering' ? { whiteSpace: 'pre-line' } : undefined}
+              >
                 {question.kind === 'spell' ? (
                   <>
                     {question.partOfSpeech && <span className="cell-pos">{question.partOfSpeech} </span>}
@@ -139,7 +145,7 @@ export default function QuizPanel({
                   {question.meaning}
                 </div>
               )}
-            {(question.kind === 'choice' || question.kind === 'meaning') && question.options ? (
+            {question.options ? (
               <div className="quiz-options">
                 {question.options.map((opt, i) => (
                   <button

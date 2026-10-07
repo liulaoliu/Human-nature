@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  ARTICLE_KINDS,
   buildQuizQuestions,
   countQuestions,
   isCorrect,
   isQuizKind,
   makeQuestion,
   shuffleQuiz,
+  type ArticleQuizKind,
   type QuizKind,
   type QuizQuestion,
 } from '../../core/quiz'
+import { buildArticleQuestions } from '../../core/articleQuiz'
 import { isDue, reviewItem } from '../../core/vocab'
-import type { VocabItem, VocabLibrary } from '../../types/document'
+import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+
+const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering']
+const isArticleKind = (k: QuizKind): k is ArticleQuizKind => (ARTICLE_KINDS as readonly string[]).includes(k)
 import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
 import type { PracticeKind } from '../../core/practice'
@@ -55,6 +61,8 @@ export interface UseQuizSessionParams {
   library: VocabLibrary
   articleIdentity: string
   docLemmas: Set<string>
+  /** 当前文章（文章级测验要句子/译文/语言点）。 */
+  doc: { sentences: Sentence[] } | null
   /** 开始一轮考试时关掉其它会话（背单词/听写/快刷）。 */
   closeOthers: () => void
   speak: (text: string) => void
@@ -76,6 +84,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     library,
     articleIdentity,
     docLemmas,
+    doc,
     closeOthers,
     speak,
     flash,
@@ -111,6 +120,23 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const [auto, setAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
   const [unique, setUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
   const [speakAfter, setSpeakAfter] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
+  /** 文章级测验题型（英译中 / 中译英 / 功能词填空 / 句子排序 / 结构语法）。 */
+  const [articleKinds, setArticleKinds] = useLocalStorageState<QuizKind[]>('reader:quizArticleKinds', DEFAULT_ARTICLE_KINDS, {
+    parse: (raw) => {
+      try {
+        const arr = JSON.parse(raw)
+        if (Array.isArray(arr)) {
+          const valid = arr.filter((k) => isQuizKind(k) && isArticleKind(k))
+          if (valid.length) return valid
+        }
+      } catch {
+        // 忽略
+      }
+      return DEFAULT_ARTICLE_KINDS
+    },
+  })
+  /** 本轮是不是「文章测验」（决定面板标题、且不写 SRS）。 */
+  const [articleRun, setArticleRun] = useState(false)
 
   // ---- 会话（落盘：刷新可恢复，刷新也是解除 TTS 假死的办法） ----
   const [restored] = useState<QuizSessionSnapshot | null>(loadQuizSession)
@@ -125,6 +151,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
   /** 本轮是否自动切题（开始一轮时按设置快照）。 */
   const [autoRun, setAutoRun] = useState(restored?.autoRun ?? false)
   const advanceRef = useRef<number | null>(null)
+  /** 本轮全部题目（重做错题按 id 从这里取，词/文章通用）。 */
+  const allRef = useRef<QuizQuestion[]>([])
   // 恢复的会话若已完成，别在挂载时把成绩再记一遍
   const recordedRef = useRef(!!restored && restored.index >= restored.queue.length)
 
@@ -194,13 +222,15 @@ export function useQuizSession(params: UseQuizSessionParams) {
 
   /** 用一批题开一轮考试（内部复用）。 */
   const begin = useCallback(
-    (qs: QuizQuestion[]) => {
+    (qs: QuizQuestion[], opts?: { article?: boolean }) => {
       if (!qs.length) {
         flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
         return
       }
       clearAdvance()
       closeOthers()
+      allRef.current = qs
+      setArticleRun(!!opts?.article)
       setQueue(shuffleQuiz(qs))
       setIndex(0)
       setInput('')
@@ -213,6 +243,18 @@ export function useQuizSession(params: UseQuizSessionParams) {
     },
     [clearAdvance, closeOthers, auto, flash],
   )
+
+  /** 文章级测验：按当前文章出题（英译中/中译英/功能词填空/句子排序/结构语法）。 */
+  const startArticle = useCallback(() => {
+    const sents = doc?.sentences ?? []
+    const kinds = articleKinds.filter(isArticleKind)
+    const qs = buildArticleQuestions(sents, { kinds })
+    if (!qs.length) {
+      flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
+      return
+    }
+    begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length), { article: true })
+  }, [doc, articleKinds, limit, begin, flash])
 
   /** 用当前设置出一份考卷（洗牌 + 限量）。 */
   const start = useCallback(() => {
@@ -249,11 +291,15 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setChecked(true)
       setResult(ok)
       setResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
-      if (ok) dropMistake(`vocab:${q.itemId}`)
-      else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
-      persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
-      markStudied(q.itemId)
-      recordActivity(q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
+      const isArticle = q.source === 'article'
+      // 文章题不写 SRS / 错题本（那是词级的）
+      if (!isArticle) {
+        if (ok) dropMistake(`vocab:${q.itemId}`)
+        else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
+        persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
+        markStudied(q.itemId)
+      }
+      recordActivity(isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
       if (speakAfter) speak(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
@@ -276,12 +322,13 @@ export function useQuizSession(params: UseQuizSessionParams) {
     clearAdvance()
     setQueue(null)
     setSetupOpen(false)
+    setArticleRun(false)
   }, [clearAdvance])
 
   const retryWrong = useCallback(() => {
-    const wrongIds = new Set(results.filter((r) => !r.correct).map((r) => r.itemId))
-    const items = library.items.filter((it) => wrongIds.has(it.id))
-    const qs = buildSet(items)
+    // 按题目 id 从本轮全部题目里取错题（词级 / 文章级通用）
+    const wrongIds = new Set(results.filter((r) => !r.correct).map((r) => r.id))
+    const qs = allRef.current.filter((q) => wrongIds.has(q.id))
     if (!qs.length) {
       flash('没有可重做的错题')
       return
@@ -294,7 +341,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setResult(null)
     setResults([])
     recordedRef.current = false
-  }, [results, library.items, buildSet, clearAdvance, flash])
+  }, [results, clearAdvance, flash])
 
   // 计时：开考清零，每秒 +1
   useEffect(() => {
@@ -339,7 +386,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
         else next()
         return
       }
-      if ((q?.kind === 'choice' || q?.kind === 'meaning') && !checked && q.options) {
+      if (q?.options && !checked) {
         const n = Number(e.key)
         if (n >= 1 && n <= q.options.length) {
           e.preventDefault()
@@ -367,6 +414,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setUnique,
     speakAfter,
     setSpeakAfter,
+    articleKinds,
+    setArticleKinds,
+    articleRun,
     // 会话
     setupOpen,
     setSetupOpen,
@@ -385,6 +435,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     availableCount,
     // 动作
     start,
+    startArticle,
     startItems,
     check,
     next,

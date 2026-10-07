@@ -21,6 +21,9 @@ assets/imgs/fish/
 
 # 本地词典数据（不进仓库）
 data/
+
+# AI 工作包 / 结果（本地约定目录，不进仓库）
+new/
 public/ecdict.tsv
 public/ecdict-forms.tsv
 public/ecdict-near.tsv

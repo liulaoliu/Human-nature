@@ -6,10 +6,11 @@ import {
   makeCloze,
   packSegments,
   pickBlankTargets,
-  splitForDictation,
+  splitForDictationSpans,
   takeRound,
   type DiffToken,
 } from '../../core/dictation'
+import { wordSpans } from '../../core/wordSelect'
 import type { Sentence } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import type { PracticeKind } from '../../core/practice'
@@ -19,6 +20,9 @@ import { useLocalStorageState, persistentEnum, persistentNumber } from './useLoc
 
 /** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+
+/** 听写预热窗口：当前题往后预合成几题；太大时「不限题数」会让整篇排队。 */
+const DICT_WARM_AHEAD = 6
 
 /** 文章指纹（用于记住「上次做到哪」）。 */
 function docKeyOf(doc: { sentences: Sentence[] } | null): string {
@@ -50,6 +54,10 @@ export interface DictItem {
   id: string
   text: string
   targets?: string[]
+  /** 整句模式：源句全文 + 本块在该句里的词区间（复用整句音频 seek 播放，零额外合成）。 */
+  src?: string
+  sw?: number
+  ew?: number
 }
 
 /** 听写会话快照（落 localStorage，刷新后接着听写）。 */
@@ -85,6 +93,10 @@ export interface UseDictationParams {
   doc: { sentences: Sentence[] } | null
   libraryLemmas: Set<string>
   speak: (text: string) => void
+  /** 预热若干文本的音频（后台合成、不下载正文）；填空并段用它缓存，避免每次重新合成。 */
+  warmTexts: (texts: string[]) => void
+  /** 预热「整句音频 + 逐词时间戳」；整句模式复用它来 seek 播放（零额外合成）。 */
+  warmTimings: (texts: string[]) => void
   flash: (message: string) => void
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
@@ -106,6 +118,8 @@ export function useDictation(params: UseDictationParams) {
     doc,
     libraryLemmas,
     speak,
+    warmTexts,
+    warmTimings,
     flash,
     mergeBatch,
     batchItemsFromWords,
@@ -205,6 +219,21 @@ export function useDictation(params: UseDictationParams) {
     return makeCloze(item.text, targets)
   }, [mode, queue, index, libraryLemmas, blankCount])
 
+  // 预热「当前题及后几题」：
+  //  - 整句模式：块复用整句音频 + seek，只需备好「源句」的音频/时间戳（零额外合成）；
+  //  - 填空模式：块是跨句并段、没有现成音频，只能预热块本身。
+  // 只开有限窗口并随进度前移，避免「不限题数」时一次把整篇几百块全排队。
+  useEffect(() => {
+    if (!queue || index >= queue.length) return
+    const win = queue.slice(index, index + 1 + DICT_WARM_AHEAD)
+    if (mode === 'full') {
+      const srcs = [...new Set(win.map((i) => i.src).filter((x): x is string => !!x))]
+      if (srcs.length) warmTimings(srcs)
+    } else {
+      warmTexts(win.map((i) => i.text))
+    }
+  }, [queue, index, mode, warmTexts, warmTimings])
+
   const start = useCallback(
     (opts?: { mode?: 'full' | 'cloze'; words?: number; blanks?: number; clozeWords?: number; max?: number }) => {
       clearAdvance()
@@ -234,9 +263,27 @@ export function useDictation(params: UseDictationParams) {
         })
       } else {
         doc.sentences.forEach((s) => {
-          splitForDictation(s.text, maxWords).forEach((chunk, ci) => {
-            const t = chunk.trim()
-            if (t) items.push({ id: `${s.id}-${ci}`, text: t })
+          const spans = splitForDictationSpans(s.text, maxWords)
+          const words = wordSpans(s.text)
+          spans.forEach((sp, ci) => {
+            const t = sp.text.trim()
+            if (!t) return
+            const item: DictItem = { id: `${s.id}-${ci}`, text: t }
+            // 字符区间 → 词下标区间：播放时复用整句音频并 seek（不新合成）
+            const sw = words.findIndex((w) => w.end > sp.start)
+            let ew = -1
+            for (let i = words.length - 1; i >= 0; i--) {
+              if (words[i].start < sp.end) {
+                ew = i
+                break
+              }
+            }
+            if (sw >= 0 && ew >= sw) {
+              item.src = s.text
+              item.sw = sw
+              item.ew = ew
+            }
+            items.push(item)
           })
         })
       }

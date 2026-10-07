@@ -38,6 +38,7 @@ export interface ReaderToolbarProps {
   onSpeakSelected: () => void
   readingAll: boolean
   onToggleReadAll: () => void
+  onSpeedRead: () => void
   ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
@@ -113,6 +114,7 @@ export default function ReaderToolbar({
   onSpeakSelected,
   readingAll,
   onToggleReadAll,
+  onSpeedRead,
   ttsState,
   ttsVoice,
   onTtsVoiceChange,
@@ -149,7 +151,7 @@ export default function ReaderToolbar({
   onDeleteSave,
 }: ReaderToolbarProps) {
   return (
-    <div className="bar">
+    <div className="bar reader-toolbar">
       <strong>学吧老哥</strong>
       {book && editions.length > 1 && (
         <select value={edition} onChange={(e) => onEditionChange(e.target.value)} title="按期次筛选内置文章">
@@ -276,6 +278,14 @@ export default function ReaderToolbar({
             : pregenAllCached
               ? '✅ 已全部缓存（点此重查）'
               : '⬇ 预生成朗读'}
+        </button>
+      )}
+      {hasDoc && !editing && (
+        <button
+          onClick={onSpeedRead}
+          title="逐句速读：一次一句，先自己读→空格看释义/语言点；超时算不太理解，来个填空拷打"
+        >
+          ⚡ 速读
         </button>
       )}
       {hasDoc && !editing && (

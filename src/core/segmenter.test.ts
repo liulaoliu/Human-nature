@@ -98,6 +98,7 @@ describe('carryAnalysis', () => {
     audio: { start: 1, end: 2 },
     translation: '译',
     grammarNote: '语法',
+    language: { structure: '主谓', phrases: ['a b'] },
     collocations: ['c'],
     vocab: ['v'],
     tags: ['t'],
@@ -108,6 +109,7 @@ describe('carryAnalysis', () => {
     const [out] = carryAnalysis([base('Hello world.')], segment('Hello world.').sentences)
     expect(out.translation).toBe('译')
     expect(out.grammarNote).toBe('语法')
+    expect(out.language).toEqual({ structure: '主谓', phrases: ['a b'] })
     expect(out.collocations).toEqual(['c'])
     expect(out.audio).toEqual({ start: 1, end: 2 })
   })

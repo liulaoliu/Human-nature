@@ -115,17 +115,44 @@ export function dictationWrongWords(result: DiffResult): string[] {
  * 注意：**逗号后面紧跟数字时不切**，避免把 `1,234,567` 这种长数字切断。
  */
 export function splitForDictation(text: string, maxWords = 12): string[] {
+  return splitForDictationSpans(text, maxWords).map((s) => s.text)
+}
+
+/** 一个听写切块 + 它在原句里的字符区间 [start, end)。 */
+export interface DictSpan {
+  text: string
+  start: number
+  end: number
+}
+
+/**
+ * 与 `splitForDictation` 同逻辑，但额外给出每块在原句里的字符区间，
+ * 供「整句模式复用整句音频 + 逐词时间戳 seek」定位用。
+ */
+export function splitForDictationSpans(text: string, maxWords = 12): DictSpan[] {
   const t = text.trim()
   if (!t) return []
-  const out: string[] = []
+  const out: DictSpan[] = []
+  let offset = 0
   for (const part of t.split(/(?<=[,;:—–])(?!\d)/)) {
+    const partStart = offset
+    offset += part.length
+    const lead = part.length - part.trimStart().length
     const p = part.trim()
     if (!p) continue
+    const base = partStart + lead
     const words = p.split(/\s+/)
     if (words.length <= maxWords) {
-      out.push(p)
+      out.push({ text: p, start: base, end: base + p.length })
     } else {
-      for (let i = 0; i < words.length; i += maxWords) out.push(words.slice(i, i + maxWords).join(' '))
+      const spans: { s: number; e: number }[] = []
+      const re = /\S+/g
+      let m: RegExpExecArray | null
+      while ((m = re.exec(p))) spans.push({ s: m.index, e: m.index + m[0].length })
+      for (let i = 0; i < spans.length; i += maxWords) {
+        const seg = spans.slice(i, i + maxWords)
+        out.push({ text: p.slice(seg[0].s, seg[seg.length - 1].e), start: base + seg[0].s, end: base + seg[seg.length - 1].e })
+      }
     }
   }
   return out

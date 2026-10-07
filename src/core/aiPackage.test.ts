@@ -109,6 +109,13 @@ describe('buildJobPack / parseJobPack', () => {
     expect(back?.jobs).toHaveLength(1)
     expect(back?.jobs[0]).toEqual(job())
   })
+  it('导出包内嵌结果格式说明（告诉 AI 用 results 包装）', () => {
+    const pack = buildJobPack([job()])
+    expect(typeof pack.instructions).toBe('string')
+    expect(pack.instructions).toContain('"results"')
+    expect(pack.instructions).toContain('raw')
+    expect(pack.instructions).toContain('id')
+  })
   it('坏输入返回 null', () => {
     expect(parseJobPack('not json')).toBeNull()
     expect(parseJobPack('{"jobs":[]}')).toBeNull()

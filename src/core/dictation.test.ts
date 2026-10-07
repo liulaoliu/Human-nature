@@ -7,6 +7,7 @@ import {
   packSegments,
   pickBlankTargets,
   splitForDictation,
+  splitForDictationSpans,
   takeRound,
   wordTokens,
 } from './dictation'
@@ -73,6 +74,21 @@ describe('splitForDictation', () => {
   })
   it('空串 → []', () => {
     expect(splitForDictation('   ')).toEqual([])
+  })
+})
+
+describe('splitForDictationSpans', () => {
+  it('文本与 splitForDictation 一致，区间能精确切回原句', () => {
+    const s = 'The plan was bold, the budget was tight, and the team was small.'
+    const spans = splitForDictationSpans(s, 12)
+    expect(spans.map((x) => x.text)).toEqual(splitForDictation(s, 12))
+    for (const sp of spans) expect(s.slice(sp.start, sp.end)).toBe(sp.text)
+  })
+  it('无标点长句硬切后区间仍精确', () => {
+    const s = Array.from({ length: 25 }, (_, i) => `w${i}`).join(' ')
+    const spans = splitForDictationSpans(s, 10)
+    expect(spans.map((x) => x.text.split(' ').length)).toEqual([10, 10, 5])
+    for (const sp of spans) expect(s.slice(sp.start, sp.end)).toBe(sp.text)
   })
 })
 

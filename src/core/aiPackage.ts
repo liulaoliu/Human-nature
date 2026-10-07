@@ -71,6 +71,11 @@ export interface AiJob {
 export interface AiJobPack {
   version: 1
   exportedAt: string
+  /**
+   * 给 AI / 本机 agent 的结果格式说明：直接把它当系统提示，就能产出可导入的 results 包。
+   * 导出包带上它，agent 就不会只回裸答案（那样导入会报「缺少 results 数组」）。
+   */
+  instructions?: string
   jobs: AiJob[]
 }
 
@@ -102,8 +107,35 @@ export function makeJobId(task: AiJobTask, key: string): string {
   return `${task}-${fnv1a(key)}`
 }
 
+/**
+ * 导出包里附带的「结果格式说明」。给本机 agent / 任意 AI 看：照它做就能直接产出
+ * 可导入的 `ai-results` 包，不用再猜格式。
+ */
+export const AI_RESULT_FORMAT_INSTRUCTIONS = [
+  '你是「学吧老哥」的 AI 批处理引擎。下面 jobs 数组里每个元素是一条独立任务：请阅读它的 prompt 并作答。',
+  '把**所有回答**包成**一个**结果 JSON，并且**只输出这个 JSON**（不要解释、不要 Markdown 代码围栏）：',
+  '',
+  '{',
+  '  "version": 1,',
+  '  "results": [',
+  '    { "id": "<job 的 id，原样照抄>", "task": "<job 的 task>", "raw": "<该 job 的回答文本>" }',
+  '  ]',
+  '}',
+  '',
+  '规则：',
+  '1. 每个 job 对应一条 result；id 必须与 jobs[].id 完全一致（导入靠它匹配，错了会被跳过）。',
+  '2. raw 是字符串：内容本身若是 JSON / 表格，照原样放进去（转义进字符串）。',
+  '3. 一次放不下就宁可少答几个、之后再补，绝不省略或用省略号。',
+  '4. 不要复述任务、不要总结；只输出上面的结果 JSON。',
+].join('\n')
+
 export function buildJobPack(jobs: AiJob[], now: Date = new Date()): AiJobPack {
-  return { version: AI_JOB_PACK_VERSION, exportedAt: now.toISOString(), jobs }
+  return {
+    version: AI_JOB_PACK_VERSION,
+    exportedAt: now.toISOString(),
+    instructions: AI_RESULT_FORMAT_INSTRUCTIONS,
+    jobs,
+  }
 }
 
 /** 把数组切成每块最多 size 个（size<=0 表示不切）。 */

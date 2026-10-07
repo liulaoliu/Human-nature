@@ -98,7 +98,7 @@ export function segment(cleaned: string): SegmentResult {
  * 重新切句后，把旧句子上挂着的分析结果按「句文相同」搬过来。
  *
  * 编辑正文要重新切句（`segment` 会新建一批 Sentence 对象），不搬的话
- * 之前粘回来的翻译 / 语法 / 搭配 / 生词 / 时间轴会全部丢掉。
+ * 之前粘回来的翻译 / 语法 / 语言点 / 搭配 / 生词 / 时间轴会全部丢掉。
  * 同一句文出现多次时，按出现顺序一一对应。
  */
 export function carryAnalysis(previous: Sentence[], next: Sentence[]): Sentence[] {
@@ -116,6 +116,8 @@ export function carryAnalysis(previous: Sentence[], next: Sentence[]): Sentence[
       ...s,
       translation: src.translation,
       grammarNote: src.grammarNote,
+      // 语言点也别丢：编辑正文重切句后，AI 分析要跟着同句文搬过来
+      language: src.language,
       collocations: src.collocations,
       vocab: src.vocab,
       audio: src.audio,

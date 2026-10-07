@@ -57,7 +57,6 @@ export interface UseSelectionParams {
   sessionPickedRef: MutableRefObject<number>
   navVocabRef: MutableRefObject<(dir: 1 | -1) => void>
   stopReadAll: () => void
-  resetSpoken: () => void
   fontSize: string
   bold: boolean
   serif: boolean
@@ -104,7 +103,6 @@ export function useSelection({
   sessionPickedRef,
   navVocabRef,
   stopReadAll,
-  resetSpoken,
   fontSize,
   bold,
   serif,
@@ -117,10 +115,9 @@ export function useSelection({
     (sid: string) => {
       const same = selectedIdRef.current === sid
       stopReadAll()
-      resetSpoken()
       if (!same) setSelectedId(sid)
     },
-    [stopReadAll, resetSpoken, setSelectedId],
+    [stopReadAll, setSelectedId],
   )
 
   /** 点正文里的生词 → 高亮并滚到生词本对应词条。 */
@@ -128,13 +125,17 @@ export function useSelection({
     (word: string) => {
       const key = lemmaOf(word)
       setFocusLemma(key)
-      window.requestAnimationFrame(() => {
-        sideRef.current
-          ?.querySelector(`[data-lemma="${CSS.escape(key)}"]`)
-          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
-      })
+      // 调用方通常会先切到「生词本」Tab；用双 rAF 等 React 提交 + 布局完成后再滚，
+      // 否则目标元素可能还是 display:none，scrollIntoView 会静默失败。
+      window.requestAnimationFrame(() =>
+        window.requestAnimationFrame(() => {
+          const el = sideRef.current?.querySelector(`[data-lemma="${CSS.escape(key)}"]`)
+          if (el) el.scrollIntoView({ block: 'center', behavior: 'smooth' })
+          else flash(`「${word}」不在本篇词表，可点「全部生词」查看`)
+        }),
+      )
     },
-    [setFocusLemma, sideRef],
+    [setFocusLemma, sideRef, flash],
   )
 
   /** 滚到某一句（优先滚可见的那个—「只看译文」时英文是隐藏的）。 */
@@ -264,7 +265,10 @@ export function useSelection({
       const span = sentSpanOf(range.startContainer) ?? sentSpanOf(range.endContainer)
       if (!span) return
       const sid = span.dataset.sid ?? null
-      if (sid) setSelectedId(sid)
+      // 折叠的单击交给句子的 onClick（selectSentence）来选中：若这里也设 selectedId，
+      // 随后 click 的 selectSentence 会误判成「又点了同一句」而停掉刚起的朗读（自动朗读时隐时现）。
+      // 只有真正的选区（拖动 / Ctrl 多选）才在这里定句。
+      if (sid && !range.collapsed) setSelectedId(sid)
       setPeekSid(null)
 
       const text = span.textContent ?? ''

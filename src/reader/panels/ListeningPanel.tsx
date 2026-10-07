@@ -12,6 +12,8 @@ export interface ListeningPanelProps {
   readingAll: boolean
   /** 全文原文（提交后「显示原文」用）；无文章为 null。 */
   transcript: string | null
+  /** 阅读理解模式：先展开原文给读，不靠听。 */
+  readMode?: boolean
   onClose: () => void
   onToggleRead: () => void
   /** 一键尝试唤醒假死的语音。 */
@@ -34,6 +36,7 @@ export default function ListeningPanel({
   onlyWrong,
   readingAll,
   transcript,
+  readMode = false,
   onClose,
   onToggleRead,
   onResetSpeech,
@@ -70,6 +73,13 @@ export default function ListeningPanel({
           </span>
         )}
       </div>
+
+      {readMode && transcript && (
+        <details className="listen-transcript" open>
+          <summary>原文（阅读理解：先读原文再答题）</summary>
+          <div>{transcript}</div>
+        </details>
+      )}
 
       <div className="listen-list">
         {questions.map((q, qi) => {

@@ -71,10 +71,13 @@ function ClozeSentence({
   )
 }
 
-/** 听写面板的一个「题」：句子 id + 原文。 */
+/** 听写面板的一个「题」：句子 id + 原文；整句模式带源句与词区间（复用整句音频 seek 播放）。 */
 export interface DictItem {
   id: string
   text: string
+  src?: string
+  sw?: number
+  ew?: number
 }
 
 export interface DictPanelProps {
@@ -109,6 +112,8 @@ export interface DictPanelProps {
   onRetryWrong: () => void
   onClose: () => void
   onSpeak: (text: string) => void
+  /** 播放当前题：整句模式复用整句音频 + seek（零额外合成）；否则播该块文本。 */
+  onPlayItem: (item: DictItem) => void
   /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续做）。 */
   onResetSpeech: () => void
   /** 朗读状态（合成中 / 朗读中），用于按钮反馈。 */
@@ -142,6 +147,7 @@ export default function DictPanel({
   onRetryWrong,
   onClose,
   onSpeak,
+  onPlayItem,
   onResetSpeech,
   ttsState,
   onInputChange,
@@ -258,13 +264,13 @@ export default function DictPanel({
             ? `（第 ${roundOffset + 1}–${roundOffset + queue.length} / 全篇 ${grandTotal}）`
             : ''}
         </span>
-        <button onClick={() => current && onSpeak(current.text)} title="再听一遍（已缓存则秒播）">
+        <button onClick={() => current && onPlayItem(current)} title="再听一遍（整句模式复用整句音频，秒播）">
           {ttsState === 'loading' ? '🔊 合成中…' : '🔊 再听一遍'}
         </button>
         <button
           onClick={() => {
             onResetSpeech()
-            if (current) onSpeak(current.text)
+            if (current) onPlayItem(current)
           }}
           title="朗读卡住时点这里尝试唤醒；仍无效就刷新页面（刷新后进度会恢复）"
         >

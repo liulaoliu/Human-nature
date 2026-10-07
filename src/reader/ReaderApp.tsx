@@ -25,9 +25,13 @@ import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt } from '../core/language'
 import {
   addPracticeRecord,
+  practiceForArticle,
   type PracticeKind,
   type PracticeRecord,
 } from '../core/practice'
+import { buildArticleMastery, isStable } from '../core/mastery'
+import { buildArticleQuestions } from '../core/articleQuiz'
+import { type ArticleQuizKind } from '../core/quiz'
 import {
   removeMistake,
   upsertMistake,
@@ -43,12 +47,14 @@ import VocabList, { type VocabEditPatch } from './VocabList'
 import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
+import SpeedReadPanel from './panels/SpeedReadPanel'
 import WritingPanel from './panels/WritingPanel'
 import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import QuickPanel from './panels/QuickPanel'
 import SideOverview from './panels/SideOverview'
+import SideMastery from './panels/SideMastery'
 import SidePick, { type BatchItem } from './panels/SidePick'
 import SideVocab from './panels/SideVocab'
 import ReaderBody from './panels/ReaderBody'
@@ -149,6 +155,8 @@ export default function ReaderApp() {
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
+  /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
+  const [savedLoaded, setSavedLoaded] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
   /** 有内容改动、需要（首次则建立记录）自动保存 */
   const [pendingSave, setPendingSave] = useState(false)
@@ -163,10 +171,10 @@ export default function ReaderApp() {
   /** 阅读字号 / 字重，存本机 */
   const [fontSize, setFontSize] = useLocalStorageState('reader:size', 'md', persistentString)
   /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 / 统计 */
-  const [sideTab, setSideTab] = useLocalStorageState<'overview' | 'pick' | 'vocab' | 'stats'>(
+  const [sideTab, setSideTab] = useLocalStorageState<'overview' | 'pick' | 'vocab' | 'stats' | 'mastery'>(
     'reader:sideTab',
     'overview',
-    persistentEnum(['overview', 'pick', 'vocab', 'stats'] as const, 'overview'),
+    persistentEnum(['overview', 'pick', 'vocab', 'stats', 'mastery'] as const, 'overview'),
   )
   const [bold, setBold] = useLocalStorageState('reader:bold', false, persistentBool)
   const [serif, setSerif] = useLocalStorageState('reader:serif', false, persistentBool)
@@ -236,13 +244,23 @@ export default function ReaderApp() {
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
-  const { speak, speakFromWord, startReadAll, stopReadAll, resetSpoken, resetSpeech, readingAll, ttsState, nowPlaying } =
-    useSpeaking({
-      doc,
-      selectedId,
-      autoSpeak,
-      voice: ttsVoice,
-    })
+  const {
+    speak,
+    speakFromWord,
+    speakRange,
+    startReadAll,
+    stopReadAll,
+    resetSpeech,
+    warmTexts,
+    warmTimings,
+    readingAll,
+    ttsState,
+    nowPlaying,
+  } = useSpeaking({
+    doc,
+    selectedId,
+    voice: ttsVoice,
+  })
 
   /** 预生成整篇朗读：先查缓存、只补缺的句子（增量），带进度、可取消。 */
   const [pregen, setPregen] = useState<{ done: number; total: number; running: boolean; allCached: boolean }>({
@@ -488,7 +506,13 @@ export default function ReaderApp() {
     }
     const ar = createArticleRepo()
     articles.current = ar
-    ar.list().then(setSaved).catch(() => {})
+    ar
+      .list()
+      .then((list) => {
+        setSaved(list)
+        setSavedLoaded(true)
+      })
+      .catch(() => setSavedLoaded(true))
     fetch(`${import.meta.env.BASE_URL}articles.json`)
       .then((x) => (x.ok ? x.json() : Promise.reject(new Error(String(x.status)))))
       .then((b: ArticleBook) => setBook(b))
@@ -618,10 +642,15 @@ export default function ReaderApp() {
   }, [])
 
   /** 记一次练习成绩（考试 / 听写 / 听力理解）。 */
-  const recordPractice = useCallback((kind: PracticeKind, total: number, correct: number) => {
-    if (total <= 0) return
-    setPractice((prev) => addPracticeRecord(prev, { at: new Date().toISOString(), kind, total, correct }))
-  }, [])
+  const recordPractice = useCallback(
+    (kind: PracticeKind, total: number, correct: number) => {
+      if (total <= 0) return
+      setPractice((prev) =>
+        addPracticeRecord(prev, { at: new Date().toISOString(), kind, total, correct, articleId: articleIdentity || undefined }),
+      )
+    },
+    [articleIdentity],
+  )
 
   const addMistake = useCallback((entry: MistakeEntry) => {
     setMistakes((prev) => upsertMistake(prev, entry))
@@ -698,6 +727,7 @@ export default function ReaderApp() {
     library,
     articleIdentity,
     docLemmas,
+    doc,
     closeOthers: () => closeStudy(),
     speak,
     flash,
@@ -722,6 +752,9 @@ export default function ReaderApp() {
     setUnique: setQuizUnique,
     speakAfter: quizSpeak,
     setSpeakAfter: setQuizSpeak,
+    articleKinds: quizArticleKinds,
+    setArticleKinds: setQuizArticleKinds,
+    articleRun: quizArticleRun,
     setupOpen: quizSetupOpen,
     setSetupOpen: setQuizSetupOpen,
     queue: quizQueue,
@@ -737,6 +770,7 @@ export default function ReaderApp() {
     poolSizes: quizPoolSizes,
     availableCount: quizAvailableCount,
     start: startQuiz,
+    startArticle: startArticleQuiz,
     startItems: startQuizItems,
     check: checkQuiz,
     next: nextQuiz,
@@ -785,6 +819,31 @@ export default function ReaderApp() {
     retryWrong: retryListenWrong,
     showAll: showAllListen,
   } = listenApi
+
+  /** 理解题面板：听力模式 / 阅读理解（文本）模式。 */
+  const [listenReadMode, setListenReadMode] = useState(false)
+  const openListeningMode = useCallback(
+    (read: boolean) => {
+      setListenReadMode(read)
+      openListening()
+    },
+    [openListening],
+  )
+
+  /** 逐句速读。 */
+  const [speedReadOpen, setSpeedReadOpen] = useState(false)
+  const openSpeedRead = useCallback(() => {
+    if (!doc?.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    closeStudy()
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+    setQuickQueue(null)
+    setListenOpen(false)
+    setSpeedReadOpen(true)
+  }, [doc, closeStudy, flash])
 
   /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
   const startDictItems = useCallback((items: { id: string; text: string }[]) => {
@@ -1083,6 +1142,8 @@ export default function ReaderApp() {
     doc,
     libraryLemmas,
     speak,
+    warmTexts,
+    warmTimings,
     flash,
     mergeBatch,
     batchItemsFromWords,
@@ -1236,6 +1297,7 @@ export default function ReaderApp() {
     setArticleTitle,
     saved,
     setSaved,
+    savedLoaded,
     savedId,
     setSavedId,
     pendingSave,
@@ -1332,13 +1394,45 @@ export default function ReaderApp() {
     sessionPickedRef,
     navVocabRef,
     stopReadAll,
-    resetSpoken,
     fontSize,
     bold,
     serif,
     flash,
   })
 
+  /** 点正文生词：先切到「生词本」Tab（默认在「总览」时词表是 display:none），再滚到对应词条。 */
+  const revealVocabWord = useCallback(
+    (word: string) => {
+      setSideTab('vocab')
+      focusEntry(word)
+    },
+    [focusEntry, setSideTab],
+  )
+
+  /**
+   * 听写播放：整句模式复用整句音频 + 逐词 seek（零额外合成）；填空并段没有源句，直接播该块。
+   */
+  const playDictItem = useCallback(
+    (item: { text: string; src?: string; sw?: number; ew?: number }) => {
+      if (item.src && item.sw != null && item.ew != null) speakRange(item.src, item.sw, item.ew)
+      else speak(item.text)
+    },
+    [speak, speakRange],
+  )
+
+  /**
+   * 点句子：选中；开了「选中朗读」就在**点击手势里**直接读新句。
+   * 不放在 useEffect 里，避免被「先 mouseup 选中、再 click 当成重点同句停掉」的时序问题打断。
+   */
+  const selectSentenceAndRead = useCallback(
+    (sid: string) => {
+      const wasSelected = selectedId === sid
+      const s = doc?.sentences.find((x) => x.id === sid)
+      selectSentence(sid)
+      if (!wasSelected && autoSpeak && s && s.text.trim()) speak(s.text)
+    },
+    [selectedId, doc, selectSentence, autoSpeak, speak],
+  )
 
   /** 各类「复制提示词给 AI」的动作（逻辑在 hooks/useAiTasks）。 */
   const {
@@ -1521,6 +1615,54 @@ export default function ReaderApp() {
     ],
   )
 
+  /** 本篇掌握度：词（SRS）+ 精读完成度 + 本篇技能正确率 + 本篇错题。 */
+  const articleMastery = useMemo(() => {
+    const words = articleWords
+    let stable = 0
+    let due = 0
+    let lapsed = 0
+    let fresh = 0
+    for (const it of words) {
+      if (isStable(it)) stable += 1
+      if (isDue(it)) due += 1
+      if ((it.reviewState.lapses ?? 0) > 0) lapsed += 1
+      if (it.reviewState.repetitions === 0) fresh += 1
+    }
+    const sents = doc?.sentences ?? []
+    const reading = {
+      sentences: sents.length,
+      translated: sents.filter((s) => s.translation).length,
+      language: sents.filter((s) => s.language).length,
+    }
+    const stat = (kind: PracticeKind) => {
+      const rows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === kind)
+      const total = rows.reduce((a, r) => a + r.total, 0)
+      const correct = rows.reduce((a, r) => a + r.correct, 0)
+      return total > 0 ? { total, correct } : undefined
+    }
+    const mine = mistakes.filter((m) => {
+      if (m.kind === 'vocab') return !!m.itemId && words.some((it) => it.id === m.itemId)
+      if (m.kind === 'listen') return m.articleId === articleIdentity
+      if (m.kind === 'dict') return !!m.text && sents.some((s) => s.text.includes(m.text ?? ''))
+      return false
+    })
+    return buildArticleMastery({
+      words: { total: words.length, stable, due, lapsed, fresh },
+      reading,
+      skills: { quiz: stat('quiz'), dictation: stat('dictation'), listening: stat('listening') },
+      mistakes: {
+        words: mine.filter((m) => m.kind === 'vocab').length,
+        sentences: mine.filter((m) => m.kind !== 'vocab').length,
+      },
+    })
+  }, [articleWords, doc, practice, mistakes, articleIdentity])
+
+  /** 文章测验可出题数（设置面板提示用）。 */
+  const articleQuizCount = useMemo(
+    () => buildArticleQuestions(doc?.sentences ?? [], { kinds: quizArticleKinds as ArticleQuizKind[] }).length,
+    [doc, quizArticleKinds],
+  )
+
   /** AI 工作包：导出待办 / 导入结果（agent）+ 网页版提示词 / 应用 / 重问缺项。 */
   const {
     jobCount: aiJobCount,
@@ -1638,7 +1780,7 @@ export default function ReaderApp() {
   }
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
-  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen
+  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
   /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
   const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
 
@@ -1685,6 +1827,7 @@ export default function ReaderApp() {
             }}
             readingAll={readingAll}
             onToggleReadAll={readingAll ? stopReadAll : startReadAll}
+            onSpeedRead={openSpeedRead}
             ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
@@ -1802,7 +1945,10 @@ export default function ReaderApp() {
             speakAfter={quizSpeak}
             availableCount={quizAvailableCount}
             poolUnmastered={quizPoolSizes.unmastered}
+            articleKinds={quizArticleKinds}
+            articleAvailable={articleQuizCount}
             onToggleKind={(k, on) => setQuizKinds((prev) => (on ? [...prev, k] : prev.filter((x) => x !== k)))}
+            onToggleArticleKind={(k, on) => setQuizArticleKinds((prev) => (on ? [...prev, k] : prev.filter((x) => x !== k)))}
             onScopeChange={setQuizScope}
             onLimitChange={setQuizLimit}
             onAutoChange={setQuizAuto}
@@ -1810,6 +1956,7 @@ export default function ReaderApp() {
             onSpeakChange={setQuizSpeak}
             onCancel={() => setQuizSetupOpen(false)}
             onStart={startQuiz}
+            onStartArticle={startArticleQuiz}
           />
         )}
 
@@ -1817,6 +1964,7 @@ export default function ReaderApp() {
           <QuizPanel
             question={quizIndex < quizQueue.length ? quizQueue[quizIndex] : null}
             scope={quizScope}
+            articleRun={quizArticleRun}
             queueLength={quizQueue.length}
             index={quizIndex}
             seconds={quizSeconds}
@@ -1884,10 +2032,21 @@ export default function ReaderApp() {
             onRetryWrong={retryDictWrong}
             onClose={closeDict}
             onSpeak={speak}
+            onPlayItem={playDictItem}
             onResetSpeech={resetSpeech}
             ttsState={ttsState}
             onInputChange={setDictInput}
             onBlankChange={setDictBlank}
+          />
+        )}
+
+        {speedReadOpen && doc && (
+          <SpeedReadPanel
+            sentences={doc.sentences}
+            docKey={articleIdentity}
+            onClose={() => setSpeedReadOpen(false)}
+            onSpeak={speak}
+            ttsState={ttsState}
           />
         )}
 
@@ -1900,7 +2059,11 @@ export default function ReaderApp() {
             onlyWrong={!!listenWrongIds}
             readingAll={readingAll}
             transcript={doc ? doc.sentences.map((s) => s.text).join(' ') : null}
-            onClose={() => setListenOpen(false)}
+            readMode={listenReadMode}
+            onClose={() => {
+              setListenOpen(false)
+              setListenReadMode(false)
+            }}
             onToggleRead={readingAll ? stopReadAll : startReadAll}
             onResetSpeech={resetSpeech}
             ttsState={ttsState}
@@ -2034,8 +2197,8 @@ export default function ReaderApp() {
                   lastPicked={lastPicked}
                   bubblePos={bubblePos}
                   articleRef={articleRef}
-                  onSelectSentence={selectSentence}
-                  onFocusEntry={focusEntry}
+                  onSelectSentence={selectSentenceAndRead}
+                  onFocusEntry={revealVocabWord}
                   karaoke={karaoke}
                   onWordSeek={(sid, i) => {
                     const s = doc?.sentences.find((x) => x.id === sid)
@@ -2065,6 +2228,9 @@ export default function ReaderApp() {
           <button className={sideTab === 'stats' ? 'primary' : ''} onClick={() => setSideTab('stats')}>
             统计
           </button>
+          <button className={sideTab === 'mastery' ? 'primary' : ''} onClick={() => setSideTab('mastery')}>
+            掌握度
+          </button>
         </div>
         <SideOverview
           mistakes={mistakes}
@@ -2074,6 +2240,15 @@ export default function ReaderApp() {
           onRetryListen={retryMistakeListen}
           onRetryDict={retryMistakeDict}
           onClearMistakes={() => setMistakes([])}
+        />
+        <SideMastery
+          mastery={articleMastery}
+          onStartArticle={startArticleQuiz}
+          onStartVocab={() => {
+            setQuizQueue(null)
+            setQuizSetupOpen(false)
+            startStudy()
+          }}
         />
         <div className="side-sec" data-sec="stats">
           <StatsPanel activity={activity} practice={practice} />
@@ -2170,7 +2345,9 @@ export default function ReaderApp() {
             startQuick()
           }}
           onStartDictation={() => startDictation()}
-          onOpenListening={openListening}
+          onOpenListening={() => openListeningMode(false)}
+          onOpenReading={() => openListeningMode(true)}
+          onOpenSpeedRead={openSpeedRead}
           listenCount={listenCount}
           onListenCountChange={setListenCount}
           onLanguagePrompt={() => void copyLanguagePrompt()}

@@ -168,6 +168,27 @@ a { color: var(--accent); }
 .reader-side.tab-stats .side-sec[data-sec='pick'],
 .reader-side.tab-stats .side-sec[data-sec='vocab'] { display: none; }
 .reader-side:not(.tab-stats) .side-sec[data-sec='stats'] { display: none; }
+.reader-side:not(.tab-mastery) .side-sec[data-sec='mastery'] { display: none; }
+.reader-side.tab-mastery .side-sec[data-sec='overview'],
+.reader-side.tab-mastery .side-sec[data-sec='pick'],
+.reader-side.tab-mastery .side-sec[data-sec='vocab'],
+.reader-side.tab-mastery .side-sec[data-sec='stats'] { display: none; }
+
+/* 掌握度面板 */
+.mastery-score { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 10px; }
+.mastery-num { font-size: 34px; font-weight: 800; line-height: 1; }
+.mastery-grade { font-size: 13px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
+.mastery-grade.g4 { color: #1f7a4d; border-color: rgba(47, 143, 91, 0.5); background: rgba(47, 143, 91, 0.12); }
+.mastery-grade.g3 { color: #2f8f5b; border-color: rgba(47, 143, 91, 0.4); background: rgba(47, 143, 91, 0.08); }
+.mastery-grade.g2 { color: #a06a1e; border-color: rgba(224, 138, 60, 0.5); background: rgba(224, 138, 60, 0.12); }
+.mastery-grade.g1 { color: #b3403a; border-color: rgba(192, 57, 43, 0.5); background: rgba(192, 57, 43, 0.12); }
+.mastery-dims { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+.mastery-dim-row { display: flex; justify-content: space-between; font-size: 13px; }
+.mastery-bar { height: 6px; border-radius: 999px; background: var(--panel-3); overflow: hidden; margin: 3px 0; }
+.mastery-bar > div { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+.mastery-detail { font-size: 12px; }
+.mastery-next { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+.mastery-tip { margin-bottom: 6px; }
 
 /* 学习统计 */
 .stat-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding: 4px 0; }
@@ -252,6 +273,18 @@ a { color: var(--accent); }
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
 .bar .check-inline { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 13px; cursor: pointer; }
 .bar .check-inline input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+/* 精读顶栏：滚动时固定在视窗顶端（像 Excel 冻结标题行）。
+   负 margin 撑满 .reader-main 的 padding，滚动时正文不会从边缘/上方露出。 */
+.reader-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  margin: -24px -34px 16px;
+  padding: 16px 34px 12px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+}
 
 .article { max-width: none; }
 .article h1 { font-size: 25px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
@@ -931,7 +964,18 @@ button.danger {
   border-color: #2f8f5b;
   color: #ffffff;
 }
-:root[data-theme='green'] button.primary { box-shadow: 0 2px 10px rgba(47, 143, 91, 0.25); }
+/* 护眼模式下高亮按钮要显式用绿底白字：上面 `button { background:#fff }` 的特异性
+   高于 `button.primary`，否则主按钮会变成白底白字（看不见）。 */
+:root[data-theme='green'] button.primary {
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  box-shadow: 0 2px 10px rgba(47, 143, 91, 0.25);
+}
+:root[data-theme='green'] button.primary:hover:not(:disabled) {
+  background: linear-gradient(180deg, #3fb877, #2f8f5b);
+  border-color: var(--accent);
+}
 :root[data-theme='green'] .picker-item:hover { background: #edf5ea; }
 :root[data-theme='green'] .picker-pop { box-shadow: 0 18px 48px rgba(40, 70, 50, 0.2); }
 :root[data-theme='green'] .entry:hover { border-color: #c9dcc6; }
@@ -1128,6 +1172,40 @@ button.danger {
 .goal .muted { display: flex; align-items: center; gap: 8px; }
 .goal select { margin-left: 4px; padding: 1px 6px; font-size: 12px; }
 .goal-bar { height: 6px; border-radius: 999px; background: var(--panel-3); overflow: hidden; margin-top: 4px; }
+.quiz-sep { margin: 14px 0; border: 0; border-top: 1px solid var(--line-soft); }
+
+/* 逐句速读 */
+.speed-progress { height: 4px; border-radius: 999px; background: var(--panel-3); overflow: hidden; margin-bottom: 12px; }
+.speed-progress > div { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.2s var(--ease); }
+.speed-meta { margin-bottom: 6px; }
+.speed-pace { font-weight: 700; }
+.speed-pace.ok { color: var(--green); }
+.speed-pace.over { color: var(--red); }
+.speed-timebar { height: 6px; border-radius: 999px; background: var(--panel-3); overflow: hidden; margin: 4px 0 14px; }
+.speed-timebar > div { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 0.1s linear; }
+.speed-timebar > div.over { background: linear-gradient(90deg, #ff8a80, var(--red)); }
+.speed-sentence-slot { position: relative; }
+.speed-sentence { font-size: calc(var(--read) + 4px); line-height: 1.8; font-weight: 600; }
+/* 拷打时保留占位、只藏文字，避免布局跳动 */
+.speed-sentence.is-hidden { visibility: hidden; }
+.speed-hidden-overlay {
+  position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  color: var(--dim); font-style: italic; text-align: center; padding: 0 8px; font-size: 14px;
+}
+.speed-hint { margin-top: 12px; }
+.speed-reveal { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 6px; }
+.speed-tr { font-size: var(--read); color: var(--fg); }
+.speed-lang { font-size: 13.5px; color: var(--dim); display: flex; flex-direction: column; gap: 3px; }
+.speed-banner { margin-top: 8px; padding: 8px 10px; border-radius: 8px; background: rgba(224, 138, 60, 0.14); border: 1px solid rgba(224, 138, 60, 0.5); color: #a06a1e; font-size: 13px; }
+.speed-drill { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line-soft); }
+.speed-drill-title { font-weight: 700; margin-bottom: 6px; }
+.speed-drill-prompt { font-size: var(--read); line-height: 1.8; margin-bottom: 8px; }
+.speed-drill-result { margin-top: 10px; font-weight: 700; }
+.speed-drill-result.ok { color: var(--green); }
+.speed-drill-result.bad { color: var(--red); }
+.speed-hidden { padding: 10px 0; color: var(--dim); font-style: italic; }
+.speed-answer-sentence { margin-top: 6px; font-weight: 400; }
+.speed-drill-title .muted { margin-left: 8px; font-weight: 400; }
 .goal-bar > div { height: 100%; background: var(--accent); }
 
 /* 到期日历热力图 */
