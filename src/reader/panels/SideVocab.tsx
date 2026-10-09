@@ -55,6 +55,7 @@ export interface SideVocabProps {
   onExportWrong: (items: VocabItem[]) => void
   onExportAll: () => void
   onImportBackup: (file: File | undefined) => void
+  onMergeBackup: (file: File | undefined) => void
 
   // 统计
   statsOpen: boolean
@@ -107,6 +108,7 @@ export default function SideVocab({
   onExportWrong,
   onExportAll,
   onImportBackup,
+  onMergeBackup,
   statsOpen,
   stats,
   onDailyGoalChange,
@@ -279,13 +281,27 @@ export default function SideVocab({
         <button onClick={onExportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
           导出全部（备份）
         </button>
-        <label className="filebtn" title="导入之前的备份 JSON（文章 + 生词）">
+        <label className="filebtn" title="导入备份并覆盖本机数据（还原用：词库整库替换、统计整段替换）">
           导入备份
           <input
             type="file"
             accept=".json,application/json"
             onChange={(e) => {
               onImportBackup(e.target.files?.[0])
+              e.target.value = ''
+            }}
+          />
+        </label>
+        <label
+          className="filebtn"
+          title="合并导入：保留本机现有的文章/生词/统计，把备份并进来（生词按原形去重、统计按天累加）"
+        >
+          合并导入
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={(e) => {
+              onMergeBackup(e.target.files?.[0])
               e.target.value = ''
             }}
           />

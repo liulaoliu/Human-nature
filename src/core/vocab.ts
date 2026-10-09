@@ -569,6 +569,7 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
     phonetic: a.phonetic ?? b.phonetic,
     partOfSpeech: a.partOfSpeech ?? b.partOfSpeech,
     meaning: a.meaning ?? b.meaning,
+    definition: a.definition ?? b.definition,
     usage: mergeUnique(a.usage, b.usage),
     examples: mergeExamples(a.examples, b.examples),
     tags: [...new Set([...a.tags, ...b.tags])],

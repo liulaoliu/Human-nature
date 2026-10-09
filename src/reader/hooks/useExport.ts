@@ -8,6 +8,57 @@ import type { DayActivity } from '../../core/activity'
 import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
+import {
+  mergeActivity,
+  mergeLibraries,
+  mergeMistakes,
+  mergePractice,
+  mergeSessions,
+  mergeStudyDays,
+  mergeWritingHistory,
+} from '../../core/mergeBackup'
+
+/** 一份备份里解析出来的各项数据（缺的字段为 undefined / 空）。 */
+interface ParsedBackup {
+  articles: SavedArticle[]
+  library: VocabLibrary | null
+  sessions?: PickSession[]
+  studyDays?: StudyDay[]
+  activity?: DayActivity[]
+  writingHistory?: WritingRecord[]
+  practice?: PracticeRecord[]
+  mistakes?: MistakeEntry[]
+}
+
+/** 解析导入的 JSON：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
+function parseBackupPayload(data: unknown): ParsedBackup {
+  const out: ParsedBackup = { articles: [], library: null }
+  if (Array.isArray(data)) {
+    if (data.length && data[0] && typeof data[0] === 'object' && 'sentences' in data[0]) {
+      out.articles = data as SavedArticle[]
+    } else if (data.length && data[0] && typeof data[0] === 'object' && 'lemma' in data[0]) {
+      out.library = { schemaVersion: 1, items: data as VocabLibrary['items'] }
+    }
+    return out
+  }
+  if (data && typeof data === 'object') {
+    const obj = data as Record<string, unknown>
+    if (Array.isArray(obj.articles)) out.articles = obj.articles as SavedArticle[]
+    if (obj.library && typeof obj.library === 'object' && Array.isArray((obj.library as VocabLibrary).items)) {
+      out.library = obj.library as VocabLibrary
+    } else if (Array.isArray(obj.items)) {
+      out.library = data as VocabLibrary
+    }
+    if (Array.isArray(obj.stats)) out.sessions = obj.stats as PickSession[]
+    if (Array.isArray(obj.studyStats)) out.studyDays = obj.studyStats as StudyDay[]
+    if (Array.isArray(obj.activity)) out.activity = obj.activity as DayActivity[]
+    if (Array.isArray(obj.writingHistory)) out.writingHistory = obj.writingHistory as WritingRecord[]
+    if (Array.isArray(obj.practice)) out.practice = obj.practice as PracticeRecord[]
+    if (Array.isArray(obj.mistakes)) out.mistakes = obj.mistakes as MistakeEntry[]
+    if (!out.articles.length && 'sentences' in obj && 'paragraphs' in obj) out.articles = [data as SavedArticle]
+  }
+  return out
+}
 
 export interface UseExportParams {
   articles: RefObject<ArticleRepoPort | null>
@@ -95,45 +146,54 @@ export function useExport({
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
   }
 
-  /** 导入备份：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
+  /** 导入备份（覆盖）：词库整库替换、统计整段替换，文章按 id 写入。 */
   const onImportBackup = async (file: File | null | undefined) => {
     if (!file) return
     try {
-      const data: unknown = JSON.parse(await file.text())
-      let imported: SavedArticle[] = []
-      let importedLib: VocabLibrary | null = null
-      if (Array.isArray(data)) {
-        if (data.length && data[0] && typeof data[0] === 'object' && 'sentences' in data[0]) {
-          imported = data as SavedArticle[]
-        } else if (data.length && data[0] && typeof data[0] === 'object' && 'lemma' in data[0]) {
-          importedLib = { schemaVersion: 1, items: data as VocabLibrary['items'] }
-        }
-      } else if (data && typeof data === 'object') {
-        const obj = data as Record<string, unknown>
-        if (Array.isArray(obj.articles)) imported = obj.articles as SavedArticle[]
-        if (obj.library && typeof obj.library === 'object' && Array.isArray((obj.library as VocabLibrary).items)) {
-          importedLib = obj.library as VocabLibrary
-        } else if (Array.isArray(obj.items)) {
-          importedLib = data as VocabLibrary
-        }
-        if (Array.isArray(obj.stats)) setSessions(obj.stats as PickSession[])
-        if (Array.isArray(obj.studyStats)) setStudyDays(obj.studyStats as StudyDay[])
-        if (Array.isArray(obj.activity)) setActivity(obj.activity as DayActivity[])
-        if (Array.isArray(obj.writingHistory)) setWritingHistory(obj.writingHistory as WritingRecord[])
-        if (Array.isArray(obj.practice)) setPractice(obj.practice as PracticeRecord[])
-        if (Array.isArray(obj.mistakes)) setMistakes(obj.mistakes as MistakeEntry[])
-        if (!imported.length && 'sentences' in obj && 'paragraphs' in obj) imported = [data as SavedArticle]
-      }
-      for (const a of imported) {
+      const parsed = parseBackupPayload(JSON.parse(await file.text()))
+      for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
           await articles.current?.save(a)
         }
       }
-      if (importedLib) persist(importedLib)
+      if (parsed.library) persist(parsed.library)
+      if (parsed.sessions) setSessions(parsed.sessions)
+      if (parsed.studyDays) setStudyDays(parsed.studyDays)
+      if (parsed.activity) setActivity(parsed.activity)
+      if (parsed.writingHistory) setWritingHistory(parsed.writingHistory)
+      if (parsed.practice) setPractice(parsed.practice)
+      if (parsed.mistakes) setMistakes(parsed.mistakes)
       setSaved((await articles.current?.list()) ?? [])
-      flash(`导入完成：文章 ${imported.length} 篇${importedLib ? `，生词 ${importedLib.items.length} 个` : ''}`)
+      flash(`导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}`)
     } catch {
       flash('导入失败：不是有效的 JSON 备份')
+    }
+  }
+
+  /** 合并导入：保留现有数据，把备份并进来（词库按 lemma 去重、统计按天累加、错题按 id 累加）。 */
+  const onMergeBackup = async (file: File | null | undefined) => {
+    if (!file) return
+    try {
+      const parsed = parseBackupPayload(JSON.parse(await file.text()))
+      let added = 0
+      for (const a of parsed.articles) {
+        if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
+          await articles.current?.save(a)
+          added += 1
+        }
+      }
+      const mergedLib = parsed.library ? mergeLibraries(library, parsed.library) : null
+      if (mergedLib) persist(mergedLib)
+      if (parsed.sessions) setSessions(mergeSessions(sessions, parsed.sessions))
+      if (parsed.studyDays) setStudyDays(mergeStudyDays(studyDays, parsed.studyDays))
+      if (parsed.activity) setActivity(mergeActivity(activity, parsed.activity))
+      if (parsed.writingHistory) setWritingHistory(mergeWritingHistory(writingHistory, parsed.writingHistory))
+      if (parsed.practice) setPractice(mergePractice(practice, parsed.practice))
+      if (parsed.mistakes) setMistakes(mergeMistakes(mistakes, parsed.mistakes))
+      setSaved((await articles.current?.list()) ?? [])
+      flash(`合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}`)
+    } catch {
+      flash('合并失败：不是有效的 JSON 备份')
     }
   }
 
@@ -159,5 +219,5 @@ export function useExport({
     win.document.close()
   }
 
-  return { download, doExportAnki, exportJson, exportBatch, doExportWrong, exportAll, onImportBackup, doPrint }
+  return { download, doExportAnki, exportJson, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint }
 }

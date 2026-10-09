@@ -1564,6 +1564,7 @@ export default function ReaderApp() {
     doExportWrong,
     exportAll,
     onImportBackup,
+    onMergeBackup,
     doPrint,
   } = useExport({
     articles,
@@ -2369,6 +2370,7 @@ export default function ReaderApp() {
           onExportWrong={doExportWrong}
           onExportAll={exportAll}
           onImportBackup={(f) => void onImportBackup(f)}
+          onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}
           stats={{
             totals,
