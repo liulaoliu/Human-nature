@@ -1,6 +1,6 @@
 import type { RefObject } from 'react'
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../../core/exports'
-import { groupItems, sortItems } from '../../core/vocab'
+import { groupItems, markPrinted, sortItems } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../adapters/articleRepo'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
@@ -197,8 +197,17 @@ export function useExport({
     }
   }
 
-  /** A4 打印（弹新窗口）。 */
-  const doPrint = (items: VocabItem[], title: string, numberOf?: (it: VocabItem) => number | null) => {
+  /** A4 打印（弹新窗口）。成功后默认给这批词记上打印时间（opts.mark=false 可关掉）。 */
+  const doPrint = (
+    items: VocabItem[],
+    title: string,
+    numberOf?: (it: VocabItem) => number | null,
+    opts?: { mark?: boolean },
+  ) => {
+    if (!items.length) {
+      flash('没有可打印的词')
+      return
+    }
     const sorted = numberOf
       ? [...items].sort((a, b) => (numberOf(a) ?? 1e9) - (numberOf(b) ?? 1e9))
       : sortItems(items, 'word')
@@ -217,6 +226,10 @@ export function useExport({
     }
     win.document.write(html)
     win.document.close()
+    // 打印成功即记录时间，下次「只打未打印」可据此跳过。
+    if (opts?.mark !== false) {
+      persist(markPrinted(library, items.map((it) => it.id)))
+    }
   }
 
   return { download, doExportAnki, exportJson, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint }

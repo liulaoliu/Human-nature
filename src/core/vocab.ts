@@ -417,6 +417,35 @@ export function removeItem(library: VocabLibrary, id: string): VocabLibrary {
   return { ...library, items: library.items.filter((it) => it.id !== id) }
 }
 
+/**
+ * 记录 A4 打印：把传进来的这批词条写上 `lastPrintedAt`。
+ * 打印后调用，用于「不重复打印」（下次可只打印未打印的）。
+ * 纯函数，不改别的字段，方便单测。
+ */
+export function markPrinted(
+  library: VocabLibrary,
+  ids: Iterable<string>,
+  now: Date = new Date(),
+): VocabLibrary {
+  const set = new Set(ids)
+  if (!set.size) return library
+  const iso = now.toISOString()
+  return {
+    ...library,
+    items: library.items.map((it) => (set.has(it.id) ? { ...it, lastPrintedAt: iso, updatedAt: iso } : it)),
+  }
+}
+
+/** 是否打印过（老数据没有 lastPrintedAt，按未打印算）。 */
+export function isPrinted(item: VocabItem): boolean {
+  return !!item.lastPrintedAt
+}
+
+/** 未打印过的词条（用于「只打未打印」）。 */
+export function unprintedItems(items: VocabItem[]): VocabItem[] {
+  return items.filter((it) => !it.lastPrintedAt)
+}
+
 /** 按词形（lemma）删除。 */
 export function removeByLemma(library: VocabLibrary, word: string): VocabLibrary {
   const lemma = lemmaOf(word)

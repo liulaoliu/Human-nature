@@ -383,13 +383,15 @@ export function useSelection({
     const handler = () => {
       if (applyingDom.current) return
       if (rightDownRef.current) return
+      // Alt：保留浏览器原生选区，方便直接 Ctrl+C 复制（不被我们的划词逻辑清掉）
+      if (altHeld && !vocabMode) return
       const sel = window.getSelection()
       if (!sel || sel.rangeCount === 0) return
       applySelection(ctrlHeld, false)
     }
     document.addEventListener('selectionchange', handler)
     return () => document.removeEventListener('selectionchange', handler)
-  }, [editing, ctrlHeld, applySelection, applyingDom, rightDownRef])
+  }, [editing, ctrlHeld, altHeld, vocabMode, applySelection, applyingDom, rightDownRef])
 
   const onMouseUp = useCallback(
     (e: MouseEvent<HTMLElement>) => {
@@ -398,9 +400,11 @@ export function useSelection({
         rightDownRef.current = false
         return // 右键单独处理
       }
+      // Alt：不清原生选区，让 ⌘/Ctrl+C 能复制（配合「按住 Alt 拖选」）
+      if (e.altKey && !vocabMode) return
       applySelection(e.ctrlKey || e.metaKey, true)
     },
-    [editing, applySelection, rightDownRef],
+    [editing, applySelection, rightDownRef, vocabMode],
   )
 
   const onMouseDown = useCallback(

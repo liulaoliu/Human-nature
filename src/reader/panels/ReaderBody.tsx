@@ -85,6 +85,8 @@ export interface ReaderBodyProps {
   articleRef: RefObject<HTMLElement>
   onSelectSentence: (sid: string) => void
   onFocusEntry: (word: string) => void
+  /** 按住 Alt 点句子：把该句（或译文）文本复制走，方便去翻译。 */
+  onAltCopyText: (text: string) => void
   /** 正在朗读的句子（逐词高亮）。 */
   karaoke: { sid: string; activeIndex: number | null } | null
   /** 点某个词 → 从该词起播。 */
@@ -111,6 +113,7 @@ export default function ReaderBody({
   articleRef,
   onSelectSentence,
   onFocusEntry,
+  onAltCopyText,
   karaoke,
   onWordSeek,
 }: ReaderBodyProps) {
@@ -136,7 +139,14 @@ export default function ReaderBody({
                     (peekSid === sid && selectedId !== sid ? ' peek' : '') +
                     (vocabSidSet.has(sid) ? ' has-vocab' : '')
                   }
-                  onClick={() => onSelectSentence(sid)}
+                  onClick={(e) => {
+                    if (e.altKey) {
+                      e.stopPropagation()
+                      onAltCopyText(s.text)
+                      return
+                    }
+                    onSelectSentence(sid)
+                  }}
                 >
                   {sentenceNodes(
                     s.text,
@@ -155,8 +165,15 @@ export default function ReaderBody({
                   <span
                     data-sid={sid}
                     className={'tr-block' + (selectedId === sid ? ' sel' : '')}
-                    onClick={() => onSelectSentence(sid)}
-                    title="点这里等价于选中这句"
+                    onClick={(e) => {
+                      if (e.altKey) {
+                        e.stopPropagation()
+                        onAltCopyText(s.translation ?? s.text)
+                        return
+                      }
+                      onSelectSentence(sid)
+                    }}
+                    title="点这里等价于选中这句（按住 Alt 点击 = 复制这句译文）"
                   >
                     {s.translation ?? '（未翻译）'}
                   </span>

@@ -14,7 +14,9 @@ import {
   filterItems,
   groupItems,
   isDue,
+  isPrinted,
   lemmaOf,
+  markPrinted,
   markWord,
   normalizeWord,
   relemmaLibrary,
@@ -24,6 +26,7 @@ import {
   reviewItem,
   setStatus,
   sortItems,
+  unprintedItems,
 } from './vocab'
 import type { VocabItem } from '../types/document'
 
@@ -434,5 +437,28 @@ describe('applyPosAnalysis', () => {
     lib = applyPosAnalysis(lib, [row], NOW)
     expect(lib.items[0].word).toBe('sliding oil price')
     expect(lib.items[0].note).toContain('辨析')
+  })
+})
+
+describe('markPrinted / unprintedItems', () => {
+  it('给指定词条写上打印时间，其余不动', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = markWord(lib, { word: 'jump', articleId: 'a1' }, NOW).library
+    const runId = lib.items.find((it) => it.lemma === 'run')!.id
+    const out = markPrinted(lib, [runId], NOW)
+    expect(out.items.find((it) => it.lemma === 'run')!.lastPrintedAt).toBe(NOW.toISOString())
+    expect(out.items.find((it) => it.lemma === 'jump')!.lastPrintedAt).toBeUndefined()
+  })
+  it('isPrinted / unprintedItems 把没有 lastPrintedAt 的算作未打印', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = markWord(lib, { word: 'jump', articleId: 'a1' }, NOW).library
+    expect(unprintedItems(lib.items)).toHaveLength(2)
+    lib = markPrinted(lib, [lib.items[0].id], NOW)
+    expect(isPrinted(lib.items[0])).toBe(true)
+    expect(unprintedItems(lib.items)).toHaveLength(1)
+  })
+  it('传空集合原样返回', () => {
+    const lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    expect(markPrinted(lib, [])).toBe(lib)
   })
 })

@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
 import type { VocabItem } from '../../types/document'
 import type { ReviewGrade } from '../../core/vocab'
@@ -65,6 +66,10 @@ export interface SideVocabProps {
   // 生词列表
   articleList: VocabItem[]
   articleNums: Map<string, number>
+  /** 本篇是否已全部打印（用于「已打印」标记，避免重复打印）。 */
+  articleAllPrinted: boolean
+  /** 本篇最近一次打印时间（ISO），没打印过为 null。 */
+  articlePrintedAt: string | null
   focusLemma: string | null
   confirmDel: string | null
   onJumpSource?: (item: VocabItem) => void
@@ -114,6 +119,8 @@ export default function SideVocab({
   onDailyGoalChange,
   articleList,
   articleNums,
+  articleAllPrinted,
+  articlePrintedAt,
   focusLemma,
   confirmDel,
   onJumpSource,
@@ -123,6 +130,10 @@ export default function SideVocab({
   onEdit,
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
+  /** 整库打印时是否只打没打印过的词。 */
+  const [onlyUnprinted, setOnlyUnprinted] = useState(false)
+  const unprintedCount = libraryItems.filter((it) => !it.lastPrintedAt).length
+  const printedDate = articlePrintedAt ? articlePrintedAt.slice(0, 10) : ''
   return (
     <div className="side-sec" data-sec="vocab">
       <div className="section-title">
@@ -243,16 +254,40 @@ export default function SideVocab({
         <button
           onClick={() => onPrint(articleWords, printTitle, (it) => articleNums.get(it.lemma) ?? null)}
           disabled={!articleWords.length}
-          title="打印本篇生词（A4）"
+          title={
+            articleAllPrinted
+              ? `本篇已于 ${printedDate} 打印过；再点会重新打印（并刷新打印时间）`
+              : '打印本篇生词（A4）'
+          }
         >
-          A4（本篇）
+          {articleAllPrinted ? 'A4（本篇）✓' : 'A4（本篇）'}
         </button>
         <button onClick={() => onExportAnki(libraryItems)} disabled={!hasItems} title="导出整库生词为 Anki CSV">
           Anki（整库）
         </button>
-        <button onClick={() => onPrint(libraryItems, '全部生词')} disabled={!hasItems} title="打印整库生词（A4）">
+        <button
+          onClick={() =>
+            onPrint(
+              onlyUnprinted ? libraryItems.filter((it) => !it.lastPrintedAt) : libraryItems,
+              onlyUnprinted ? '全部生词（未打印）' : '全部生词',
+            )
+          }
+          disabled={!hasItems || (onlyUnprinted && unprintedCount === 0)}
+          title={onlyUnprinted ? `只打印没打印过的 ${unprintedCount} 个词（A4）` : '打印整库生词（A4）'}
+        >
           A4（整库）
         </button>
+        <label
+          className="check-inline"
+          title="勾上后「A4（整库）」只打印没打印过的词；打印过的会记住，不会再重复出。"
+        >
+          <input
+            type="checkbox"
+            checked={onlyUnprinted}
+            onChange={(e) => setOnlyUnprinted(e.target.checked)}
+          />
+          只打未打印{unprintedCount ? `（${unprintedCount}）` : ''}
+        </label>
         <button onClick={onExportJson} disabled={!hasItems}>
           导出 JSON
         </button>

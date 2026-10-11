@@ -171,6 +171,12 @@ export interface VocabItem {
   note: string
   /** 标签 */
   tags: string[]
+  /**
+   * 最近一次 A4 打印的时间（ISO 8601）。
+   * 用来避免重复打印：打印后自动写入，整库/本篇都能据此跳过已打印的词。
+   * 老数据没有，按「未打印」算。
+   */
+  lastPrintedAt?: string | null
   /** AI 生成的易混项（形近/义近）；选择题干扰项优先用它 */
   confusables?: VocabConfusable[]
   /** 复习状态 */

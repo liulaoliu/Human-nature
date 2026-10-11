@@ -474,6 +474,15 @@ export default function ReaderApp() {
     ordered.forEach((it, i) => nums.set(it.lemma, i + 1))
     return { articleNums: nums, articleFirst: first }
   }, [doc, articleWords])
+  /** 本篇打印情况：最近打印时间 + 是否全部打印过（用于「不重复打印」提示）。 */
+  const articlePrintedAt = useMemo(() => {
+    let latest: string | null = null
+    for (const it of articleWords) {
+      if (it.lastPrintedAt && (!latest || it.lastPrintedAt > latest)) latest = it.lastPrintedAt
+    }
+    return latest
+  }, [articleWords])
+  const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
   const applyingDom = useRef(false)
   const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
@@ -565,6 +574,19 @@ export default function ReaderApp() {
     setToast(message)
     window.setTimeout(() => setToast(''), 1900)
   }, [])
+
+  /** 按住 Alt 点句子：把文本复制到剪贴板（方便拿去翻译）。 */
+  const altCopyText = useCallback(
+    (text: string) => {
+      const t = (text ?? '').trim()
+      if (!t) return
+      navigator.clipboard?.writeText(t).then(
+        () => flash('已复制（Alt 点击）'),
+        () => flash('复制失败：可按住 Alt 拖选后按 Ctrl+C'),
+      )
+    },
+    [flash],
+  )
 
   const persist = useCallback((lib: VocabLibrary) => {
     setLibrary(lib)
@@ -2200,6 +2222,7 @@ export default function ReaderApp() {
                   articleRef={articleRef}
                   onSelectSentence={selectSentenceAndRead}
                   onFocusEntry={revealVocabWord}
+                  onAltCopyText={altCopyText}
                   karaoke={karaoke}
                   onWordSeek={(sid, i) => {
                     const s = doc?.sentences.find((x) => x.id === sid)
@@ -2387,6 +2410,8 @@ export default function ReaderApp() {
           onDailyGoalChange={setDailyGoal}
           articleList={articleList}
           articleNums={articleNums}
+          articleAllPrinted={articleAllPrinted}
+          articlePrintedAt={articlePrintedAt}
           focusLemma={focusLemma}
           confirmDel={confirmDel}
           onJumpSource={jumpToSource}
