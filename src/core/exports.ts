@@ -178,6 +178,28 @@ ${body}
 </html>`
 }
 
+/**
+ * 导出「纯单词表」TXT：每行一个单词，升序，去重（忽略大小写）。
+ * 默认跳过词组（带空格）和含标点的条目——很多背单词 App 只认单词、不认词组。
+ * 给「请选择 txt 文件（每行一个单词）」那类外部词书用。
+ */
+export function toWordListTXT(items: VocabItem[], opts?: { includePhrases?: boolean }): string {
+  const ok = /^[A-Za-z][A-Za-z'-]*$/
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const it of dedupeByLemma(items)) {
+    const w = it.word.trim()
+    if (!w) continue
+    if (!opts?.includePhrases && (/\s/.test(w) || !ok.test(w))) continue
+    const key = w.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push(w)
+  }
+  out.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()))
+  return out.length ? out.join('\n') + '\n' : ''
+}
+
 /** 导出「待选生词」CSV（两列：Word, Context）。 */
 export function toWordsCSV(entries: { word: string; context?: string }[]): string {
   const rows = ['Word,Context']

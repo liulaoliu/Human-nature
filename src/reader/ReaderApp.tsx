@@ -1582,6 +1582,7 @@ export default function ReaderApp() {
     download,
     doExportAnki,
     exportJson,
+    exportWordList,
     exportBatch,
     doExportWrong,
     exportAll,
@@ -2388,6 +2389,7 @@ export default function ReaderApp() {
           onPrint={doPrint}
           printTitle={articleTitle || articleKey || '本篇生词'}
           onExportJson={exportJson}
+          onExportWordList={exportWordList}
           onCopyMissingPhonetic={(only) => void copyMissingPhonetic(only)}
           onToggleStats={() => setStatsOpen((v) => !v)}
           onExportWrong={doExportWrong}

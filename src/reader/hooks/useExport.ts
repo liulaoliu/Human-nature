@@ -1,5 +1,5 @@
 import type { RefObject } from 'react'
-import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordsCSV, toWrongWordsCSV } from '../../core/exports'
+import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordListTXT, toWordsCSV, toWrongWordsCSV } from '../../core/exports'
 import { groupItems, markPrinted, sortItems } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../adapters/articleRepo'
@@ -118,6 +118,10 @@ export function useExport({
 
   const exportJson = () => download('vocab.json', exportLibraryJSON(library), 'application/json')
 
+  /** 导出纯单词表 TXT（每行一个单词；跳过词组），给外部词书 App 导入。 */
+  const exportWordList = (items: VocabItem[]) =>
+    download('wordlist.txt', toWordListTXT(items), 'text/plain;charset=utf-8')
+
   const exportBatch = () =>
     download(
       'picked-words.csv',
@@ -232,5 +236,5 @@ export function useExport({
     }
   }
 
-  return { download, doExportAnki, exportJson, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint }
+  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint }
 }

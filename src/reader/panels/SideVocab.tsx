@@ -51,6 +51,7 @@ export interface SideVocabProps {
   onPrint: (items: VocabItem[], title: string, numberOf?: (item: VocabItem) => number | null) => void
   printTitle: string
   onExportJson: () => void
+  onExportWordList: (items: VocabItem[]) => void
   onCopyMissingPhonetic: (only: 'missing' | 'all') => void
   onToggleStats: () => void
   onExportWrong: (items: VocabItem[]) => void
@@ -108,6 +109,7 @@ export default function SideVocab({
   onPrint,
   printTitle,
   onExportJson,
+  onExportWordList,
   onCopyMissingPhonetic,
   onToggleStats,
   onExportWrong,
@@ -290,6 +292,13 @@ export default function SideVocab({
         </label>
         <button onClick={onExportJson} disabled={!hasItems}>
           导出 JSON
+        </button>
+        <button
+          onClick={() => onExportWordList(libraryItems)}
+          disabled={!hasItems}
+          title="导出纯单词表 TXT（每行一个单词，自动跳过词组），给外部词书 App 导入"
+        >
+          导出 TXT
         </button>
         <button
           onClick={() => onCopyMissingPhonetic('missing')}

@@ -7,6 +7,7 @@ import {
   importLibraryJSON,
   renderPrintHTML,
   toAnkiCSV,
+  toWordListTXT,
   toWordsCSV,
   toWrongWordsCSV,
 } from './exports'
@@ -155,5 +156,28 @@ describe('toWrongWordsCSV', () => {
     expect(lines).toHaveLength(2)
     expect(lines[1]).toContain('run')
     expect(lines[1]).toContain('3')
+  })
+})
+
+describe('toWordListTXT', () => {
+  it('每行一个单词，升序，去重（忽略大小写）', () => {
+    const txt = toWordListTXT([vocab({ word: 'run' }), vocab({ id: 'x', word: 'Run', lemma: 'run2' }), vocab({ id: 'y', word: 'apple', lemma: 'apple' })])
+    expect(txt).toBe('apple\nrun\n')
+  })
+  it('默认跳过词组和含标点的条目（背单词 App 不认）', () => {
+    const txt = toWordListTXT([
+      vocab({ word: 'give up' }),
+      vocab({ id: 'x', word: 'shield sb/sth from sth' }),
+      vocab({ id: 'y', word: 'bank (approval)' }),
+      vocab({ id: 'z', word: 'well-known', lemma: 'well-known' }),
+    ])
+    expect(txt).toBe('well-known\n')
+  })
+  it('includePhrases 时保留词组', () => {
+    const txt = toWordListTXT([vocab({ word: 'give up' })], { includePhrases: true })
+    expect(txt).toBe('give up\n')
+  })
+  it('没有可导出时返回空串', () => {
+    expect(toWordListTXT([vocab({ word: 'give up' })])).toBe('')
   })
 })
