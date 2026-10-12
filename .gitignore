@@ -7,6 +7,10 @@ tsconfig.tsbuildinfo
 # （需要时本地跑 tools/extract-articles.py 生成）
 public/articles.json
 
+# 跟读状态快照（「存入项目」写出的，含你改过的正文）。本地保留即可，默认不进仓库；
+# 想靠 git 带到新机器的话，改用它自带的「导出备份」更干净。
+public/shadowing-state.json
+
 # Python
 __pycache__/
 *.pyc
