@@ -71,6 +71,8 @@ export interface SidePickProps {
   checklistDone: number
   checklistTotal: number
   nextHint: string
+  /** 把当前待办标记为已处理/跳过（用于个别补不齐、反复失败的词）。 */
+  onSkipPending: () => void
 
   /** AI 工作包（网页版 / DeepSeek 路径）。 */
   aiWebBatchSize: number
@@ -148,6 +150,7 @@ export default function SidePick({
   checklistDone,
   checklistTotal,
   nextHint,
+  onSkipPending,
   aiWebBatchSize,
   onAiWebBatchSizeChange,
   onCopyWebPrompt,
@@ -312,6 +315,24 @@ export default function SidePick({
               })}
             </div>
             {nextHint && <div className="muted ai-next">👉 {nextHint}</div>}
+            {webPending > 0 && (
+              <button
+                className="ai-skip"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      `把当前 ${webPending} 项待办标记为「已处理/跳过」？\n\n` +
+                        `不改动词库数据，只是不再提示（数据再变时可能重新出现）。\n` +
+                        `适合个别补不齐、反复失败的词。`,
+                    )
+                  )
+                    onSkipPending()
+                }}
+                title="标记为已处理，不再提示"
+              >
+                ⏭ 跳过这 {webPending} 项
+              </button>
+            )}
           </div>
         )}
         <div className="ai-scope">

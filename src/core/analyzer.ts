@@ -87,7 +87,9 @@ function parseExample(raw: string): { text: string; translation?: string } {
   return { text: raw.trim() }
 }
 
-const HEADER_WORDS = ['单词', 'word', 'phonetic', '音标']
+/** 表头判定：只看「首列 / 音标列」是不是表头标签，避免把正文里含 "word" 的正常行误删。 */
+const HEADER_FIRST = new Set(['单词', '词语', '原形', '单词/原形'])
+const HEADER_PHONETIC = new Set(['音标', '国际音标', 'phonetic', 'ipa'])
 
 /** 解析查词表格（`word | phonetic | pos | meaning | usage | example`）。 */
 export function parseLookupTable(raw: string): WordAnalysis[] {
@@ -95,8 +97,6 @@ export function parseLookupTable(raw: string): WordAnalysis[] {
   for (const line of raw.split('\n')) {
     const trimmed = line.trim()
     if (!trimmed || /^[|\-\s:]+$/.test(trimmed)) continue
-    const low = trimmed.toLowerCase()
-    if (HEADER_WORDS.some((h) => low.includes(h))) continue
     const hadLead = /^[|｜]/.test(trimmed)
     const hadTrail = /[|｜]$/.test(trimmed)
     const cols = trimmed.split(/[|｜]/).map((c) => c.trim())
@@ -104,6 +104,11 @@ export function parseLookupTable(raw: string): WordAnalysis[] {
     if (hadLead && cols[0] === '') cols.shift()
     if (hadTrail && cols[cols.length - 1] === '') cols.pop()
     if (cols.length < 2) continue
+    // 表头行：音标列写着「音标/phonetic」，或首列是「单词」这类标签。
+    // 注意不能全文匹配 "word"——否则像 portmanteau 的释义 "a word formed by…" 会被误当表头。
+    const c0 = (cols[0] ?? '').toLowerCase()
+    const c1 = (cols[1] ?? '').toLowerCase()
+    if (HEADER_PHONETIC.has(c1) || HEADER_FIRST.has(c0)) continue
     let [word, phonetic, partOfSpeech, meaning, usage, example, definition] = cols
     if (!word) continue
     // 只有音标格为空时，才从单词格里拆音标（"run /rʌn/" 或 "run [rʌn]"），避免误伤

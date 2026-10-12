@@ -100,6 +100,19 @@ describe('parseLookupTable', () => {
     // 旧 6 列：没有第 7 列 → definition 为 undefined
     expect(parseLookupTable(table)[0].definition).toBeUndefined()
   })
+
+  it('英文释义里含 "word" 不算表头（回归：portmanteau 曾被误删）', () => {
+    const row =
+      'portmanteau | /pɔːrtˈmæntoʊ/ | n. | 混成词 | a portmanteau word | "Brunch" is a portmanteau. — “Brunch”是混成词。 | a word formed by combining the sounds and meanings of two other words'
+    const words = parseLookupTable(row)
+    expect(words).toHaveLength(1)
+    expect(words[0]).toMatchObject({ word: 'portmanteau', phonetic: '/pɔːrtˈmæntoʊ/', meaning: '混成词' })
+    expect(words[0].definition).toContain('word')
+  })
+  it('真正的表头（音标列写着 音标/phonetic）仍被跳过', () => {
+    expect(parseLookupTable('word | phonetic | pos | meaning')).toHaveLength(0)
+    expect(parseLookupTable('单词 | 音标 | 词性 | 中文含义')).toHaveLength(0)
+  })
 })
 
 describe('parseAnalysis', () => {

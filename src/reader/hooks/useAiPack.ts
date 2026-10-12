@@ -130,6 +130,15 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const checklistDone = useMemo(() => checklist.reduce((n, it) => n + it.done, 0), [checklist])
   const checklistTotal = useMemo(() => checklist.reduce((n, it) => n + it.total, 0), [checklist])
 
+  /** 还没做、且涉及具体单词的待办里的词（用于提示「卡住的是哪些词」）。 */
+  const pendingWords = useMemo(() => {
+    const words: string[] = []
+    for (const j of pending) {
+      for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
+    }
+    return words
+  }, [pending])
+
   /** 下一步该干嘛：一条提醒，按优先级挑。 */
   const nextHint = useMemo(() => {
     if (jobsInput.batch.length) {
@@ -137,9 +146,14 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     }
     if (localRunning) return `跑批中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
     if (round.length && pending.length === 0) return '本篇待办已全部完成 🎉'
-    if (pending.length) return `还有 ${pending.length} 项待办，可点「⚡ 一键跑批」。`
+    if (pending.length) {
+      const w = pendingWords.length
+        ? `（${pendingWords.slice(0, 6).join('、')}${pendingWords.length > 6 ? '…' : ''}）`
+        : ''
+      return `还有 ${pending.length} 项待办${w}，可点「⚡ 一键跑批」。`
+    }
     return ''
-  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, pending.length])
+  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, pending.length, pendingWords])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
@@ -327,7 +341,10 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   /** 把一个批次发给服务端跑，轮询进度；onDone(本批已完成数) 用于进度显示。 */
   const runBatchOnServer = useCallback(
-    async (jobs: AiJob[], onDone: (done: number) => void): Promise<AiResultEntry[]> => {
+    async (
+      jobs: AiJob[],
+      onDone: (done: number) => void,
+    ): Promise<{ results: AiResultEntry[]; failed: { id: string; error: string }[] }> => {
       const res = await fetch('/api/ai/run', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -344,7 +361,13 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       const { runId } = (await res.json()) as { runId: string }
       for (;;) {
         await new Promise((r) => setTimeout(r, 1500))
-        let p: { state?: string; done?: number; results?: AiResultEntry[]; error?: string } | null = null
+        let p: {
+          state?: string
+          done?: number
+          results?: AiResultEntry[]
+          failed?: { id: string; error: string }[]
+          error?: string
+        } | null = null
         try {
           p = await (await fetch('/api/ai/run?id=' + encodeURIComponent(runId))).json()
         } catch {
@@ -352,7 +375,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         }
         if (!p) continue
         onDone(p.done ?? 0)
-        if (p.state === 'done') return p.results ?? []
+        if (p.state === 'done') return { results: p.results ?? [], failed: p.failed ?? [] }
         if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
       }
     },
@@ -412,11 +435,23 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         setLocalDone(0)
         setLocalTotal(todo.length)
 
-        const results = await runBatchOnServer(todo, (d) => setLocalDone(d))
+        const { results, failed } = await runBatchOnServer(todo, (d) => setLocalDone(d))
 
         const { okCount, failCount, lines, appliedIds } = applyResultsRef.current(results, all)
         setDoneIds((prev) => [...new Set([...prev, ...appliedIds])])
-        onReport([`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)])
+        const report = [`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)]
+        if (failed.length) {
+          const byId = new Map(all.map((j) => [j.id, j]))
+          report.push(`⚠️ 有 ${failed.length} 项没跑成功（会一直显示为待办，可点「跳过」）：`)
+          for (const f of failed.slice(0, 10)) {
+            const j = byId.get(f.id)
+            const who = j
+              ? `${j.label}${j.askedWords.length ? '：' + j.askedWords.slice(0, 8).join('、') : ''}`
+              : f.id
+            report.push(`· ${who} —— ${f.error}`)
+          }
+        }
+        onReport(report)
         // 本轮一条都没成，就别再等数据变化了
         if (!results.length) break
         // 等数据落地、下一轮待办浮现
@@ -431,6 +466,13 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       setLocalRunning(false)
     }
   }, [localRunning, pending, round, runBatchOnServer, settle, setDoneIds, onReport, flash, jobsInput.scope])
+
+  /** 把当前所有待办标记为「已处理/跳过」（不改数据；用于个别补不齐、反复失败的词）。 */
+  const skipPending = useCallback(() => {
+    if (!pending.length) return
+    setDoneIds((prev) => [...new Set([...prev, ...pending.map((j) => j.id)])])
+    flash(`已跳过 ${pending.length} 项（标记为已处理；不改数据，数据再变时可能重新出现）`)
+  }, [pending, setDoneIds, flash])
 
   return {
     // agent 路径
@@ -462,6 +504,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     localPhase,
     localError,
     runLocal,
+    skipPending,
     // 待办检查 / 进度提醒
     checklist,
     checklistDone,

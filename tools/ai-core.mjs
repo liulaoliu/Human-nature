@@ -91,12 +91,13 @@ export async function runJobs(jobs, cfg, { onProgress } = {}) {
       const i = cursor++
       const job = jobs[i]
       let raw = ''
+      let error = ''
       try {
         raw = await callWithRetry(cfg, job.prompt)
-      } catch {
-        raw = ''
+      } catch (e) {
+        error = String((e && e.message) || e)
       }
-      const entry = { id: job.id, task: job.task, raw }
+      const entry = { id: job.id, task: job.task, raw, error }
       results[i] = entry
       done++
       if (onProgress) onProgress(done, jobs.length, entry)
@@ -170,17 +171,21 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       }
       gcRuns()
       const runId = 'run-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-      const run = { state: 'running', done: 0, total: jobs.length, results: [], startedAt: Date.now(), error: '' }
+      const run = { state: 'running', done: 0, total: jobs.length, results: [], failed: [], startedAt: Date.now(), error: '' }
       runs.set(runId, run)
       runJobs(jobs, cfg, {
         onProgress: (done, total, last) => {
           run.done = done
           run.total = total
           if (last && last.raw && last.raw.trim()) run.results.push(last)
+          else if (last) run.failed.push({ id: last.id, error: last.error || '空回复' })
         },
       })
         .then((all) => {
           run.results = all.filter((r) => r.raw && r.raw.trim())
+          run.failed = all
+            .filter((r) => !(r.raw && r.raw.trim()))
+            .map((r) => ({ id: r.id, error: r.error || '空回复' }))
           run.done = all.length
           run.state = 'done'
         })
@@ -200,7 +205,14 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       sendJson(res, 404, { error: 'no-run' })
       return
     }
-    sendJson(res, 200, { state: run.state, done: run.done, total: run.total, results: run.results, error: run.error })
+    sendJson(res, 200, {
+      state: run.state,
+      done: run.done,
+      total: run.total,
+      results: run.results,
+      failed: run.failed,
+      error: run.error,
+    })
     return
   }
 

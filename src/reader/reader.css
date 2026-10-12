@@ -519,6 +519,11 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .ai-check-row.manual .ai-check-mark { color: #c0392b; font-weight: 600; }
 .ai-check-row .ai-check-mark { width: 3.4em; text-align: right; }
 .ai-check .ai-next { color: #c0392b; }
+.ai-check .ai-skip {
+  margin-top: 6px;
+  font-size: 12px;
+  padding: 2px 8px;
+}
 
 /* 选词模式的待选词 */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }

@@ -1738,6 +1738,7 @@ export default function ReaderApp() {
     localPhase: aiLocalPhase,
     localError: aiLocalError,
     runLocal: runAiLocal,
+    skipPending: aiSkipPending,
     checklist: aiChecklist,
     checklistDone: aiChecklistDone,
     checklistTotal: aiChecklistTotal,
@@ -2367,6 +2368,7 @@ export default function ReaderApp() {
           checklistDone={aiChecklistDone}
           checklistTotal={aiChecklistTotal}
           nextHint={aiNextHint}
+          onSkipPending={aiSkipPending}
           aiWebBatchSize={aiWebBatchSize}
           onAiWebBatchSizeChange={setAiWebBatchSize}
           onCopyWebPrompt={() => void copyAiWebPrompt()}
