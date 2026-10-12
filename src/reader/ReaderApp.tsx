@@ -7,6 +7,7 @@ import {
   editItem,
   isDue,
   lemmaOf,
+  markWord,
   normalizeWord,
   removeItem,
   reviewItem,
@@ -412,6 +413,8 @@ export default function ReaderApp() {
     'article',
     persistentEnum(['article', 'all'] as const, 'article'),
   )
+  /** 自动标词是否**直接**写进生词本（跳过「待选」，省一步人工入库）。 */
+  const [autoVocabDirect, setAutoVocabDirect] = useLocalStorageState('reader:autoVocabDirect', true, persistentBool)
   /** 每天引入新词的上限（0=不限）与今天已引入 */
   const [newLimit, setNewLimit] = useLocalStorageState('reader:newLimit', 20, persistentNumber)
   const [newToday, setNewToday] = useLocalStorageState('reader:newToday', 0, {
@@ -973,6 +976,26 @@ export default function ReaderApp() {
     [doc],
   )
 
+  /** 把词条**直接**加进生词本（跳过「待选」）。用于「自动标词」直入模式。 */
+  const commitBatchItems = useCallback(
+    (items: BatchItem[]) => {
+      const valid = items.filter((it) => it.word.trim())
+      if (!valid.length) return
+      let lib = library
+      for (const it of valid) {
+        lib = markWord(lib, {
+          word: it.word,
+          articleId: articleTitle || articleKey || '手动粘贴',
+          fileName: articleIdentity,
+          sentenceId: it.sentenceId,
+          sentenceText: it.sentence,
+        }).library
+      }
+      persist(lib)
+    },
+    [library, persist, articleTitle, articleKey, articleIdentity],
+  )
+
   /** 复制听力理解题出题提示词。 */
   const copyLanguagePrompt = useCallback(async () => {
     if (!doc || !doc.sentences.length) {
@@ -1498,6 +1521,8 @@ export default function ReaderApp() {
     persist,
     mergeBatch,
     batchItemsFromWords,
+    autoVocabDirect,
+    commitBatchItems,
     articleTitle,
     articleKey,
     articleIdentity,
@@ -1705,6 +1730,18 @@ export default function ReaderApp() {
     webMissing: aiWebMissing,
     webPendingLabels: aiWebPendingLabels,
     webBreakdown: aiWebBreakdown,
+    localConfigured: aiLocalConfigured,
+    localRunning: aiLocalRunning,
+    localDone: aiLocalDone,
+    localTotal: aiLocalTotal,
+    localRound: aiLocalRound,
+    localPhase: aiLocalPhase,
+    localError: aiLocalError,
+    runLocal: runAiLocal,
+    checklist: aiChecklist,
+    checklistDone: aiChecklistDone,
+    checklistTotal: aiChecklistTotal,
+    nextHint: aiNextHint,
   } = useAiPack({
     jobsInput: aiJobsInput,
     applyTaskResult,
@@ -2308,6 +2345,8 @@ export default function ReaderApp() {
           aiJobCount={aiJobCount}
           aiScope={aiPackScope}
           onAiScopeChange={setAiPackScope}
+          autoVocabDirect={autoVocabDirect}
+          onAutoVocabDirectChange={setAutoVocabDirect}
           onExportAiJobs={exportAiJobs}
           dictReady={dictReady}
           onPickFromDict={pickFromDict}
@@ -2316,6 +2355,18 @@ export default function ReaderApp() {
           onConfuseFromDict={confuseFromDict}
           aiFileRef={aiFileRef}
           onAiFile={onAiFile}
+          localConfigured={aiLocalConfigured}
+          localRunning={aiLocalRunning}
+          localDone={aiLocalDone}
+          localTotal={aiLocalTotal}
+          localRound={aiLocalRound}
+          localPhase={aiLocalPhase}
+          localError={aiLocalError}
+          onRunLocal={() => void runAiLocal()}
+          checklist={aiChecklist}
+          checklistDone={aiChecklistDone}
+          checklistTotal={aiChecklistTotal}
+          nextHint={aiNextHint}
           aiWebBatchSize={aiWebBatchSize}
           onAiWebBatchSizeChange={setAiWebBatchSize}
           onCopyWebPrompt={() => void copyAiWebPrompt()}

@@ -2,6 +2,7 @@ import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readF
 import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 import { handleTts } from '../tools/tts-core.mjs'
+import { handleAiApi } from '../tools/ai-core.mjs'
 
 const DATA_FILES = new Set([
   'articles.json',
@@ -71,6 +72,12 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
         uptime: (Date.now() - startedAt) / 1000,
         time: new Date().toISOString(),
       })
+      return
+    }
+
+    // AI 一键跑批：/api/ai/status · /api/ai/run（key 只在服务端读取，绝不回传浏览器）
+    if (pathname.startsWith('/api/ai/')) {
+      handleAiApi(req, res, { root: join(distDir, '..') })
       return
     }
 

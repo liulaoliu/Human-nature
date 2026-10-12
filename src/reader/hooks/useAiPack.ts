@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
   AI_TASK_LABEL,
   buildAiJobs,
@@ -36,6 +36,13 @@ export interface UseAiPackParams {
  *  - 网页版（DeepSeek 等）：复制一条「工作包提示词」去网页贴 → 整段回复贴回 → 应用；
  *    网页端可能截断/漏答，所以按「待处理」分批复制、跟踪进度（完成/缺项），并支持刷新。
  */
+/** 一批任务包含的任务类型（去重，用于「第 N 轮 · 查词/补齐」这种提示）。 */
+function phaseLabelOf(jobs: AiJob[]): string {
+  const seen: AiJobTask[] = []
+  for (const j of jobs) if (!seen.includes(j.task)) seen.push(j.task)
+  return seen.map((t) => AI_TASK_LABEL[t] ?? t).join('、')
+}
+
 export function useAiPack({ jobsInput, applyTaskResult, download, flash, onReport }: UseAiPackParams) {
   const packRef = useRef<string>('')
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -48,6 +55,27 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const [autoVocabDone, setAutoVocabDone] = useLocalStorageState<string[]>('reader:autoVocabDone', [])
   /** agent 路径回执里缺的词（用于「复制未返回的」重试）。 */
   const [missingIds, setMissingIds] = useState<string[]>([])
+
+  /** 「一键跑批」：服务端是否已配置 key / 是否在跑 / 进度 / 错误。 */
+  const [localConfigured, setLocalConfigured] = useState<boolean | null>(null)
+  const [localRunning, setLocalRunning] = useState(false)
+  const [localDone, setLocalDone] = useState(0)
+  const [localTotal, setLocalTotal] = useState(0)
+  const [localRound, setLocalRound] = useState(0)
+  const [localPhase, setLocalPhase] = useState('')
+  const [localError, setLocalError] = useState('')
+
+  /** 问一次服务端：key 配没配（接口只回布尔，不回 key）。 */
+  useEffect(() => {
+    let alive = true
+    fetch('/api/ai/status')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => alive && setLocalConfigured(!!(d && d.configured)))
+      .catch(() => alive && setLocalConfigured(false))
+    return () => {
+      alive = false
+    }
+  }, [])
 
   /** 有效输入：注入本篇的「自动标词已完成」标记。 */
   const jobsInputEff = useMemo<AiJobsInput>(
@@ -83,6 +111,36 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     return order.map((t) => map.get(t)!)
   }, [round, doneSet])
 
+  /**
+   * 工作待办检查：把「AI 任务进度」和「需要人工跟进的步骤」合成一张清单。
+   * 关键是把「自动标词 → 待选 → 加入生词本 → 补查释义」这个断层显式列出来，
+   * 免得跑完批处理以为完事、结果生词本还是空的。
+   */
+  const checklist = useMemo(() => {
+    const items: { key: string; label: string; done: number; total: number; manual?: boolean }[] = []
+    for (const g of webBreakdown) {
+      items.push({ key: g.task, label: g.label, done: g.done, total: g.total })
+    }
+    if (jobsInput.batch.length) {
+      items.push({ key: 'commitBatch', label: `待选入库（${jobsInput.batch.length} 词）`, done: 0, total: 1, manual: true })
+    }
+    return items
+  }, [webBreakdown, jobsInput.batch])
+
+  const checklistDone = useMemo(() => checklist.reduce((n, it) => n + it.done, 0), [checklist])
+  const checklistTotal = useMemo(() => checklist.reduce((n, it) => n + it.total, 0), [checklist])
+
+  /** 下一步该干嘛：一条提醒，按优先级挑。 */
+  const nextHint = useMemo(() => {
+    if (jobsInput.batch.length) {
+      return `待选有 ${jobsInput.batch.length} 个词还没进生词本：先点「加入生词本」，再跑一次批处理补齐音标/释义。`
+    }
+    if (localRunning) return `跑批中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
+    if (round.length && pending.length === 0) return '本篇待办已全部完成 🎉'
+    if (pending.length) return `还有 ${pending.length} 项待办，可点「⚡ 一键跑批」。`
+    return ''
+  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, pending.length])
+
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
     (results: AiResultEntry[], jobs: AiJob[]) => {
@@ -116,6 +174,16 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     },
     [applyTaskResult, jobsInput.articleId, setAutoVocabDone],
   )
+
+  /** 给「一键跑批」串联多轮用：始终读到最新的输入 / 最新的应用逻辑（避免闭包读到旧值）。 */
+  const jobsInputRef = useRef(jobsInputEff)
+  useEffect(() => {
+    jobsInputRef.current = jobsInputEff
+  }, [jobsInputEff])
+  const applyResultsRef = useRef(applyResults)
+  useEffect(() => {
+    applyResultsRef.current = applyResults
+  }, [applyResults])
 
   // ---------- 本机 agent 路径 ----------
 
@@ -255,6 +323,115 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   const doneCount = round.length - pending.length
 
+  // ---------- 一键跑批（服务端直连，自动串联多轮） ----------
+
+  /** 把一个批次发给服务端跑，轮询进度；onDone(本批已完成数) 用于进度显示。 */
+  const runBatchOnServer = useCallback(
+    async (jobs: AiJob[], onDone: (done: number) => void): Promise<AiResultEntry[]> => {
+      const res = await fetch('/api/ai/run', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jobs: jobs.map((j) => ({ id: j.id, task: j.task, prompt: j.prompt })) }),
+      })
+      if (!res.ok) {
+        const info = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+        throw new Error(
+          info.error === 'no-key'
+            ? '服务端未配置 key：把 key 填进 config.local.json 的 ai.apiKey'
+            : '启动失败：' + (info.message || res.status),
+        )
+      }
+      const { runId } = (await res.json()) as { runId: string }
+      for (;;) {
+        await new Promise((r) => setTimeout(r, 1500))
+        let p: { state?: string; done?: number; results?: AiResultEntry[]; error?: string } | null = null
+        try {
+          p = await (await fetch('/api/ai/run?id=' + encodeURIComponent(runId))).json()
+        } catch {
+          continue
+        }
+        if (!p) continue
+        onDone(p.done ?? 0)
+        if (p.state === 'done') return p.results ?? []
+        if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
+      }
+    },
+    [],
+  )
+
+  /** 等 React 把应用后的新数据渲染出来（输入对象换了新引用即视为已就绪）。 */
+  const settle = useCallback(async (prev: AiJobsInput) => {
+    for (let i = 0; i < 60; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      if (jobsInputRef.current !== prev) return
+    }
+  }, [])
+
+  /** 最多串联几轮，防止意外死循环。 */
+  const MAX_CHAIN_ROUNDS = 5
+
+  /**
+   * 一键跑批：**自动串联多轮**直到没有新待办。
+   * 典型：第 1 轮「自动标词」把词写进生词本 → 数据一变就冒出这些新词的「查词」待办 →
+   * 自动继续第 2 轮补齐音标/释义。点一次全好。
+   */
+  const runLocal = useCallback(async () => {
+    if (localRunning) return
+    const first = pending.length ? pending : round
+    if (!first.length) {
+      flash('没有待办（生词本已齐，也没有缺译文/语言点/听力题）')
+      return
+    }
+    // 全库范围要谨慎：词库可能有上千词，一次全跑又慢又费 token，先让人确认
+    if (jobsInput.scope === 'all' && first.length > 20) {
+      const ok = window.confirm(
+        `范围＝全库：本次将处理 ${first.length} 项待办（整个词库，可能上千词）。\n\n` +
+          `这会比较慢、也比较费 token。确定继续吗？\n` +
+          `（只想处理本篇的话，先取消，把「范围」切回「本篇」。）`,
+      )
+      if (!ok) return
+    }
+    setLocalError('')
+    setLocalRunning(true)
+    setLocalDone(0)
+    setLocalTotal(0)
+
+    const attempted = new Set<string>()
+    let planned = 0
+
+    try {
+      for (let r = 0; r < MAX_CHAIN_ROUNDS; r++) {
+        const input = jobsInputRef.current
+        const all = buildAiJobs(input)
+        const todo = all.filter((j) => !attempted.has(j.id))
+        if (!todo.length) break
+        for (const j of todo) attempted.add(j.id)
+        planned += todo.length
+        setLocalRound(r + 1)
+        setLocalPhase(phaseLabelOf(todo))
+        setLocalDone(0)
+        setLocalTotal(todo.length)
+
+        const results = await runBatchOnServer(todo, (d) => setLocalDone(d))
+
+        const { okCount, failCount, lines, appliedIds } = applyResultsRef.current(results, all)
+        setDoneIds((prev) => [...new Set([...prev, ...appliedIds])])
+        onReport([`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)])
+        // 本轮一条都没成，就别再等数据变化了
+        if (!results.length) break
+        // 等数据落地、下一轮待办浮现
+        await settle(input)
+      }
+      flash(`一键跑批完成（共 ${planned} 项）`)
+    } catch (e) {
+      const msg = String((e as Error)?.message || e)
+      setLocalError(msg)
+      flash(msg)
+    } finally {
+      setLocalRunning(false)
+    }
+  }, [localRunning, pending, round, runBatchOnServer, settle, setDoneIds, onReport, flash, jobsInput.scope])
+
   return {
     // agent 路径
     jobCount,
@@ -276,5 +453,19 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     /** 「还要做」的前几项标签（给 UI 提示用）。 */
     webPendingLabels: pending.slice(0, 6).map((j) => j.label),
     agentMissingCount: missingIds.length,
+    // 一键跑批（服务端直连）
+    localConfigured,
+    localRunning,
+    localDone,
+    localTotal,
+    localRound,
+    localPhase,
+    localError,
+    runLocal,
+    // 待办检查 / 进度提醒
+    checklist,
+    checklistDone,
+    checklistTotal,
+    nextHint,
   }
 }

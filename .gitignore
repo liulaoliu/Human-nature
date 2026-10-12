@@ -24,6 +24,13 @@ data/
 
 # AI 工作包 / 结果（本地约定目录，不进仓库）
 new/
+
+# 本机私密配置：放 API key 的地方，绝不进仓库！
+# （config.json 是被跟踪的，别把 key 写进去）
+config.local.json
+.env
+.env.*
+!.env.example
 public/ecdict.tsv
 public/ecdict-forms.tsv
 public/ecdict-near.tsv

@@ -40,6 +40,10 @@ export interface UseApplyTaskResultParams {
   persist: (library: VocabLibrary) => void
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
+  /** 自动标词直入：true = 直接写进生词本（跳过「待选」）。 */
+  autoVocabDirect: boolean
+  /** 把词条直接加进生词本（按原形去重）。 */
+  commitBatchItems: (items: BatchItemLike[]) => void
   articleTitle: string
   articleKey: string | null
   articleIdentity: string
@@ -74,6 +78,8 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     persist,
     mergeBatch,
     batchItemsFromWords,
+    autoVocabDirect,
+    commitBatchItems,
     articleTitle,
     articleKey,
     articleIdentity,
@@ -118,7 +124,20 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         }
         if (!words.length)
           return { report: [`词典筛完后没有超纲词（已滤掉 ${dropped} 个非超纲）`], missing: null, ok: true }
-        mergeBatch(batchItemsFromWords(words))
+        const items = batchItemsFromWords(words)
+        if (autoVocabDirect) {
+          // 直入模式：跳过「待选」，直接进生词本（状态未查），下次跑批自动补音标/释义
+          commitBatchItems(items)
+          return {
+            report: [
+              `已直接加入生词本 ${words.length} 个词${dropped ? `（词典筛掉 ${dropped} 个非超纲）` : ''}`,
+              '下次跑批会补齐它们的音标/释义',
+            ],
+            missing: null,
+            ok: true,
+          }
+        }
+        mergeBatch(items)
         return {
           report: [`已加入待选 ${words.length} 个词${dropped ? `（词典筛掉 ${dropped} 个非超纲）` : ''}，可增删后再查词`],
           missing: null,
@@ -356,6 +375,8 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       persist,
       mergeBatch,
       batchItemsFromWords,
+      autoVocabDirect,
+      commitBatchItems,
       articleTitle,
       articleKey,
       articleIdentity,

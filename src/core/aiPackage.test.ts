@@ -244,6 +244,31 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs.find((j) => j.task === 'auto_vocab')).toBeUndefined()
   })
 
+  it('串联前提：自动标词把词入库（缺音标/释义）后，下一轮会生成这些词的查词待办', () => {
+    // 第 1 轮：空词库 + 有句子 → 有自动标词，没有查词
+    const round1 = buildAiJobs(emptyInput({ scope: 'article', sentences: [mkSentence({ id: 's1' })] }))
+    expect(round1.find((j) => j.task === 'auto_vocab')).toBeTruthy()
+    expect(round1.find((j) => j.task === 'lookup')).toBeUndefined()
+
+    // 模拟「自动标词」应用：词进生词本（带本篇来源，但没音标/释义）
+    const added = ['ubiquitous', 'novice'].map((w) =>
+      mkItem({
+        id: w,
+        word: w,
+        lemma: w,
+        phonetic: null,
+        meaning: null,
+        source: { articleId: 'art-1', fileName: 'art-1', sentenceId: 's1', sentenceText: 'Hello.' },
+      }),
+    )
+    const round2 = buildAiJobs(
+      emptyInput({ scope: 'article', articleWords: added, autoVocabDone: true, sentences: [mkSentence({ id: 's1' })] }),
+    )
+    const lookup = round2.find((j) => j.task === 'lookup')
+    expect(lookup).toBeTruthy()
+    expect(lookup?.askedWords).toEqual(expect.arrayContaining(['ubiquitous', 'novice']))
+  })
+
   it('同一逻辑任务重建后 id 稳定（便于进度持久化）', () => {
     const input = emptyInput({ items: [mkItem({ word: 'w1', meaning: null })] })
     const a = buildAiJobs(input).map((j) => j.id)

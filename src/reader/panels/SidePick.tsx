@@ -43,6 +43,9 @@ export interface SidePickProps {
   aiJobCount: number
   aiScope: 'article' | 'all'
   onAiScopeChange: (scope: 'article' | 'all') => void
+  /** 自动标词是否直接进生词本（跳过待选）。 */
+  autoVocabDirect: boolean
+  onAutoVocabDirectChange: (v: boolean) => void
   onExportAiJobs: () => void
   /** 离线词典（ECDICT）。 */
   dictReady: boolean
@@ -52,6 +55,22 @@ export interface SidePickProps {
   onConfuseFromDict: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
+
+  /** 一键跑批（服务端直连；key 在服务端，不经过网页/命令行）。 */
+  localConfigured: boolean | null
+  localRunning: boolean
+  localDone: number
+  localTotal: number
+  localRound: number
+  localPhase: string
+  localError: string
+  onRunLocal: () => void
+
+  /** 待办检查 / 进度提醒。 */
+  checklist: { key: string; label: string; done: number; total: number; manual?: boolean }[]
+  checklistDone: number
+  checklistTotal: number
+  nextHint: string
 
   /** AI 工作包（网页版 / DeepSeek 路径）。 */
   aiWebBatchSize: number
@@ -107,6 +126,8 @@ export default function SidePick({
   aiJobCount,
   aiScope,
   onAiScopeChange,
+  autoVocabDirect,
+  onAutoVocabDirectChange,
   onExportAiJobs,
   dictReady,
   onPickFromDict,
@@ -115,6 +136,18 @@ export default function SidePick({
   onConfuseFromDict,
   aiFileRef,
   onAiFile,
+  localConfigured,
+  localRunning,
+  localDone,
+  localTotal,
+  localRound,
+  localPhase,
+  localError,
+  onRunLocal,
+  checklist,
+  checklistDone,
+  checklistTotal,
+  nextHint,
   aiWebBatchSize,
   onAiWebBatchSizeChange,
   onCopyWebPrompt,
@@ -252,6 +285,35 @@ export default function SidePick({
         <div className="muted">
           ⚡ 一键打包：导出待办文件 → 整包交给 AI（网页版也行，喂给本机 agent 更快）→ 把结果 JSON 导回，一次应用全部，不用一条条复制粘贴。
         </div>
+        {checklist.length > 0 && (
+          <div className="ai-check">
+            <div className="muted">
+              📋 待办检查 · 进度 <b>{checklistDone}</b>/{checklistTotal}
+              {checklistTotal > 0 && checklistDone >= checklistTotal ? ' 🎉' : ''}
+            </div>
+            <div className="ai-check-list">
+              {checklist.map((it) => {
+                const ok = it.total > 0 && it.done >= it.total
+                return (
+                  <div
+                    key={it.key}
+                    className={'ai-check-row' + (ok ? ' done' : '') + (it.manual ? ' manual' : '')}
+                  >
+                    <span className="ai-check-name">
+                      {it.manual ? '👤 ' : ''}
+                      {it.label}
+                    </span>
+                    <span className="muted">
+                      {it.done}/{it.total}
+                    </span>
+                    <span className="ai-check-mark">{ok ? '✔' : it.manual ? '待处理' : ''}</span>
+                  </div>
+                )
+              })}
+            </div>
+            {nextHint && <div className="muted ai-next">👉 {nextHint}</div>}
+          </div>
+        )}
         <div className="ai-scope">
           <span className="muted">范围</span>
           <button className={aiScope === 'article' ? 'primary' : ''} onClick={() => onAiScopeChange('article')} title="只处理这篇的生词 / 翻译 / 语言点">
@@ -261,6 +323,22 @@ export default function SidePick({
             全库
           </button>
         </div>
+        {aiScope === 'all' && (
+          <div className="ai-scope-warn">
+            ⚠️ 全库范围：会处理整个生词本（当前 {webPending} 项待办），不只是本篇——词库大时又慢又费 token。
+          </div>
+        )}
+        <label
+          className="ai-direct"
+          title="开启后：自动标词挑出的词直接写进生词本（跳过「待选」），下次跑批再自动补音标/释义"
+        >
+          <input
+            type="checkbox"
+            checked={autoVocabDirect}
+            onChange={(e) => onAutoVocabDirectChange(e.target.checked)}
+          />
+          自动标词直接进生词本（跳过待选）
+        </label>
         <button
           onClick={onExportAiJobs}
           disabled={!aiJobCount}
@@ -276,6 +354,23 @@ export default function SidePick({
           📥 导入 AI 结果
         </button>
         <input ref={aiFileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={onAiFile} />
+
+        <div className="ai-local">
+          <button
+            className="primary"
+            onClick={onRunLocal}
+            disabled={!webPending || localRunning || localConfigured === false}
+            title={
+              localConfigured === false
+                ? '服务端未配置 API key：把 key 填进 config.local.json（该文件已 gitignore）'
+                : '把待办直接发给本机服务端跑，跑完自动应用；会自动串联多轮（如：先选词进生词本，再自动补音标/释义），不用复制粘贴、不用命令行'
+            }
+          >
+            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webPending} 项）`}
+          </button>
+          {localConfigured === false && <span className="muted"> 未配置 key（config.local.json）</span>}
+          {localError && <span className="web-miss"> · {localError}</span>}
+        </div>
 
         <div className="ai-web">
           <div className="muted">

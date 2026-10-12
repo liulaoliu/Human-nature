@@ -7,9 +7,11 @@ import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
 import { fishStaticPlugin } from './tools/vite-fish-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
 import { ttsEndpointPlugin } from './tools/vite-tts-endpoint.mjs'
+// @ts-expect-error .mjs 没有类型声明
+import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
 
 export default defineConfig({
-  plugins: [react(), projectStatePlugin(), fishStaticPlugin(), ttsEndpointPlugin()],
+  plugins: [react(), projectStatePlugin(), fishStaticPlugin(), ttsEndpointPlugin(), aiEndpointPlugin()],
   base: './',
   build: {
     rollupOptions: {

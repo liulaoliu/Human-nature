@@ -419,6 +419,21 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   margin-bottom: 6px;
 }
 .ai-scope .muted { margin: 0 2px 0 0; }
+.ai-scope-warn {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #c0392b;
+  margin: 2px 0 8px;
+}
+.ai-direct {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  margin: 0 0 8px;
+  cursor: pointer;
+}
+.ai-direct input { margin: 0; }
 
 /* 网页版（DeepSeek）工作包 */
 .ai-web {
@@ -466,6 +481,44 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 }
 .web-flow-row.done { color: var(--green); }
 .web-flow-row .web-flow-mark { width: 1em; }
+
+/* 一键跑批 */
+.ai-local {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+/* 待办检查 / 进度提醒 */
+.ai-check {
+  margin: 6px 0 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12px;
+  background: rgba(127, 127, 127, 0.06);
+}
+.ai-check .muted { margin-bottom: 4px; }
+.ai-check-list { margin: 2px 0 4px; }
+.ai-check-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  line-height: 1.6;
+}
+.ai-check-row .ai-check-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ai-check-row.done { color: var(--green); }
+.ai-check-row.manual .ai-check-mark { color: #c0392b; font-weight: 600; }
+.ai-check-row .ai-check-mark { width: 3.4em; text-align: right; }
+.ai-check .ai-next { color: #c0392b; }
 
 /* 选词模式的待选词 */
 .chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 8px 0; }
