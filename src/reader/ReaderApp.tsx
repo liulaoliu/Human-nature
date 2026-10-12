@@ -446,6 +446,16 @@ export default function ReaderApp() {
     () => library.items.filter((it) => it.source?.fileName === articleIdentity),
     [library.items, articleIdentity],
   )
+  /** 生词本已有原形集合（速读里标记「已收录」）。 */
+  const knownLemmas = useMemo(() => new Set(library.items.map((it) => it.lemma)), [library.items])
+  /** 某一句来源的词条（含短语），给速读的「本句已在生词本」用。 */
+  const wordsInSentence = useCallback(
+    (sid: string) =>
+      library.items
+        .filter((it) => it.source?.fileName === articleIdentity && it.source.sentenceId === sid)
+        .map((it) => it.word),
+    [library.items, articleIdentity],
+  )
   /**
    * 本篇生词编号：按**手动标记顺序**（createdAt 升序），同一时刻批量加入的
    * （如「自动标词」一次入库）再按**正文出现顺序**兜底，所以自动标词自然就是文中顺序。
@@ -994,6 +1004,46 @@ export default function ReaderApp() {
       persist(lib)
     },
     [library, persist, articleTitle, articleKey, articleIdentity],
+  )
+
+  /** 速读里手动加生词/词组（可一次多个；针对自动标词漏掉的）。 */
+  const addItemsToVocab = useCallback(
+    (items: { word: string; sentenceId: string | null; sentenceText: string }[]) => {
+      const list = items.map((it) => ({ ...it, word: it.word.trim() })).filter((it) => it.word)
+      if (!list.length) return
+      let lib = library
+      let created = 0
+      for (const it of list) {
+        const r = markWord(lib, {
+          word: it.word,
+          articleId: articleTitle || articleKey || '手动粘贴',
+          fileName: articleIdentity,
+          sentenceId: it.sentenceId,
+          sentenceText: it.sentenceText,
+        })
+        lib = r.library
+        if (r.created) created++
+      }
+      persist(lib)
+      const names = list.map((it) => it.word).join('、')
+      flash(created ? `已加入 ${created} 个生词：${names}` : `已在生词本：${names}`)
+    },
+    [library, articleIdentity, articleTitle, articleKey, persist, flash],
+  )
+
+  /** 速读里把误加的词从生词本移出（两步确认在面板里做）。 */
+  const removeWordFromVocab = useCallback(
+    (word: string) => {
+      const lem = lemmaOf(word)
+      const item = library.items.find((it) => it.lemma === lem)
+      if (!item) {
+        flash(`不在生词本：${word}`)
+        return
+      }
+      persist(removeItem(library, item.id))
+      flash(`已移出生词本：${item.word}`)
+    },
+    [library, persist, flash],
   )
 
   /** 复制听力理解题出题提示词。 */
@@ -2109,6 +2159,10 @@ export default function ReaderApp() {
             onClose={() => setSpeedReadOpen(false)}
             onSpeak={speak}
             ttsState={ttsState}
+            onAddItems={addItemsToVocab}
+            isKnown={(w) => knownLemmas.has(lemmaOf(w))}
+            wordsInSentence={wordsInSentence}
+            onRemoveWord={removeWordFromVocab}
           />
         )}
 

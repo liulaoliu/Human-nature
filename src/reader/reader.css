@@ -1264,6 +1264,41 @@ button.danger {
 .speed-hidden { padding: 10px 0; color: var(--dim); font-style: italic; }
 .speed-answer-sentence { margin-top: 6px; font-weight: 400; }
 .speed-drill-title .muted { margin-left: 8px; font-weight: 400; }
+
+/* 速读 · 手动加生词（补自动标词漏掉的词 / 词组） */
+.speed-addword {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.speed-selbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
+.speed-basket { display: flex; flex-wrap: wrap; gap: 5px; max-height: 108px; overflow: auto; }
+.speed-basket-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+.speed-basket-chip .speed-x { color: var(--red); margin-left: 2px; }
+.speed-known { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; }
+.speed-known-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+.speed-known-chip.danger { background: var(--red); color: #fff; border-color: var(--red); }
+.speed-addword-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.speed-addword-input {
+  flex: 1 1 220px;
+  min-width: 160px;
+  padding: 6px 10px;
+}
+.speed-added { font-size: 12px; color: var(--green); }
+
+/* 速读 · 句子按词可点选 */
+.speed-sentence { user-select: none; }
+.speed-w { cursor: pointer; border-radius: 4px; padding: 0 1px; }
+.speed-w:hover { background: var(--accent-soft); }
+.speed-w.known { color: var(--dim); text-decoration: underline dotted; text-underline-offset: 3px; }
+.speed-w.sel { background: var(--accent); color: #fff; }
+
+/* 速读 · 前后翻句 */
+.speed-nav { display: inline-flex; align-items: center; gap: 4px; }
+.speed-nav button { padding: 0 8px; }
 .goal-bar > div { height: 100%; background: var(--accent); }
 
 /* 到期日历热力图 */
