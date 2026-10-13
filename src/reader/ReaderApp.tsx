@@ -139,6 +139,9 @@ export default function ReaderApp() {
   const [selSid, setSelSid] = useState<string | null>(null)
   const [selIndices, setSelIndices] = useState<number[]>([])
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
+  /** 词库的可变引用：跑批里多条任务挨个应用时用它串起来，避免相互覆盖（见 useApplyTaskResult）。 */
+  const libraryRef = useRef(library)
+  libraryRef.current = library
   const [pasted, setPasted] = useState('')
   /** 上次「复制提示词」请求的词（用于校验 AI 返回是否齐全） */
   const askedWordsRef = useRef<string[]>([])
@@ -603,6 +606,7 @@ export default function ReaderApp() {
   )
 
   const persist = useCallback((lib: VocabLibrary) => {
+    libraryRef.current = lib
     setLibrary(lib)
     repo.current?.save(lib).catch(() => {})
   }, [])
@@ -994,7 +998,7 @@ export default function ReaderApp() {
     (items: BatchItem[]) => {
       const valid = items.filter((it) => it.word.trim())
       if (!valid.length) return
-      let lib = library
+      let lib = libraryRef.current
       for (const it of valid) {
         lib = markWord(lib, {
           word: it.word,
@@ -1006,7 +1010,7 @@ export default function ReaderApp() {
       }
       persist(lib)
     },
-    [library, persist, articleTitle, articleKey, articleIdentity],
+    [persist, articleTitle, articleKey, articleIdentity],
   )
 
   /** 速读里手动加生词/词组（可一次多个；针对自动标词漏掉的）。 */
@@ -1583,6 +1587,7 @@ export default function ReaderApp() {
   /** 应用一份 AI 结果（按任务分派）；逻辑在 hooks/useApplyTaskResult。 */
   const applyTaskResult = useApplyTaskResult({
     library,
+    libraryRef,
     sentence,
     persist,
     mergeBatch,

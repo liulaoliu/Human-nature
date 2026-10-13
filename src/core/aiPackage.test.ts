@@ -214,6 +214,11 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs.map((j) => j.task).sort()).toEqual(['lemma', 'pos'])
   })
 
+  it('-ing/-ed 已辨析过（note 含「辨析」）就不再排', () => {
+    const items = [mkItem({ word: 'ping', lemma: 'ping', note: '[辨析] ping — v.', examples: [{ text: 'x' }] })]
+    expect(buildAiJobs(emptyInput({ items })).find((j) => j.task === 'pos')).toBeUndefined()
+  })
+
   it('scope=article 只看本篇，scope=all 看全库', () => {
     const lib = [mkItem({ word: 'libword', lemma: 'libword', meaning: null })]
     const art = [mkItem({ word: 'artword', lemma: 'artword', meaning: null })]

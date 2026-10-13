@@ -246,7 +246,7 @@ export default function SidePick({
               {t.label}
             </button>
           ))}
-          <button onClick={onOpenLang} disabled={!canMark} title="手动给这句加语言点（结构 / 语法 / 习语 / 词组 / 用法）">
+          <button onClick={onOpenLang} disabled={!target} title="手动给这句加语言点（结构 / 语法 / 习语 / 词组 / 用法）">
             ＋ 语言点
           </button>
         </div>

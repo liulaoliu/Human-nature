@@ -70,7 +70,7 @@ export function lemmaOf(raw: string): string {
 
   if (/(s|x|z|ch|sh)es$/.test(s)) s = s.slice(0, -2)
   else if (/ies$/.test(s) && s.length > 4) s = s.slice(0, -3) + 'y'
-  else if (/[^s]s$/.test(s)) s = s.slice(0, -1)
+  else if (/[^s]s$/.test(s) && !/(us|ss|is|os)$/.test(s)) s = s.slice(0, -1)
 
   if (/ing$/.test(s) && s.length > 4) {
     let base = s.slice(0, -3)

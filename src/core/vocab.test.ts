@@ -121,6 +121,12 @@ describe('lemmaOf', () => {
   it('所有格', () => {
     expect(lemmaOf("Mississippi's")).toBe('mississippi')
   })
+  it('以 us/ss/is/os 结尾的词不误删 s（census/status/analysis）', () => {
+    expect(lemmaOf('census')).toBe('census')
+    expect(lemmaOf('status')).toBe('status')
+    expect(lemmaOf('analysis')).toBe('analysis')
+    expect(lemmaOf('boss')).toBe('boss')
+  })
   it('空词返回空串', () => {
     expect(lemmaOf('   ')).toBe('')
   })

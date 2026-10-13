@@ -139,6 +139,12 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     return words
   }, [round])
 
+  /** 待办涉及的任务类型（用于提示是「查词/补齐」还是「用法示例」等）。 */
+  const todoTasks = useMemo(
+    () => [...new Set(round.map((j) => AI_TASK_LABEL[j.task] ?? j.task))],
+    [round],
+  )
+
   /**
    * 下一步该干嘛。判断「完成/还有几项」**以数据上真正还缺的 `round` 为准**，
    * 而不是「应用过」的 doneSet（pending）——否则某任务应用成功但没补全时，
@@ -153,10 +159,10 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       const w = todoWords.length
         ? `（${todoWords.slice(0, 6).join('、')}${todoWords.length > 6 ? '…' : ''}）`
         : ''
-      return `还有 ${round.length} 项待办${w}，可点「⚡ 一键跑批」。`
+      return `还有 ${round.length} 项待办【${todoTasks.join('、')}】${w}，可点「⚡ 一键跑批」。`
     }
     return '本篇待办已全部完成 🎉'
-  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, todoWords])
+  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, todoWords, todoTasks])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(

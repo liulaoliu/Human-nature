@@ -351,7 +351,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
   }
   // -ing/-ed → 语法辨析
   const posCandidates = base
-    .filter((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)
+    .filter((it) => (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma) && !it.note.includes('辨析'))
     .slice(0, 60)
   if (posCandidates.length) {
     push(
@@ -509,7 +509,7 @@ export function countAiJobs(input: AiJobsInput): number {
   if (base.some((it) => it.meaning && it.examples.length === 0)) n++
   if (!input.autoVocabDone && input.sentences.length) n++
   if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
-  if (base.some((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)) n++
+  if (base.some((it) => (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma) && !it.note.includes('辨析'))) n++
   n += chunk(
     input.sentences.filter((s) => !s.translation),
     SENTENCE_CHUNK,

@@ -1,4 +1,4 @@
-import { useCallback, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import {
   applyToSentence,
   parseAnalysis,
@@ -38,6 +38,8 @@ export interface ApplyOutcome {
 
 export interface UseApplyTaskResultParams {
   library: VocabLibrary
+  /** 词库的可变引用：一次跑批里多个任务挨个应用时用它串起来，避免相互覆盖。 */
+  libraryRef: MutableRefObject<VocabLibrary>
   sentence: Sentence | null
   persist: (library: VocabLibrary) => void
   mergeBatch: (items: BatchItemLike[]) => void
@@ -76,6 +78,7 @@ function missingWords(requested: string[], returned: string[]): string[] {
 export function useApplyTaskResult(params: UseApplyTaskResultParams) {
   const {
     library,
+    libraryRef,
     sentence,
     persist,
     mergeBatch,
@@ -102,6 +105,14 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     (task: AiTaskKey | null, raw: string, askedWords: string[], askedIds: string[]): ApplyOutcome => {
       const text = raw.trim()
       if (!text) return { report: [], missing: null, ok: false }
+
+      // 本次应用基于「当前最新词库」；每写一次就更新 ref，供同一批里的下一条接着用，
+      // 避免多条任务各拿同一份旧库互相覆盖（会导致某些词永远补不上、反复待办）。
+      const lib = libraryRef.current
+      const commit = (next: VocabLibrary) => {
+        libraryRef.current = next
+        persist(next)
+      }
 
       // 自动标词：AI 返回的是一串单词 → 用离线词典归一到原形、按级别过滤 → 进「待选」
       if (task === 'auto_vocab') {
@@ -152,7 +163,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const parsed = parseConfusables(text)
         if (!parsed.length)
           return { report: ['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'], missing: null, ok: false }
-        const libLemmas = new Set(library.items.map((it) => it.lemma))
+        const libLemmas = new Set(lib.items.map((it) => it.lemma))
         const valid = parsed
           .map((r) => ({
             ...r,
@@ -167,7 +178,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const missing = missingWords(askedWords, valid.map((r) => r.word))
 
         const report: string[] = []
-        if (applied.length) persist(applyConfusables(library, applied))
+        if (applied.length) commit(applyConfusables(lib, applied))
         report.push(`成功写入 ${applied.length} 个词的混淆项`)
         if (missing.length) {
           report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
@@ -181,7 +192,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       if (task === 'example') {
         const rows = parseExampleTable(text)
         if (!rows.length) return { report: ['没解析出例句（格式：单词 | 英 | 中 | 英 | 中）'], missing: null, ok: false }
-        persist(applyExamples(library, rows))
+        commit(applyExamples(lib, rows))
         return { report: [`已加入 ${rows.length} 个词的用法示例`], missing: null, ok: true }
       }
 
@@ -189,9 +200,9 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       if (task === 'lemma') {
         const pairs = parseLemmaTable(text)
         if (!pairs.length) return { report: ['没解析出原形（格式：原词形 | 原形）'], missing: null, ok: false }
-        const before = library.items.length
-        const next = dedupeLibrary(applyLemmaMap(library, pairs))
-        persist(next)
+        const before = lib.items.length
+        const next = dedupeLibrary(applyLemmaMap(lib, pairs))
+        commit(next)
         const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
         const merged = before - next.items.length
         const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
@@ -208,9 +219,9 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const rows = parsePosTable(text)
         if (!rows.length)
           return { report: ['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'], missing: null, ok: false }
-        const before = library.items.length
-        const next = dedupeLibrary(applyPosAnalysis(library, rows))
-        persist(next)
+        const before = lib.items.length
+        const next = dedupeLibrary(applyPosAnalysis(lib, rows))
+        commit(next)
         const merged = before - next.items.length
         const surfaces = rows.map((r) => normalizeWord(r.surface)).filter(Boolean)
         const missing = askedWords.filter((w) => {
@@ -288,7 +299,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       const result = parseAnalysis(text)
       const report: string[] = []
       let missing: { task: 'lookup'; words: string[] } | null = null
-      let next = library
+      let next = lib
       if (result.words?.length) {
         // 用离线词典校验/补全：归一到原形，并补齐缺失的音标/词性/中英释义（英文释义优先 M-W）
         const dict = dictionary()
@@ -349,7 +360,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         return { report: ['没解析出可用内容（查词表格 / 逐句翻译 / JSON）；检查格式后重试'], missing: null, ok: false }
       }
 
-      persist(next)
+      commit(next)
       if (result.sentences?.length || fellBack) setPendingSave(true)
 
       if (result.words?.length) {
@@ -381,6 +392,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     },
     [
       library,
+      libraryRef,
       sentence,
       persist,
       mergeBatch,
