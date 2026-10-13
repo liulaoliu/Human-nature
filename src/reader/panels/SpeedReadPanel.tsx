@@ -270,13 +270,14 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
           title={
             pickMode
               ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
-              : '选词模式未开（勾上顶栏「选词模式」才能点选）；右键可直接加入生词本'
+              : '选词模式未开（勾上顶栏「选词模式」才能点选 / 右键入库）'
           }
           onClick={(e) => {
             e.stopPropagation()
             if (pickMode) toggleSel(w.text)
           }}
           onContextMenu={(e) => {
+            if (!pickMode) return
             e.preventDefault()
             e.stopPropagation()
             addDirect(w.text)
@@ -672,7 +673,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             {phase !== 'drill' && (
               <div className="speed-addword">
                 <div className="speed-selbar">
-                  <span className="muted">勾顶栏「选词模式」后点词选中 → 点「加入清单」或右键入库；右上角清单可删除误加。</span>
+                  <span className="muted">勾顶栏「选词模式」后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
                   {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
                   {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
                 </div>
