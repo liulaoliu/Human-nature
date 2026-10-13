@@ -459,6 +459,11 @@ export default function ReaderApp() {
   )
   /** 生词本已有原形集合（速读里标记「已收录」）。 */
   const knownLemmas = useMemo(() => new Set(library.items.map((it) => it.lemma)), [library.items])
+  /** 本篇已有语言点的句子数（侧栏显示用）。 */
+  const languageSentCount = useMemo(
+    () => (doc?.sentences ?? []).filter((s) => hasSentenceLanguage(s)).length,
+    [doc],
+  )
   /** 某一句来源的词条（含短语），给速读的「本句已在生词本」用。 */
   const wordsInSentence = useCallback(
     (sid: string) =>
@@ -1298,7 +1303,9 @@ export default function ReaderApp() {
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
       if (studyQueue || quizQueue || quickQueue || dictQueue) return
+      if (speedReadOpen || listenOpen || langOpen) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -1309,7 +1316,7 @@ export default function ReaderApp() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue, quizQueue])
+  }, [studyQueue, quizQueue, speedReadOpen, listenOpen, langOpen])
 
   /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
   const visibleBatch = useMemo(
@@ -1624,7 +1631,11 @@ export default function ReaderApp() {
   const applyPaste = useCallback(() => {
     const raw = pasted.trim()
     if (!raw) return
-    const res = applyTaskResult(lastTask, raw, askedWordsRef.current, askedIdsRef.current)
+    // 语言点 JSON 若没先点过「语言点」按钮（lastTask≠language），会被当成翻译空转。
+    // 这里自动识别：含 structure/grammar/idioms/phrases/usage 且没有 translation → 按语言点应用。
+    const looksLikeLang = /"(structure|grammar|idioms|phrases|usage)"\s*:/.test(raw) && !/"translation"\s*:/.test(raw)
+    const task = lastTask === 'language' || looksLikeLang ? 'language' : lastTask
+    const res = applyTaskResult(task, raw, askedWordsRef.current, askedIdsRef.current)
     setPasteReport(res.report)
     setPasteMissing(res.missing)
     if (res.ok) {
@@ -2197,6 +2208,7 @@ export default function ReaderApp() {
             isKnown={(w) => knownLemmas.has(lemmaOf(w))}
             wordsInSentence={wordsInSentence}
             onRemoveWord={removeWordFromVocab}
+            vocabMode={vocabMode}
           />
         )}
 
@@ -2526,6 +2538,7 @@ export default function ReaderApp() {
           onLanguagePrompt={() => void copyLanguagePrompt()}
           showLanguage={showLanguage}
           onShowLanguageChange={setShowLanguage}
+          languageCount={languageSentCount}
           onOpenWriting={openWriting}
           onWrongPractice={() => {
             setQuizScope('lapses')

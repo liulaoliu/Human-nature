@@ -44,6 +44,20 @@ describe('parseLanguage', () => {
   it('非法 JSON → 空', () => {
     expect(parseLanguage('nope')).toEqual([])
   })
+  it('前后夹着说明文字也能抠出 JSON', () => {
+    const raw =
+      '好的，下面是分析结果：\n{"sentences":[{"id":"s001","grammar":"present tense"}]}\n希望有帮助！'
+    const rows = parseLanguage(raw)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].id).toBe('s001')
+  })
+  it('模型偶发非法反斜杠转义（\\( \\) \\[ \\]）也能修好', () => {
+    const raw =
+      '{"sentences":[{"id":"s001","structure":"主句","phrases":\\("a b", "c d"\\),"idioms":\\("x"\\),"usage":\\("u"\\)}]}'
+    const rows = parseLanguage(raw)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].phrases).toEqual(['a b', 'c d'])
+  })
 })
 
 describe('applyLanguage', () => {

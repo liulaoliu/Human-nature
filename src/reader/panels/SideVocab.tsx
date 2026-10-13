@@ -42,6 +42,8 @@ export interface SideVocabProps {
   onLanguagePrompt: () => void
   showLanguage: boolean
   onShowLanguageChange: (on: boolean) => void
+  /** 本篇已有语言点的句子数（诊断/提示用）。 */
+  languageCount: number
   onOpenWriting: () => void
   onWrongPractice: () => void
 
@@ -102,6 +104,7 @@ export default function SideVocab({
   onLanguagePrompt,
   showLanguage,
   onShowLanguageChange,
+  languageCount,
   onOpenWriting,
   onWrongPractice,
   onBrowseAll,
@@ -232,6 +235,8 @@ export default function SideVocab({
         <label className="check-inline" title="在正文里显示语言点（结构/语法/习语/词组/用法）">
           <input type="checkbox" checked={showLanguage} onChange={(e) => onShowLanguageChange(e.target.checked)} />
           显示语言点
+          {showLanguage ? '〔已开启〕' : '〔未开启 — 请勾选它〕'}
+          {languageCount > 0 ? `（本篇 ${languageCount} 句）` : '（本篇 0 句）'}
         </label>
         <button onClick={onOpenWriting} disabled={!hasDoc} title="仿写：从范句生成任务 + 评分标准 → 你写 → AI 严格批改">
           仿写

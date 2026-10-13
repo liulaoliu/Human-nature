@@ -11,14 +11,23 @@ export interface LanguageRow extends SentenceLanguage {
   id: string
 }
 
-/** 取该句所有语言点（兼容旧的单条 `language`；旧的按 AI 来源算）。 */
+/** 语言点里是否真有内容（空对象 `{}` 视为没有）。 */
+function hasLangContent(L: SentenceLanguage): boolean {
+  return !!(L.structure || L.grammar || L.idioms?.length || L.phrases?.length || L.usage?.length)
+}
+
+/** 取该句所有语言点（兼容旧的单条 `language`；旧的按 AI 来源算；空对象不计）。 */
 export function getSentenceLanguages(s: {
   language?: SentenceLanguage
   languages?: SentenceLanguage[]
 } | null | undefined): SentenceLanguage[] {
   if (!s) return []
-  if (s.languages?.length) return s.languages
-  return s.language ? [{ ...s.language, source: s.language.source ?? 'ai' }] : []
+  const list = s.languages?.length
+    ? s.languages
+    : s.language
+      ? [{ ...s.language, source: s.language.source ?? 'ai' }]
+      : []
+  return list.filter(hasLangContent)
 }
 
 /** 该句是否有语言点（AI 或手动）。 */
@@ -65,20 +74,47 @@ function stripFence(raw: string): string {
   return (m ? m[1] : raw).trim()
 }
 
-/** 解析并校验语言点；每条至少要有 structure/grammar/idioms/phrases/usage 之一。 */
-export function parseLanguage(raw: string): LanguageRow[] {
-  const text = stripFence(raw)
-  if (!text) return []
-  let obj: unknown
-  try {
-    obj = JSON.parse(text)
-  } catch {
-    return []
+/** 从一段文本里抠出第一个「配平的」JSON 对象（忽略前后废话/说明）。 */
+function extractJsonObject(text: string): string | null {
+  const start = text.indexOf('{')
+  if (start < 0) return null
+  let depth = 0
+  let inStr = false
+  let esc = false
+  for (let i = start; i < text.length; i++) {
+    const c = text[i]
+    if (inStr) {
+      if (esc) esc = false
+      else if (c === '\\') esc = true
+      else if (c === '"') inStr = false
+    } else if (c === '"') {
+      inStr = true
+    } else if (c === '{') {
+      depth++
+    } else if (c === '}') {
+      depth--
+      if (depth === 0) return text.slice(start, i + 1)
+    }
   }
-  const list = Array.isArray(obj)
-    ? obj
-    : obj && typeof obj === 'object' && Array.isArray((obj as { sentences?: unknown }).sentences)
-      ? (obj as { sentences: unknown[] }).sentences
+  return null
+}
+
+/** 修掉 JSON 里非法的反斜杠转义（模型偶发把 [ ] 写成 \( \) 或 \[ \]）。 */
+function sanitizeJson(s: string): string {
+  return s
+    .replace(/\\\(/g, '[')
+    .replace(/\\\)/g, ']')
+    .replace(/\\\[/g, '[')
+    .replace(/\\\]/g, ']')
+    .replace(/\\(?![\\"/bfnrtu])/g, '')
+}
+
+/** 从解析出的对象里抽出语言点行（每条至少要有 structure/grammar/idioms/phrases/usage 之一）。 */
+function rowsFrom(parsed: unknown): LanguageRow[] {
+  const list = Array.isArray(parsed)
+    ? parsed
+    : parsed && typeof parsed === 'object' && Array.isArray((parsed as { sentences?: unknown }).sentences)
+      ? (parsed as { sentences: unknown[] }).sentences
       : []
   const out: LanguageRow[] = []
   for (const item of list) {
@@ -95,6 +131,28 @@ export function parseLanguage(raw: string): LanguageRow[] {
     out.push({ id, structure, grammar, idioms, phrases, usage })
   }
   return out
+}
+
+/**
+ * 解析并校验语言点。宽容多种写法：代码围栏、前后夹说明、非法反斜杠转义。
+ * 每条至少要有 structure/grammar/idioms/phrases/usage 之一，否则丢弃。
+ */
+export function parseLanguage(raw: string): LanguageRow[] {
+  const text = stripFence(raw)
+  if (!text) return []
+  const balanced = extractJsonObject(text)
+  const candidates = [text, balanced, sanitizeJson(text), balanced ? sanitizeJson(balanced) : null].filter(
+    (c): c is string => !!c,
+  )
+  for (const c of candidates) {
+    try {
+      const rows = rowsFrom(JSON.parse(c))
+      if (rows.length) return rows
+    } catch {
+      // 试下一个
+    }
+  }
+  return []
 }
 
 /**

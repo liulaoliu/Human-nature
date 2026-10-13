@@ -120,6 +120,12 @@ export default function ReaderBody({
 }: ReaderBodyProps) {
   return (
     <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
+      {showLanguage && (
+        <div className="muted lang-summary">
+          语言点（结构 / 语法 / 习语 / 词组 / 用法）· 本篇{' '}
+          {sentences.filter((s) => getSentenceLanguages(s).length > 0).length} 句
+        </div>
+      )}
       {vocabMode && lastPicked && bubblePos && (
         <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
           {lastPicked.word}

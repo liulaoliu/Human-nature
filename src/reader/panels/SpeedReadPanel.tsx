@@ -31,6 +31,8 @@ export interface SpeedReadPanelProps {
   wordsInSentence: (sentenceId: string) => string[]
   /** 把误加的词从生词本移除（调用方自行做两步确认 UI）。 */
   onRemoveWord: (word: string) => void
+  /** 阅读页「选词模式」是否开启：开启时禁用正文选中/复制（避免和点词打架）。 */
+  vocabMode: boolean
 }
 
 const cursorKey = (docKey: string) => `reader:speedCursor:${docKey}`
@@ -65,7 +67,7 @@ function loadCollected(docKey: string): CollectedItem[] {
  * 逐句速读：一次一句 → 我先读 → 空格揭示释义/语言点；超时算「不太理解」→ 四选一拷打；
  * 理解后下一句。带配速条、目标 WPM、进度与总结。拷打时原文隐藏，只给挖空句与选项。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordsInSentence, onRemoveWord }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordsInSentence, onRemoveWord, vocabMode }: SpeedReadPanelProps) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
@@ -524,7 +526,12 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
 
               {/* 拷打时隐藏原文文字，但保留 div 占位，避免布局跳动 */}
               <div className="speed-sentence-slot">
-                <div className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}>{sentenceParts}</div>
+                <div
+                  className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
+                  style={{ userSelect: vocabMode ? 'none' : 'text' }}
+                >
+                  {sentenceParts}
+                </div>
                 {phase === 'drill' && (
                   <div className="speed-hidden-overlay">原文已隐藏 —— 只看挖空句，从选项里选</div>
                 )}
