@@ -54,6 +54,8 @@ export interface UseSpeakingOptions {
   selectedId: string | null
   /** Edge TTS 音色 id（改口音就是改它）。 */
   voice?: string
+  /** 从服务端 Edge 语音退回浏览器语音时通知（reason: server=服务端连不上；autoplay=自动播放被拦）。 */
+  onFallback?: (reason: 'server' | 'autoplay') => void
 }
 
 /**
@@ -67,7 +69,7 @@ export interface UseSpeakingOptions {
  *
  * `speak` 身份稳定（useCallback 空依赖链），调用方可在任意位置引用。
  */
-export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE }: UseSpeakingOptions) {
+export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFallback }: UseSpeakingOptions) {
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const utterRef = useRef<SpeechSynthesisUtterance | null>(null)
   const readAllRef = useRef(false)
@@ -79,6 +81,9 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE }: UseS
   /** 当前音色（改口音即时生效，且不改变 speak 身份）。 */
   const voiceRef = useRef(voice)
   voiceRef.current = voice
+  /** 回退通知（保持稳定，用 ref 读最新）。 */
+  const fallbackRef = useRef(onFallback)
+  fallbackRef.current = onFallback
   /** 已取回的逐词时间戳缓存（`voice\ntext` → timings）。 */
   const timingsCacheRef = useRef<Map<string, WordTiming[]>>(new Map())
   /** 当前播放的文本（异步 seek 用 ref，避免读到过期的 state）。 */
@@ -294,7 +299,9 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE }: UseS
       a.onerror = () => {
         if (token !== tokenRef.current) return
         // 服务端暂时不可用：降级一段时间后自动重试 Edge（不再永久退回浏览器语音）
+        const wasUp = canUseServer()
         serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
+        if (wasUp) fallbackRef.current?.('server')
         useBrowser()
       }
       // 逐词时间戳（服务端随音频一起生成）：有缓存直接用；没有才请求。sapi 无时间戳，跳过。
@@ -319,15 +326,20 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE }: UseS
             const name = err instanceof DOMException ? err.name : ''
             if (name === 'NotAllowedError') {
               // 自动播放被拦：本次退回浏览器语音，但服务端仍可用（下次照旧试 Edge）
+              fallbackRef.current?.('autoplay')
               useBrowser()
             } else {
+              const wasUp = canUseServer()
               serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
+              if (wasUp) fallbackRef.current?.('server')
               useBrowser()
             }
           })
         }
       } catch {
+        const wasUp = canUseServer()
         serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
+        if (wasUp) fallbackRef.current?.('server')
         useBrowser()
       }
     },

@@ -265,6 +265,13 @@ export default function ReaderApp() {
     doc,
     selectedId,
     voice: ttsVoice,
+    onFallback: (reason) => {
+      if (reason === 'server') {
+        flash('Edge 在线语音连不上，已临时改用浏览器语音；可在音色里选「离线 · 系统语音」')
+      } else {
+        flash('浏览器拦了自动播放，已改用浏览器语音（点一下页面再试）')
+      }
+    },
   })
 
   /** 预生成整篇朗读：先查缓存、只补缺的句子（增量），带进度、可取消。 */
