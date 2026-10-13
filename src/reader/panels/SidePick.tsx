@@ -30,6 +30,8 @@ export interface SidePickProps {
   onClearBatch: () => void
   onAddSelectionToBatch: () => void
   onMark: () => void
+  /** 手动加/改语言点。 */
+  onOpenLang: () => void
 
   /** 粘回与应用。 */
   pasted: string
@@ -46,6 +48,9 @@ export interface SidePickProps {
   /** 自动标词是否直接进生词本（跳过待选）。 */
   autoVocabDirect: boolean
   onAutoVocabDirectChange: (v: boolean) => void
+  /** 本篇是否已「自动标过词」（标过就不再进待办）+ 重跑。 */
+  autoVocabDoneHere: boolean
+  onRerunAutoVocab: () => void
   onExportAiJobs: () => void
   /** 离线词典（ECDICT）。 */
   dictReady: boolean
@@ -119,6 +124,7 @@ export default function SidePick({
   onClearBatch,
   onAddSelectionToBatch,
   onMark,
+  onOpenLang,
   pasted,
   onPastedChange,
   pasteReport,
@@ -130,6 +136,8 @@ export default function SidePick({
   onAiScopeChange,
   autoVocabDirect,
   onAutoVocabDirectChange,
+  autoVocabDoneHere,
+  onRerunAutoVocab,
   onExportAiJobs,
   dictReady,
   onPickFromDict,
@@ -238,6 +246,9 @@ export default function SidePick({
               {t.label}
             </button>
           ))}
+          <button onClick={onOpenLang} disabled={!canMark} title="手动给这句加语言点（结构 / 语法 / 习语 / 词组 / 用法）">
+            ＋ 语言点
+          </button>
         </div>
         <div className="muted">
           {lastTask ? `上一个任务：${lastTask}` : '点任务 → 复制提示词 → 去 chat.deepseek.com'}
@@ -360,6 +371,14 @@ export default function SidePick({
           />
           自动标词直接进生词本（跳过待选）
         </label>
+        {autoVocabDoneHere && (
+          <div className="ai-direct-done">
+            <span className="muted">本篇「自动标词」已做过（不再自动进待办）</span>
+            <button onClick={onRerunAutoVocab} title="清掉本篇「已标词」标记，让一键跑批重新标词">
+              🔄 重跑自动标词
+            </button>
+          </div>
+        )}
         <button
           onClick={onExportAiJobs}
           disabled={!aiJobCount}
@@ -380,14 +399,14 @@ export default function SidePick({
           <button
             className="primary"
             onClick={onRunLocal}
-            disabled={!webPending || localRunning || localConfigured === false}
+            disabled={!webTotal || localRunning || localConfigured === false}
             title={
               localConfigured === false
                 ? '服务端未配置 API key：把 key 填进 config.local.json（该文件已 gitignore）'
                 : '把待办直接发给本机服务端跑，跑完自动应用；会自动串联多轮（如：先选词进生词本，再自动补音标/释义），不用复制粘贴、不用命令行'
             }
           >
-            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webPending} 项）`}
+            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webTotal} 项）`}
           </button>
           {localConfigured === false && <span className="muted"> 未配置 key（config.local.json）</span>}
           {localError && <span className="web-miss"> · {localError}</span>}

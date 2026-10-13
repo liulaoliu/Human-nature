@@ -49,6 +49,7 @@ import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import SpeedReadPanel from './panels/SpeedReadPanel'
+import LanguageEditor from './panels/LanguageEditor'
 import WritingPanel from './panels/WritingPanel'
 import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
@@ -88,7 +89,7 @@ import {
   useLocalStorageState,
 } from './hooks/useLocalStorageState'
 import type { VocabRepoPort } from '../core/ports'
-import type { Paragraph, Sentence, VocabLibrary, VocabItem } from '../types/document'
+import type { Paragraph, Sentence, SentenceLanguage, VocabLibrary, VocabItem } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
 
@@ -151,7 +152,7 @@ export default function ReaderApp() {
     words: string[]
   } | null>(null)
   const [lastTask, setLastTask] = useState<
-    AnalysisTask | 'confusable' | 'lemma' | 'pos' | 'listening' | 'language' | 'imitation' | 'feedback' | null
+    AnalysisTask | 'confusable' | 'example' | 'lemma' | 'pos' | 'listening' | 'language' | 'imitation' | 'feedback' | null
   >(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
@@ -867,6 +868,8 @@ export default function ReaderApp() {
 
   /** 逐句速读。 */
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
+  /** 手动加/改语言点。 */
+  const [langOpen, setLangOpen] = useState(false)
   const openSpeedRead = useCallback(() => {
     if (!doc?.sentences.length) {
       flash('先打开一篇文章')
@@ -1440,6 +1443,19 @@ export default function ReaderApp() {
     return null
   }, [doc, selectedId, exact])
 
+  /** 手动保存语言点（写回该句的 language）。 */
+  const saveLanguage = useCallback(
+    (lang: SentenceLanguage) => {
+      if (!sentence) return
+      const sid = sentence.id
+      setDoc((d) => (d ? { ...d, sentences: d.sentences.map((s) => (s.id === sid ? { ...s, language: lang } : s)) } : d))
+      setPendingSave(true)
+      setLangOpen(false)
+      flash('已保存语言点')
+    },
+    [sentence, setDoc, setPendingSave, flash],
+  )
+
   /** 实际用于提示词/复制的文本：默认整句；有精确选区时用选区。 */
   const target = useExact && exact ? exact : sentence?.text || exact
 
@@ -1774,6 +1790,8 @@ export default function ReaderApp() {
     applyWeb: applyAiWeb,
     copyWebMissing: copyAiWebMissing,
     resetWebProgress: resetAiWebProgress,
+    autoVocabDoneHere: aiAutoVocabDoneHere,
+    rerunAutoVocab,
     webTotal: aiWebTotal,
     webDone: aiWebDone,
     webPending: aiWebPending,
@@ -2166,6 +2184,10 @@ export default function ReaderApp() {
           />
         )}
 
+        {langOpen && (
+          <LanguageEditor sentence={sentence} onSave={saveLanguage} onClose={() => setLangOpen(false)} />
+        )}
+
         {listenOpen && listenQuiz && (
           <ListeningPanel
             questions={listenQuestions}
@@ -2387,6 +2409,7 @@ export default function ReaderApp() {
           onClearBatch={() => setBatch([])}
           onAddSelectionToBatch={addSelectionToBatch}
           onMark={mark}
+          onOpenLang={() => setLangOpen(true)}
           pasted={pasted}
           onPastedChange={(v) => {
             setPasted(v)
@@ -2402,6 +2425,8 @@ export default function ReaderApp() {
           onAiScopeChange={setAiPackScope}
           autoVocabDirect={autoVocabDirect}
           onAutoVocabDirectChange={setAutoVocabDirect}
+          autoVocabDoneHere={aiAutoVocabDoneHere}
+          onRerunAutoVocab={rerunAutoVocab}
           onExportAiJobs={exportAiJobs}
           dictReady={dictReady}
           onPickFromDict={pickFromDict}

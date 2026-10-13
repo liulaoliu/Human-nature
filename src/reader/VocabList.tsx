@@ -1,6 +1,7 @@
 import { Fragment, useState } from 'react'
 import type { VocabItem } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
+import { displayMeaning, normalizePos } from '../core/vocab'
 
 /** 生词本里可改的字段（单词本身、音标、词性、释义、用法）。 */
 export interface VocabEditPatch {
@@ -231,19 +232,21 @@ export default function VocabList({
                 {it.word}{' '}
                 {it.phonetic && <span className="ph">{it.phonetic}</span>}
               </div>
-              {it.partOfSpeech && <div className="mu">{it.partOfSpeech}</div>}
-              {it.meaning && <div className="mu">{it.meaning}</div>}
+              {normalizePos(it.partOfSpeech) && <div className="mu">{normalizePos(it.partOfSpeech)}</div>}
+              {displayMeaning(it) && <div className="mu">{displayMeaning(it)}</div>}
               {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
               {it.note && <div className="note">{it.note}</div>}
               {it.confusables && it.confusables.length > 0 && (
                 <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
               )}
-              {it.examples.slice(0, 1).map((ex, i) => (
-                <div className="ex" key={i}>
-                  {ex.text}
-                  {ex.translation ? ` — ${ex.translation}` : ''}
-                </div>
-              ))}
+              {it.examples.slice(0, 2).map((ex, i) =>
+                ex.text && ex.text !== it.source?.sentenceText ? (
+                  <div className="ex" key={i}>
+                    {ex.text}
+                    {ex.translation ? ` — ${ex.translation}` : ''}
+                  </div>
+                ) : null,
+              )}
               <div className="muted">
                 状态：{it.status}
                 {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}

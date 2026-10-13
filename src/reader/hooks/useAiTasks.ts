@@ -17,6 +17,7 @@ import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 export type AiTaskKey =
   | AnalysisTask
   | 'confusable'
+  | 'example'
   | 'lemma'
   | 'pos'
   | 'listening'

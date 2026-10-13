@@ -1,14 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import {
   applyConfusables,
+  applyExamples,
   applyLemmaMap,
   applyPosAnalysis,
   applyWordAnalysis,
   buildLearnQueue,
   buildReviewQueue,
   buildStudyQueue,
+  cleanGloss,
   createLibrary,
   dedupeLibrary,
+  displayMeaning,
   dueItems,
   editItem,
   filterItems,
@@ -19,6 +22,7 @@ import {
   markPrinted,
   markWord,
   normalizeWord,
+  normalizePos,
   relemmaLibrary,
   removeByLemma,
   removeItem,
@@ -28,6 +32,42 @@ import {
   sortItems,
   unprintedItems,
 } from './vocab'
+
+describe('释义/词性清洗', () => {
+  it('cleanGloss 去掉行尾反斜杠与多余空白', () => {
+    expect(cleanGloss('n. 林学, 森林地\\')).toBe('n. 林学, 森林地')
+    expect(cleanGloss('  a word formed by something \\ ')).toBe('a word formed by something')
+  })
+  it('normalizePos 全称 → 缩写', () => {
+    expect(normalizePos('noun')).toBe('n.')
+    expect(normalizePos('verb')).toBe('v.')
+    expect(normalizePos('n.')).toBe('n.')
+    expect(normalizePos('')).toBe('')
+  })
+  it('displayMeaning 去掉与词性重复的开头', () => {
+    expect(displayMeaning({ partOfSpeech: 'noun', meaning: 'n. 林学, 森林地\\' })).toBe('林学, 森林地')
+    expect(displayMeaning({ partOfSpeech: 'n.', meaning: '小群, 子群\\' })).toBe('小群, 子群')
+    // 没有词性时，保留释义自带的词性前缀
+    expect(displayMeaning({ partOfSpeech: '', meaning: 'n. 小群\\' })).toBe('n. 小群')
+  })
+})
+
+describe('applyExamples', () => {
+  it('按 lemma / 词形并入例句，并去重', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = applyExamples(lib, [
+      {
+        word: 'running',
+        examples: [
+          { text: 'I run every day.', translation: '我每天跑步。' },
+          { text: 'I run every day.', translation: '重复' },
+        ],
+      },
+    ])
+    const item = lib.items[0]
+    expect(item.examples.filter((e) => e.text === 'I run every day.')).toHaveLength(1)
+  })
+})
 import type { VocabItem } from '../types/document'
 
 const NOW = new Date('2026-10-02T00:00:00.000Z')

@@ -130,30 +130,33 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const checklistDone = useMemo(() => checklist.reduce((n, it) => n + it.done, 0), [checklist])
   const checklistTotal = useMemo(() => checklist.reduce((n, it) => n + it.total, 0), [checklist])
 
-  /** 还没做、且涉及具体单词的待办里的词（用于提示「卡住的是哪些词」）。 */
-  const pendingWords = useMemo(() => {
+  /** 数据上真正还缺的待办里的词（用于提示「卡住的是哪些词」）。 */
+  const todoWords = useMemo(() => {
     const words: string[] = []
-    for (const j of pending) {
+    for (const j of round) {
       for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
     }
     return words
-  }, [pending])
+  }, [round])
 
-  /** 下一步该干嘛：一条提醒，按优先级挑。 */
+  /**
+   * 下一步该干嘛。判断「完成/还有几项」**以数据上真正还缺的 `round` 为准**，
+   * 而不是「应用过」的 doneSet（pending）——否则某任务应用成功但没补全时，
+   * 会被误判成「已完成」，还会把一键跑批禁用掉、连重跑都点不了。
+   */
   const nextHint = useMemo(() => {
     if (jobsInput.batch.length) {
       return `待选有 ${jobsInput.batch.length} 个词还没进生词本：先点「加入生词本」，再跑一次批处理补齐音标/释义。`
     }
     if (localRunning) return `跑批中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
-    if (round.length && pending.length === 0) return '本篇待办已全部完成 🎉'
-    if (pending.length) {
-      const w = pendingWords.length
-        ? `（${pendingWords.slice(0, 6).join('、')}${pendingWords.length > 6 ? '…' : ''}）`
+    if (round.length > 0) {
+      const w = todoWords.length
+        ? `（${todoWords.slice(0, 6).join('、')}${todoWords.length > 6 ? '…' : ''}）`
         : ''
-      return `还有 ${pending.length} 项待办${w}，可点「⚡ 一键跑批」。`
+      return `还有 ${round.length} 项待办${w}，可点「⚡ 一键跑批」。`
     }
-    return ''
-  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, pending.length, pendingWords])
+    return '本篇待办已全部完成 🎉'
+  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, todoWords])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
@@ -266,6 +269,17 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     setAutoVocabDone((prev) => prev.filter((id) => id !== jobsInput.articleId))
     flash('已重置进度（成果不删；所有待办重新显示为未做）')
   }, [jobsInput.articleId, setAskedIds, setDoneIds, setAutoVocabDone, flash])
+
+  /** 只重置本篇「自动标词」的完成标记，让「一键跑批」能重新标词（不动其它进度与数据）。 */
+  const rerunAutoVocab = useCallback(() => {
+    setAutoVocabDone((prev) => prev.filter((id) => id !== jobsInput.articleId))
+    // 同时清掉「自动标词」的历史完成标记（doneIds），否则它仍会被判成已完成而不进待办
+    setDoneIds((prev) => prev.filter((id) => !id.startsWith('auto_vocab-')))
+    flash('已重置本篇「自动标词」；再点一次「⚡ 一键跑批」即可重新标词')
+  }, [jobsInput.articleId, setAutoVocabDone, setDoneIds, flash])
+
+  /** 本篇是否已经「自动标过词」（标过就不再进默认待办）。 */
+  const autoVocabDoneHere = useMemo(() => autoVocabDone.includes(jobsInput.articleId), [autoVocabDone, jobsInput.articleId])
 
   /** 复制「下一批待处理」的网页版提示词（自动跳过已完成的）。 */
   const copyWebPrompt = useCallback(async () => {
@@ -487,6 +501,8 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     applyWeb,
     copyWebMissing,
     resetWebProgress,
+    autoVocabDoneHere,
+    rerunAutoVocab,
     webTotal: round.length,
     webDone: doneCount,
     webPending: pending.length,

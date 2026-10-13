@@ -5,12 +5,14 @@ import {
   buildBatchLookupPrompt,
   buildCleanupPrompt,
   buildConfusablePrompt,
+  buildExamplePrompt,
   buildLemmaPrompt,
   buildPosPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
   parseAnalysis,
   parseConfusables,
+  parseExampleTable,
   parseLemmaTable,
   parsePosTable,
   parseLookupTable,
@@ -112,6 +114,27 @@ describe('parseLookupTable', () => {
   it('真正的表头（音标列写着 音标/phonetic）仍被跳过', () => {
     expect(parseLookupTable('word | phonetic | pos | meaning')).toHaveLength(0)
     expect(parseLookupTable('单词 | 音标 | 词性 | 中文含义')).toHaveLength(0)
+  })
+})
+
+describe('parseExampleTable / buildExamplePrompt', () => {
+  it('解析「单词 | 英 | 中 | 英 | 中」并跳过表头', () => {
+    const raw = [
+      '单词 | 例句1英 | 例句1中 | 例句2英 | 例句2中',
+      'run | I run every day. | 我每天跑步。 | She runs a firm. | 她经营一家公司。',
+    ].join('\n')
+    const rows = parseExampleTable(raw)
+    expect(rows).toHaveLength(1)
+    expect(rows[0].word).toBe('run')
+    expect(rows[0].examples).toEqual([
+      { text: 'I run every day.', translation: '我每天跑步。' },
+      { text: 'She runs a firm.', translation: '她经营一家公司。' },
+    ])
+  })
+  it('提示词带上词与含义', () => {
+    const p = buildExamplePrompt([{ word: 'run', meaning: '跑步' }])
+    expect(p).toContain('run')
+    expect(p).toContain('跑步')
   })
 })
 

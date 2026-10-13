@@ -434,6 +434,15 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   cursor: pointer;
 }
 .ai-direct input { margin: 0; }
+.ai-direct-done {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  margin: 0 0 8px;
+}
+.ai-direct-done button { font-size: 12px; padding: 2px 8px; }
 
 /* 网页版（DeepSeek）工作包 */
 .ai-web {
@@ -1299,6 +1308,34 @@ button.danger {
 /* 速读 · 前后翻句 */
 .speed-nav { display: inline-flex; align-items: center; gap: 4px; }
 .speed-nav button { padding: 0 8px; }
+
+/* 手动语言点编辑 */
+.lang-editor-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 60;
+}
+.lang-editor {
+  width: min(560px, 92vw);
+  max-height: 86vh;
+  overflow: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.lang-editor-bar { display: flex; gap: 8px; align-items: baseline; }
+.lang-editor-bar .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lang-editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.lang-editor input { padding: 6px 10px; }
+.lang-editor-actions { justify-content: flex-end; }
 .goal-bar > div { height: 100%; background: var(--accent); }
 
 /* 到期日历热力图 */

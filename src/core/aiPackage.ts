@@ -10,6 +10,7 @@ import {
   buildAutoVocabPrompt,
   buildBatchLookupPrompt,
   buildConfusablePrompt,
+  buildExamplePrompt,
   buildLemmaPrompt,
   buildPosPrompt,
   buildTranslateAllPrompt,
@@ -26,6 +27,7 @@ export const AI_JOB_TASKS = [
   'translate',
   'auto_vocab',
   'confusable',
+  'example',
   'lemma',
   'pos',
   'listening',
@@ -46,6 +48,7 @@ export const AI_TASK_LABEL: Record<AiJobTask, string> = {
   translate: '翻译',
   auto_vocab: '自动标词',
   confusable: '混淆项',
+  example: '用法示例',
   lemma: '原形',
   pos: '-ing/-ed',
   listening: '听力',
@@ -276,8 +279,10 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     askedIds: string[] = [],
     idKey?: string,
   ) => {
-    // 稳定 id：默认用「问过的词/句」当内容指纹，同内容重建后 id 不变
-    const key = idKey ?? `${askedWords.join('\n')}|${askedIds.join('\n')}`
+    // 稳定 id：默认用「问过的词/句」当内容指纹，同内容重建后 id 不变；
+    // 再按文章隔离——否则像「自动标词」这种内容指纹为空的任务，id 会在所有文章间相同，
+    // 一篇应用过就会把别的文章的同一任务也判成「已完成」（doneSet 误杀）。
+    const key = `${input.articleId}|${idKey ?? `${askedWords.join('\n')}|${askedIds.join('\n')}`}`
     jobs.push({ id: makeJobId(task, key), task, label, askedWords, askedIds, prompt })
   }
 
@@ -301,9 +306,10 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       ),
     )
   }
-  // 生词本缺音标/释义 → 批量查词（按范围：本篇 / 全库；每 N 个一份，避免 AI 回复被截断）
+  // 生词本缺音标/释义 → 批量查词（只看「从未查过」的词：查过一次就不再自动重排，
+  // 免得「模型只补了释义没给音标」这种半成品被无限重试；剩下的可离线「补齐生词本」）
   const base = input.scope === 'article' ? input.articleWords : input.items
-  const needInfo = base.filter((it) => !it.phonetic || !it.meaning)
+  const needInfo = base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning))
   for (const part of chunk(needInfo, LOOKUP_CHUNK)) {
     push(
       'lookup',
@@ -321,6 +327,16 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       `生成混淆项（${part.length}）`,
       buildConfusablePrompt(part.map((it) => ({ word: it.word, meaning: it.meaning }))),
       part.map((it) => it.word),
+    )
+  }
+  // 有释义但没例句 → 生成用法示例（AI 按语义造 2 句，英+中）
+  const exampleTodo = base.filter((it) => it.meaning && it.examples.length === 0).slice(0, 30)
+  if (exampleTodo.length) {
+    push(
+      'example',
+      `用法示例（${exampleTodo.length}）`,
+      buildExamplePrompt(exampleTodo.map((it) => ({ word: it.word, meaning: it.meaning ?? undefined }))),
+      exampleTodo.map((it) => it.word),
     )
   }
   // 疑似非原型 → 校正原形
@@ -482,7 +498,7 @@ export function countAiJobs(input: AiJobsInput): number {
   let n = 0
   if (input.batch.length) n++
   n += chunk(
-    base.filter((it) => !it.phonetic || !it.meaning),
+    base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning)),
     LOOKUP_CHUNK,
   ).length
   const confusableTodo = base.filter((it) => it.meaning && !it.confusables?.length)
@@ -490,6 +506,7 @@ export function countAiJobs(input: AiJobsInput): number {
     confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
+  if (base.some((it) => it.meaning && it.examples.length === 0)) n++
   if (!input.autoVocabDone && input.sentences.length) n++
   if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
   if (base.some((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)) n++

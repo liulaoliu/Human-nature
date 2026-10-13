@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, dedupeLibrary, normalizeWord } from '../../core/vocab'
+import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, normalizePos, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 
@@ -37,9 +37,11 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
       const patch: Partial<VocabItem> = {}
       const ph = mw?.phonetic || e?.phonetic
       if (!it.phonetic && ph) patch.phonetic = `/${ph.replace(/^\/+|\/+$/g, '')}/`
-      if (!it.partOfSpeech && (mw?.pos || e?.pos)) patch.partOfSpeech = mw?.pos || e?.pos || undefined
-      if (!it.meaning && e?.zh) patch.meaning = firstLine(e.zh)
-      if (!it.definition && (mw?.en || e?.en)) patch.definition = mw?.en || firstLine(e?.en ?? '')
+      if (!it.partOfSpeech && (mw?.pos || e?.pos)) {
+        patch.partOfSpeech = normalizePos(mw?.pos || e?.pos || '') || undefined
+      }
+      if (!it.meaning && e?.zh) patch.meaning = cleanGloss(firstLine(e.zh)) || undefined
+      if (!it.definition && (mw?.en || e?.en)) patch.definition = cleanGloss(mw?.en || firstLine(e?.en ?? '')) || undefined
       if (!Object.keys(patch).length) return it
       filled++
       if (it.status === 'unqueried') patch.status = 'queried'

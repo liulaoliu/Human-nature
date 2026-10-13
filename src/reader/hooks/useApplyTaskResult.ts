@@ -3,6 +3,7 @@ import {
   applyToSentence,
   parseAnalysis,
   parseConfusables,
+  parseExampleTable,
   parseLemmaTable,
   parsePosTable,
   parseWordList,
@@ -12,6 +13,7 @@ import { parseListeningQuiz, type ListeningQuiz } from '../../core/listening'
 import { addWritingRecord, parseImitationTask, parseWritingFeedback, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
 import {
   applyConfusables,
+  applyExamples,
   applyLemmaMap,
   applyPosAnalysis,
   applyWordAnalysis,
@@ -173,6 +175,14 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         if (empty.length) report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
         if (unknown.length) report.push(`词库里没有 ${unknown.length} 个：${unknown.slice(0, 10).join('、')}`)
         return { report, missing: missing.length ? { task: 'confusable', words: missing } : null, ok: true }
+      }
+
+      // 用法示例：按中文含义给词补例句（英+中）
+      if (task === 'example') {
+        const rows = parseExampleTable(text)
+        if (!rows.length) return { report: ['没解析出例句（格式：单词 | 英 | 中 | 英 | 中）'], missing: null, ok: false }
+        persist(applyExamples(library, rows))
+        return { report: [`已加入 ${rows.length} 个词的用法示例`], missing: null, ok: true }
       }
 
       // 原形校正：改 word/lemma，再合并重复

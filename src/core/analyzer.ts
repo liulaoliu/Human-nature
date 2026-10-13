@@ -226,6 +226,45 @@ ${raw.trim()}
 ${FENCE}`
 }
 
+/** 用法示例提示词：按中文含义给每个词造 2 个例句（英+中）。 */
+export function buildExamplePrompt(entries: { word: string; meaning?: string }[]): string {
+  const lines = entries
+    .map((e) => (e.meaning ? `- ${e.word}（含义：${e.meaning}）` : `- ${e.word}`))
+    .join('\n')
+  return `${HEADER}
+下面每个单词给了中文含义。请为每个词造 2 个地道、简短的例句（英文 + 中文翻译），要体现该含义的典型用法。
+每个词输出一行，字段用 | 分隔，顺序固定：单词 | 例句1英 | 例句1中 | 例句2英 | 例句2中
+不要编号、不要解释、不要加标题。
+词与含义：
+${lines}`
+}
+
+export interface ExampleRow {
+  word: string
+  examples: { text: string; translation?: string }[]
+}
+
+/** 解析用法示例表（`word | 英 | 中 | 英 | 中`）。 */
+export function parseExampleTable(raw: string): ExampleRow[] {
+  const out: ExampleRow[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim()
+    if (!t || /^[|\-\s:]+$/.test(t)) continue
+    const cols = t.split(/[|｜]/).map((c) => c.trim())
+    if (cols.length < 3) continue
+    const word = cols[0].replace(/^[\-*•\d.、\s]+/, '').trim()
+    if (!word || /^(单词|word)$/i.test(word)) continue
+    const examples: { text: string; translation?: string }[] = []
+    for (let i = 1; i + 1 < cols.length; i += 2) {
+      const en = cols[i]
+      const zh = cols[i + 1]
+      if (en) examples.push(zh ? { text: en, translation: zh } : { text: en })
+    }
+    if (examples.length) out.push({ word, examples })
+  }
+  return out
+}
+
 /** 解析「id | 译文」逐句翻译表。 */
 export function parseTranslationTable(raw: string): SentenceAnalysis[] {
   const out: SentenceAnalysis[] = []

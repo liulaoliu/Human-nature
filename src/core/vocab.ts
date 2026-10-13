@@ -91,6 +91,59 @@ export function createLibrary(): VocabLibrary {
   return { schemaVersion: SCHEMA_VERSION, items: [] }
 }
 
+/** 词性全称 → 缩写（离线词典/AI 有时给 "noun" 全称）。 */
+const POS_ABBR: Record<string, string> = {
+  noun: 'n.',
+  verb: 'v.',
+  adjective: 'adj.',
+  adverb: 'adv.',
+  preposition: 'prep.',
+  conjunction: 'conj.',
+  pronoun: 'pron.',
+  numeral: 'num.',
+  article: 'art.',
+  interjection: 'interj.',
+}
+
+/** 规范化词性显示：「noun」→「n.」。 */
+export function normalizePos(pos: string | null | undefined): string {
+  const p = (pos ?? '').trim()
+  if (!p) return ''
+  const key = p.toLowerCase().replace(/\.+$/, '').trim()
+  return POS_ABBR[key] ?? p
+}
+
+/**
+ * 清洗释义/英英：数据里常见行尾转义残留的「\」（ECDICT/AI 都有），
+ * 还有多余空白与首尾分隔符。中文英文都过一遍。
+ */
+export function cleanGloss(s: string | null | undefined): string {
+  return (s ?? '')
+    .replace(/\\+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s;,.，、]+/, '')
+    .replace(/[\s;,，、]+$/, '')
+    .trim()
+}
+
+/** 若释义开头与词性重复（词性 n. 且释义以「n. 」或「noun 」开头），去掉重复那段。 */
+export function stripLeadingPos(pos: string | null | undefined, gloss: string): string {
+  const abbr = normalizePos(pos)
+  if (!abbr) return gloss
+  const tokens = [abbr, (pos ?? '').trim()].filter(Boolean)
+  let out = gloss
+  for (const t of tokens) {
+    const esc = t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    out = out.replace(new RegExp('^\\s*' + esc + '\\.?\\s*', 'i'), '')
+  }
+  return out.trim()
+}
+
+/** 词条的展示用中释义（清洗 + 去重复词性）。 */
+export function displayMeaning(item: { partOfSpeech: string | null; meaning: string | null }): string {
+  return stripLeadingPos(item.partOfSpeech, cleanGloss(item.meaning))
+}
+
 function replaceItem(library: VocabLibrary, item: VocabItem): VocabLibrary {
   return {
     ...library,
@@ -111,6 +164,27 @@ function mergeUnique(a: string[], b: string[]): string[] {
   const out = [...a]
   for (const x of b) if (!out.includes(x)) out.push(x)
   return out
+}
+
+/** 把 AI 生成的用法示例并入词条（按 lemma / 词形匹配；例句按文本去重）。 */
+export function applyExamples(
+  library: VocabLibrary,
+  rows: { word: string; examples: { text: string; translation?: string }[] }[],
+): VocabLibrary {
+  const iso = new Date().toISOString()
+  let changed = false
+  const items = library.items.map((it) => {
+    const row = rows.find((r) => lemmaOf(r.word) === it.lemma || normalizeWord(r.word) === normalizeWord(it.word))
+    if (!row) return it
+    const merged = mergeExamples(
+      it.examples,
+      row.examples.map((e) => ({ text: e.text, translation: e.translation })),
+    )
+    if (merged.length === it.examples.length) return it
+    changed = true
+    return { ...it, examples: merged, updatedAt: iso }
+  })
+  return changed ? { ...library, items } : library
 }
 
 function mergeConfusables(
@@ -230,9 +304,9 @@ export function applyWordAnalysis(
           word: wa.word.trim(),
           lemma,
           phonetic: wa.phonetic ?? null,
-          partOfSpeech: wa.partOfSpeech ?? null,
-          meaning: wa.meaning ?? null,
-          definition: wa.definition ?? null,
+          partOfSpeech: normalizePos(wa.partOfSpeech) || null,
+          meaning: cleanGloss(wa.meaning) || null,
+          definition: cleanGloss(wa.definition) || null,
           usage: wa.usage ?? [],
           examples,
           source: defaultSource ?? null,
@@ -258,9 +332,9 @@ export function applyWordAnalysis(
       word: newWord,
       lemma: newLemma,
       phonetic: cur.phonetic ?? wa.phonetic ?? null,
-      partOfSpeech: cur.partOfSpeech ?? wa.partOfSpeech ?? null,
-      meaning: locked && cur.meaning ? cur.meaning : wa.meaning ?? cur.meaning,
-      definition: locked && cur.definition ? cur.definition : wa.definition ?? cur.definition,
+      partOfSpeech: cur.partOfSpeech ?? (normalizePos(wa.partOfSpeech) || null),
+      meaning: locked && cur.meaning ? cur.meaning : cleanGloss(wa.meaning) || cur.meaning,
+      definition: locked && cur.definition ? cur.definition : cleanGloss(wa.definition) || cur.definition,
       usage: mergeUnique(cur.usage, wa.usage ?? []),
       examples: mergeExamples(cur.examples, examples),
       status: locked ? cur.status : 'queried',

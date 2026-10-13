@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { VocabItem } from '../../types/document'
-import { review, type ReviewGrade, type StudyMode } from '../../core/vocab'
+import { cleanGloss, displayMeaning, normalizePos, review, type ReviewGrade, type StudyMode } from '../../core/vocab'
 import { diffWords, type DiffToken } from '../../core/dictation'
 import { fmtDue, fmtDur, fmtInterval } from '../format'
 
@@ -102,8 +102,8 @@ function buildSteps(card: VocabItem, items: VocabItem[]): DrillStep[] {
 
 /** 选词义：正确释义 + 3 个来自其它词的释义（确定性排序）。 */
 function meaningOptions(card: VocabItem, items: VocabItem[]): { text: string; correct: boolean }[] {
-  const correct = card.meaning ?? ''
-  const pool = [...new Set(items.filter((it) => it.id !== card.id && it.meaning).map((it) => it.meaning as string))]
+  const correct = displayMeaning(card)
+  const pool = [...new Set(items.filter((it) => it.id !== card.id).map((it) => displayMeaning(it)).filter(Boolean))]
   const picked = pool
     .map((m) => ({ m, k: hash(card.id + '|' + m) }))
     .sort((a, b) => a.k - b.k)
@@ -209,8 +209,8 @@ function DrillBoard({
       {cur.kind === 'spell' && (
         <div className="drill-body">
           <div className="study-meaning">
-            {card.partOfSpeech && <span className="cell-pos">{card.partOfSpeech} </span>}
-            {card.meaning ?? '（无释义）'}
+            {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+            {displayMeaning(card) || '（无释义）'}
           </div>
           <input
             className="study-input"
@@ -445,8 +445,8 @@ export default function StudyPanel({
             {spellingFront ? (
               <div className="study-prompt">
                 <div className="study-meaning">
-                  {card.partOfSpeech && <span className="cell-pos">{card.partOfSpeech} </span>}
-                  {card.meaning ?? '（无释义）'}
+                  {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+                  {displayMeaning(card) || '（无释义）'}
                 </div>
                 <input
                   className="study-input"
@@ -498,8 +498,8 @@ export default function StudyPanel({
                 {(revealed || (spelling && checked)) && (
                   <div className="study-back">
                     <div className="study-meaning">
-                      {card.partOfSpeech && <span className="cell-pos">{card.partOfSpeech} </span>}
-                      {card.meaning ?? '（无释义）'}
+                      {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+                      {displayMeaning(card) || '（无释义）'}
                       <button
                         className="unknown-btn"
                         onClick={(e) => {
@@ -511,13 +511,15 @@ export default function StudyPanel({
                         不认识
                       </button>
                     </div>
-                    {card.definition && <div className="study-def">EN · {card.definition}</div>}
-                    {card.examples.slice(0, 1).map((ex, i) => (
-                      <div className="ex" key={i}>
-                        {ex.text}
-                        {ex.translation ? ` — ${ex.translation}` : ''}
-                      </div>
-                    ))}
+                    {cleanGloss(card.definition) && <div className="study-def">EN · {cleanGloss(card.definition)}</div>}
+                    {card.examples.slice(0, 3).map((ex, i) =>
+                      ex.text && ex.text !== card.source?.sentenceText ? (
+                        <div className="ex" key={i}>
+                          {ex.text}
+                          {ex.translation ? ` — ${ex.translation}` : ''}
+                        </div>
+                      ) : null,
+                    )}
                     {card.source?.sentenceText && <div className="muted src">来源：{card.source.sentenceText}</div>}
                     {card.confusables && card.confusables.length > 0 && (
                       <div className="muted study-conf">

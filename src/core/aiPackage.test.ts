@@ -28,7 +28,7 @@ const mkItem = (over: Partial<VocabItem> = {}): VocabItem => ({
   usage: [],
   examples: [],
   source: null,
-  status: 'queried',
+  status: 'unqueried',
   note: '',
   tags: [],
   reviewState: review(),
@@ -186,9 +186,16 @@ describe('buildAiJobs / countAiJobs', () => {
   })
 
   it('有音标有释义的词不算待办', () => {
-    const items = [mkItem({ word: 'ok', lemma: 'ok', phonetic: '/o/', meaning: '行了', confusables: [{ word: 'x' }] })]
+    const items = [
+      mkItem({ word: 'ok', lemma: 'ok', phonetic: '/o/', meaning: '行了', confusables: [{ word: 'x' }], examples: [{ text: 'ok' }] }),
+    ]
     const jobs = buildAiJobs(emptyInput({ items }))
     expect(jobs).toHaveLength(0)
+  })
+
+  it('已查过（queried）但缺字段的词不再进待办（避免无限重试）', () => {
+    const items = [mkItem({ word: 'halfdone', lemma: 'halfdone', phonetic: null, meaning: '释义', status: 'queried' })]
+    expect(buildAiJobs(emptyInput({ items })).find((j) => j.task === 'lookup')).toBeUndefined()
   })
 
   it('混淆项按 batchSize 分批；0 表示全部一批', () => {
@@ -202,7 +209,8 @@ describe('buildAiJobs / countAiJobs', () => {
   })
 
   it('原形 / -ing-ed 各一条', () => {
-    const jobs = buildAiJobs(emptyInput({ items: [mkItem({ word: 'running', lemma: 'run', confusables: [{ word: 'x' }] })] }))
+    const items = [mkItem({ word: 'running', lemma: 'run', confusables: [{ word: 'x' }], examples: [{ text: 'x' }] })]
+    const jobs = buildAiJobs(emptyInput({ items }))
     expect(jobs.map((j) => j.task).sort()).toEqual(['lemma', 'pos'])
   })
 
@@ -274,6 +282,16 @@ describe('buildAiJobs / countAiJobs', () => {
     const a = buildAiJobs(input).map((j) => j.id)
     const b = buildAiJobs(input).map((j) => j.id)
     expect(a).toEqual(b)
+  })
+
+  it('任务 id 按文章隔离（不同文章 → 不同 id，避免 doneSet 跨篇误杀）', () => {
+    const sentences = [mkSentence({ id: 's1' })]
+    const a = buildAiJobs(emptyInput({ articleId: 'art-A', sentences }))
+    const b = buildAiJobs(emptyInput({ articleId: 'art-B', sentences }))
+    const idOf = (jobs: AiJob[], t: string) => jobs.find((j) => j.task === t)?.id
+    expect(idOf(a, 'auto_vocab')).toBeTruthy()
+    expect(idOf(a, 'auto_vocab')).not.toBe(idOf(b, 'auto_vocab'))
+    expect(idOf(a, 'translate')).not.toBe(idOf(b, 'translate'))
   })
 
   it('翻译/语言点按句分块（避免单条太大被截断）', () => {
