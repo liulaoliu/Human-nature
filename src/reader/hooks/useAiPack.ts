@@ -130,39 +130,28 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const checklistDone = useMemo(() => checklist.reduce((n, it) => n + it.done, 0), [checklist])
   const checklistTotal = useMemo(() => checklist.reduce((n, it) => n + it.total, 0), [checklist])
 
-  /** 数据上真正还缺的待办里的词（用于提示「卡住的是哪些词」）。 */
-  const todoWords = useMemo(() => {
-    const words: string[] = []
-    for (const j of round) {
-      for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
-    }
-    return words
-  }, [round])
-
-  /** 待办涉及的任务类型（用于提示是「查词/补齐」还是「用法示例」等）。 */
-  const todoTasks = useMemo(
-    () => [...new Set(round.map((j) => AI_TASK_LABEL[j.task] ?? j.task))],
-    [round],
-  )
-
   /**
-   * 下一步该干嘛。判断「完成/还有几项」**以数据上真正还缺的 `round` 为准**，
-   * 而不是「应用过」的 doneSet（pending）——否则某任务应用成功但没补全时，
-   * 会被误判成「已完成」，还会把一键跑批禁用掉、连重跑都点不了。
+   * 下一步该干嘛。
+   * 「待办」按 **pending（还没试过的）** 算——试过一次的即使没补全也不再重复排队（否则会无限重跑）；
+   * 若所有都试过但数据仍有缺口（多半是模型没返回），另给一行提示，引导用离线「补齐生词本」。
    */
   const nextHint = useMemo(() => {
     if (jobsInput.batch.length) {
       return `待选有 ${jobsInput.batch.length} 个词还没进生词本：先点「加入生词本」，再跑一次批处理补齐音标/释义。`
     }
     if (localRunning) return `跑批中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
+    if (pending.length > 0) {
+      const tasks = [...new Set(pending.map((j) => AI_TASK_LABEL[j.task] ?? j.task))]
+      const words: string[] = []
+      for (const j of pending) for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
+      const w = words.length ? `（${words.slice(0, 6).join('、')}${words.length > 6 ? '…' : ''}）` : ''
+      return `还有 ${pending.length} 项待办【${tasks.join('、')}】${w}，可点「⚡ 一键跑批」。`
+    }
     if (round.length > 0) {
-      const w = todoWords.length
-        ? `（${todoWords.slice(0, 6).join('、')}${todoWords.length > 6 ? '…' : ''}）`
-        : ''
-      return `还有 ${round.length} 项待办【${todoTasks.join('、')}】${w}，可点「⚡ 一键跑批」。`
+      return `本轮已跑完；还有 ${round.length} 项没补全（多半是模型没返回这些词）：可点「📖 补齐生词本」（离线），或删掉不需要的词。`
     }
     return '本篇待办已全部完成 🎉'
-  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, round.length, todoWords, todoTasks])
+  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, pending, round.length])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(

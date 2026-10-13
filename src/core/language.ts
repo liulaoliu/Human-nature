@@ -11,6 +11,21 @@ export interface LanguageRow extends SentenceLanguage {
   id: string
 }
 
+/** 取该句所有语言点（兼容旧的单条 `language`；旧的按 AI 来源算）。 */
+export function getSentenceLanguages(s: {
+  language?: SentenceLanguage
+  languages?: SentenceLanguage[]
+} | null | undefined): SentenceLanguage[] {
+  if (!s) return []
+  if (s.languages?.length) return s.languages
+  return s.language ? [{ ...s.language, source: s.language.source ?? 'ai' }] : []
+}
+
+/** 该句是否有语言点（AI 或手动）。 */
+export function hasSentenceLanguage(s: { language?: SentenceLanguage; languages?: SentenceLanguage[] } | null | undefined): boolean {
+  return getSentenceLanguages(s).length > 0
+}
+
 /** 出题提示词：按句 id 逐句分析，严格 JSON。 */
 export function buildLanguagePrompt(sentences: { id: string; text: string }[]): string {
   const list = sentences.map((s) => `${s.id} | ${s.text}`).join('\n')
@@ -83,7 +98,7 @@ export function parseLanguage(raw: string): LanguageRow[] {
 }
 
 /**
- * 把语言点写回句子（按 id 匹配，覆盖旧的 language）。
+ * 把语言点写回句子（按 id 匹配）：**替换/AI 生成的那条，保留手动添加的若干条**。
  * 纯函数，方便单测；返回新的 sentences 数组。
  */
 export function applyLanguage(sentences: Sentence[], rows: LanguageRow[]): Sentence[] {
@@ -92,13 +107,15 @@ export function applyLanguage(sentences: Sentence[], rows: LanguageRow[]): Sente
   return sentences.map((s) => {
     const r = byId.get(s.id)
     if (!r) return s
-    const language: SentenceLanguage = {
+    const ai: SentenceLanguage = {
       structure: r.structure,
       grammar: r.grammar,
       idioms: r.idioms,
       phrases: r.phrases,
       usage: r.usage,
+      source: 'ai',
     }
-    return { ...s, language }
+    const manual = getSentenceLanguages(s).filter((x) => x.source === 'manual')
+    return { ...s, languages: [ai, ...manual], language: undefined }
   })
 }

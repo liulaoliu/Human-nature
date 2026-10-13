@@ -1,6 +1,12 @@
 import { normalizeAnswer, shuffleQuiz, type ArticleQuizKind, type QuizQuestion } from './quiz'
 import { wordSpans } from './wordSelect'
+import { getSentenceLanguages } from './language'
 import type { Sentence } from '../types/document'
+
+/** 该句所有语言点里的语法要点（合并；兼容多条）。 */
+function grammarOf(s: Sentence): string {
+  return getSentenceLanguages(s).map((l) => (l.grammar ?? '').trim()).filter(Boolean).join('；')
+}
 
 /**
  * 文章级测验：按句子 / 段落出题，考理解与结构（不写 SRS）。
@@ -177,10 +183,10 @@ export function buildArticleQuestions(sentences: Sentence[], opts: ArticleQuizOp
 
   // 结构/语法（依语言点数据）
   if (want.has('grammar')) {
-    const withGram = withText.filter((s) => (s.language?.grammar ?? '').trim())
-    const allGram = [...new Set(withGram.map((s) => (s.language?.grammar ?? '').trim()))]
+    const withGram = withText.filter((s) => grammarOf(s))
+    const allGram = [...new Set(withGram.map(grammarOf))]
     for (const s of withGram) {
-      const answer = (s.language?.grammar ?? '').trim()
+      const answer = grammarOf(s)
       const dist = pickN(answer, allGram, 3, rnd)
       if (dist.length < 1) continue
       out.push(

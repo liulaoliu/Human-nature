@@ -23,7 +23,7 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
-import { buildLanguagePrompt } from '../core/language'
+import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
 import {
   addPracticeRecord,
   practiceForArticle,
@@ -1454,15 +1454,19 @@ export default function ReaderApp() {
     return null
   }, [doc, selectedId, exact])
 
-  /** 手动保存语言点（写回该句的 language）。 */
+  /** 手动保存语言点列表（写回该句的 languages）。 */
   const saveLanguage = useCallback(
-    (lang: SentenceLanguage) => {
+    (langs: SentenceLanguage[]) => {
       if (!sentence) return
       const sid = sentence.id
-      setDoc((d) => (d ? { ...d, sentences: d.sentences.map((s) => (s.id === sid ? { ...s, language: lang } : s)) } : d))
+      setDoc((d) =>
+        d
+          ? { ...d, sentences: d.sentences.map((s) => (s.id === sid ? { ...s, languages: langs, language: undefined } : s)) }
+          : d,
+      )
       setPendingSave(true)
       setLangOpen(false)
-      flash('已保存语言点')
+      flash(langs.length ? `已保存语言点（${langs.length} 条）` : '已清空该句语言点')
     },
     [sentence, setDoc, setPendingSave, flash],
   )
@@ -1759,7 +1763,7 @@ export default function ReaderApp() {
     const reading = {
       sentences: sents.length,
       translated: sents.filter((s) => s.translation).length,
-      language: sents.filter((s) => s.language).length,
+      language: sents.filter((s) => hasSentenceLanguage(s)).length,
     }
     const stat = (kind: PracticeKind) => {
       const rows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === kind)
@@ -1876,7 +1880,7 @@ export default function ReaderApp() {
         hasDoc: !!doc,
         sentences: doc?.sentences.length ?? 0,
         translated: doc?.sentences.filter((s) => s.translation).length ?? 0,
-        language: doc?.sentences.filter((s) => s.language).length ?? 0,
+        language: doc?.sentences.filter((s) => hasSentenceLanguage(s)).length ?? 0,
         listenQuiz: listenQuiz?.questions.length ?? 0,
         vocab: library.items.length,
         batch: batch.length,

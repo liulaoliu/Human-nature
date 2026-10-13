@@ -69,6 +69,8 @@ export interface SentenceLanguage {
   phrases?: string[]
   /** 用法说明 */
   usage?: string[]
+  /** 来源：AI 生成 / 手动添加（一句可有多条；AI 的只保留一条） */
+  source?: 'ai' | 'manual'
 }
 
 /** 单个句子，精读与复读的共同最小单元。 */
@@ -89,8 +91,10 @@ export interface Sentence {
   collocations: string[]
   /** 本句出现的生词词形 */
   vocab: string[]
-  /** AI 结构化的语言点（结构/语法/idiom/词组/用法） */
+  /** AI 结构化的语言点（结构/语法/idiom/词组/用法）——旧字段，单条；新数据用 languages */
   language?: SentenceLanguage
+  /** 该句的语言点列表（AI 一条 + 手动若干条） */
+  languages?: SentenceLanguage[]
   /** 标签，如 ["long_sentence"] */
   tags: string[]
   /** 复习状态 */

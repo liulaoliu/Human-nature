@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildImitationTaskPrompt, buildWritingFeedbackPrompt, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import { getSentenceLanguages } from '../../core/language'
 import { useLocalStorageState } from './useLocalStorageState'
 
 /** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
@@ -66,12 +67,13 @@ export function useWriting({
       return
     }
     const s = doc?.sentences.find((x) => x.text === m)
+    const first = s ? getSentenceLanguages(s)[0] : undefined
     setLastTask('imitation')
     askedWordsRef.current = []
     askedIdsRef.current = []
     try {
       await navigator.clipboard.writeText(
-        buildImitationTaskPrompt({ model: m, structure: s?.language?.structure, mustUse: s?.language?.phrases }),
+        buildImitationTaskPrompt({ model: m, structure: first?.structure, mustUse: first?.phrases }),
       )
       flash('已复制仿写任务提示词；把 AI 的 JSON 粘回「应用结果」')
     } catch {

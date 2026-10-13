@@ -47,10 +47,18 @@ describe('parseLanguage', () => {
 })
 
 describe('applyLanguage', () => {
-  it('按 id 写回，未命中的不动', () => {
+  it('按 id 写回（写入 languages，标 source=ai），未命中的不动', () => {
     const sents = [sentence('s001'), sentence('s002', 'Other.')]
     const out = applyLanguage(sents, [{ id: 's001', structure: '主谓', phrases: ['a b'] }])
-    expect(out[0].language).toMatchObject({ structure: '主谓', phrases: ['a b'] })
-    expect(out[1].language).toBeUndefined()
+    expect(out[0].languages?.[0]).toMatchObject({ structure: '主谓', phrases: ['a b'], source: 'ai' })
+    expect(out[1].languages).toBeUndefined()
+  })
+  it('AI 只替换 AI 那条，保留手动条目', () => {
+    const base = sentence('s001')
+    const withManual = { ...base, languages: [{ grammar: '手动语法', source: 'manual' as const }] }
+    const out = applyLanguage([withManual], [{ id: 's001', structure: '主谓' }])
+    expect(out[0].languages).toHaveLength(2)
+    expect(out[0].languages?.[0]).toMatchObject({ structure: '主谓', source: 'ai' })
+    expect(out[0].languages?.[1]).toMatchObject({ grammar: '手动语法', source: 'manual' })
   })
 })

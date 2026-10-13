@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { wordSpans } from '../../core/wordSelect'
+import { getSentenceLanguages } from '../../core/language'
 import {
   DEFAULT_WPM,
   checkDrill,
@@ -41,19 +42,19 @@ function readCursor(k: string): number {
   }
 }
 
-/** 「待加入」清单里的一项：词/词组 + 来源句（跨句累积、持久化）。 */
-interface BasketItem {
+/** 「本页加入」清单里的一项：词/词组 + 来源句（跨句累积、持久化）。 */
+interface CollectedItem {
   word: string
   sentenceId: string | null
   sentenceText: string
 }
-const basketKey = (docKey: string) => `reader:speedBasket:${docKey}`
-function loadBasket(docKey: string): BasketItem[] {
+const collectedKey = (docKey: string) => `reader:speedCollected:${docKey}`
+function loadCollected(docKey: string): CollectedItem[] {
   try {
-    const raw = localStorage.getItem(basketKey(docKey))
+    const raw = localStorage.getItem(collectedKey(docKey))
     const arr = raw ? JSON.parse(raw) : []
     return Array.isArray(arr)
-      ? arr.filter((x): x is BasketItem => !!x && typeof x.word === 'string')
+      ? arr.filter((x): x is CollectedItem => !!x && typeof x.word === 'string')
       : []
   } catch {
     return []
@@ -89,85 +90,114 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   /** 干扰项池：整篇实词，选最像的做选项。 */
   const pool = useMemo(() => [...new Set(sentences.flatMap((s) => contentWords(s.text)))], [sentences])
 
-  /** 加生词：输入框草稿 + 待加入清单（跨句累积、持久化）+ 刚加入的提示。 */
+  /** 加生词：输入框草稿 + 本页加入清单（跨句汇总、持久化）+ 刚加入提示。 */
   const [wordDraft, setWordDraft] = useState('')
   const [addedWord, setAddedWord] = useState('')
-  const [basket, setBasket] = useState<BasketItem[]>(() => loadBasket(docKey))
+  /** 本页从速读加入生词本的记录（跨句汇总、持久化），可在右上角清单里删除。 */
+  const [collected, setCollected] = useState<CollectedItem[]>(() => loadCollected(docKey))
+  /** 本句当前选中的词（点击切换；供「加入清单」/右键/合成词组）。 */
+  const [selWords, setSelWords] = useState<string[]>([])
   /** 两步确认移出的词。 */
   const [confirmDel, setConfirmDel] = useState('')
   /** 当前句按词切分（复用正文同款 wordSpans）。 */
   const spans = useMemo(() => (sentence ? wordSpans(sentence.text) : []), [sentence])
 
-  // 待加入清单落盘（翻页 / 关掉重开都不丢）
+  // 本页加入清单落盘（翻页 / 关掉重开都不丢）
   useEffect(() => {
     try {
-      localStorage.setItem(basketKey(docKey), JSON.stringify(basket))
+      localStorage.setItem(collectedKey(docKey), JSON.stringify(collected))
     } catch {
       // 忽略
     }
-  }, [basket, docKey])
+  }, [collected, docKey])
 
-  const sid = sentence?.id ?? null
-  const inBasket = useCallback(
-    (word: string) => basket.some((x) => x.sentenceId === sid && x.word.toLowerCase() === word.toLowerCase()),
-    [basket, sid],
+  // 换句清空当前选择
+  useEffect(() => {
+    setSelWords([])
+  }, [index])
+
+  const inSel = useCallback(
+    (word: string) => selWords.some((x) => x.toLowerCase() === word.toLowerCase()),
+    [selWords],
   )
-  /** 本句已进清单的词（用于合成词组）。 */
-  const selHere = useMemo(() => basket.filter((x) => x.sentenceId === sid), [basket, sid])
 
-  const toggleWord = useCallback(
-    (word: string) => {
-      if (!sentence) return
-      setBasket((prev) => {
-        const i = prev.findIndex(
-          (x) => x.sentenceId === sentence.id && x.word.toLowerCase() === word.toLowerCase(),
-        )
-        if (i >= 0) return prev.filter((_, k) => k !== i)
-        return [...prev, { word, sentenceId: sentence.id, sentenceText: sentence.text }]
+  /** 点击词：切换选中（只选中，不入库）。 */
+  const toggleSel = useCallback((word: string) => {
+    setSelWords((prev) =>
+      prev.some((x) => x.toLowerCase() === word.toLowerCase())
+        ? prev.filter((x) => x.toLowerCase() !== word.toLowerCase())
+        : [...prev, word],
+    )
+  }, [])
+
+  /** 把一批词加入生词本，并记入本页清单。 */
+  const commitAdd = useCallback(
+    (items: CollectedItem[]) => {
+      const list = items.filter((x) => x.word.trim())
+      if (!list.length) return
+      onAddItems(list.map((x) => ({ word: x.word.trim(), sentenceId: x.sentenceId, sentenceText: x.sentenceText })))
+      setCollected((prev) => {
+        const out = [...prev]
+        for (const it of list) {
+          if (!out.some((x) => x.word.toLowerCase() === it.word.toLowerCase() && x.sentenceId === it.sentenceId)) {
+            out.push({ word: it.word.trim(), sentenceId: it.sentenceId, sentenceText: it.sentenceText })
+          }
+        }
+        return out
       })
+      const label = list.map((x) => x.word.trim()).join('、')
+      setAddedWord(label)
+      window.setTimeout(() => setAddedWord((cur) => (cur === label ? '' : cur)), 2000)
     },
-    [sentence],
+    [onAddItems],
   )
 
+  /** 「加入清单」：把本句选中的词（或合成后的词组）加入生词本。 */
+  const addSelected = useCallback(() => {
+    if (!sentence || !selWords.length) return
+    commitAdd(selWords.map((w) => ({ word: w, sentenceId: sentence.id, sentenceText: sentence.text })))
+    setSelWords([])
+  }, [sentence, selWords, commitAdd])
+
+  /** 输入框手打词/词组：直接加入。 */
   const addCustom = useCallback(
     (w: string) => {
       const t = w.trim()
       if (!t || !sentence) return
-      setBasket((prev) =>
-        prev.some((x) => x.sentenceId === sentence.id && x.word.toLowerCase() === t.toLowerCase())
-          ? prev
-          : [...prev, { word: t, sentenceId: sentence.id, sentenceText: sentence.text }],
-      )
+      commitAdd([{ word: t, sentenceId: sentence.id, sentenceText: sentence.text }])
       setWordDraft('')
     },
-    [sentence],
+    [sentence, commitAdd],
   )
 
-  const removeBasket = useCallback((i: number) => setBasket((prev) => prev.filter((_, k) => k !== i)), [])
+  /** 右键：把该词加入生词本（等价于「加入清单」）。 */
+  const addDirect = useCallback(
+    (word: string) => {
+      if (!sentence) return
+      commitAdd([{ word, sentenceId: sentence.id, sentenceText: sentence.text }])
+      setSelWords((prev) => prev.filter((x) => x.toLowerCase() !== word.toLowerCase()))
+    },
+    [sentence, commitAdd],
+  )
 
-  /** 把本句已选中的词按顺序合成一个词组条目（中间夹着的词不加入）。 */
+  /** 把本句选中的词按句内顺序合成一个词组（替换当前选择，待「加入清单」）。 */
   const mergePhrase = useCallback(() => {
-    if (!sentence || selHere.length < 2) return
-    const phrase = selHere.map((x) => x.word).join(' ')
-    setBasket((prev) => [
-      ...prev.filter((x) => x.sentenceId !== sentence.id),
-      { word: phrase, sentenceId: sentence.id, sentenceText: sentence.text },
-    ])
-  }, [sentence, selHere])
+    if (!sentence || selWords.length < 2) return
+    const ordered = spans.map((s) => s.text).filter((t) => selWords.some((w) => w.toLowerCase() === t.toLowerCase()))
+    if (ordered.length < 2) return
+    setSelWords([ordered.join(' ')])
+  }, [sentence, selWords, spans])
 
-  /** 一次性把清单里所有项写进生词本。 */
-  const addAll = useCallback(() => {
-    const items = basket
-      .map((x) => ({ word: x.word.trim(), sentenceId: x.sentenceId, sentenceText: x.sentenceText }))
-      .filter((x) => x.word)
-    if (!items.length) return
-    onAddItems(items)
-    const label = items.map((x) => x.word).join('、')
-    setAddedWord(label)
-    setBasket([])
-    setWordDraft('')
-    window.setTimeout(() => setAddedWord((cur) => (cur === label ? '' : cur)), 2200)
-  }, [basket, onAddItems])
+  /** 从本页清单删除一条（同时从生词本移除，用于剔除误加）。 */
+  const removeCollected = useCallback(
+    (i: number) => {
+      const it = collected[i]
+      if (!it) return
+      onRemoveWord(it.word)
+      setCollected((prev) => prev.filter((_, k) => k !== i))
+    },
+    [collected, onRemoveWord],
+  )
 
   /** 本句已在生词本的词 / 短语（含从本句加入的多词词组），用于「移出」。 */
   const knownWords = useMemo(() => {
@@ -204,15 +234,20 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     spans.forEach((w, i) => {
       if (w.start > pos) nodes.push(text.slice(pos, w.start))
       const known = isKnown(w.text)
-      const sel = inBasket(w.text)
+      const sel = inSel(w.text)
       nodes.push(
         <span
           key={i}
           className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '')}
-          title={known ? '已在生词本' : sel ? '点一下移出「待加入」' : '点一下加入「待加入」'}
+          title={known ? '已在生词本' : '左键选中，再点「加入清单」；或右键直接加入生词本'}
           onClick={(e) => {
             e.stopPropagation()
-            toggleWord(w.text)
+            toggleSel(w.text)
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            addDirect(w.text)
           }}
         >
           {w.text}
@@ -222,7 +257,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     })
     if (pos < text.length) nodes.push(text.slice(pos))
     return nodes
-  }, [sentence, spans, inBasket, toggleWord, isKnown])
+  }, [sentence, spans, inSel, toggleSel, isKnown, addDirect])
 
   useEffect(() => {
     if (phase !== 'read' || done) return
@@ -350,6 +385,17 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         go(1)
         return
       }
+      const k = e.key.toLowerCase()
+      if (k === 'w' || k === 'a') {
+        e.preventDefault()
+        go(-1)
+        return
+      }
+      if (k === 'd') {
+        e.preventDefault()
+        go(1)
+        return
+      }
       if (e.key === 'Escape') {
         e.preventDefault()
         onClose()
@@ -426,6 +472,29 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         <div style={{ width: `${n ? (Math.min(index, n) / n) * 100 : 0}%` }} />
       </div>
 
+      {collected.length > 0 && (
+        <div className="speed-basket-panel">
+          <div className="speed-basket-head">
+            <b>本页加入（{collected.length}）</b>
+          </div>
+          <div className="speed-basket-list">
+            {collected.map((it, i) => (
+              <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
+                <span className="speed-basket-word">{it.word}</span>
+                {it.sentenceText && (
+                  <span className="muted ellipsis" title={it.sentenceText}>
+                    {it.sentenceText}
+                  </span>
+                )}
+                <button onClick={() => removeCollected(i)} title="从生词本移出（剔除误加）">
+                  删除
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {done ? (
         <div className="study-done speed-summary">
           <p>
@@ -470,15 +539,16 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
               {(phase === 'reveal' || phase === 'drill-answer') && (
                 <div className="speed-reveal">
                   {sentence.translation && <div className="speed-tr">{sentence.translation}</div>}
-                  {sentence.language && (
-                    <div className="speed-lang">
-                      {sentence.language.structure && <div>结构：{sentence.language.structure}</div>}
-                      {sentence.language.grammar && <div>语法：{sentence.language.grammar}</div>}
-                      {sentence.language.idioms?.length ? <div>习语：{sentence.language.idioms.join('；')}</div> : null}
-                      {sentence.language.phrases?.length ? <div>词组：{sentence.language.phrases.join('；')}</div> : null}
-                      {sentence.language.usage?.length ? <div>用法：{sentence.language.usage.join('；')}</div> : null}
+                  {getSentenceLanguages(sentence).map((L, li) => (
+                    <div className="speed-lang" key={li}>
+                      {L.source === 'manual' && <div className="muted">手动语言点</div>}
+                      {L.structure && <div>结构：{L.structure}</div>}
+                      {L.grammar && <div>语法：{L.grammar}</div>}
+                      {L.idioms?.length ? <div>习语：{L.idioms.join('；')}</div> : null}
+                      {L.phrases?.length ? <div>词组：{L.phrases.join('；')}</div> : null}
+                      {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
                     </div>
-                  )}
+                  ))}
                   {sentence.collocations.length > 0 && <div className="muted">搭配：{sentence.collocations.join('；')}</div>}
                   {readMs > 0 && (
                     <div className="muted">
@@ -529,38 +599,22 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             {phase !== 'drill' && (
               <div className="speed-addword">
                 <div className="speed-selbar">
-                  <span className="muted">点词加入「待加入」清单（跨句累积，翻页 / 重开都不丢）：</span>
-                  {basket.length ? <b>{basket.length} 个待加入</b> : <span className="muted">还没选</span>}
-                  {basket.length > 0 && (
-                    <>
-                      <button className="primary" onClick={addAll}>
-                        ＋ 全部加入生词本（{basket.length}）
-                      </button>
-                      <button onClick={() => setBasket([])} title="清空待加入清单（不影响已入库的）">
-                        清空
-                      </button>
-                    </>
-                  )}
+                  <span className="muted">点词选中 → 点「加入清单」或右键，加入生词本；右上角清单可删除误加。</span>
+                  {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
                   {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
                 </div>
-                {basket.length > 0 && (
-                  <div className="speed-basket">
-                    {basket.map((it, i) => (
-                      <button
-                        key={`${it.sentenceId}|${it.word}|${i}`}
-                        className="speed-basket-chip"
-                        title={`点一下移除。来源：${it.sentenceText.slice(0, 50)}${it.sentenceText.length > 50 ? '…' : ''}`}
-                        onClick={() => removeBasket(i)}
-                      >
-                        {it.word} <span className="speed-x">×</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
                 <div className="speed-addword-row">
+                  <button className="primary" disabled={!selWords.length} onClick={addSelected}>
+                    ＋ 加入清单{selWords.length ? `（${selWords.length}）` : ''}
+                  </button>
+                  {selWords.length > 1 && (
+                    <button onClick={mergePhrase} title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入）">
+                      ＋ 合成本句词组
+                    </button>
+                  )}
                   <input
                     className="speed-addword-input"
-                    placeholder="也可手打词 / 词组，回车加入清单"
+                    placeholder="也可手打词 / 词组，回车加入"
                     value={wordDraft}
                     onChange={(e) => setWordDraft(e.target.value)}
                     onKeyDown={(e) => {
@@ -570,14 +624,9 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
                       }
                     }}
                   />
-                  <button className="primary" disabled={!wordDraft.trim()} onClick={() => addCustom(wordDraft)}>
-                    ＋ 加入清单
+                  <button disabled={!wordDraft.trim()} onClick={() => addCustom(wordDraft)}>
+                    加入
                   </button>
-                  {selHere.length > 1 && (
-                    <button onClick={mergePhrase} title="把本句已选中的词按顺序合成一个词组条目（中间夹着的词不加入）">
-                      ＋ 合成本句词组
-                    </button>
-                  )}
                 </div>
                 {knownWords.length > 0 && (
                   <div className="speed-known">

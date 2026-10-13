@@ -16,7 +16,7 @@ import {
   buildTranslateAllPrompt,
   type VocabLevel,
 } from './analyzer'
-import { buildLanguagePrompt } from './language'
+import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
 import { normalizeWord } from './vocab'
 import type { Sentence, VocabItem } from '../types/document'
@@ -376,7 +376,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 缺语言点 → 逐句语言点（同样按句分块）
-  const noLang = input.sentences.filter((s) => !s.language)
+  const noLang = input.sentences.filter((s) => !hasSentenceLanguage(s))
   let lPos = 0
   for (const part of chunk(noLang, SENTENCE_CHUNK)) {
     const from = lPos + 1
@@ -515,7 +515,7 @@ export function countAiJobs(input: AiJobsInput): number {
     SENTENCE_CHUNK,
   ).length
   n += chunk(
-    input.sentences.filter((s) => !s.language),
+    input.sentences.filter((s) => !hasSentenceLanguage(s)),
     SENTENCE_CHUNK,
   ).length
   if (input.sentences.length && !input.hasListenQuiz) n++

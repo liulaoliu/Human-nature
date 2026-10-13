@@ -1284,9 +1284,29 @@ button.danger {
   gap: 8px;
 }
 .speed-selbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 13px; }
-.speed-basket { display: flex; flex-wrap: wrap; gap: 5px; max-height: 108px; overflow: auto; }
-.speed-basket-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
-.speed-basket-chip .speed-x { color: var(--red); margin-left: 2px; }
+.speed-basket-panel {
+  position: fixed;
+  top: 56px;
+  right: 10px;
+  width: min(340px, 44vw);
+  max-height: 62vh;
+  overflow: auto;
+  z-index: 40;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.35);
+}
+.speed-basket-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.speed-basket-head b { flex: 1; }
+.speed-basket-head button { font-size: 12px; padding: 2px 8px; }
+.speed-basket-list { display: flex; flex-direction: column; gap: 4px; max-height: 34vh; overflow: auto; }
+.speed-basket-row { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.speed-basket-row .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.speed-basket-word { white-space: nowrap; }
+.speed-basket-known { font-size: 11px; color: var(--dim); margin-left: 4px; }
+.speed-basket-row button { font-size: 12px; padding: 2px 8px; white-space: nowrap; }
 .speed-known { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; font-size: 12px; }
 .speed-known-chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; }
 .speed-known-chip.danger { background: var(--red); color: #fff; border-color: var(--red); }
@@ -1337,6 +1357,17 @@ button.danger {
 .lang-editor input { padding: 6px 10px; }
 .lang-editor-actions { justify-content: flex-end; }
 .lang-editor-warn { font-size: 12px; color: #b7791f; margin: -2px 0 0; }
+.lang-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow: auto; }
+.lang-item { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+.lang-item.editing { border-color: var(--accent); }
+.lang-item-head { display: flex; align-items: center; gap: 6px; }
+.lang-item-head .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.lang-tag { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--panel-3); color: var(--dim); }
+.lang-tag.ai { background: var(--accent-soft); color: var(--accent); }
+.lang-form { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.lang-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.lang-form input { padding: 6px 10px; }
+.lang-src { font-size: 11px; color: var(--dim); }
 .goal-bar > div { height: 100%; background: var(--accent); }
 
 /* 到期日历热力图 */

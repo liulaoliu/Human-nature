@@ -1,6 +1,7 @@
 import type { ReactNode, RefObject } from 'react'
 import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
+import { getSentenceLanguages } from '../../core/language'
 import type { Paragraph, Sentence } from '../../types/document'
 
 /** 把一句话渲染成「词 span（生词包成 .vw + 序号上标） + 标点文本」，选中的词加 .hl。
@@ -178,15 +179,17 @@ export default function ReaderBody({
                     {s.translation ?? '（未翻译）'}
                   </span>
                 )}
-                {showLanguage && s.language && (
-                  <span className="lang-block">
-                    {s.language.structure && <div>结构：{s.language.structure}</div>}
-                    {s.language.grammar && <div>语法：{s.language.grammar}</div>}
-                    {s.language.idioms?.length ? <div>习语：{s.language.idioms.join('；')}</div> : null}
-                    {s.language.phrases?.length ? <div>词组：{s.language.phrases.join('；')}</div> : null}
-                    {s.language.usage?.length ? <div>用法：{s.language.usage.join('；')}</div> : null}
-                  </span>
-                )}
+                {showLanguage &&
+                  getSentenceLanguages(s).map((L, li) => (
+                    <span className="lang-block" key={li}>
+                      {L.source === 'manual' && <div className="lang-src">手动</div>}
+                      {L.structure && <div>结构：{L.structure}</div>}
+                      {L.grammar && <div>语法：{L.grammar}</div>}
+                      {L.idioms?.length ? <div>习语：{L.idioms.join('；')}</div> : null}
+                      {L.phrases?.length ? <div>词组：{L.phrases.join('；')}</div> : null}
+                      {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
+                    </span>
+                  ))}
               </span>
             )
           })}

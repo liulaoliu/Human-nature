@@ -399,14 +399,14 @@ export default function SidePick({
           <button
             className="primary"
             onClick={onRunLocal}
-            disabled={!webTotal || localRunning || localConfigured === false}
+            disabled={!webPending || localRunning || localConfigured === false}
             title={
               localConfigured === false
                 ? '服务端未配置 API key：把 key 填进 config.local.json（该文件已 gitignore）'
                 : '把待办直接发给本机服务端跑，跑完自动应用；会自动串联多轮（如：先选词进生词本，再自动补音标/释义），不用复制粘贴、不用命令行'
             }
           >
-            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webTotal} 项）`}
+            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webPending} 项）`}
           </button>
           {localConfigured === false && <span className="muted"> 未配置 key（config.local.json）</span>}
           {localError && <span className="web-miss"> · {localError}</span>}

@@ -118,6 +118,7 @@ export function carryAnalysis(previous: Sentence[], next: Sentence[]): Sentence[
       grammarNote: src.grammarNote,
       // 语言点也别丢：编辑正文重切句后，AI 分析要跟着同句文搬过来
       language: src.language,
+      languages: src.languages,
       collocations: src.collocations,
       vocab: src.vocab,
       audio: src.audio,

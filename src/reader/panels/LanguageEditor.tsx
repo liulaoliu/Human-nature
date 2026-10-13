@@ -1,109 +1,160 @@
 import { useEffect, useState } from 'react'
 import type { Sentence, SentenceLanguage } from '../../types/document'
+import { getSentenceLanguages } from '../../core/language'
 
 export interface LanguageEditorProps {
   sentence: Sentence | null
-  onSave: (lang: SentenceLanguage) => void
+  onSave: (langs: SentenceLanguage[]) => void
   onClose: () => void
 }
 
-/** 把「；/;/、/换行」分隔的一行拆成数组（去空、去重）。 */
+interface Form {
+  structure: string
+  grammar: string
+  idioms: string
+  phrases: string
+  usage: string
+}
+
+const EMPTY: Form = { structure: '', grammar: '', idioms: '', phrases: '', usage: '' }
+
 function splitList(s: string): string[] {
   return [...new Set(s.split(/[；;、\n]+/).map((x) => x.trim()).filter(Boolean))]
 }
 
-/** 该句已是否有语言点内容。 */
-function hasLang(l?: SentenceLanguage): boolean {
-  if (!l) return false
-  return !!(l.structure || l.grammar || l.idioms?.length || l.phrases?.length || l.usage?.length)
+function toEntry(f: Form): SentenceLanguage {
+  const o: SentenceLanguage = {}
+  if (f.structure.trim()) o.structure = f.structure.trim()
+  if (f.grammar.trim()) o.grammar = f.grammar.trim()
+  const id = splitList(f.idioms)
+  const ph = splitList(f.phrases)
+  const us = splitList(f.usage)
+  if (id.length) o.idioms = id
+  if (ph.length) o.phrases = ph
+  if (us.length) o.usage = us
+  return o
+}
+
+function toForm(L?: SentenceLanguage): Form {
+  return {
+    structure: L?.structure ?? '',
+    grammar: L?.grammar ?? '',
+    idioms: (L?.idioms ?? []).join('；'),
+    phrases: (L?.phrases ?? []).join('；'),
+    usage: (L?.usage ?? []).join('；'),
+  }
+}
+
+function preview(L: SentenceLanguage): string {
+  return [L.structure, L.grammar, ...(L.idioms ?? []), ...(L.phrases ?? []), ...(L.usage ?? [])]
+    .filter(Boolean)
+    .join(' ｜ ')
 }
 
 /**
- * 语言点编辑：**默认「新增」——空白表单，全新填写（不带出旧内容，保存即覆盖该句）**；
- * 顶部可切到「编辑已有」预填现有内容（用于改错）。
- * 写回 `Sentence.language`，和 AI 生成的语言点同一份数据结构。
+ * 语言点编辑（列表式）：**一句可多条**——可新增、逐条编辑/删除；AI 生成的那条标「AI」，手动的标「手动」。
+ * 写回 `Sentence.languages`（兼容旧的单条 `language`）。
  */
 export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEditorProps) {
-  const [mode, setMode] = useState<'new' | 'edit'>('new')
-  const [structure, setStructure] = useState('')
-  const [grammar, setGrammar] = useState('')
-  const [idioms, setIdioms] = useState('')
-  const [phrases, setPhrases] = useState('')
-  const [usage, setUsage] = useState('')
+  const [langs, setLangs] = useState<SentenceLanguage[]>(() => getSentenceLanguages(sentence))
+  const [editIdx, setEditIdx] = useState<number | null>(null)
+  const [form, setForm] = useState<Form>(EMPTY)
 
-  const existing = sentence?.language
-  const canEdit = hasLang(existing)
-
-  // 换句 / 切换模式时刷新表单：新增=空白；编辑=预填现有
   useEffect(() => {
-    const L = mode === 'edit' ? existing : undefined
-    setStructure(L?.structure ?? '')
-    setGrammar(L?.grammar ?? '')
-    setIdioms((L?.idioms ?? []).join('；'))
-    setPhrases((L?.phrases ?? []).join('；'))
-    setUsage((L?.usage ?? []).join('；'))
-  }, [sentence, mode, existing])
+    setLangs(getSentenceLanguages(sentence))
+    setEditIdx(null)
+    setForm(EMPTY)
+  }, [sentence])
 
-  const save = () => {
-    const lang: SentenceLanguage = {}
-    if (structure.trim()) lang.structure = structure.trim()
-    if (grammar.trim()) lang.grammar = grammar.trim()
-    const id = splitList(idioms)
-    const ph = splitList(phrases)
-    const us = splitList(usage)
-    if (id.length) lang.idioms = id
-    if (ph.length) lang.phrases = ph
-    if (us.length) lang.usage = us
-    onSave(lang)
+  const startNew = () => {
+    setEditIdx(null)
+    setForm(EMPTY)
   }
+  const startEdit = (i: number) => {
+    setEditIdx(i)
+    setForm(toForm(langs[i]))
+  }
+  const remove = (i: number) => {
+    setLangs((l) => l.filter((_, k) => k !== i))
+    setEditIdx((e) => (e === i ? null : e != null && e > i ? e - 1 : e))
+    setForm(EMPTY)
+  }
+  const commit = () => {
+    const entry = toEntry(form)
+    if (!Object.keys(entry).length) return
+    if (editIdx === null) {
+      setLangs((l) => [...l, { ...entry, source: 'manual' }])
+    } else {
+      setLangs((l) => l.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual' } : x)))
+    }
+    startNew()
+  }
+
+  const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }))
 
   return (
     <div className="lang-editor-overlay" onClick={onClose}>
       <div className="lang-editor" onClick={(e) => e.stopPropagation()}>
         <div className="bar lang-editor-bar">
-          <b>{mode === 'edit' ? '编辑语言点' : '＋ 新增语言点'}</b>
+          <b>语言点（{langs.length}）</b>
           <span className="muted ellipsis" title={sentence?.text}>
             {sentence?.text}
           </span>
-          <button
-            onClick={() => setMode((m) => (m === 'edit' ? 'new' : 'edit'))}
-            disabled={mode === 'new' && !canEdit}
-            title={
-              mode === 'edit'
-                ? '切回「新增」：清空表单，全新填写（保存会覆盖该句现有语言点）'
-                : canEdit
-                  ? '载入该句现有语言点来修改（改错）'
-                  : '该句还没有语言点'
-            }
-          >
-            {mode === 'edit' ? '＋ 改为新增' : '✎ 编辑已有'}
-          </button>
         </div>
-        {mode === 'new' && canEdit && (
-          <div className="muted lang-editor-warn">新增会覆盖该句已有语言点；只想改错请点右上「✎ 编辑已有」。</div>
+
+        {langs.length > 0 && (
+          <div className="lang-list">
+            {langs.map((L, i) => (
+              <div className={'lang-item' + (editIdx === i ? ' editing' : '')} key={i}>
+                <div className="lang-item-head">
+                  <span className={'lang-tag' + (L.source === 'ai' ? ' ai' : '')}>{L.source === 'ai' ? 'AI' : '手动'}</span>
+                  <span className="muted ellipsis" title={preview(L)}>
+                    {preview(L)}
+                  </span>
+                  <button onClick={() => startEdit(i)} title="编辑这条">
+                    编辑
+                  </button>
+                  <button className="danger" onClick={() => remove(i)} title="删除这条">
+                    删除
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-        <label>
-          结构
-          <input value={structure} onChange={(e) => setStructure(e.target.value)} placeholder="句子主干 + 从句/非谓语/插入语…" />
-        </label>
-        <label>
-          语法
-          <input value={grammar} onChange={(e) => setGrammar(e.target.value)} placeholder="时态 / 语态 / 倒装 / 比较…" />
-        </label>
-        <label>
-          习语
-          <input value={idioms} onChange={(e) => setIdioms(e.target.value)} placeholder="多个用「；」分隔" />
-        </label>
-        <label>
-          词组
-          <input value={phrases} onChange={(e) => setPhrases(e.target.value)} placeholder="多个用「；」分隔" />
-        </label>
-        <label>
-          用法
-          <input value={usage} onChange={(e) => setUsage(e.target.value)} placeholder="多个用「；」分隔" />
-        </label>
+
+        <div className="lang-form">
+          <div className="muted">{editIdx === null ? '＋ 新增一条' : `编辑第 ${editIdx + 1} 条`}</div>
+          <label>
+            结构
+            <input value={form.structure} onChange={(e) => set({ structure: e.target.value })} placeholder="句子主干 + 从句/非谓语/插入语…" />
+          </label>
+          <label>
+            语法
+            <input value={form.grammar} onChange={(e) => set({ grammar: e.target.value })} placeholder="时态 / 语态 / 倒装 / 比较…" />
+          </label>
+          <label>
+            习语
+            <input value={form.idioms} onChange={(e) => set({ idioms: e.target.value })} placeholder="多个用「；」分隔" />
+          </label>
+          <label>
+            词组
+            <input value={form.phrases} onChange={(e) => set({ phrases: e.target.value })} placeholder="多个用「；」分隔" />
+          </label>
+          <label>
+            用法
+            <input value={form.usage} onChange={(e) => set({ usage: e.target.value })} placeholder="多个用「；」分隔" />
+          </label>
+          <div className="bar">
+            <button className="primary" onClick={commit}>
+              {editIdx === null ? '＋ 加入列表' : '保存本条'}
+            </button>
+            {editIdx !== null && <button onClick={startNew}>取消编辑</button>}
+          </div>
+        </div>
+
         <div className="bar lang-editor-actions">
-          <button className="primary" onClick={save}>
+          <button className="primary" onClick={() => onSave(langs)}>
             保存
           </button>
           <button onClick={onClose}>取消</button>
