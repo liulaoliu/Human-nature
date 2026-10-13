@@ -44,6 +44,8 @@ export interface SideVocabProps {
   onShowLanguageChange: (on: boolean) => void
   /** 本篇已有语言点的句子数（诊断/提示用）。 */
   languageCount: number
+  /** 打开「今日计划」。 */
+  onOpenPlan: () => void
   onOpenWriting: () => void
   onWrongPractice: () => void
 
@@ -105,6 +107,7 @@ export default function SideVocab({
   showLanguage,
   onShowLanguageChange,
   languageCount,
+  onOpenPlan,
   onOpenWriting,
   onWrongPractice,
   onBrowseAll,
@@ -240,6 +243,9 @@ export default function SideVocab({
         </label>
         <button onClick={onOpenWriting} disabled={!hasDoc} title="仿写：从范句生成任务 + 评分标准 → 你写 → AI 严格批改">
           仿写
+        </button>
+        <button onClick={onOpenPlan} title="今日计划：每日清单（自动打勾）+ 选材料建议">
+          📋 今日计划
         </button>
         <button
           onClick={onWrongPractice}

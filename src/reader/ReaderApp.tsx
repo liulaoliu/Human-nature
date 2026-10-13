@@ -50,6 +50,7 @@ import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
+import PlanPanel from './panels/PlanPanel'
 import WritingPanel from './panels/WritingPanel'
 import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
@@ -886,6 +887,9 @@ export default function ReaderApp() {
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
   /** 手动加/改语言点。 */
   const [langOpen, setLangOpen] = useState(false)
+  /** 今日计划。
+   */
+  const [planOpen, setPlanOpen] = useState(false)
   const openSpeedRead = useCallback(() => {
     if (!doc?.sentences.length) {
       flash('先打开一篇文章')
@@ -1187,6 +1191,21 @@ export default function ReaderApp() {
 
   /** 背单词时长统计：累计 / 今日 / 评分次数；显示时加上本轮尚未落盘的部分。 */
   const studyStats = useMemo(() => studyTotals(studyDays), [studyDays])
+
+  /** 今日计划用：今天背了几张、写了几条。 */
+  const todayKey = dayKeyLocal(new Date())
+  const todayCards = useMemo(() => studyDays.find((d) => d.day === todayKey)?.cards ?? 0, [studyDays, todayKey])
+  const todayWrites = useMemo(() => {
+    let n = 0
+    for (const r of writingHistory) {
+      try {
+        if (dayKeyLocal(new Date(r.at)) === todayKey) n++
+      } catch {
+        // 忽略
+      }
+    }
+    return n
+  }, [writingHistory, todayKey])
   const studyTotalSeconds = studyStats.totalSeconds
   const studyTotalCards = studyStats.totalCards
   const studyTodaySeconds = studyStats.todaySeconds
@@ -2216,6 +2235,30 @@ export default function ReaderApp() {
           <LanguageEditor sentence={sentence} onSave={saveLanguage} onClose={() => setLangOpen(false)} />
         )}
 
+        {planOpen && (
+          <PlanPanel
+            onClose={() => setPlanOpen(false)}
+            hasDoc={!!doc}
+            articleTitle={articleTitle}
+            todoPending={aiWebPending}
+            todayCards={todayCards}
+            todayWrites={todayWrites}
+            todayKey={todayKey}
+            onNewArticle={() => {
+              setPlanOpen(false)
+              setComposing(true)
+            }}
+            onStartStudy={() => {
+              setPlanOpen(false)
+              startStudy()
+            }}
+            onOpenSpeedRead={() => {
+              setPlanOpen(false)
+              openSpeedRead()
+            }}
+          />
+        )}
+
         {listenOpen && listenQuiz && (
           <ListeningPanel
             questions={listenQuestions}
@@ -2539,6 +2582,7 @@ export default function ReaderApp() {
           showLanguage={showLanguage}
           onShowLanguageChange={setShowLanguage}
           languageCount={languageSentCount}
+          onOpenPlan={() => setPlanOpen(true)}
           onOpenWriting={openWriting}
           onWrongPractice={() => {
             setQuizScope('lapses')

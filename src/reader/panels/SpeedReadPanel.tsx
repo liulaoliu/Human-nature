@@ -97,6 +97,8 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   const [addedWord, setAddedWord] = useState('')
   /** 本页从速读加入生词本的记录（跨句汇总、持久化），可在右上角清单里删除。 */
   const [collected, setCollected] = useState<CollectedItem[]>(() => loadCollected(docKey))
+  /** 右上角「本页加入」清单是否展开（可折叠，持久化）。 */
+  const [collectedOpen, setCollectedOpen] = useLocalStorageState('reader:speedCollectedOpen', true, persistentBoolTrue)
   /** 本句当前选中的词（点击切换；供「加入清单」/右键/合成词组）。 */
   const [selWords, setSelWords] = useState<string[]>([])
   /** 两步确认移出的词。 */
@@ -475,24 +477,29 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       </div>
 
       {collected.length > 0 && (
-        <div className="speed-basket-panel">
+        <div className={'speed-basket-panel' + (collectedOpen ? '' : ' collapsed')}>
           <div className="speed-basket-head">
             <b>本页加入（{collected.length}）</b>
+            <button onClick={() => setCollectedOpen((v) => !v)} title={collectedOpen ? '折叠清单' : '展开清单'}>
+              {collectedOpen ? '▾ 折叠' : '▸ 展开'}
+            </button>
           </div>
-          <div className="speed-basket-list">
-            {collected.map((it, i) => (
-              <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
-                <span className="speed-basket-word">{it.word}</span>
-                {it.sentenceText && (
-                  <span className="muted ellipsis" title={it.sentenceText}>
-                    {it.sentenceText}
-                  </span>
-                )}
-                <button onClick={() => removeCollected(i)} title="从生词本移出（剔除误加）">
-                  删除
-                </button>
-              </div>
-            ))}
+          <div className="speed-basket-body">
+            <div className="speed-basket-list">
+              {collected.map((it, i) => (
+                <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
+                  <span className="speed-basket-word">{it.word}</span>
+                  {it.sentenceText && (
+                    <span className="muted ellipsis" title={it.sentenceText}>
+                      {it.sentenceText}
+                    </span>
+                  )}
+                  <button onClick={() => removeCollected(i)} title="从生词本移出（剔除误加）">
+                    删除
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}
