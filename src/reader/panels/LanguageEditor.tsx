@@ -92,6 +92,17 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
 
   const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }))
 
+  /** 保存：把「正在填的这条」也一并收进来再写回（避免只点了下面「保存」而漏掉表单内容）。 */
+  const saveAll = () => {
+    const entry = toEntry(form)
+    let list = langs
+    if (Object.keys(entry).length) {
+      if (editIdx === null) list = [...langs, { ...entry, source: 'manual' }]
+      else list = langs.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual' } : x))
+    }
+    onSave(list)
+  }
+
   return (
     <div className="lang-editor-overlay" onClick={onClose}>
       <div className="lang-editor" onClick={(e) => e.stopPropagation()}>
@@ -154,7 +165,7 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
         </div>
 
         <div className="bar lang-editor-actions">
-          <button className="primary" onClick={() => onSave(langs)}>
+          <button className="primary" onClick={saveAll}>
             保存
           </button>
           <button onClick={onClose}>取消</button>

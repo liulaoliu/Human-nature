@@ -887,6 +887,8 @@ export default function ReaderApp() {
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
   /** 手动加/改语言点。 */
   const [langOpen, setLangOpen] = useState(false)
+  /** 语言点编辑的目标句（阅读页选中的句 / 速读当前句）。 */
+  const [langTarget, setLangTarget] = useState<Sentence | null>(null)
   /** 今日计划。
    */
   const [planOpen, setPlanOpen] = useState(false)
@@ -1480,11 +1482,19 @@ export default function ReaderApp() {
     return null
   }, [doc, selectedId, exact])
 
-  /** 手动保存语言点列表（写回该句的 languages）。 */
+  /** 打开语言点编辑（针对指定句子）。 */
+  const openLangFor = useCallback((s: Sentence | null) => {
+    if (!s) return
+    setLangTarget(s)
+    setLangOpen(true)
+  }, [])
+
+  /** 手动保存语言点列表（写回目标句的 languages）。 */
   const saveLanguage = useCallback(
     (langs: SentenceLanguage[]) => {
-      if (!sentence) return
-      const sid = sentence.id
+      const target = langTarget
+      if (!target) return
+      const sid = target.id
       setDoc((d) =>
         d
           ? { ...d, sentences: d.sentences.map((s) => (s.id === sid ? { ...s, languages: langs, language: undefined } : s)) }
@@ -1494,7 +1504,7 @@ export default function ReaderApp() {
       setLangOpen(false)
       flash(langs.length ? `已保存语言点（${langs.length} 条）` : '已清空该句语言点')
     },
-    [sentence, setDoc, setPendingSave, flash],
+    [langTarget, setDoc, setPendingSave, flash],
   )
 
   /** 实际用于提示词/复制的文本：默认整句；有精确选区时用选区。 */
@@ -2228,11 +2238,13 @@ export default function ReaderApp() {
             wordsInSentence={wordsInSentence}
             onRemoveWord={removeWordFromVocab}
             vocabMode={vocabMode}
+            onOpenLang={openLangFor}
+            langEditorOpen={langOpen}
           />
         )}
 
         {langOpen && (
-          <LanguageEditor sentence={sentence} onSave={saveLanguage} onClose={() => setLangOpen(false)} />
+          <LanguageEditor sentence={langTarget} onSave={saveLanguage} onClose={() => setLangOpen(false)} />
         )}
 
         {planOpen && (
@@ -2480,7 +2492,7 @@ export default function ReaderApp() {
           onClearBatch={() => setBatch([])}
           onAddSelectionToBatch={addSelectionToBatch}
           onMark={mark}
-          onOpenLang={() => setLangOpen(true)}
+          onOpenLang={() => openLangFor(sentence)}
           pasted={pasted}
           onPastedChange={(v) => {
             setPasted(v)

@@ -1338,6 +1338,8 @@ button.danger {
 .speed-basket-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; transition: margin-bottom 0.28s ease; }
 .speed-basket-head b { flex: 1; }
 .speed-basket-head button { font-size: 12px; padding: 2px 8px; }
+.speed-basket-head .check-inline { font-size: 12px; white-space: nowrap; }
+.speed-basket-empty { font-size: 12px; }
 .speed-basket-panel.collapsed .speed-basket-head { margin-bottom: 0; }
 .speed-basket-body {
   overflow: hidden;
@@ -1365,8 +1367,9 @@ button.danger {
 
 /* 速读 · 句子按词可点选 */
 .speed-sentence { }
-.speed-w { cursor: pointer; border-radius: 4px; padding: 0 1px; }
-.speed-w:hover { background: var(--accent-soft); }
+.speed-w { border-radius: 4px; padding: 0 1px; }
+.speed-w.pick { cursor: pointer; }
+.speed-w.pick:hover { background: var(--accent-soft); }
 .speed-w.known { color: var(--dim); text-decoration: underline dotted; text-underline-offset: 3px; }
 .speed-w.sel { background: var(--accent); color: #fff; }
 

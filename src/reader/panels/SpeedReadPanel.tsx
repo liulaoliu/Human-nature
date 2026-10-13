@@ -13,7 +13,7 @@ import {
   type SpeedReadDrill,
   type SpeedRow,
 } from '../../core/speedRead'
-import { useLocalStorageState, persistentBoolTrue, persistentNumber } from '../hooks/useLocalStorageState'
+import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentNumber } from '../hooks/useLocalStorageState'
 
 type Phase = 'read' | 'reveal' | 'drill' | 'drill-answer'
 
@@ -33,6 +33,10 @@ export interface SpeedReadPanelProps {
   onRemoveWord: (word: string) => void
   /** 阅读页「选词模式」是否开启：开启时禁用正文选中/复制（避免和点词打架）。 */
   vocabMode: boolean
+  /** 给这一句加/改语言点（复用阅读页的语言点编辑器）。 */
+  onOpenLang: (sentence: Sentence) => void
+  /** 语言点编辑器是否在速读之上打开（打开时不抢键盘）。 */
+  langEditorOpen: boolean
 }
 
 const cursorKey = (docKey: string) => `reader:speedCursor:${docKey}`
@@ -67,10 +71,12 @@ function loadCollected(docKey: string): CollectedItem[] {
  * 逐句速读：一次一句 → 我先读 → 空格揭示释义/语言点；超时算「不太理解」→ 四选一拷打；
  * 理解后下一句。带配速条、目标 WPM、进度与总结。拷打时原文隐藏，只给挖空句与选项。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordsInSentence, onRemoveWord, vocabMode }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
+  /** 选词模式：开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点。 */
+  const [pickMode, setPickMode] = useLocalStorageState('reader:speedPickMode', false, persistentBool)
   const [index, setIndex] = useState(() => Math.min(readCursor(cursorKey(docKey)), Math.max(0, n - 1)))
   const [phase, setPhase] = useState<Phase>('read')
   const [elapsed, setElapsed] = useState(0)
@@ -99,6 +105,10 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   const [collected, setCollected] = useState<CollectedItem[]>(() => loadCollected(docKey))
   /** 右上角「本页加入」清单是否展开（可折叠，持久化）。 */
   const [collectedOpen, setCollectedOpen] = useLocalStorageState('reader:speedCollectedOpen', true, persistentBoolTrue)
+  /** 是否显示「已加入生词本」的单词（关掉则列表显示为空）。 */
+  const [showCollected, setShowCollected] = useLocalStorageState('reader:speedShowCollected', true, persistentBoolTrue)
+  /** 删除的两步确认（点一次变红，3 秒内再点才真删）。 */
+  const [confirmIdx, setConfirmIdx] = useState<number | null>(null)
   /** 本句当前选中的词（点击切换；供「加入清单」/右键/合成词组）。 */
   const [selWords, setSelWords] = useState<string[]>([])
   /** 两步确认移出的词。 */
@@ -203,6 +213,20 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     [collected, onRemoveWord],
   )
 
+  /** 删除（两步确认）：第一次点变红，3 秒内再点才真删。 */
+  const tapDelete = useCallback(
+    (i: number) => {
+      if (confirmIdx === i) {
+        removeCollected(i)
+        setConfirmIdx(null)
+        return
+      }
+      setConfirmIdx(i)
+      window.setTimeout(() => setConfirmIdx((cur) => (cur === i ? null : cur)), 3000)
+    },
+    [confirmIdx, removeCollected],
+  )
+
   /** 本句已在生词本的词 / 短语（含从本句加入的多词词组），用于「移出」。 */
   const knownWords = useMemo(() => {
     const out: string[] = []
@@ -242,11 +266,15 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       nodes.push(
         <span
           key={i}
-          className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '')}
-          title={known ? '已在生词本' : '左键选中，再点「加入清单」；或右键直接加入生词本'}
+          className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '') + (pickMode ? ' pick' : '')}
+          title={
+            pickMode
+              ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
+              : '选词模式未开（勾上顶栏「选词模式」才能点选）；右键可直接加入生词本'
+          }
           onClick={(e) => {
             e.stopPropagation()
-            toggleSel(w.text)
+            if (pickMode) toggleSel(w.text)
           }}
           onContextMenu={(e) => {
             e.preventDefault()
@@ -261,7 +289,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     })
     if (pos < text.length) nodes.push(text.slice(pos))
     return nodes
-  }, [sentence, spans, inSel, toggleSel, isKnown, addDirect])
+  }, [sentence, spans, inSel, toggleSel, isKnown, addDirect, pickMode])
 
   useEffect(() => {
     if (phase !== 'read' || done) return
@@ -378,6 +406,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     const onKey = (e: KeyboardEvent) => {
       // 正在输入框里打字时，不要触发空格翻页 / 数字选项
       const el = e.target as HTMLElement | null
+      if (langEditorOpen) return
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
@@ -420,7 +449,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [advance, chooseDrill, onClose, phase, drill, go])
+  }, [advance, chooseDrill, onClose, phase, drill, go, langEditorOpen])
 
   const restart = () => {
     setRows([])
@@ -469,6 +498,24 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
           <input type="checkbox" checked={autoDrill} onChange={(e) => setAutoDrill(e.target.checked)} />
           超时拷打
         </label>
+        <label className="check-inline" title="开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点">
+          <input
+            type="checkbox"
+            checked={pickMode}
+            onChange={(e) => {
+              setPickMode(e.target.checked)
+              if (!e.target.checked) setSelWords([])
+            }}
+          />
+          选词模式
+        </label>
+        <button
+          onClick={() => sentence && onOpenLang(sentence)}
+          disabled={!sentence}
+          title="给这一句加/改语言点（结构 / 语法 / 习语 / 词组 / 用法）"
+        >
+          ＋ 语言点
+        </button>
         <span className="muted">平均 {summary.avgWpm} 词/分 · 超时 {summary.slow}</span>
       </div>
 
@@ -480,26 +527,38 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         <div className={'speed-basket-panel' + (collectedOpen ? '' : ' collapsed')}>
           <div className="speed-basket-head">
             <b>本页加入（{collected.length}）</b>
+            <label className="check-inline" title="开=显示已加入生词本的单词；关=列表显示为空">
+              <input type="checkbox" checked={showCollected} onChange={(e) => setShowCollected(e.target.checked)} />
+              显示已加入
+            </label>
             <button onClick={() => setCollectedOpen((v) => !v)} title={collectedOpen ? '折叠清单' : '展开清单'}>
               {collectedOpen ? '▾ 折叠' : '▸ 展开'}
             </button>
           </div>
           <div className="speed-basket-body">
-            <div className="speed-basket-list">
-              {collected.map((it, i) => (
-                <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
-                  <span className="speed-basket-word">{it.word}</span>
-                  {it.sentenceText && (
-                    <span className="muted ellipsis" title={it.sentenceText}>
-                      {it.sentenceText}
-                    </span>
-                  )}
-                  <button onClick={() => removeCollected(i)} title="从生词本移出（剔除误加）">
-                    删除
-                  </button>
-                </div>
-              ))}
-            </div>
+            {showCollected ? (
+              <div className="speed-basket-list">
+                {collected.map((it, i) => (
+                  <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
+                    <span className="speed-basket-word">{it.word}</span>
+                    {it.sentenceText && (
+                      <span className="muted ellipsis" title={it.sentenceText}>
+                        {it.sentenceText}
+                      </span>
+                    )}
+                    <button
+                      className={confirmIdx === i ? 'danger' : ''}
+                      onClick={() => tapDelete(i)}
+                      title={confirmIdx === i ? '再点一次确认移出（两步确认）' : '从生词本移出（剔除误加）'}
+                    >
+                      {confirmIdx === i ? '确认删除' : '删除'}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="muted speed-basket-empty">已加入的单词已隐藏（勾选「显示已加入」查看）</div>
+            )}
           </div>
         </div>
       )}
@@ -535,7 +594,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
               <div className="speed-sentence-slot">
                 <div
                   className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
-                  style={{ userSelect: vocabMode ? 'none' : 'text' }}
+                  style={{ userSelect: pickMode || vocabMode ? 'none' : 'text' }}
                 >
                   {sentenceParts}
                 </div>
@@ -613,7 +672,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             {phase !== 'drill' && (
               <div className="speed-addword">
                 <div className="speed-selbar">
-                  <span className="muted">点词选中 → 点「加入清单」或右键，加入生词本；右上角清单可删除误加。</span>
+                  <span className="muted">勾顶栏「选词模式」后点词选中 → 点「加入清单」或右键入库；右上角清单可删除误加。</span>
                   {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
                   {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
                 </div>
