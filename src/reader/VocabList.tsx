@@ -1,15 +1,19 @@
 import { Fragment, useState } from 'react'
 import type { VocabItem } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
-import { displayMeaning, normalizePos } from '../core/vocab'
+import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
+import VocabBlocks from './panels/VocabBlocks'
 
-/** 生词本里可改的字段（单词本身、音标、词性、释义、用法）。 */
+/** 生词本里可改的字段（单词本身、音标、词性、释义、用法、词组、习语、语法标记）。 */
 export interface VocabEditPatch {
   word?: string
   phonetic?: string | null
   partOfSpeech?: string | null
   meaning?: string | null
   usage?: string[]
+  phrases?: string[]
+  idioms?: string[]
+  grammarMarks?: string[]
 }
 
 interface Props {
@@ -35,6 +39,9 @@ interface Draft {
   partOfSpeech: string
   meaning: string
   usage: string
+  phrases: string
+  idioms: string
+  grammarMarks: string
 }
 
 /** 生词本列表（卡片 / 书本式表格），侧栏与「全部生词」视图共用；支持就地编辑。 */
@@ -62,6 +69,9 @@ export default function VocabList({
       partOfSpeech: it.partOfSpeech ?? '',
       meaning: it.meaning ?? '',
       usage: it.usage.join('；'),
+      phrases: (it.phrases ?? []).join('；'),
+      idioms: (it.idioms ?? []).join('；'),
+      grammarMarks: (it.grammarMarks ?? []).join('；'),
     })
   }
   const cancelEdit = () => {
@@ -70,15 +80,20 @@ export default function VocabList({
   }
   const saveEdit = (it: VocabItem) => {
     if (!draft) return
+    const split = (s: string) =>
+      s
+        .split(/[;；\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean)
     onEdit(it.id, {
       word: draft.word.trim() || it.word,
       phonetic: draft.phonetic.trim() || null,
       partOfSpeech: draft.partOfSpeech.trim() || null,
       meaning: draft.meaning.trim() || null,
-      usage: draft.usage
-        .split(/[;；\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      usage: split(draft.usage),
+      phrases: split(draft.phrases),
+      idioms: split(draft.idioms),
+      grammarMarks: split(draft.grammarMarks),
     })
     cancelEdit()
   }
@@ -119,6 +134,30 @@ export default function VocabList({
           value={draft?.usage ?? ''}
           placeholder="run a business；run out"
           onChange={(e) => setDraft((d) => (d ? { ...d, usage: e.target.value } : d))}
+        />
+      </label>
+      <label className="wide">
+        词组（分号分隔）
+        <input
+          value={draft?.phrases ?? ''}
+          placeholder="run out of；run a business"
+          onChange={(e) => setDraft((d) => (d ? { ...d, phrases: e.target.value } : d))}
+        />
+      </label>
+      <label className="wide">
+        习语（分号分隔）
+        <input
+          value={draft?.idioms ?? ''}
+          placeholder="run in the family"
+          onChange={(e) => setDraft((d) => (d ? { ...d, idioms: e.target.value } : d))}
+        />
+      </label>
+      <label className="wide">
+        语法标记（分号分隔）
+        <input
+          value={draft?.grammarMarks ?? ''}
+          placeholder="可数；不可数 / 及物；不及物 / 可分级"
+          onChange={(e) => setDraft((d) => (d ? { ...d, grammarMarks: e.target.value } : d))}
         />
       </label>
       <div className="bar">
@@ -166,6 +205,15 @@ export default function VocabList({
                 <td className="cell-meaning">
                   {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
                   {it.meaning ?? ''}
+                  {it.grammarMarks?.length ? (
+                    <span className="grammar-marks">
+                      {it.grammarMarks.map((m) => (
+                        <span className="gmark" key={m}>
+                          {m}
+                        </span>
+                      ))}
+                    </span>
+                  ) : null}
                   {it.confusables && it.confusables.length > 0 && (
                     <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
                   )}
@@ -234,30 +282,22 @@ export default function VocabList({
               </div>
               {normalizePos(it.partOfSpeech) && <div className="mu">{normalizePos(it.partOfSpeech)}</div>}
               {displayMeaning(it) && <div className="mu">{displayMeaning(it)}</div>}
-              {it.usage.length > 0 && <div className="mu">{it.usage.join('；')}</div>}
+              {it.grammarMarks?.length ? (
+                <div className="grammar-marks">
+                  {it.grammarMarks.map((m) => (
+                    <span className="gmark" key={m}>
+                      {m}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               {it.note && <div className="note">{it.note}</div>}
-              {it.confusables && it.confusables.length > 0 && (
-                <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
-              )}
-              {it.examples.slice(0, 2).map((ex, i) =>
-                ex.text && ex.text !== it.source?.sentenceText ? (
-                  <div className="ex" key={i}>
-                    {ex.text}
-                    {ex.translation ? ` — ${ex.translation}` : ''}
-                  </div>
-                ) : null,
-              )}
+              <VocabBlocks blocks={vocabCardBlocks(it, { maxExamples: 2 })} />
               <div className="muted">
                 状态：{it.status}
                 {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
                 {it.source ? ` · ${it.source.articleId}` : ''}
               </div>
-              {showSource && it.source && (
-                <div className="ex src">
-                  来源：{it.source.articleId}
-                  {it.source.sentenceText ? ` · ${it.source.sentenceText}` : ''}
-                </div>
-              )}
               <div className="row">
                 <button onClick={() => onReview(it.id, 'again')}>重来</button>
                 <button onClick={() => onReview(it.id, 'good')}>记得</button>

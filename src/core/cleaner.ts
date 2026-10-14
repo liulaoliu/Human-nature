@@ -73,6 +73,14 @@ function dehyphenateLines(lines: string[]): string[] {
 }
 
 /**
+ * 手动加的「【…】」标记行（标题 / 导语）。这些行单独成段，不与相邻正文合并，
+ * 免得清洗时把标题/导语和正文粘成一段。
+ */
+function isMarkerLine(line: string): boolean {
+  return /^[【〖［]/.test(line.trim())
+}
+
+/**
  * 按空行切段落：段内所有物理行合成一行（用空格连接），段间空一行。
  *
  * 这同时覆盖了大纲里「合并行内硬换行」那条规则：既然每段最终输出为一行，
@@ -81,17 +89,26 @@ function dehyphenateLines(lines: string[]): string[] {
 function groupParagraphs(lines: string[]): string {
   const paras: string[] = []
   let cur: string[] = []
-  for (const line of lines) {
-    if (line.trim() === '') {
-      if (cur.length) {
-        paras.push(cur.join(' '))
-        cur = []
-      }
-    } else {
-      cur.push(line.trim())
+  const flush = () => {
+    if (cur.length) {
+      paras.push(cur.join(' '))
+      cur = []
     }
   }
-  if (cur.length) paras.push(cur.join(' '))
+  for (const line of lines) {
+    if (line.trim() === '') {
+      flush()
+      continue
+    }
+    const t = line.trim()
+    if (isMarkerLine(t)) {
+      flush()
+      paras.push(t)
+      continue
+    }
+    cur.push(t)
+  }
+  flush()
   return paras.join('\n\n')
 }
 

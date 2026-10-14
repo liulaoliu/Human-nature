@@ -7,6 +7,8 @@ export interface SideOverviewProps {
   /** 按 row.key 找对应的动作按钮（label + run）；没有则不显示按钮。 */
   boardAction: (key: string) => { label: string; run: () => void } | null
   onRetryVocab: () => void
+  /** 「错题包围战」：错题 + 优先 + 学不稳 混编，打到全对。 */
+  onSiege: () => void
   onRetryListen: () => void
   onRetryDict: () => void
   onClearMistakes: () => void
@@ -18,6 +20,7 @@ export default function SideOverview({
   readyRows,
   boardAction,
   onRetryVocab,
+  onSiege,
   onRetryListen,
   onRetryDict,
   onClearMistakes,
@@ -50,6 +53,14 @@ export default function SideOverview({
                     </button>
                   </div>
                 ))}
+                <button
+                  className="danger"
+                  onClick={onSiege}
+                  disabled={c.vocab === 0}
+                  title="错题 + 优先重排 + 学不稳的词混编轰炸，自动反复鞭打直到全对"
+                >
+                  🧨 错题包围战（打到全对）
+                </button>
                 <button className="danger" onClick={onClearMistakes}>
                   清空错题本
                 </button>

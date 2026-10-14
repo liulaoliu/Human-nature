@@ -187,7 +187,16 @@ describe('buildAiJobs / countAiJobs', () => {
 
   it('有音标有释义的词不算待办', () => {
     const items = [
-      mkItem({ word: 'ok', lemma: 'ok', phonetic: '/o/', meaning: '行了', confusables: [{ word: 'x' }], examples: [{ text: 'ok' }] }),
+      mkItem({
+        word: 'ok',
+        lemma: 'ok',
+        phonetic: '/o/',
+        meaning: '行了',
+        confusables: [{ word: 'x' }],
+        phrases: ['ok for'],
+        grammarMarks: ['可数'],
+        examples: [{ text: 'ok' }],
+      }),
     ]
     const jobs = buildAiJobs(emptyInput({ items }))
     expect(jobs).toHaveLength(0)
@@ -209,9 +218,62 @@ describe('buildAiJobs / countAiJobs', () => {
   })
 
   it('原形 / -ing-ed 各一条', () => {
-    const items = [mkItem({ word: 'running', lemma: 'run', confusables: [{ word: 'x' }], examples: [{ text: 'x' }] })]
+    const items = [
+      mkItem({
+        word: 'running',
+        lemma: 'run',
+        confusables: [{ word: 'x' }],
+        phrases: ['run out'],
+        grammarMarks: ['及物'],
+        examples: [{ text: 'x' }],
+      }),
+    ]
     const jobs = buildAiJobs(emptyInput({ items }))
     expect(jobs.map((j) => j.task).sort()).toEqual(['lemma', 'pos'])
+  })
+
+  it('名词/动词缺语法标记 → 生成语法标记任务；标过就不再排', () => {
+    const need = buildAiJobs(emptyInput({ items: [mkItem({ word: 'water', lemma: 'water' })] }))
+    expect(need.find((j) => j.task === 'grammar_mark')?.askedWords).toEqual(['water'])
+    const done = buildAiJobs(
+      emptyInput({ items: [mkItem({ word: 'water', lemma: 'water', grammarMarks: ['不可数'] })] }),
+    )
+    expect(done.find((j) => j.task === 'grammar_mark')).toBeUndefined()
+  })
+
+  it('非名词/动词/形容词不排语法标记任务', () => {
+    const jobs = buildAiJobs(emptyInput({ items: [mkItem({ word: 'into', lemma: 'into', partOfSpeech: 'prep.' })] }))
+    expect(jobs.find((j) => j.task === 'grammar_mark')).toBeUndefined()
+  })
+
+  it('标过（哪怕空数组，如 mrs 无可标项）就不再排，避免重复跑批', () => {
+    const items = [mkItem({ word: 'mrs', lemma: 'mrs', grammarMarks: [], phrases: [] })]
+    const jobs = buildAiJobs(emptyInput({ items }))
+    expect(jobs.find((j) => j.task === 'grammar_mark')).toBeUndefined()
+    expect(jobs.find((j) => j.task === 'phrase')).toBeUndefined()
+  })
+
+  it('缺词组 → 生成词组/习语任务；有了就不再排', () => {
+    const missing = buildAiJobs(emptyInput({ items: [mkItem({ word: 'run', lemma: 'run' })] }))
+    expect(missing.find((j) => j.task === 'phrase')?.askedWords).toEqual(['run'])
+    const done = buildAiJobs(
+      emptyInput({ items: [mkItem({ word: 'run', lemma: 'run', phrases: ['run out'] })] }),
+    )
+    expect(done.find((j) => j.task === 'phrase')).toBeUndefined()
+  })
+
+  it('只有来源句（等于没有自己的例句）也要生成用法示例', () => {
+    const it = mkItem({
+      word: 'run',
+      lemma: 'run',
+      phrases: ['run out'],
+      examples: [{ text: 'He runs fast.' }],
+      source: { articleId: 'a', fileName: null, sentenceId: 's1', sentenceText: 'He runs fast.' },
+    })
+    expect(buildAiJobs(emptyInput({ items: [it] })).find((j) => j.task === 'example')?.askedWords).toEqual(['run'])
+    // 有了别的例句就不再排
+    const withOwn = { ...it, examples: [...it.examples, { text: 'I run every day.' }] }
+    expect(buildAiJobs(emptyInput({ items: [withOwn] })).find((j) => j.task === 'example')).toBeUndefined()
   })
 
   it('-ing/-ed 已辨析过（note 含「辨析」）就不再排', () => {

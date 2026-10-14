@@ -4,7 +4,9 @@ import {
   parseAnalysis,
   parseConfusables,
   parseExampleTable,
+  parseGrammarMarkTable,
   parseLemmaTable,
+  parsePhraseTable,
   parsePosTable,
   parseWordList,
 } from '../../core/analyzer'
@@ -14,7 +16,9 @@ import { addWritingRecord, parseImitationTask, parseWritingFeedback, type Imitat
 import {
   applyConfusables,
   applyExamples,
+  applyGrammarMarks,
   applyLemmaMap,
+  applyPhrases,
   applyPosAnalysis,
   applyWordAnalysis,
   dedupeLibrary,
@@ -32,7 +36,9 @@ type BatchItemLike = { word: string; sentence: string; sentenceId: string | null
 
 export interface ApplyOutcome {
   report: string[]
-  missing: { task: 'confusable' | 'lookup' | 'lemma' | 'pos'; words: string[] } | null
+  missing:
+    | { task: 'confusable' | 'lookup' | 'lemma' | 'pos' | 'phrase' | 'grammar_mark'; words: string[] }
+    | null
   ok: boolean
 }
 
@@ -193,7 +199,35 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const rows = parseExampleTable(text)
         if (!rows.length) return { report: ['没解析出例句（格式：单词 | 英 | 中 | 英 | 中）'], missing: null, ok: false }
         commit(applyExamples(lib, rows))
-        return { report: [`已加入 ${rows.length} 个词的用法示例`], missing: null, ok: true }
+        return { report: [`已加入 ${rows.length} 个词的例句`], missing: null, ok: true }
+      }
+
+      // 词组 / 习语：给词补「词组」「习语」两块（与用法、例句分开）
+      if (task === 'phrase') {
+        const rows = parsePhraseTable(text)
+        if (!rows.length)
+          return { report: ['没解析出词组/习语（格式：单词 | 词组1；词组2 | 习语1；习语2）'], missing: null, ok: false }
+        commit(applyPhrases(lib, rows))
+        const missing = missingWords(askedWords, rows.map((r) => r.word))
+        const report = [`已写入 ${rows.length} 个词组的词组/习语`]
+        if (missing.length) {
+          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+        return { report, missing: missing.length ? { task: 'phrase', words: missing } : null, ok: true }
+      }
+
+      // 语法标记：给名词/动词/形容词标「可数性 / 及物性」等
+      if (task === 'grammar_mark') {
+        const rows = parseGrammarMarkTable(text)
+        if (!rows.length)
+          return { report: ['没解析出语法标记（格式：单词 | 标记1；标记2，标记取可数/不可数/及物/不及物…）'], missing: null, ok: false }
+        commit(applyGrammarMarks(lib, rows))
+        const missing = missingWords(askedWords, rows.map((r) => r.word))
+        const report = [`已标注 ${rows.length} 个词的语法标记`]
+        if (missing.length) {
+          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
+        }
+        return { report, missing: missing.length ? { task: 'grammar_mark', words: missing } : null, ok: true }
       }
 
       // 原形校正：改 word/lemma，再合并重复

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  blankParticle,
   blankWord,
   buildQuizQuestions,
   countQuestions,
@@ -193,6 +194,75 @@ describe('countQuestions', () => {
     expect(countQuestions(items, ['spell'])).toBe(1)
     expect(countQuestions(items, ['cloze'])).toBe(1)
     expect(countQuestions(items, ['ear'])).toBe(3)
+  })
+})
+
+describe('精读专用题型：英英释义 / 搭配 / 介词 / 语法标记', () => {
+  it('define：英英释义 → 写单词；无释义则不出题', () => {
+    const q = makeQuestion(item({ definition: 'to move quickly on foot' }), 'define')!
+    expect(q.prompt).toBe('to move quickly on foot')
+    expect(q.answer).toBe('run')
+    expect(makeQuestion(item({ definition: null }), 'define')).toBeNull()
+  })
+
+  it('defineChoice：英英释义 → 选单词（带干扰项）', () => {
+    const me = item({ definition: 'to move quickly', confusables: [{ word: 'ran' }] })
+    const q = makeQuestion(me, 'defineChoice', [me])!
+    expect(q.options).toContain('run')
+    expect(q.options!.length).toBeGreaterThan(1)
+  })
+
+  it('collocation：给词写搭配；只写光杆单词不算对', () => {
+    const me = item({ usage: ['run out of', 'run a business'], phrases: ['run late'] })
+    const q = makeQuestion(me, 'collocation')!
+    expect(q.answer).toBe('run out of')
+    expect(q.accept).toEqual(expect.arrayContaining(['run a business', 'run late']))
+    // 换了搭配也算对
+    expect(isCorrect(q, 'run a business')).toBe(true)
+    expect(isCorrect(q, 'run late')).toBe(true)
+    // 光杆单词不算
+    expect(isCorrect(q, 'run')).toBe(false)
+  })
+
+  it('prep：从搭配里挖掉介词/小品词，选项含正确答案', () => {
+    const me = item({ meaning: '用完', usage: ['run out of'] })
+    const q = makeQuestion(me, 'prep')!
+    expect(q.prompt).toBe('run out ____')
+    expect(q.answer).toBe('of')
+    expect(q.options).toContain('of')
+    // 没有介词的搭配不出题
+    expect(makeQuestion(item({ usage: ['run a business'] }), 'prep')).toBeNull()
+  })
+
+  it('mark：可数/不可数等成对判断；兼类/无标记不出题', () => {
+    const q = makeQuestion(item({ word: 'water', lemma: 'water', grammarMarks: ['不可数'] }), 'mark')!
+    expect(q.answer).toBe('不可数')
+    expect(q.options!.sort()).toEqual(['不可数', '可数'].sort())
+    // 兼类 → 歧义，跳过
+    expect(makeQuestion(item({ grammarMarks: ['可数', '不可数'] }), 'mark')).toBeNull()
+    expect(makeQuestion(item({ grammarMarks: [] }), 'mark')).toBeNull()
+  })
+
+  it('blankParticle：挖最后一个介词', () => {
+    expect(blankParticle('depend on')).toEqual({ blanked: 'depend ____', particle: 'on' })
+    expect(blankParticle('run a business')).toBeNull()
+  })
+
+  it('idiom：习语里挖掉目标词；不含该词则不出题', () => {
+    const q = makeQuestion(item({ idioms: ['run in the family'] }), 'idiom')!
+    expect(q.prompt).toBe('____ in the family')
+    expect(q.answer).toBe('run')
+    expect(makeQuestion(item({ idioms: ['a piece of cake'] }), 'idiom')).toBeNull()
+  })
+
+  it('countQuestions 统计新题型', () => {
+    const items = [
+      item({ id: 'a', definition: 'x', usage: ['run out'], grammarMarks: ['不可数'] }),
+      item({ id: 'b', definition: null, usage: [], grammarMarks: [] }),
+    ]
+    expect(countQuestions(items, ['define'])).toBe(1)
+    expect(countQuestions(items, ['collocation'])).toBe(1)
+    expect(countQuestions(items, ['mark'])).toBe(1)
   })
 })
 

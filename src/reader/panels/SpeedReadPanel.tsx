@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
-import { wordSpans } from '../../core/wordSelect'
+import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
 import { getSentenceLanguages } from '../../core/language'
 import {
   DEFAULT_WPM,
@@ -109,8 +109,10 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   const [showCollected, setShowCollected] = useLocalStorageState('reader:speedShowCollected', true, persistentBoolTrue)
   /** 删除的两步确认（点一次变红，3 秒内再点才真删）。 */
   const [confirmIdx, setConfirmIdx] = useState<number | null>(null)
-  /** 本句当前选中的词（点击切换；供「加入清单」/右键/合成词组）。 */
-  const [selWords, setSelWords] = useState<string[]>([])
+  /** 本句当前选中的词——按**词下标**记录，同一个词的不同位置互不影响。 */
+  const [selIdx, setSelIdx] = useState<number[]>([])
+  /** 是否已把选中的词「合成本句词组」（合成后作为一整条加入）。 */
+  const [merged, setMerged] = useState(false)
   /** 两步确认移出的词。 */
   const [confirmDel, setConfirmDel] = useState('')
   /** 当前句按词切分（复用正文同款 wordSpans）。 */
@@ -127,21 +129,22 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
 
   // 换句清空当前选择
   useEffect(() => {
-    setSelWords([])
+    setSelIdx([])
+    setMerged(false)
   }, [index])
 
-  const inSel = useCallback(
-    (word: string) => selWords.some((x) => x.toLowerCase() === word.toLowerCase()),
-    [selWords],
-  )
+  /** 当前选中的词形（按句内顺序；「合成词组」时并成一条）。 */
+  const selWords = useMemo(() => {
+    const picked = wordsAtIndex(spans, selIdx)
+    return merged && picked.length > 1 ? [picked.join(' ')] : picked
+  }, [merged, selIdx, spans])
 
-  /** 点击词：切换选中（只选中，不入库）。 */
-  const toggleSel = useCallback((word: string) => {
-    setSelWords((prev) =>
-      prev.some((x) => x.toLowerCase() === word.toLowerCase())
-        ? prev.filter((x) => x.toLowerCase() !== word.toLowerCase())
-        : [...prev, word],
-    )
+  const isSel = useCallback((i: number) => selIdx.includes(i), [selIdx])
+
+  /** 点击词：切换**这一个位置**的选中（只选中，不入库）。 */
+  const toggleSel = useCallback((i: number) => {
+    setMerged(false)
+    setSelIdx((prev) => toggleIndex(prev, i))
   }, [])
 
   /** 把一批词加入生词本，并记入本页清单。 */
@@ -170,7 +173,8 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   const addSelected = useCallback(() => {
     if (!sentence || !selWords.length) return
     commitAdd(selWords.map((w) => ({ word: w, sentenceId: sentence.id, sentenceText: sentence.text })))
-    setSelWords([])
+    setSelIdx([])
+    setMerged(false)
   }, [sentence, selWords, commitAdd])
 
   /** 输入框手打词/词组：直接加入。 */
@@ -184,23 +188,24 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     [sentence, commitAdd],
   )
 
-  /** 右键：把该词加入生词本（等价于「加入清单」）。 */
+  /** 右键：把**这一个位置**的词加入生词本（等价于「加入清单」）。 */
   const addDirect = useCallback(
-    (word: string) => {
-      if (!sentence) return
+    (i: number) => {
+      const word = spans[i]?.text
+      if (!sentence || !word) return
       commitAdd([{ word, sentenceId: sentence.id, sentenceText: sentence.text }])
-      setSelWords((prev) => prev.filter((x) => x.toLowerCase() !== word.toLowerCase()))
+      setMerged(false)
+      setSelIdx((prev) => prev.filter((x) => x !== i))
     },
-    [sentence, commitAdd],
+    [sentence, spans, commitAdd],
   )
 
   /** 把本句选中的词按句内顺序合成一个词组（替换当前选择，待「加入清单」）。 */
   const mergePhrase = useCallback(() => {
-    if (!sentence || selWords.length < 2) return
-    const ordered = spans.map((s) => s.text).filter((t) => selWords.some((w) => w.toLowerCase() === t.toLowerCase()))
-    if (ordered.length < 2) return
-    setSelWords([ordered.join(' ')])
-  }, [sentence, selWords, spans])
+    if (!sentence || merged || selIdx.length < 2) return
+    if (wordsAtIndex(spans, selIdx).length < 2) return
+    setMerged(true)
+  }, [sentence, merged, selIdx, spans])
 
   /** 从本页清单删除一条（同时从生词本移除，用于剔除误加）。 */
   const removeCollected = useCallback(
@@ -262,7 +267,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     spans.forEach((w, i) => {
       if (w.start > pos) nodes.push(text.slice(pos, w.start))
       const known = isKnown(w.text)
-      const sel = inSel(w.text)
+      const sel = isSel(i)
       nodes.push(
         <span
           key={i}
@@ -274,13 +279,13 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
           }
           onClick={(e) => {
             e.stopPropagation()
-            if (pickMode) toggleSel(w.text)
+            if (pickMode) toggleSel(i)
           }}
           onContextMenu={(e) => {
             if (!pickMode) return
             e.preventDefault()
             e.stopPropagation()
-            addDirect(w.text)
+            addDirect(i)
           }}
         >
           {w.text}
@@ -290,7 +295,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     })
     if (pos < text.length) nodes.push(text.slice(pos))
     return nodes
-  }, [sentence, spans, inSel, toggleSel, isKnown, addDirect, pickMode])
+  }, [sentence, spans, isSel, toggleSel, isKnown, addDirect, pickMode])
 
   useEffect(() => {
     if (phase !== 'read' || done) return
@@ -505,7 +510,10 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             checked={pickMode}
             onChange={(e) => {
               setPickMode(e.target.checked)
-              if (!e.target.checked) setSelWords([])
+              if (!e.target.checked) {
+                setSelIdx([])
+                setMerged(false)
+              }
             }}
           />
           选词模式
@@ -682,7 +690,10 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
                     ＋ 加入清单{selWords.length ? `（${selWords.length}）` : ''}
                   </button>
                   {selWords.length > 1 && (
-                    <button onClick={mergePhrase} title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入）">
+                    <button
+                      onClick={mergePhrase}
+                      title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入；同一个词的不同位置互不影响）"
+                    >
                       ＋ 合成本句词组
                     </button>
                   )}

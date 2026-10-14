@@ -166,6 +166,15 @@ function mergeUnique(a: string[], b: string[]): string[] {
   return out
 }
 
+/** 合并两个「可选列表」：两边都缺 → 保持缺失（undefined）；否则合并去重。 */
+function mergeOptionalList(a: string[] | undefined, b: string[] | undefined): string[] | undefined {
+  if (a === undefined && b === undefined) return undefined
+  return mergeUnique(a ?? [], b ?? [])
+}
+
+/** 一个词最多保留几条例句（避免反复查词越堆越多）。 */
+export const MAX_EXAMPLES = 6
+
 /** 把 AI 生成的用法示例并入词条（按 lemma / 词形匹配；例句按文本去重）。 */
 export function applyExamples(
   library: VocabLibrary,
@@ -180,11 +189,130 @@ export function applyExamples(
       it.examples,
       row.examples.map((e) => ({ text: e.text, translation: e.translation })),
     )
-    if (merged.length === it.examples.length) return it
+    // 保留最早的（含来源句），只裁掉后面多出来的
+    const capped = merged.length > MAX_EXAMPLES ? merged.slice(0, MAX_EXAMPLES) : merged
+    if (capped.length === it.examples.length) return it
     changed = true
-    return { ...it, examples: merged, updatedAt: iso }
+    return { ...it, examples: capped, updatedAt: iso }
   })
   return changed ? { ...library, items } : library
+}
+
+/**
+ * 把 AI 生成的「词组 / 习语」并入词条（按 lemma / 词形匹配）。
+ * 词组去重，并滤掉已经在「用法」里的，避免卡片上「用法」和「词组」两块重复。
+ *
+ * 被 AI 列出的词 = 已标注过：哪怕词组为空（如 mrs），也写空数组，避免永远重复待办。
+ */
+export function applyPhrases(
+  library: VocabLibrary,
+  rows: { word: string; phrases: string[]; idioms: string[] }[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!rows.length) return library
+  const iso = now.toISOString()
+  let changed = false
+  const items = library.items.map((it) => {
+    const row = rows.find((r) => lemmaOf(r.word) === it.lemma || normalizeWord(r.word) === normalizeWord(it.word))
+    if (!row) return it
+    const usedKeys = new Set(it.usage.map((u) => normalizeWord(u)))
+    const phrases = mergeUnique(
+      it.phrases ?? [],
+      row.phrases.filter((p) => p.trim() && !usedKeys.has(normalizeWord(p))),
+    )
+    const idioms = mergeUnique(it.idioms ?? [], row.idioms.filter((s) => s.trim()))
+    if (it.phrases !== undefined && it.idioms !== undefined && phrases.length === it.phrases.length && idioms.length === it.idioms.length) {
+      return it
+    }
+    changed = true
+    return { ...it, phrases, idioms, updatedAt: iso }
+  })
+  return changed ? { ...library, items } : library
+}
+
+/**
+ * 把 AI 标注的「语法标记」（可数/不可数、及物/不及物…）并入词条。
+ * 按 lemma / 词形匹配，去重合并。
+ *
+ * 关键：**被 AI 列出的词 = 已标注过**。哪怕该词没有可标项（marks 为空，如 mrs），
+ * 也要把 `grammarMarks` 写成空数组，表示「查过、无可标」，否则会永远重复待办。
+ */
+export function applyGrammarMarks(
+  library: VocabLibrary,
+  rows: { word: string; marks: string[] }[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!rows.length) return library
+  const iso = now.toISOString()
+  let changed = false
+  const items = library.items.map((it) => {
+    const row = rows.find((r) => lemmaOf(r.word) === it.lemma || normalizeWord(r.word) === normalizeWord(it.word))
+    if (!row) return it
+    const marks = mergeUnique(it.grammarMarks ?? [], row.marks.map((m) => m.trim()).filter(Boolean))
+    // 已标注过且没有新增 → 不动（避免无意义地刷新 updatedAt）
+    if (it.grammarMarks !== undefined && marks.length === it.grammarMarks.length) return it
+    changed = true
+    return { ...it, grammarMarks: marks, updatedAt: iso }
+  })
+  return changed ? { ...library, items } : library
+}
+
+/** 词性是否含名词 / 动词 / 形容词（只有这几类才需要标语法标记）。 */
+export function isMarkablePos(pos: string | null | undefined): boolean {
+  const p = normalizePos(pos)
+  if (!p) return false
+  const tokens = p.split(/[\/,，;；\s]+/).map((s) => s.replace(/\.+$/, '').trim().toLowerCase())
+  return tokens.some((t) => ['n', 'noun', 'v', 'verb', 'adj', 'adjective'].includes(t))
+}
+
+/** 本词自己的例句（排除「就是来源句」的那条）。 */
+export function ownExamples(item: VocabItem): VocabExample[] {  const src = (item.source?.sentenceText ?? '').trim()
+  return item.examples.filter((e) => e.text?.trim() && e.text.trim() !== src)
+}
+
+/** 是否有「自己的例句」（只有来源句等于没有）。 */
+export function hasOwnExamples(item: VocabItem): boolean {
+  return ownExamples(item).length > 0
+}
+
+/** 卡片上带小标题的一段内容（规范化「用法 / 词组 / 习语 / 例句 / 来源 / 易混」）。 */
+export interface VocabCardBlock {
+  key: 'usage' | 'phrases' | 'idioms' | 'examples' | 'source' | 'confusables'
+  /** 小标题，如「例句」。 */
+  label: string
+  lines: string[]
+}
+
+/**
+ * 把词条整理成卡片上按固定顺序排列、带小标题的内容块。
+ * 只返回有内容的块；例句只取「自己的例句」（跳过与来源句相同的那条）。
+ */
+export function vocabCardBlocks(item: VocabItem, opts: { maxExamples?: number } = {}): VocabCardBlock[] {
+  const blocks: VocabCardBlock[] = []
+  const push = (key: VocabCardBlock['key'], label: string, lines: string[]) => {
+    if (lines.length) blocks.push({ key, label, lines })
+  }
+
+  push('usage', '用法', item.usage.map((s) => s.trim()).filter(Boolean))
+
+  push('phrases', '词组', (item.phrases ?? []).map((s) => s.trim()).filter(Boolean))
+  push('idioms', '习语', (item.idioms ?? []).map((s) => s.trim()).filter(Boolean))
+
+  const examples = ownExamples(item).map((e) => (e.translation ? `${e.text} — ${e.translation}` : e.text))
+  push('examples', '例句', opts.maxExamples != null ? examples.slice(0, opts.maxExamples) : examples)
+
+  const sentence = item.source?.sentenceText?.trim()
+  push('source', '来源', sentence ? [sentence] : [])
+
+  push(
+    'confusables',
+    '易混',
+    (item.confusables ?? [])
+      .filter((c) => c.word.trim())
+      .map((c) => (c.meaning ? `${c.word}（${c.meaning}）` : c.word)),
+  )
+
+  return blocks
 }
 
 function mergeConfusables(
@@ -510,8 +638,30 @@ export function markPrinted(
   }
 }
 
-/** 是否打印过（老数据没有 lastPrintedAt，按未打印算）。 */
-export function isPrinted(item: VocabItem): boolean {
+/**
+ * 答错的词 → 标记「优先重排」到 `until`（默认次日）。
+ * 队列会把这些词排到最前，实现「今日鞭打、次日优先重练」。
+ */
+export function prioritizeItems(library: VocabLibrary, ids: Iterable<string>, until: string): VocabLibrary {
+  const set = new Set(ids)
+  if (!set.size) return library
+  return {
+    ...library,
+    items: library.items.map((it) => (set.has(it.id) ? { ...it, priorityUntil: until } : it)),
+  }
+}
+
+/** 是否正处于「优先重排」（priorityUntil 未过期）。 */
+export function isPriority(item: VocabItem, now: Date = new Date()): boolean {
+  return !!item.priorityUntil && new Date(item.priorityUntil) > now
+}
+
+/** 次日 ISO（优先重排用）。 */
+export function nextDayIso(now: Date = new Date()): string {
+  return addDays(now, 1).toISOString()
+}
+
+/** 是否打印过（老数据没有 lastPrintedAt，按未打印算）。 */export function isPrinted(item: VocabItem): boolean {
   return !!item.lastPrintedAt
 }
 
@@ -674,9 +824,13 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
     meaning: a.meaning ?? b.meaning,
     definition: a.definition ?? b.definition,
     usage: mergeUnique(a.usage, b.usage),
+    phrases: mergeOptionalList(a.phrases, b.phrases),
+    idioms: mergeOptionalList(a.idioms, b.idioms),
+    grammarMarks: mergeOptionalList(a.grammarMarks, b.grammarMarks),
     examples: mergeExamples(a.examples, b.examples),
     tags: [...new Set([...a.tags, ...b.tags])],
     confusables: mergeConfusables(a.confusables, b.confusables),
+    priorityUntil: [a.priorityUntil, b.priorityUntil].filter(Boolean).sort().pop() ?? null,
     note: a.note || b.note,
     source: a.source ?? b.source,
     status: stronger.status,
@@ -702,6 +856,7 @@ export function dedupeLibrary(library: VocabLibrary): VocabLibrary {
 /**
  * 背单词的出场顺序：先到期的，再没学过的，最后其它。
  * opts.newLimit / newToday 用来限制「每天新词量」。
+ * 「优先重排」（答错过的词，priorityUntil 未过期）排在到期组最前。
  */
 export function buildStudyQueue(
   items: VocabItem[],
@@ -709,7 +864,9 @@ export function buildStudyQueue(
   opts: { newLimit?: number; newToday?: number } = {},
 ): VocabItem[] {
   const isDue = (it: VocabItem) => it.reviewState.due !== null && new Date(it.reviewState.due) <= now
+  const prio = (it: VocabItem) => (isPriority(it, now) ? 0 : 1)
   const byDue = (a: VocabItem, b: VocabItem) =>
+    prio(a) - prio(b) ||
     (a.reviewState.due ?? '').localeCompare(b.reviewState.due ?? '') ||
     a.createdAt.localeCompare(b.createdAt)
   const due = items.filter(isDue).sort(byDue)
@@ -738,7 +895,7 @@ export function buildLearnQueue(
   return fresh.slice(0, remaining)
 }
 
-/** 复习队列：只取「已学过且到期」的，按到期时间升序（逾期最久的排前面）。 */
+/** 复习队列：只取「已学过且到期」的，优先重排的最前，其次按到期时间升序（逾期最久在前）。 */
 export function buildReviewQueue(items: VocabItem[], now: Date = new Date()): VocabItem[] {
   return items
     .filter(
@@ -749,6 +906,7 @@ export function buildReviewQueue(items: VocabItem[], now: Date = new Date()): Vo
     )
     .sort(
       (a, b) =>
+        (isPriority(a, now) ? 0 : 1) - (isPriority(b, now) ? 0 : 1) ||
         (a.reviewState.due ?? '').localeCompare(b.reviewState.due ?? '') ||
         a.createdAt.localeCompare(b.createdAt),
     )

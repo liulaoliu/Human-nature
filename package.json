@@ -14,7 +14,8 @@
     "ai:pack": "node tools/ai-pack.mjs",
     "ai:agent": "node tools/ai-agent.mjs",
     "ecdict:build": "node tools/build-ecdict.mjs",
-    "mwld:build": "node tools/build-mwld.mjs"
+    "mwld:build": "node tools/build-mwld.mjs",
+    "tatoeba:build": "node tools/build-tatoeba.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",

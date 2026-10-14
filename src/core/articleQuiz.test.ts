@@ -77,6 +77,30 @@ describe('buildArticleQuestions', () => {
     for (const q of qs) expect(isCorrect(q, q.answer)).toBe(true)
   })
 
+  it('词组/习语填空：把句中的词组/习语挖空，选项含正确答案', () => {
+    const sents: Sentence[] = [
+      { ...S('s1', 'p01', 'The government must mitigate the risk of recession.', '政府必须降低衰退风险。'), languages: [{ phrases: ['mitigate the risk'] }] },
+      { ...S('s2', 'p01', 'Firms are ramping up investment quickly.', '公司正在迅速加大投资。'), languages: [{ phrases: ['ramping up investment'] }] },
+      { ...S('s3', 'p01', 'They must bear the brunt of the downturn.', '他们必须承受衰退的冲击。'), languages: [{ idioms: ['bear the brunt'] }] },
+      { ...S('s4', 'p01', 'Managers keep an eye on the costs.', '管理者密切关注成本。'), languages: [{ idioms: ['keep an eye on'] }] },
+    ]
+    const qs = buildArticleQuestions(sents, { kinds: ['phraseBlank'], rnd: seqRnd(7) })
+    expect(qs.length).toBeGreaterThan(0)
+    for (const q of qs) {
+      expect(q.source).toBe('article')
+      expect(q.prompt).toContain('____')
+      expect(q.options).toHaveLength(4)
+      expect(q.options).toContain(q.answer)
+      expect(isCorrect(q, q.answer)).toBe(true)
+    }
+    // 句里没原样出现的词组 → 挖不出空，不硬出题
+    const none = buildArticleQuestions([S('x', 'p01', 'Nothing here.', '这里没有。')], {
+      kinds: ['phraseBlank'],
+      rnd: seqRnd(1),
+    })
+    expect(none).toHaveLength(0)
+  })
+
   it('没有译文/语言点时对应题型不出题', () => {
     const bare = [S('a', 'p01', 'Hello world.'), S('b', 'p01', 'Goodbye moon.')]
     expect(buildArticleQuestions(bare, { kinds: ['translate'], rnd: seqRnd(1) })).toHaveLength(0)

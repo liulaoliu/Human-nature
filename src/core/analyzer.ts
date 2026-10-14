@@ -1,4 +1,7 @@
 import type { AnalysisResult, Sentence, SentenceAnalysis, WordAnalysis } from '../types/document'
+import { GRAMMAR_MARKS } from '../types/document'
+import { lemmaOf } from './vocab'
+import { wordSpans } from './wordSelect'
 
 /**
  * 精读模块：一键提示词生成 + 粘回解析。
@@ -56,7 +59,7 @@ export function buildPrompt(input: BuildPromptInput): string {
       return buildAutoVocabPrompt(text)
     case 'lookup': {
       const words = (input.words?.length ? input.words : [text]).join(', ')
-      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
+      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
     }
   }
 }
@@ -82,9 +85,9 @@ export function parseWordList(raw: string): string[] {
 function parseExample(raw: string): { text: string; translation?: string } {
   const parts = raw.split(/\s+[—–-]\s+/)
   if (parts.length >= 2) {
-    return { text: parts[0].trim(), translation: parts.slice(1).join(' — ').trim() }
+    return { text: cleanExampleText(parts[0]), translation: cleanExampleText(parts.slice(1).join(' — ')) }
   }
-  return { text: raw.trim() }
+  return { text: cleanExampleText(raw) }
 }
 
 /** 表头判定：只看「首列 / 音标列」是不是表头标签，避免把正文里含 "word" 的正常行误删。 */
@@ -205,7 +208,7 @@ export function buildBatchLookupPrompt(entries: { word: string; context?: string
   const lines = unique
     .map((e) => (e.context ? `- ${e.word}  （上下文：${e.context}）` : `- ${e.word}`))
     .join('\n')
-  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /rʌn/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句里英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词与上下文：\n${lines}`
+  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /rʌn/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词与上下文：\n${lines}`
 }
 
 /**
@@ -218,7 +221,15 @@ export function buildCleanupPrompt(raw: string): string {
 - 单词粘连（例如 offthe、BarackObama、tookpart）
 - 拼写、标点等明显错误
 
-请去掉不必要的换行、修复粘连和错误，保持原意和原有措辞，给我修复后的文本。只输出修复后的文本，不要解释，不要加标题。
+请去掉不必要的换行、修复粘连和错误，保持原意和原有措辞，给我修复后的文本。
+
+**重要：我可能在最开头手动加了「【……】」中文方括号标记（标题 / 导语，可能有一到多行）。请原样保留**：
+- 不要删除、不要改写、不要换成别的括号或符号；
+- 不要移动位置，也不要把「【…】」那几行和正文合并成一行；
+- 每一行「【…】」都单独成行保留。
+除这些标记以外的正文，才按上面的要求清洗。
+
+只输出修复后的文本，不要解释、不要加标题。
 
 原文：
 ${FENCE}
@@ -226,24 +237,183 @@ ${raw.trim()}
 ${FENCE}`
 }
 
-/** 用法示例提示词：按中文含义给每个词造 2 个例句（英+中）。 */
+/** 用法示例提示词：按中文含义给每个词造 1–2 个「好例句」。 */
 export function buildExamplePrompt(entries: { word: string; meaning?: string }[]): string {
   const lines = entries
     .map((e) => (e.meaning ? `- ${e.word}（含义：${e.meaning}）` : `- ${e.word}`))
     .join('\n')
   return `${HEADER}
-下面每个单词给了中文含义。请为每个词造 2 个地道、简短的例句（英文 + 中文翻译），要体现该含义的典型用法。
+下面每个单词给了中文含义。请为每个词写 1–2 个**好例句**（英文 + 中文），要求：
+- **短**：每句不超过 12 个词，语法简单，读一遍就懂；
+- **只考一个词**：除了目标词，句中其余词都要是常见词（别塞别的生词，这就是 "i+1"）；
+- **用对义项**：必须体现「含义」里给的那个意思，不要用别的义项；
+- **给搭配**：优先用该词最常见的搭配 / 句型（动词带典型宾语或介词；名词配常见动词/介词；形容词配典型名词）；
+- **具体真实**：像真实场景里说出的一句话，不要空洞例句（如 "This is a run."）；
+- 句中必须**出现该词的自然词形**（原形或它的屈折形式，方便以后挖空）。
 每个词输出一行，字段用 | 分隔，顺序固定：单词 | 例句1英 | 例句1中 | 例句2英 | 例句2中
+只有在需要展示**不同搭配**时才给第二句；中文要自然、口语化，不要逐字直译。
 不要编号、不要解释、不要加标题。
+示例：
+mitigate | The drug can mitigate the pain. | 这种药能减轻疼痛。 | We must mitigate the risks. | 我们必须降低风险。
 词与含义：
 ${lines}`
+}
+
+/**
+ * 清洗 AI 给的例句：去编号/项目符号、去包裹引号、压缩空白。
+ * 句子被 AI 加序号或引号很常见，不清会污染卡片、也影响挖空。
+ */
+export function cleanExampleText(raw: string): string {
+  return raw
+    .replace(/^\s*(?:[-*•·]|\d+[.)、])\s*/, '')
+    .replace(/^["'“”‘’]+|["'“”‘’]+$/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+/** 例句是否**真的含该词**（词形还原后比较）；用来剔掉「用同义词糊弄」的例句。 */
+function exampleHasWord(text: string, word: string): boolean {
+  const lemma = lemmaOf(word)
+  const w = word.trim().toLowerCase()
+  if (!w) return true
+  return wordSpans(text).some((s) => {
+    const t = s.text.toLowerCase()
+    return t === w || (!!lemma && lemmaOf(s.text) === lemma)
+  })
+}
+
+
+/**
+ * 词组 / 习语提示词：为每个词补「常用词组搭配」与「固定习语」。
+ * 用来填背单词卡片上「词组 / 习语」两块（与「用法」「例句」分开）。
+ */
+export function buildPhrasePrompt(entries: { word: string; meaning?: string | null }[]): string {
+  const lines = entries.map((e) => (e.meaning ? `- ${e.word}（含义：${e.meaning}）` : `- ${e.word}`)).join('\n')
+  return `${HEADER}
+下面每个单词，请给出它的**常用词组 / 搭配**和**固定习语**（有就给，没有就写「无」）。
+- 词组：该词组成的常用搭配或短语（2–4 条），如 run out、run a business；
+- 习语：该词参与的固定习语 / 俚语（0–2 条），如 run in the family；确实没有就写「无」；
+- 只放该词真实常见的说法，不要与单词本身重复，不要解释，不要造句。
+**每个词都必须输出一行**（哪一类没有就写「无」，不要漏行）。
+每个词输出一行，字段用 | 分隔，顺序固定：单词 | 词组1；词组2 | 习语1；习语2
+词组、习语有多条都用「；」分隔；某一类没有就写「无」。
+示例：
+run | run out；run a business | run in the family
+mrs | 无 | 无
+只输出这些行，不要编号、不要标题、不要解释。
+词与含义：
+${lines}`
+}
+
+export interface PhraseRow {
+  word: string
+  phrases: string[]
+  idioms: string[]
+}
+
+/** 解析词组 / 习语表（`单词 | 词组1；词组2 | 习语1；习语2`）。 */
+export function parsePhraseTable(raw: string): PhraseRow[] {
+  const out: PhraseRow[] = []
+  const none = /^(无|没有|不适用|none|n\/a|nil|空|-|—|–)$/i
+  for (const line of raw.split('\n')) {
+    const t = line.trim()
+    if (!t || /^[|\-\s:]+$/.test(t)) continue
+    const cols = t.split(/[|｜]/).map((c) => c.trim())
+    if (cols.length < 2) continue
+    const word = cols[0].replace(/^[\-*•\d.、\s]+/, '').trim()
+    if (!word || /^(单词|word)$/i.test(word)) continue
+    // 空 / 「无」= 没有该类的说法；**仍算「已标注」**（防止无限重复待办）
+    const phrases = cols[1] && !none.test(cols[1]) ? splitList(cols[1]) : []
+    const idioms = cols[2] && !none.test(cols[2]) ? splitList(cols[2]) : []
+    out.push({ word, phrases, idioms })
+  }
+  return out
+}
+
+/** 语法标记提示词：为每个词标「主要释义」的语法属性（名词可数性、动词及物性等）。 */
+export function buildGrammarMarkPrompt(entries: { word: string; meaning?: string | null }[]): string {
+  const lines = entries.map((e) => (e.meaning ? `- ${e.word}（含义：${e.meaning}）` : `- ${e.word}`)).join('\n')
+  return `${HEADER}
+下面每个单词，请按它**最常用的那个释义**，给出语法标记。可选标记（只能从下面挑，可多选）：
+- 名词：可数 / 不可数（两种用法都有就都选）
+- 动词：及物 / 不及物（两种用法都有就都选）
+- 形容词：可分级 / 不可分级
+只标该词**确实具备**的类别；该词不是名词/动词/形容词，或该类别不适用，就不要硬凑。
+**每个词都必须输出一行**（哪怕没有可标的，也要写「无」，不要漏行，不要跳过专有名词/称呼语）。
+每个词输出一行，字段用 | 分隔，顺序固定：单词 | 标记1；标记2
+多个标记用「；」分隔；没有可标的就在第二格写「无」。
+示例：
+water | 不可数
+run | 可数；及物；不及物
+happy | 可分级
+mrs | 无
+只输出这些行，不要编号、不要标题、不要解释。
+词与含义：
+${lines}`
+}
+
+export interface GrammarMarkRow {
+  word: string
+  marks: string[]
+}
+
+/** 把 AI 给的标记词归一成受控词表里的标准写法（容忍英文/别名）。 */
+const MARK_ALIASES: Record<string, string> = {
+  可数名词: '可数',
+  countable: '可数',
+  '不可数名词': '不可数',
+  uncountable: '不可数',
+  noncount: '不可数',
+  及物动词: '及物',
+  transitive: '及物',
+  vt: '及物',
+  不及物动词: '不及物',
+  intransitive: '不及物',
+  vi: '不及物',
+  gradable: '可分级',
+  ungradable: '不可分级',
+  'non-gradable': '不可分级',
+}
+
+function normalizeMark(raw: string): string | null {
+  const t = raw.trim()
+  if (!t) return null
+  if ((GRAMMAR_MARKS as readonly string[]).includes(t)) return t
+  const key = t.toLowerCase().replace(/\s+/g, '')
+  if ((GRAMMAR_MARKS as readonly string[]).includes(key)) return key
+  return MARK_ALIASES[key] ?? null
+}
+
+/** 解析语法标记表（`单词 | 标记1；标记2`）。只保留受控词表内的标记。 */
+export function parseGrammarMarkTable(raw: string): GrammarMarkRow[] {
+  const out: GrammarMarkRow[] = []
+  for (const line of raw.split('\n')) {
+    const t = line.trim()
+    if (!t || /^[|\-\s:]+$/.test(t)) continue
+    const cols = t.split(/[|｜]/).map((c) => c.trim())
+    if (cols.length < 2) continue
+    const word = cols[0].replace(/^[\-*•\d.、\s]+/, '').trim()
+    if (!word || /^(单词|word)$/i.test(word)) continue
+    // 「无 / 不适用 / -」或留空 = 该词没有可标的标记；**仍算「已标注」**（防止无限重复待办）
+    const marks = /^(无|没有|不适用|none|n\/a|nil|空|-|—|–)$/i.test(cols[1])
+      ? []
+      : (() => {
+          const picked: string[] = []
+          for (const part of cols[1].split(/[;；,，、\s/]+/)) {
+            const m = normalizeMark(part)
+            if (m && !picked.includes(m)) picked.push(m)
+          }
+          return picked
+        })()
+    out.push({ word, marks })
+  }
+  return out
 }
 
 export interface ExampleRow {
   word: string
   examples: { text: string; translation?: string }[]
 }
-
 /** 解析用法示例表（`word | 英 | 中 | 英 | 中`）。 */
 export function parseExampleTable(raw: string): ExampleRow[] {
   const out: ExampleRow[] = []
@@ -256,11 +426,18 @@ export function parseExampleTable(raw: string): ExampleRow[] {
     if (!word || /^(单词|word)$/i.test(word)) continue
     const examples: { text: string; translation?: string }[] = []
     for (let i = 1; i + 1 < cols.length; i += 2) {
-      const en = cols[i]
-      const zh = cols[i + 1]
-      if (en) examples.push(zh ? { text: en, translation: zh } : { text: en })
+      const en = cleanExampleText(cols[i])
+      const zh = cleanExampleText(cols[i + 1])
+      if (!en) continue
+      // 跑飞的长句（多半是 AI 跑题）直接丢
+      if (en.split(/\s+/).length > 30) continue
+      if (examples.some((e) => e.text.toLowerCase() === en.toLowerCase())) continue
+      examples.push(zh ? { text: en, translation: zh } : { text: en })
     }
-    if (examples.length) out.push({ word, examples })
+    if (!examples.length) continue
+    // 优先留「真的含该词」的例句；全都不含（AI 用同义词糊弄）时宽松保留，避免任务反复跑
+    const withWord = examples.filter((e) => exampleHasWord(e.text, word))
+    out.push({ word, examples: withWord.length ? withWord : examples })
   }
   return out
 }

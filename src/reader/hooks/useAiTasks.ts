@@ -18,8 +18,10 @@ export type AiTaskKey =
   | AnalysisTask
   | 'confusable'
   | 'example'
+  | 'phrase'
   | 'lemma'
   | 'pos'
+  | 'grammar_mark'
   | 'listening'
   | 'language'
   | 'imitation'

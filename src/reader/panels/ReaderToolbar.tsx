@@ -39,6 +39,7 @@ export interface ReaderToolbarProps {
   readingAll: boolean
   onToggleReadAll: () => void
   onSpeedRead: () => void
+  onOpenIntensive: () => void
   ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
@@ -115,6 +116,7 @@ export default function ReaderToolbar({
   readingAll,
   onToggleReadAll,
   onSpeedRead,
+  onOpenIntensive,
   ttsState,
   ttsVoice,
   onTtsVoiceChange,
@@ -286,6 +288,15 @@ export default function ReaderToolbar({
           title="逐句速读：一次一句，先自己读→空格看释义/语言点；超时算不太理解，来个填空拷打"
         >
           ⚡ 速读
+        </button>
+      )}
+      {hasDoc && !editing && (
+        <button
+          className="primary"
+          onClick={onOpenIntensive}
+          title="精读工作流：通读 → 查词 → 词块 → 句子 → 拷打 → 仿写 → 语法，按进度一步步带你做深"
+        >
+          🎯 精读
         </button>
       )}
       {hasDoc && !editing && (

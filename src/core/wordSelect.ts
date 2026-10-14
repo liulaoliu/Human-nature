@@ -84,3 +84,21 @@ export function snapSelection(text: string, start: number, end: number): WordSpa
   const to = Math.max(spans.indexOf(first), spans.indexOf(last))
   return { start: spans[from].start, end: spans[to].end, text: text.slice(spans[from].start, spans[to].end) }
 }
+
+/**
+ * 切换某个**词下标**的选中状态。
+ *
+ * 按位置而不是按词形：同一句里出现多次的同一个词（如两个 `a`）各自独立，
+ * 点其中一个不会把另一个也选上。
+ */
+export function toggleIndex(indices: number[], i: number): number[] {
+  return indices.includes(i) ? indices.filter((x) => x !== i) : [...indices, i]
+}
+
+/** 取选中下标对应的词形（按句内顺序）。 */
+export function wordsAtIndex(spans: WordSpan[], indices: number[]): string[] {
+  return [...indices]
+    .sort((a, b) => a - b)
+    .map((i) => spans[i]?.text)
+    .filter((t): t is string => !!t)
+}

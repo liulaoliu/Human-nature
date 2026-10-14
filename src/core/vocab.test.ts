@@ -3,6 +3,8 @@ import {
   applyConfusables,
   applyExamples,
   applyLemmaMap,
+  applyPhrases,
+  applyGrammarMarks,
   applyPosAnalysis,
   applyWordAnalysis,
   buildLearnQueue,
@@ -16,13 +18,19 @@ import {
   editItem,
   filterItems,
   groupItems,
+  hasOwnExamples,
   isDue,
+  isMarkablePos,
   isPrinted,
+  isPriority,
   lemmaOf,
   markPrinted,
   markWord,
   normalizeWord,
   normalizePos,
+  nextDayIso,
+  ownExamples,
+  prioritizeItems,
   relemmaLibrary,
   removeByLemma,
   removeItem,
@@ -31,6 +39,7 @@ import {
   setStatus,
   sortItems,
   unprintedItems,
+  vocabCardBlocks,
 } from './vocab'
 
 describe('释义/词性清洗', () => {
@@ -67,8 +76,128 @@ describe('applyExamples', () => {
     const item = lib.items[0]
     expect(item.examples.filter((e) => e.text === 'I run every day.')).toHaveLength(1)
   })
+  it('例句最多保留 6 条（避免反复查词越堆越多）', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    for (let i = 0; i < 10; i++) {
+      lib = applyExamples(lib, [{ word: 'run', examples: [{ text: `He runs ${i}.` }] }])
+    }
+    const item = lib.items[0]
+    expect(item.examples.length).toBeLessThanOrEqual(6)
+    // 最早的那条（来源句）保留
+    expect(item.examples.map((e) => e.text)).toContain('run')
+  })
 })
 import type { VocabItem } from '../types/document'
+
+describe('applyPhrases', () => {
+  it('按 lemma 并入词组/习语，并去重', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = applyPhrases(
+      lib,
+      [{ word: 'running', phrases: ['run out', 'run out'], idioms: ['run in the family'] }],
+      NOW,
+    )
+    expect(lib.items[0].phrases).toEqual(['run out'])
+    expect(lib.items[0].idioms).toEqual(['run in the family'])
+  })
+  it('已在「用法」里的词组不再重复写进「词组」', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = applyWordAnalysis(lib, [{ word: 'run', usage: ['run out'] }], NOW)
+    lib = applyPhrases(lib, [{ word: 'run', phrases: ['run out', 'run late'], idioms: [] }], NOW)
+    expect(lib.items[0].phrases).toEqual(['run late'])
+  })
+  it('匹配不到的词条不动', () => {
+    const lib = applyPhrases(createLibrary(), [{ word: 'zzz', phrases: ['zzz out'], idioms: [] }], NOW)
+    expect(lib.items).toHaveLength(0)
+  })
+  it('没有词组也写入空数组（=已标注，避免重复跑批）', () => {
+    let lib = markWord(createLibrary(), { word: 'mrs', articleId: 'a1' }, NOW).library
+    expect(lib.items[0].phrases).toBeUndefined()
+    lib = applyPhrases(lib, [{ word: 'mrs', phrases: [], idioms: [] }], NOW)
+    expect(lib.items[0].phrases).toEqual([])
+    expect(lib.items[0].idioms).toEqual([])
+  })
+})
+
+describe('applyGrammarMarks / isMarkablePos', () => {
+  it('按 lemma 合并语法标记并去重', () => {
+    let lib = markWord(createLibrary(), { word: 'water', articleId: 'a1' }, NOW).library
+    lib = applyGrammarMarks(lib, [{ word: 'water', marks: ['不可数', '不可数'] }], NOW)
+    expect(lib.items[0].grammarMarks).toEqual(['不可数'])
+  })
+  it('已标过的词再合并新标记（去重）', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = applyGrammarMarks(lib, [{ word: 'run', marks: ['及物'] }], NOW)
+    lib = applyGrammarMarks(lib, [{ word: 'runs', marks: ['及物', '不及物', '可数'] }], NOW)
+    expect(lib.items[0].grammarMarks).toEqual(['及物', '不及物', '可数'])
+  })
+  it('匹配不到的词条不动', () => {
+    const lib = applyGrammarMarks(createLibrary(), [{ word: 'zzz', marks: ['可数'] }], NOW)
+    expect(lib.items).toHaveLength(0)
+  })
+  it('没有可标项也写入空数组（=已标注，避免重复跑批）', () => {
+    let lib = markWord(createLibrary(), { word: 'mrs', articleId: 'a1' }, NOW).library
+    expect(lib.items[0].grammarMarks).toBeUndefined()
+    lib = applyGrammarMarks(lib, [{ word: 'mrs', marks: [] }], NOW)
+    expect(lib.items[0].grammarMarks).toEqual([])
+  })
+  it('isMarkablePos 认名词/动词/形容词，不认介词/代词/数词', () => {
+    expect(isMarkablePos('n.')).toBe(true)
+    expect(isMarkablePos('noun')).toBe(true)
+    expect(isMarkablePos('v.')).toBe(true)
+    expect(isMarkablePos('n./v.')).toBe(true)
+    expect(isMarkablePos('adj.')).toBe(true)
+    expect(isMarkablePos('prep.')).toBe(false)
+    expect(isMarkablePos('pron.')).toBe(false)
+    expect(isMarkablePos('num.')).toBe(false)
+    expect(isMarkablePos('adv.')).toBe(false)
+    expect(isMarkablePos(null)).toBe(false)
+  })
+})
+
+describe('ownExamples / hasOwnExamples', () => {
+  it('排除与来源句相同的那条', () => {
+    const it = item({
+      examples: [{ text: 'He runs.' }, { text: 'I run every day.' }],
+      source: { articleId: 'a', fileName: null, sentenceId: 's1', sentenceText: 'He runs.' },
+    })
+    expect(ownExamples(it).map((e) => e.text)).toEqual(['I run every day.'])
+    expect(hasOwnExamples(it)).toBe(true)
+  })
+  it('只有来源句时等于没有自己的例句', () => {
+    const it = item({
+      examples: [{ text: 'He runs.' }],
+      source: { articleId: 'a', fileName: null, sentenceId: 's1', sentenceText: 'He runs.' },
+    })
+    expect(hasOwnExamples(it)).toBe(false)
+  })
+})
+
+describe('vocabCardBlocks', () => {
+  it('按固定顺序输出带小标题的块，只含有内容的', () => {
+    const it = item({
+      usage: ['run a business'],
+      phrases: ['run out'],
+      idioms: ['run in the family'],
+      examples: [
+        { text: 'He runs.' },
+        { text: 'I run every day.', translation: '我每天跑步。' },
+      ],
+      source: { articleId: 'a', fileName: null, sentenceId: 's1', sentenceText: 'He runs.' },
+      confusables: [{ word: 'ran', meaning: '跑步' }],
+    })
+    const blocks = vocabCardBlocks(it)
+    expect(blocks.map((b) => b.label)).toEqual(['用法', '词组', '习语', '例句', '来源', '易混'])
+    expect(blocks.find((b) => b.label === '例句')?.lines).toEqual(['I run every day. — 我每天跑步。'])
+    expect(blocks.find((b) => b.label === '易混')?.lines).toEqual(['ran（跑步）'])
+  })
+  it('maxExamples 截断例句；没有内容的块不出现', () => {
+    const it = item({ examples: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] })
+    const blocks = vocabCardBlocks(it, { maxExamples: 2 })
+    expect(blocks.find((b) => b.key === 'examples')?.lines).toEqual(['a', 'b'])
+    expect(blocks.find((b) => b.key === 'usage')).toBeUndefined()
+  })
+})
 
 const NOW = new Date('2026-10-02T00:00:00.000Z')
 
@@ -343,6 +472,20 @@ describe('dedupeLibrary / buildStudyQueue', () => {
     const lib = dedupeLibrary({ schemaVersion: 1, items: [item({ id: 'a', lemma: 'a' }), item({ id: 'b', lemma: 'b' })] })
     expect(lib.items).toHaveLength(2)
   })
+  it('同 lemma 合并时保留「未标注」状态（grammarMarks/phrases 不被写成空数组）', () => {
+    const a = item({ id: 'vocab:run', lemma: 'run', word: 'run' })
+    const b = item({ id: 'vocab:run2', lemma: 'run', word: 'running' })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0].grammarMarks).toBeUndefined()
+    expect(lib.items[0].phrases).toBeUndefined()
+  })
+  it('一边已标注（空数组）也视为已标注，另一边的标记会补上', () => {
+    const a = item({ id: 'vocab:run', lemma: 'run', word: 'run', grammarMarks: [], phrases: [] })
+    const b = item({ id: 'vocab:run2', lemma: 'run', word: 'run', grammarMarks: ['可数'], phrases: ['run out'] })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0].grammarMarks).toEqual(['可数'])
+    expect(lib.items[0].phrases).toEqual(['run out'])
+  })
   it('学习队列：到期 → 新词 → 其它', () => {
     const now = new Date('2026-10-02T00:00:00Z')
     const due = item({ id: 'd', lemma: 'due', reviewState: { ease: 2.5, due: '2026-09-01T00:00:00Z', interval: 1, repetitions: 2 } })
@@ -360,6 +503,38 @@ describe('出错加权（lapses）', () => {
   })
   it('老数据没有 lapses 时按 0 起算', () => {
     expect(review({ ease: 2.5, due: null, interval: 1, repetitions: 1 }, 'again').lapses).toBe(1)
+  })
+})
+
+describe('优先重排（答错 → 次日排最前）', () => {
+  const now = new Date('2026-10-02T00:00:00Z')
+  const due = (id: string) =>
+    item({ id, lemma: id, reviewState: { ease: 2.5, due: '2026-10-02T00:00:00Z', interval: 3, repetitions: 2 } })
+
+  it('prioritizeItems 只标记指定词条', () => {
+    const lib = { schemaVersion: 1, items: [due('a'), due('b')] }
+    const out = prioritizeItems(lib, ['a'], nextDayIso(now))
+    expect(out.items.find((x) => x.id === 'a')?.priorityUntil).toBe('2026-10-03T00:00:00.000Z')
+    expect(out.items.find((x) => x.id === 'b')?.priorityUntil).toBeUndefined()
+  })
+
+  it('isPriority 未过期才算', () => {
+    expect(isPriority({ priorityUntil: '2026-10-03T00:00:00Z' } as any, now)).toBe(true)
+    expect(isPriority({ priorityUntil: '2026-10-01T00:00:00Z' } as any, now)).toBe(false)
+    expect(isPriority({} as any, now)).toBe(false)
+  })
+
+  it('复习队列把「优先」排到最前', () => {
+    const prio = { ...due('p'), priorityUntil: '2026-10-03T00:00:00Z' }
+    const plain = { ...due('n'), reviewState: { ...due('n').reviewState, due: '2026-10-01T00:00:00Z' } }
+    const q = buildReviewQueue([plain, prio], now)
+    expect(q.map((x) => x.id)).toEqual(['p', 'n'])
+  })
+
+  it('学习队列同样优先', () => {
+    const prio = { ...due('p'), priorityUntil: '2026-10-03T00:00:00Z' }
+    const plain = due('n')
+    expect(buildStudyQueue([plain, prio], now).map((x) => x.id)).toEqual(['p', 'n'])
   })
 })
 

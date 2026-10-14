@@ -12,10 +12,12 @@ import {
   type QuizQuestion,
 } from '../../core/quiz'
 import { buildArticleQuestions } from '../../core/articleQuiz'
-import { isDue, reviewItem } from '../../core/vocab'
+import { isDue, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 
-const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering']
+const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'phraseBlank']
+/** 「反复鞭打」最多自动重练几轮（防死循环）。 */
+const MAX_DRILL_ROUNDS = 5
 const isArticleKind = (k: QuizKind): k is ArticleQuizKind => (ARTICLE_KINDS as readonly string[]).includes(k)
 import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
@@ -73,6 +75,8 @@ export interface UseQuizSessionParams {
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
+  /** 一轮考完时按题型汇总（做「词块/搭配正确率」等量化）。 */
+  onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
 }
 
 /**
@@ -94,6 +98,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     recordPractice,
     addMistake,
     dropMistake,
+    onKinds,
   } = params
 
   // ---- 设置（持久化） ----
@@ -137,6 +142,12 @@ export function useQuizSession(params: UseQuizSessionParams) {
   })
   /** 本轮是不是「文章测验」（决定面板标题、且不写 SRS）。 */
   const [articleRun, setArticleRun] = useState(false)
+  /** 反复鞭打：一轮没全对就自动重练错题（最多 MAX_DRILL_ROUNDS 轮）。 */
+  const [loopWrong, setLoopWrong] = useLocalStorageState('reader:quizLoopWrong', false, persistentBool)
+  const [drillRound, setDrillRound] = useState(0)
+  const drillRoundRef = useRef(0)
+  /** 鞭打轮的定时器（换轮/关闭时清掉）。 */
+  const drillTimerRef = useRef<number | null>(null)
 
   // ---- 会话（落盘：刷新可恢复，刷新也是解除 TTS 假死的办法） ----
   const [restored] = useState<QuizSessionSnapshot | null>(loadQuizSession)
@@ -171,13 +182,18 @@ export function useQuizSession(params: UseQuizSessionParams) {
   }, [queue, index, input, checked, result, results, autoRun])
 
   // ---- 候选池与题量 ----
-  const pool = useMemo(() => {
-    if (scope === 'all') return library.items
-    if (scope === 'due') return library.items.filter((it) => isDue(it))
-    if (scope === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-    if (scope === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-    return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
-  }, [library.items, scope, articleIdentity, docLemmas])
+  /** 按范围取候选词（考试 / 拷打共用）。 */
+  const poolFor = useCallback(
+    (s: QuizScope): VocabItem[] => {
+      if (s === 'all') return library.items
+      if (s === 'due') return library.items.filter((it) => isDue(it))
+      if (s === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
+      if (s === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
+      return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
+    },
+    [library.items, articleIdentity, docLemmas],
+  )
+  const pool = useMemo(() => poolFor(scope), [poolFor, scope])
   const poolSizes = useMemo(() => {
     const count = (items: VocabItem[]) => countQuestions(items, kinds)
     return {
@@ -189,12 +205,12 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const availableCount = useMemo(() => countQuestions(pool, kinds), [pool, kinds])
 
   /** 出题：默认每个单词只考一次、题型随机；可关掉以允许同一词多题型。 */
-  const buildSet = useCallback(
-    (items: VocabItem[]): QuizQuestion[] => {
-      if (!unique) return buildQuizQuestions(items, kinds)
+  const buildSetWith = useCallback(
+    (items: VocabItem[], ks: QuizKind[]): QuizQuestion[] => {
+      if (!unique) return buildQuizQuestions(items, ks)
       return shuffleQuiz(items)
         .map((it) => {
-          for (const k of shuffleQuiz(kinds)) {
+          for (const k of shuffleQuiz(ks)) {
             const q = makeQuestion(it, k, items)
             if (q) return q
           }
@@ -202,8 +218,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
         })
         .filter((q): q is QuizQuestion => q !== null)
     },
-    [unique, kinds],
+    [unique],
   )
+
+  const buildSet = useCallback((items: VocabItem[]): QuizQuestion[] => buildSetWith(items, kinds), [buildSetWith, kinds])
 
   const clearAdvance = useCallback(() => {
     if (advanceRef.current) {
@@ -230,6 +248,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
       clearAdvance()
       closeOthers()
       allRef.current = qs
+      drillRoundRef.current = 0
+      setDrillRound(0)
       setArticleRun(!!opts?.article)
       setQueue(shuffleQuiz(qs))
       setIndex(0)
@@ -266,18 +286,50 @@ export function useQuizSession(params: UseQuizSessionParams) {
     begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
   }, [buildSet, pool, limit, begin, flash])
 
-  /** 从指定词条开一轮考试（错题本「重练词汇」用）。 */
+  /** 从指定词条开一轮考试（错题本「重练词汇」/ 错题包围战 用）。可指定题型。 */
   const startItems = useCallback(
-    (ids: string[]) => {
+    (ids: string[], kindsArg?: QuizKind[]) => {
       const items = library.items.filter((it) => ids.includes(it.id))
-      const qs = buildSet(items)
+      const qs = buildSetWith(items, kindsArg ?? kinds)
       if (!qs.length) {
         flash('这些词暂时出不了题（缺释义 / 例句）')
         return
       }
+      if (kindsArg) setKinds(kindsArg)
       begin(qs)
     },
-    [library.items, buildSet, begin, flash],
+    [library.items, buildSetWith, kinds, begin, flash, setKinds],
+  )
+
+  /** 精读工作流：用指定题型 / 范围直接开一轮「拷打」。 */
+  const startDrill = useCallback(
+    (ks: QuizKind[], scopeArg: QuizScope = 'article') => {
+      const vocabKinds = ks.filter((k) => !isArticleKind(k))
+      const qs = buildSetWith(poolFor(scopeArg), vocabKinds)
+      if (!qs.length) {
+        flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
+        return
+      }
+      setKinds(ks)
+      setScope(scopeArg)
+      begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
+    },
+    [poolFor, buildSetWith, limit, begin, flash, setKinds, setScope],
+  )
+
+  /** 精读工作流：用指定文章级题型开一轮（结构/语法、中译英、功能词、排序）。 */
+  const startArticleDrill = useCallback(
+    (ks: QuizKind[]) => {
+      const sents = doc?.sentences ?? []
+      const qs = buildArticleQuestions(sents, { kinds: ks.filter(isArticleKind) })
+      if (!qs.length) {
+        flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
+        return
+      }
+      setArticleKinds(ks)
+      begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length), { article: true })
+    },
+    [doc, limit, begin, flash, setArticleKinds],
   )
 
   /** 提交本题并判分；对 → SRS good，错 → SRS again（记 lapse）。 */
@@ -296,7 +348,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
       if (!isArticle) {
         if (ok) dropMistake(`vocab:${q.itemId}`)
         else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
-        persist(reviewItem(library, q.itemId, ok ? 'good' : 'again'))
+        // 答错 → 进错题本 + 标「次日优先重排」（明天队列排最前）
+        const reviewed = reviewItem(library, q.itemId, ok ? 'good' : 'again')
+        persist(ok ? reviewed : prioritizeItems(reviewed, [q.itemId], nextDayIso()))
         markStudied(q.itemId)
       }
       recordActivity(isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
@@ -320,6 +374,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
   /** 关闭考试并清掉待触发的自动切题（也顺手关掉设置面板）。 */
   const close = useCallback(() => {
     clearAdvance()
+    if (drillTimerRef.current) {
+      window.clearTimeout(drillTimerRef.current)
+      drillTimerRef.current = null
+    }
     setQueue(null)
     setSetupOpen(false)
     setArticleRun(false)
@@ -360,13 +418,39 @@ export function useQuizSession(params: UseQuizSessionParams) {
     if (index >= queue.length && results.length > 0 && !recordedRef.current) {
       recordedRef.current = true
       recordPractice('quiz', results.length, results.filter((r) => r.correct).length)
+      // 按题型汇总（词块/搭配正确率等量化用）
+      if (onKinds) {
+        const kindOf = new Map(queue.map((q) => [q.id, q.kind]))
+        const tally = new Map<QuizKind, { total: number; correct: number }>()
+        for (const r of results) {
+          const k = kindOf.get(r.id)
+          if (!k) continue
+          const cur = tally.get(k) ?? { total: 0, correct: 0 }
+          cur.total += 1
+          if (r.correct) cur.correct += 1
+          tally.set(k, cur)
+        }
+        if (tally.size) onKinds([...tally].map(([kind, s]) => ({ kind, ...s })))
+      }
+      // 反复鞭打：还有错题就自动重练（上限 MAX_DRILL_ROUNDS 轮，避免死循环）
+      const wrong = results.filter((r) => !r.correct).length
+      if (loopWrong && wrong > 0 && drillRoundRef.current < MAX_DRILL_ROUNDS) {
+        drillRoundRef.current += 1
+        setDrillRound(drillRoundRef.current)
+        setAutoRun(true) // 鞭打轮自动切题，别停下来
+        drillTimerRef.current = window.setTimeout(() => {
+          drillTimerRef.current = null
+          retryWrong()
+        }, 1500)
+      }
     }
-  }, [queue, index, results, recordPractice])
+  }, [queue, index, results, recordPractice, onKinds, loopWrong, retryWrong])
 
   // 卸载时清掉待触发的自动切题
   useEffect(() => {
     return () => {
       if (advanceRef.current) window.clearTimeout(advanceRef.current)
+      if (drillTimerRef.current) window.clearTimeout(drillTimerRef.current)
     }
   }, [])
 
@@ -417,6 +501,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     articleKinds,
     setArticleKinds,
     articleRun,
+    loopWrong,
+    setLoopWrong,
+    drillRound,
     // 会话
     setupOpen,
     setSetupOpen,
@@ -437,6 +524,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     start,
     startArticle,
     startItems,
+    startDrill,
+    startArticleDrill,
     check,
     next,
     close,

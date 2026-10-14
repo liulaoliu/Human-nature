@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { snapSelection, wordSpans } from './wordSelect'
+import { snapSelection, toggleIndex, wordSpans, wordsAtIndex } from './wordSelect'
 
 const S = 'abandon back check deaf ear fish'
 //          0      7    12    18   22  26
@@ -59,5 +59,36 @@ describe('snapSelection 连字符复合词', () => {
     expect(snapSelection(t, 3, 3)?.text).toBe('bad-tempered')
     expect(snapSelection(t, 10, 10)?.text).toBe('bad-tempered')
     expect(snapSelection(t, 2, 13)?.text).toBe('bad-tempered')
+  })
+})
+
+describe('toggleIndex / wordsAtIndex（按位置而非词形选中）', () => {
+  const text = 'a big something makes a terrible'
+  const spans = wordSpans(text)
+  // a(0) big(1) something(2) makes(3) a(4) terrible(5)
+
+  it('同一个词的不同位置互不影响', () => {
+    // 选中第二个 a（下标 4）→ 只有它被选，第一个 a（下标 0）不受影响
+    const sel = toggleIndex([], 4)
+    expect(sel).toEqual([4])
+    expect(wordsAtIndex(spans, sel)).toEqual(['a'])
+  })
+
+  it('按位置切换：选中/取消各自的词', () => {
+    let sel = toggleIndex([], 0) // 第一个 a
+    sel = toggleIndex(sel, 5) // terrible
+    expect(wordsAtIndex(spans, sel)).toEqual(['a', 'terrible'])
+    sel = toggleIndex(sel, 0) // 取消第一个 a
+    expect(wordsAtIndex(spans, sel)).toEqual(['terrible'])
+  })
+
+  it('合成词组带上各自位置的词，不会把同形词都算进来', () => {
+    // 选第二个 a + terrible → "a terrible"（而不是 "a a terrible"）
+    const sel = [5, 4]
+    expect(wordsAtIndex(spans, sel).join(' ')).toBe('a terrible')
+  })
+
+  it('下标越界不产生空串', () => {
+    expect(wordsAtIndex(spans, [99, 1])).toEqual(['big'])
   })
 })

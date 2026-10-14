@@ -12,7 +12,21 @@ export const QUIZ_SCOPE_LABEL: Record<QuizScope, string> = {
   all: '全库',
 }
 
-const KIND_ORDER: QuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
+const KIND_ORDER: QuizKind[] = [
+  'spell',
+  'cloze',
+  'usage',
+  'listen',
+  'choice',
+  'meaning',
+  'ear',
+  'define',
+  'defineChoice',
+  'collocation',
+  'prep',
+  'mark',
+  'idiom',
+]
 
 export interface QuizSetupPanelProps {
   kinds: QuizKind[]
@@ -21,6 +35,8 @@ export interface QuizSetupPanelProps {
   auto: boolean
   unique: boolean
   speakAfter: boolean
+  /** 反复鞭打：一轮没全对就自动重练错题。 */
+  loopWrong: boolean
   availableCount: number
   poolUnmastered: number
   /** 文章级测验题型与可出题数（按当前文章）。 */
@@ -33,6 +49,7 @@ export interface QuizSetupPanelProps {
   onAutoChange: (on: boolean) => void
   onUniqueChange: (on: boolean) => void
   onSpeakChange: (on: boolean) => void
+  onLoopWrongChange: (on: boolean) => void
   onCancel: () => void
   onStart: () => void
   onStartArticle: () => void
@@ -46,6 +63,7 @@ export default function QuizSetupPanel({
   auto,
   unique,
   speakAfter,
+  loopWrong,
   availableCount,
   poolUnmastered,
   articleKinds,
@@ -57,6 +75,7 @@ export default function QuizSetupPanel({
   onAutoChange,
   onUniqueChange,
   onSpeakChange,
+  onLoopWrongChange,
   onCancel,
   onStart,
   onStartArticle,
@@ -117,6 +136,10 @@ export default function QuizSetupPanel({
               <input type="checkbox" checked={speakAfter} onChange={(e) => onSpeakChange(e.target.checked)} />
               答完朗读
             </label>
+            <label className="check-inline" title="一轮没全对就自动重练错题，最多 5 轮 —— 反复鞭打，直到记牢">
+              <input type="checkbox" checked={loopWrong} onChange={(e) => onLoopWrongChange(e.target.checked)} />
+              🔁 反复鞭打错题
+            </label>
           </div>
         </div>
         <p className="muted">
@@ -151,7 +174,7 @@ export default function QuizSetupPanel({
               title={
                 articleAvailable <= 0
                   ? '这篇还没有译文 / 语言点，先在「语言点 / 全文翻译」里生成'
-                  : '按当前文章出题：英译中 / 中译英 / 功能词填空 / 句子排序 / 结构语法'
+                  : '按当前文章出题：英译中 / 中译英 / 功能词填空 / 句子排序 / 结构语法 / 词组·习语填空'
               }
             >
               开始文章测验{articleAvailable > 0 ? `（约 ${articleAvailable} 题）` : ''}

@@ -135,6 +135,22 @@ export interface VocabSource {
 /** 生词状态流转。 */
 export type VocabStatus = 'unqueried' | 'queried' | 'edited' | 'mastered'
 
+/**
+ * 生词「主要释义」的语法标记（受控建议值，按需扩展）：
+ *   名词：可数 / 不可数；动词：及物 / 不及物；形容词：可分级 / 不可分级……
+ * 兼有的两项都给，如 `['可数', '不可数']`。
+ */
+export const GRAMMAR_MARKS = [
+  '可数',
+  '不可数',
+  '及物',
+  '不及物',
+  '可分级',
+  '不可分级',
+] as const
+
+export type GrammarMark = (typeof GRAMMAR_MARKS)[number]
+
 /** AI 生成的易混项：形近/义近的词与释义（用于选择题干扰项）。 */
 export interface VocabConfusable {
   /** 易混的英文词 */
@@ -161,10 +177,16 @@ export interface VocabItem {
   partOfSpeech: string | null
   /** 中文含义 */
   meaning: string | null
+  /** 主要释义的语法标记（可数/不可数、及物/不及物…；非名词/动词/形容词或未标注为 undefined） */
+  grammarMarks?: string[]
   /** 英英释义（学习者词典风格的一句话，可选） */
   definition?: string | null
-  /** 用法 / 搭配（v1 的 collocations 并入这里） */
+  /** 用法 / 搭配说明（v1 的 collocations 并入这里） */
   usage: string[]
+  /** 词组 / 搭配，如 run out；run a business（AI 生成，可选；与 usage 分开展示） */
+  phrases?: string[]
+  /** 习语 / 固定说法，如 run in the family（AI 生成，可选） */
+  idioms?: string[]
   /** 例句 */
   examples: VocabExample[]
   /** 来源 */
@@ -183,6 +205,11 @@ export interface VocabItem {
   lastPrintedAt?: string | null
   /** AI 生成的易混项（形近/义近）；选择题干扰项优先用它 */
   confusables?: VocabConfusable[]
+  /**
+   * 优先重排到期时间（ISO 8601）。答错后写入「次日」，
+   * 到期重练时把它排到队列最前（"今日鞭打、次日优先重练"）。
+   */
+  priorityUntil?: string | null
   /** 复习状态 */
   reviewState: ReviewState
   /** ISO 8601 */

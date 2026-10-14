@@ -181,6 +181,48 @@ export function buildArticleQuestions(sentences: Sentence[], opts: ArticleQuizOp
     }
   }
 
+  // 词组/习语填空：把句中出现的「词组 / 习语」挖空，选回（依语言点数据）
+  if (want.has('phraseBlank')) {
+    // 全篇的词组/习语池（当干扰项）
+    const pool: string[] = []
+    for (const s of sentences) {
+      for (const l of getSentenceLanguages(s)) {
+        for (const p of [...(l.phrases ?? []), ...(l.idioms ?? [])]) {
+          const t = p.trim()
+          if (t && !pool.some((x) => normalizeAnswer(x) === normalizeAnswer(t))) pool.push(t)
+        }
+      }
+    }
+    for (const s of withText) {
+      const chunks: string[] = []
+      for (const l of getSentenceLanguages(s)) {
+        for (const p of [...(l.phrases ?? []), ...(l.idioms ?? [])]) {
+          const t = p.trim()
+          if (t && !chunks.some((x) => normalizeAnswer(x) === normalizeAnswer(t))) chunks.push(t)
+        }
+      }
+      for (const chunk of chunks) {
+        const idx = s.text.toLowerCase().indexOf(chunk.toLowerCase())
+        if (idx < 0) continue // 词组没原样出现在句子里 → 挖不出空
+        const dist = pickN(chunk, pool, 3, rnd)
+        if (dist.length < 3) continue
+        const blanked = `${s.text.slice(0, idx)}____${s.text.slice(idx + chunk.length)}`
+        out.push(
+          mcBase(
+            {
+              id: `article:phraseBlank:${s.id}:${idx}`, itemId: s.id, lemma: '', kind: 'phraseBlank',
+              word: '', prompt: blanked, meaning: null, partOfSpeech: null, phonetic: null,
+              context: s.text.trim(), translation: (s.translation ?? '').trim() || undefined,
+            },
+            chunk,
+            [chunk, ...dist],
+            rnd,
+          ),
+        )
+      }
+    }
+  }
+
   // 结构/语法（依语言点数据）
   if (want.has('grammar')) {
     const withGram = withText.filter((s) => grammarOf(s))

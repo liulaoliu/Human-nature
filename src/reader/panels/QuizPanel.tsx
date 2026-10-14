@@ -10,6 +10,19 @@ export interface QuizResultRow {
   correct: boolean
 }
 
+/** 这些题型在题干下显示「释义」提示（帮助锁定义项）。 */
+const QUESTION_SHOWS_MEANING = new Set([
+  'cloze',
+  'usage',
+  'listen',
+  'collocation',
+  'prep',
+  'define',
+  'defineChoice',
+  'mark',
+  'idiom',
+])
+
 export interface QuizPanelProps {
   /** 当前题；为 null 或 index 越界时显示结算。 */
   question: QuizQuestion | null
@@ -26,6 +39,8 @@ export interface QuizPanelProps {
   result: boolean | null
   /** 整个词库（用于结算页显示错词）。 */
   items: VocabItem[]
+  /** 「反复鞭打」第几轮（0 = 正常一轮）。 */
+  drillRound?: number
   onClose: () => void
   onSpeak: (text: string) => void
   /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续考）。 */
@@ -53,6 +68,7 @@ export default function QuizPanel({
   input,
   result,
   items,
+  drillRound,
   onClose,
   onSpeak,
   onResetSpeech,
@@ -81,6 +97,7 @@ export default function QuizPanel({
         <button onClick={onClose}>结束（Esc）</button>
         <span className="muted" title="本轮考试范围">
           {articleRun ? '文章测验' : `范围：${QUIZ_SCOPE_LABEL[scope]}`}
+          {drillRound ? ` · 🔁 鞭打第 ${drillRound} 轮` : ''}
         </span>
         <span className="muted">
           {Math.min(index + 1, queueLength)} / {queueLength}
@@ -116,7 +133,7 @@ export default function QuizPanel({
                   ? '🔊 合成中…'
                   : `🔊 ${question.kind === 'ear' ? '播放单词' : '播放句子'}`}
               </button>
-            ) : question.kind === 'meaning' ? (
+            ) : question.kind === 'meaning' || question.kind === 'collocation' || question.kind === 'mark' ? (
               <div className="study-word quiz-word">
                 {question.word}
                 <button className="speak" onClick={() => onSpeak(question.word)} title="朗读">
@@ -138,13 +155,13 @@ export default function QuizPanel({
                 )}
               </div>
             )}
-            {(question.kind === 'cloze' || question.kind === 'usage' || question.kind === 'listen') &&
-              question.meaning && (
-                <div className="muted quiz-hint">
-                  释义：{question.partOfSpeech ? `${question.partOfSpeech} ` : ''}
-                  {question.meaning}
-                </div>
-              )}
+            {question.kind === 'mark' && <div className="muted quiz-hint">{question.prompt}</div>}
+            {QUESTION_SHOWS_MEANING.has(question.kind) && question.meaning && (
+              <div className="muted quiz-hint">
+                释义：{question.partOfSpeech ? `${question.partOfSpeech} ` : ''}
+                {question.meaning}
+              </div>
+            )}
             {question.options ? (
               <div className="quiz-options">
                 {question.options.map((opt, i) => (
@@ -171,9 +188,13 @@ export default function QuizPanel({
                   onChange={(e) => onInputChange(formatAnswerInput(e.target.value, question.answer))}
                   disabled={checked}
                 />
-                <div className="muted quiz-mask" title="提示：一个下划线=一个字母；空格=一个词">
-                  {maskAnswer(question.answer)}
-                </div>
+                {question.kind === 'collocation' ? (
+                  <div className="muted quiz-mask">写出一条「{question.word}」的搭配 / 词组（任一对就算对）</div>
+                ) : (
+                  <div className="muted quiz-mask" title="提示：一个下划线=一个字母；空格=一个词">
+                    {maskAnswer(question.answer)}
+                  </div>
+                )}
               </>
             )}
             {checked && (
@@ -226,8 +247,8 @@ export default function QuizPanel({
               )}
               <div className="bar">
                 {wrongIds.length > 0 && (
-                  <button className="primary" onClick={onRetryWrong}>
-                    重做错题 {wrongIds.length}
+                  <button className="primary" onClick={onRetryWrong} title="只重练这一轮的错题（开了「反复鞭打」会自动接着练）">
+                    🔁 继续鞭打错题 {wrongIds.length}
                   </button>
                 )}
                 <button className={wrongIds.length ? '' : 'primary'} onClick={onRestart}>

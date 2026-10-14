@@ -6,14 +6,19 @@ import {
   buildCleanupPrompt,
   buildConfusablePrompt,
   buildExamplePrompt,
+  buildGrammarMarkPrompt,
   buildLemmaPrompt,
+  buildPhrasePrompt,
   buildPosPrompt,
   buildPrompt,
   buildTranslateAllPrompt,
+  cleanExampleText,
   parseAnalysis,
   parseConfusables,
   parseExampleTable,
+  parseGrammarMarkTable,
   parseLemmaTable,
+  parsePhraseTable,
   parsePosTable,
   parseLookupTable,
   parseTranslationTable,
@@ -136,6 +141,85 @@ describe('parseExampleTable / buildExamplePrompt', () => {
     expect(p).toContain('run')
     expect(p).toContain('跑步')
   })
+  it('提示词编码了「好例句」的原则（短 / 单一目标词 / 对义项 / 给搭配）', () => {
+    const p = buildExamplePrompt([{ word: 'mitigate', meaning: '缓解' }])
+    expect(p).toContain('不超过 12 个词')
+    expect(p).toContain('只考一个词')
+    expect(p).toContain('用对义项')
+    expect(p).toContain('搭配')
+  })
+  it('cleanExampleText 去编号 / 引号 / 多余空白', () => {
+    expect(cleanExampleText('1. "I run every day."')).toBe('I run every day.')
+    expect(cleanExampleText('-  He   runs.')).toBe('He runs.')
+    expect(cleanExampleText('2) 走开。')).toBe('走开。')
+  })
+  it('剔除「不含该词」的例句（AI 用同义词糊弄）', () => {
+    const raw = 'run | She sprints fast. | 她跑得很快。 | I run every day. | 我每天跑步。'
+    const rows = parseExampleTable(raw)
+    expect(rows[0].examples).toEqual([{ text: 'I run every day.', translation: '我每天跑步。' }])
+  })
+  it('全都不含该词时宽松保留（避免任务反复跑）', () => {
+    const raw = 'run | She sprints fast. | 她跑得飞快。'
+    expect(parseExampleTable(raw)[0].examples).toEqual([{ text: 'She sprints fast.', translation: '她跑得飞快。' }])
+  })
+  it('丢掉跑飞的长句、并去重', () => {
+    const long = Array.from({ length: 40 }, () => 'word').join(' ')
+    const raw = `run | I run every day. | 我每天跑步。 | I run every day. | 重复 | ${long} | 太长`
+    const rows = parseExampleTable(raw)
+    expect(rows[0].examples).toEqual([{ text: 'I run every day.', translation: '我每天跑步。' }])
+  })
+})
+
+describe('词组 / 习语提示词 / 解析', () => {
+  it('buildPhrasePrompt 带词、含义与 3 列格式', () => {
+    const p = buildPhrasePrompt([{ word: 'run', meaning: '跑步' }])
+    expect(p).toContain('run')
+    expect(p).toContain('跑步')
+    expect(p).toContain('单词 | 词组1；词组2 | 习语1；习语2')
+    expect(p).toContain('固定习语')
+  })
+  it('parsePhraseTable 解析词组与习语，按「；」拆开', () => {
+    const rows = parsePhraseTable('run | run out；run a business | run in the family')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toEqual({
+      word: 'run',
+      phrases: ['run out', 'run a business'],
+      idioms: ['run in the family'],
+    })
+  })
+  it('parsePhraseTable 跳过表头；空/「无」仍保留为「已标注」', () => {
+    expect(parsePhraseTable('单词 | 词组 | 习语')).toHaveLength(0)
+    const rows = parsePhraseTable('go | go on')
+    expect(rows[0]).toEqual({ word: 'go', phrases: ['go on'], idioms: [] })
+    // 没有说法也保留一行（防无限重复待办）
+    expect(parsePhraseTable('mrs | 无 | 无')).toEqual([{ word: 'mrs', phrases: [], idioms: [] }])
+    expect(parsePhraseTable('mrs |  | ')).toEqual([{ word: 'mrs', phrases: [], idioms: [] }])
+  })
+})
+
+describe('语法标记提示词 / 解析', () => {
+  it('buildGrammarMarkPrompt 列出可选标记与词/含义', () => {
+    const p = buildGrammarMarkPrompt([{ word: 'water', meaning: '水' }])
+    expect(p).toContain('water')
+    expect(p).toContain('水')
+    expect(p).toContain('可数')
+    expect(p).toContain('及物')
+    expect(p).toContain('单词 | 标记1；标记2')
+  })
+  it('parseGrammarMarkTable 解析标记并归一别名', () => {
+    const rows = parseGrammarMarkTable('water | 不可数\nrun | 可数；及物；不及物')
+    expect(rows).toEqual([
+      { word: 'water', marks: ['不可数'] },
+      { word: 'run', marks: ['可数', '及物', '不及物'] },
+    ])
+    const alias = parseGrammarMarkTable('run | countable; transitive / vi')
+    expect(alias[0].marks).toEqual(['可数', '及物', '不及物'])
+  })
+  it('parseGrammarMarkTable 跳过表头；空/「无」仍保留为「已标注」', () => {
+    expect(parseGrammarMarkTable('单词 | 标记')).toHaveLength(0)
+    expect(parseGrammarMarkTable('foo | 未知的')).toEqual([{ word: 'foo', marks: [] }])
+    expect(parseGrammarMarkTable('mrs | 无')).toEqual([{ word: 'mrs', marks: [] }])
+  })
 })
 
 describe('parseAnalysis', () => {
@@ -207,6 +291,12 @@ describe('buildCleanupPrompt', () => {
     expect(p).toContain('粘连')
     expect(p).toContain('只输出修复后的文本')
     expect(p).toContain('Hong Kong held elections for')
+  })
+  it('要求原样保留手动加的「【…】」标题 / 导语标记', () => {
+    const p = buildCleanupPrompt('【标题】\n【导语】\n\nBody text.')
+    expect(p).toContain('【……】')
+    expect(p).toContain('原样保留')
+    expect(p).toContain('不要删除')
   })
 })
 

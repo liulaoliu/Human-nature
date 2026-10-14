@@ -49,8 +49,11 @@ export function toAnkiCSV(items: VocabItem[], opts?: { header?: boolean }): stri
     const front = [it.word, it.phonetic].filter(Boolean).join(' ')
     const back: string[] = []
     if (it.partOfSpeech) back.push(it.partOfSpeech)
+    if (it.grammarMarks?.length) back.push(it.grammarMarks.join('·'))
     if (it.meaning) back.push(it.meaning)
     if (it.usage.length) back.push(it.usage.join('<br>'))
+    if (it.phrases?.length) back.push('词组：' + it.phrases.join('；'))
+    if (it.idioms?.length) back.push('习语：' + it.idioms.join('；'))
     for (const ex of it.examples) {
       back.push([ex.text, ex.translation].filter(Boolean).join('<br>'))
     }
@@ -118,11 +121,20 @@ export function renderPrintHTML(input: {
           const no = n != null ? `<span class="no">${n}</span>` : ''
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
+          const marks = it.grammarMarks?.length
+            ? ` <span class="marks">${it.grammarMarks.map(escapeHtml).join('·')}</span>`
+            : ''
           const meaning = it.meaning ? ` <span class="meaning">${escapeHtml(it.meaning)}</span>` : ''
           const usage = it.usage.length
             ? ` <span class="usage">· ${it.usage.map(escapeHtml).join('；')}</span>`
             : ''
-          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${meaning}${usage}</div>`
+          const phrases = it.phrases?.length
+            ? ` <span class="usage">词组：${it.phrases.map(escapeHtml).join('；')}</span>`
+            : ''
+          const idioms = it.idioms?.length
+            ? ` <span class="usage">习语：${it.idioms.map(escapeHtml).join('；')}</span>`
+            : ''
+          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${marks}${meaning}${usage}${phrases}${idioms}</div>`
         })
         .join('')
       return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
@@ -165,6 +177,7 @@ export function renderPrintHTML(input: {
   .phon { color: #555; }
   .pos { color: #777; font-style: italic; }
   .usage { color: #555; }
+  .marks { color: #555; font-size: 12px; }
   @media print { .items { columns: 3; } }
 </style>
 </head>

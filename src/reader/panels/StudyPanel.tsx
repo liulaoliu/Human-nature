@@ -1,8 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { VocabItem } from '../../types/document'
-import { cleanGloss, displayMeaning, normalizePos, review, type ReviewGrade, type StudyMode } from '../../core/vocab'
+import {
+  cleanGloss,
+  displayMeaning,
+  isPriority,
+  normalizePos,
+  review,
+  vocabCardBlocks,
+  type ReviewGrade,
+  type StudyMode,
+} from '../../core/vocab'
 import { diffWords, type DiffToken } from '../../core/dictation'
 import { fmtDue, fmtDur, fmtInterval } from '../format'
+import VocabBlocks from './VocabBlocks'
 
 /** 背单词范围。 */
 export type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
@@ -15,6 +25,9 @@ export interface StudyDraft {
   meaning: string
   definition: string
   usage: string
+  phrases: string
+  idioms: string
+  grammarMarks: string
 }
 
 export interface StudyPanelProps {
@@ -62,6 +75,8 @@ export interface StudyPanelProps {
   onInputChange: (value: string) => void
   onCheckSpelling: () => void
   onSpeak: (word: string) => void
+  /** 从离线例句库（Tatoeba）给当前词补例句。 */
+  onFetchExamples: () => void
   onOpenEdit: () => void
   onDelete: () => void
   onDraftChange: (draft: StudyDraft) => void
@@ -95,9 +110,14 @@ function buildSteps(card: VocabItem, items: VocabItem[]): DrillStep[] {
   const steps: DrillStep[] = []
   if (card.word) steps.push({ kind: 'spell' })
   if (card.meaning && items.filter((it) => it.id !== card.id && it.meaning).length >= 3) steps.push({ kind: 'meaning' })
-  if (card.usage.length) steps.push({ kind: 'usage' })
+  if (card.usage.length || card.phrases?.length) steps.push({ kind: 'usage' })
   if (card.source?.sentenceText) steps.push({ kind: 'dictation' })
   return steps
+}
+
+/** 可用于「写搭配」的答案：用法 + 词组。 */
+function collocationsOf(card: VocabItem): string[] {
+  return [...card.usage, ...(card.phrases ?? [])]
 }
 
 /** 选词义：正确释义 + 3 个来自其它词的释义（确定性排序）。 */
@@ -166,7 +186,7 @@ function DrillBoard({
       if (norm(text) === norm(card.word)) next()
       else setWrong(true)
     } else if (cur.kind === 'usage') {
-      const ok = card.usage.some((u) => {
+      const ok = collocationsOf(card).some((u) => {
         const n = norm(stripPunct(u))
         return n.length >= 3 && (norm(text) === n || norm(text).includes(n))
       })
@@ -256,7 +276,9 @@ function DrillBoard({
             onChange={(e) => setText(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), submit())}
           />
-          {wrong && card.usage.length > 0 && <div className="muted">参考：{card.usage.join('；')}</div>}
+          {wrong && collocationsOf(card).length > 0 && (
+            <div className="muted">参考：{collocationsOf(card).join('；')}</div>
+          )}
         </div>
       )}
 
@@ -336,6 +358,7 @@ export default function StudyPanel({
   onInputChange,
   onCheckSpelling,
   onSpeak,
+  onFetchExamples,
   onOpenEdit,
   onDelete,
   onDraftChange,
@@ -489,7 +512,6 @@ export default function StudyPanel({
                     {card.phonetic}
                   </div>
                 )}
-                {card.usage.length > 0 && <div className="study-usage">{card.usage.join('；')}</div>}
                 {spelling && checked && (
                   <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
                     {correct ? '✔ 正确' : `✘ 你写的是「${input || '（空）'}」`}
@@ -500,6 +522,15 @@ export default function StudyPanel({
                     <div className="study-meaning">
                       {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
                       {displayMeaning(card) || '（无释义）'}
+                      {card.grammarMarks?.length ? (
+                        <span className="grammar-marks">
+                          {card.grammarMarks.map((m) => (
+                            <span className="gmark" key={m}>
+                              {m}
+                            </span>
+                          ))}
+                        </span>
+                      ) : null}
                       <button
                         className="unknown-btn"
                         onClick={(e) => {
@@ -511,26 +542,18 @@ export default function StudyPanel({
                         不认识
                       </button>
                     </div>
-                    {cleanGloss(card.definition) && <div className="study-def">EN · {cleanGloss(card.definition)}</div>}
-                    {card.examples.slice(0, 3).map((ex, i) =>
-                      ex.text && ex.text !== card.source?.sentenceText ? (
-                        <div className="ex" key={i}>
-                          {ex.text}
-                          {ex.translation ? ` — ${ex.translation}` : ''}
-                        </div>
-                      ) : null,
-                    )}
-                    {card.source?.sentenceText && <div className="muted src">来源：{card.source.sentenceText}</div>}
-                    {card.confusables && card.confusables.length > 0 && (
-                      <div className="muted study-conf">
-                        易混：
-                        {card.confusables.map((c) => `${c.word}${c.meaning ? `（${c.meaning}）` : ''}`).join('；')}
+                    {cleanGloss(card.definition) && (
+                      <div className="study-def">
+                        <span className="study-def-label">英英释义</span>
+                        {cleanGloss(card.definition)}
                       </div>
                     )}
+                    <VocabBlocks className="study-blocks" blocks={vocabCardBlocks(card, { maxExamples: 3 })} />
                     <div className="muted study-srs">
                       复习 {card.reviewState.repetitions} 次
                       {(card.reviewState.lapses ?? 0) > 0 ? ` · 忘记 ${card.reviewState.lapses} 次` : ''}
                       {card.reviewState.due ? ` · 下次 ${fmtDue(card.reviewState.due)}` : ' · 还没排期'}
+                      {isPriority(card) ? ' · 🔥 优先重练' : ''}
                       {card.tags.includes('不认识') ? ' · 🆕 标为不认识' : ''}
                     </div>
                   </div>
@@ -549,6 +572,9 @@ export default function StudyPanel({
               <div className="bar study-tools">
                 <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
                   ✎ 编辑
+                </button>
+                <button onClick={onFetchExamples} title="从离线例句库（Tatoeba）给这个词补几条例句；需先跑 tools/build-tatoeba.mjs">
+                  📖 离线例句
                 </button>
                 <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
                   {delArmed ? '确认删除' : '删除'}
@@ -605,6 +631,30 @@ export default function StudyPanel({
                       value={draft.usage}
                       onChange={(e) => onDraftChange({ ...draft, usage: e.target.value })}
                       placeholder="run a business；run out"
+                    />
+                  </label>
+                  <label className="wide">
+                    词组（分号分隔）
+                    <input
+                      value={draft.phrases}
+                      onChange={(e) => onDraftChange({ ...draft, phrases: e.target.value })}
+                      placeholder="run out of；run a business"
+                    />
+                  </label>
+                  <label className="wide">
+                    习语（分号分隔）
+                    <input
+                      value={draft.idioms}
+                      onChange={(e) => onDraftChange({ ...draft, idioms: e.target.value })}
+                      placeholder="run in the family"
+                    />
+                  </label>
+                  <label className="wide">
+                    语法标记（分号分隔）
+                    <input
+                      value={draft.grammarMarks}
+                      onChange={(e) => onDraftChange({ ...draft, grammarMarks: e.target.value })}
+                      placeholder="可数；不可数 / 及物；不及物 / 可分级"
                     />
                   </label>
                   <div className="bar">

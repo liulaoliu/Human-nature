@@ -11,14 +11,16 @@ import {
   buildBatchLookupPrompt,
   buildConfusablePrompt,
   buildExamplePrompt,
+  buildGrammarMarkPrompt,
   buildLemmaPrompt,
+  buildPhrasePrompt,
   buildPosPrompt,
   buildTranslateAllPrompt,
   type VocabLevel,
 } from './analyzer'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
-import { normalizeWord } from './vocab'
+import { hasOwnExamples, isMarkablePos, normalizeWord } from './vocab'
 import type { Sentence, VocabItem } from '../types/document'
 
 /** 可以打包的 AI 任务类型（与 ReaderApp 的 lastTask 对齐）。 */
@@ -28,8 +30,10 @@ export const AI_JOB_TASKS = [
   'auto_vocab',
   'confusable',
   'example',
+  'phrase',
   'lemma',
   'pos',
+  'grammar_mark',
   'listening',
   'language',
   'imitation',
@@ -48,9 +52,11 @@ export const AI_TASK_LABEL: Record<AiJobTask, string> = {
   translate: '翻译',
   auto_vocab: '自动标词',
   confusable: '混淆项',
-  example: '用法示例',
+  example: '例句',
+  phrase: '词组/习语',
   lemma: '原形',
   pos: '-ing/-ed',
+  grammar_mark: '语法标记',
   listening: '听力',
   language: '语言点',
   imitation: '仿写',
@@ -329,14 +335,25 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       part.map((it) => it.word),
     )
   }
-  // 有释义但没例句 → 生成用法示例（AI 按语义造 2 句，英+中）
-  const exampleTodo = base.filter((it) => it.meaning && it.examples.length === 0).slice(0, 30)
+  // 例句（没「自己的例句」就生成；来源句不算自己的例句）→ 生成「好例句」：
+  // 短、单一目标词、体现该义项与典型搭配。
+  const exampleTodo = base.filter((it) => it.meaning && !hasOwnExamples(it)).slice(0, 30)
   if (exampleTodo.length) {
     push(
       'example',
-      `用法示例（${exampleTodo.length}）`,
+      `例句（${exampleTodo.length}）`,
       buildExamplePrompt(exampleTodo.map((it) => ({ word: it.word, meaning: it.meaning ?? undefined }))),
       exampleTodo.map((it) => it.word),
+    )
+  }
+  // 缺词组 → 生成「词组 / 习语」（有释义、但还没标注过词组；空数组也算标注过）
+  const phraseTodo = base.filter((it) => it.meaning && it.phrases === undefined).slice(0, 30)
+  if (phraseTodo.length) {
+    push(
+      'phrase',
+      `词组/习语（${phraseTodo.length}）`,
+      buildPhrasePrompt(phraseTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
+      phraseTodo.map((it) => it.word),
     )
   }
   // 疑似非原型 → 校正原形
@@ -359,6 +376,19 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       `-ing/-ed 辨析（${posCandidates.length}）`,
       buildPosPrompt(posCandidates.map((it) => ({ word: it.word, context: it.source?.sentenceText }))),
       posCandidates.map((it) => it.word),
+    )
+  }
+  // 名词/动词/形容词缺语法标记（可数/不可数、及物/不及物…）→ 标注。
+  // 判「标注过」看字段**是否存在**（空数组也算标注过），否则「查过但无可标」的词会永远重复跑。
+  const markTodo = base
+    .filter((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined)
+    .slice(0, 30)
+  if (markTodo.length) {
+    push(
+      'grammar_mark',
+      `语法标记（${markTodo.length}）`,
+      buildGrammarMarkPrompt(markTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
+      markTodo.map((it) => it.word),
     )
   }
   // 缺译文 → 全文翻译（按句分块：一条塞几十句最容易在网页端被截断）
@@ -506,10 +536,12 @@ export function countAiJobs(input: AiJobsInput): number {
     confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
-  if (base.some((it) => it.meaning && it.examples.length === 0)) n++
+  if (base.some((it) => it.meaning && !hasOwnExamples(it))) n++
+  if (base.some((it) => it.meaning && it.phrases === undefined)) n++
   if (!input.autoVocabDone && input.sentences.length) n++
   if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
   if (base.some((it) => (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma) && !it.note.includes('辨析'))) n++
+  if (base.some((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined)) n++
   n += chunk(
     input.sentences.filter((s) => !s.translation),
     SENTENCE_CHUNK,

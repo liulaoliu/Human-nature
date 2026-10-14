@@ -26,6 +26,9 @@ export interface StudyDraft {
   meaning: string
   definition: string
   usage: string
+  phrases: string
+  idioms: string
+  grammarMarks: string
 }
 
 export interface UseStudySessionParams {
@@ -302,6 +305,9 @@ export function useStudySession(params: UseStudySessionParams) {
       meaning: card.meaning ?? '',
       definition: card.definition ?? '',
       usage: card.usage.join('；'),
+      phrases: (card.phrases ?? []).join('；'),
+      idioms: (card.idioms ?? []).join('；'),
+      grammarMarks: (card.grammarMarks ?? []).join('；'),
     })
     setEditOpen(true)
     setDelArmed(false)
@@ -310,10 +316,11 @@ export function useStudySession(params: UseStudySessionParams) {
   /** 保存卡内编辑（持久化；状态置 edited，之后查词不会再覆盖）。 */
   const saveEdit = useCallback(() => {
     if (!card || !draft) return
-    const usage = draft.usage
-      .split(/[;；\n]/)
-      .map((s) => s.trim())
-      .filter(Boolean)
+    const split = (s: string) =>
+      s
+        .split(/[;；\n]/)
+        .map((x) => x.trim())
+        .filter(Boolean)
     persist(
       editItem(library, card.id, {
         word: draft.word.trim() || card.word,
@@ -321,7 +328,10 @@ export function useStudySession(params: UseStudySessionParams) {
         partOfSpeech: draft.partOfSpeech.trim() || null,
         meaning: draft.meaning.trim() || null,
         definition: draft.definition.trim() || null,
-        usage,
+        usage: split(draft.usage),
+        phrases: split(draft.phrases),
+        idioms: split(draft.idioms),
+        grammarMarks: split(draft.grammarMarks),
       }),
     )
     setEditOpen(false)

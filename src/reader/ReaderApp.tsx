@@ -3,11 +3,14 @@ import type { ArticleBook } from '../core/matchArticle'
 import { wordSpans } from '../core/wordSelect'
 import {
   createLibrary,
+  applyExamples,
   dedupeLibrary,
   editItem,
+  hasOwnExamples,
   isDue,
   lemmaOf,
   markWord,
+  MAX_EXAMPLES,
   normalizeWord,
   removeItem,
   reviewItem,
@@ -18,6 +21,8 @@ import {
   buildBatchLookupPrompt,
   buildConfusablePrompt,
   buildLemmaPrompt,
+  buildPhrasePrompt,
+  buildGrammarMarkPrompt,
   buildPosPrompt,
   type AnalysisTask,
   type VocabLevel,
@@ -41,7 +46,9 @@ import {
 import { buildReadiness } from '../core/readiness'
 import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
-import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
+import { activityStreak, addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
+import { buildOutputBoard } from '../core/output'
+import { buildSiege } from '../core/siege'
 import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import VocabList, { type VocabEditPatch } from './VocabList'
@@ -78,10 +85,13 @@ import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
+import { loadTatoeba, tatoebaExamples } from './tatoeba'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
 import FishLayer from '../ui/FishLayer'
+import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
+import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
 import {
   persistentBool,
   persistentEnum,
@@ -152,11 +162,22 @@ export default function ReaderApp() {
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
   const [pasteMissing, setPasteMissing] = useState<{
-    task: 'confusable' | 'lookup' | 'lemma' | 'pos'
+    task: 'confusable' | 'lookup' | 'lemma' | 'pos' | 'phrase' | 'grammar_mark'
     words: string[]
   } | null>(null)
   const [lastTask, setLastTask] = useState<
-    AnalysisTask | 'confusable' | 'example' | 'lemma' | 'pos' | 'listening' | 'language' | 'imitation' | 'feedback' | null
+    | AnalysisTask
+    | 'confusable'
+    | 'example'
+    | 'phrase'
+    | 'lemma'
+    | 'pos'
+    | 'grammar_mark'
+    | 'listening'
+    | 'language'
+    | 'imitation'
+    | 'feedback'
+    | null
   >(null)
   const [toast, setToast] = useState('')
   const [articleTitle, setArticleTitle] = useState('')
@@ -413,6 +434,15 @@ export default function ReaderApp() {
   const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>('reader:practice', [])
   /** 统一错题本（考试错词 / 听力错题 / 听写漏词） */
   const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>('reader:mistakes', [])
+  /** 按「文章 → 题型」统计的练习正确率（词块/搭配量化用）。 */
+  const [kindStats, setKindStats] = useLocalStorageState<Record<string, Record<string, { total: number; correct: number }>>>(
+    'reader:kindStats',
+    {},
+  )
+  /** 复述打卡：用自己的话复述的留档（按篇）。 */
+  const [retells, setRetells] = useLocalStorageState<
+    { at: string; articleId: string; text: string; words: number }[]
+  >('reader:retells', [])
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useLocalStorageState(
     'reader:confusableBatch',
@@ -454,6 +484,21 @@ export default function ReaderApp() {
   const [batch, setBatch] = useState<BatchItem[]>([])
   /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
   const articleIdentity = articleKey ?? savedId ?? articleTitle
+  /** 一轮考完 → 按题型累加到本篇（每次练习都算，产出看板据此算正确率）。 */
+  const mergeKindStats = useCallback(
+    (rows: { kind: string; total: number; correct: number }[]) => {
+      if (!articleIdentity) return
+      setKindStats((prev) => {
+        const forArticle = { ...(prev[articleIdentity] ?? {}) }
+        for (const r of rows) {
+          const cur = forArticle[r.kind] ?? { total: 0, correct: 0 }
+          forArticle[r.kind] = { total: cur.total + r.total, correct: cur.correct + r.correct }
+        }
+        return { ...prev, [articleIdentity]: forArticle }
+      })
+    },
+    [articleIdentity, setKindStats],
+  )
   const articleWords = useMemo(
     () => library.items.filter((it) => it.source?.fileName === articleIdentity),
     [library.items, articleIdentity],
@@ -790,6 +835,7 @@ export default function ReaderApp() {
     recordPractice,
     addMistake,
     dropMistake,
+    onKinds: mergeKindStats,
   })
   quizApiRef.current = quizApi
   const {
@@ -808,6 +854,9 @@ export default function ReaderApp() {
     articleKinds: quizArticleKinds,
     setArticleKinds: setQuizArticleKinds,
     articleRun: quizArticleRun,
+    loopWrong: quizLoopWrong,
+    setLoopWrong: setQuizLoopWrong,
+    drillRound: quizDrillRound,
     setupOpen: quizSetupOpen,
     setSetupOpen: setQuizSetupOpen,
     queue: quizQueue,
@@ -825,6 +874,8 @@ export default function ReaderApp() {
     start: startQuiz,
     startArticle: startArticleQuiz,
     startItems: startQuizItems,
+    startDrill: startQuizDrill,
+    startArticleDrill: startQuizArticleDrill,
     check: checkQuiz,
     next: nextQuiz,
     close: closeQuiz,
@@ -892,6 +943,10 @@ export default function ReaderApp() {
   /** 今日计划。
    */
   const [planOpen, setPlanOpen] = useState(false)
+  /** 精读工作流面板。 */
+  const [intensiveOpen, setIntensiveOpen] = useState(false)
+  /** 已「通读」的文章标识（勾选，本地持久化）。 */
+  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>('reader:intensiveSkimmed', [])
   const openSpeedRead = useCallback(() => {
     if (!doc?.sentences.length) {
       flash('先打开一篇文章')
@@ -1708,6 +1763,24 @@ export default function ReaderApp() {
         askedIdsRef.current = []
         setLastTask('pos')
         await navigator.clipboard.writeText(buildPosPrompt(entries))
+      } else if (task === 'phrase') {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('phrase')
+        await navigator.clipboard.writeText(buildPhrasePrompt(entries))
+      } else if (task === 'grammar_mark') {
+        const entries = words.map((w) => {
+          const it = byLemma.get(lemmaOf(w))
+          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
+        })
+        askedWordsRef.current = words
+        askedIdsRef.current = []
+        setLastTask('grammar_mark')
+        await navigator.clipboard.writeText(buildGrammarMarkPrompt(entries))
       } else {
         const entries = words.map((w) => {
           const it = byLemma.get(lemmaOf(w))
@@ -1828,6 +1901,128 @@ export default function ReaderApp() {
     })
   }, [articleWords, doc, practice, mistakes, articleIdentity])
 
+  /** 精读工作流：按本篇当前数据算出各阶段进度与下一步。 */
+  const intensiveSkimmed = skimmedArticles.includes(articleIdentity)
+  const intensivePlan = useMemo(() => {
+    const w = articleWords
+    const quizRows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === 'quiz')
+    const quizTotal = quizRows.reduce((a, r) => a + r.total, 0)
+    const quizCorrect = quizRows.reduce((a, r) => a + r.correct, 0)
+    const sents = doc?.sentences ?? []
+    return buildIntensivePlan({
+      hasDoc: !!doc,
+      skimmed: intensiveSkimmed,
+      words: {
+        total: w.length,
+        withMeaning: w.filter((it) => !!it.meaning).length,
+        withChunks: w.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
+        withMarks: w.filter((it) => (it.grammarMarks?.length ?? 0) > 0).length,
+        studied: w.filter((it) => it.reviewState.repetitions > 0).length,
+        stable: w.filter((it) => isStable(it)).length,
+        due: w.filter((it) => isDue(it)).length,
+        noExample: w.filter((it) => !hasOwnExamples(it)).length,
+      },
+      sentences: {
+        total: sents.length,
+        translated: sents.filter((s) => !!s.translation).length,
+        language: sents.filter((s) => hasSentenceLanguage(s)).length,
+      },
+      quiz: quizTotal > 0 ? { total: quizTotal, correct: quizCorrect } : undefined,
+      writes: writingHistory.filter((r) => r.articleId === articleIdentity).length,
+    })
+  }, [doc, articleWords, practice, articleIdentity, writingHistory, intensiveSkimmed])
+
+  /** 本篇的复述记录。 */
+  const myRetells = useMemo(
+    () => retells.filter((r) => r.articleId === articleIdentity),
+    [retells, articleIdentity],
+  )
+
+  /** 产出看板：词块/搭配/习语正确率 + 仿写 + 复述 的量化。 */
+  const outputBoard = useMemo(() => {
+    const ks = kindStats[articleIdentity] ?? {}
+    const sumKinds = (list: string[]) => {
+      let total = 0
+      let correct = 0
+      for (const k of list) {
+        const s = ks[k]
+        if (s) {
+          total += s.total
+          correct += s.correct
+        }
+      }
+      return { total, correct }
+    }
+    const chunkStats = sumKinds(['usage', 'collocation', 'prep', 'idiom'])
+    const grammarStats = sumKinds(['grammar', 'phraseBlank', 'functionWord', 'ordering', 'translate', 'translate2'])
+    const writes = writingHistory.filter((r) => r.articleId === articleIdentity)
+    const avgScore = writes.length
+      ? Math.round(
+          writes.reduce(
+            (a, r) => a + (r.feedback.max > 0 ? (r.feedback.total / r.feedback.max) * 100 : 0),
+            0,
+          ) / writes.length,
+        )
+      : null
+    return buildOutputBoard({
+      chunkStats,
+      grammarStats,
+      words: {
+        total: articleWords.length,
+        withChunks: articleWords.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
+        studied: articleWords.filter((it) => it.reviewState.repetitions > 0).length,
+        stable: articleWords.filter((it) => isStable(it)).length,
+      },
+      writes: { count: writes.length, avgScore },
+      retells: { count: myRetells.length, words: myRetells.reduce((a, r) => a + r.words, 0) },
+      streak: activityStreak(activity),
+    })
+  }, [kindStats, articleIdentity, writingHistory, articleWords, myRetells, activity])
+
+  /** 从离线例句库（Tatoeba）给某个词补例句。 */
+  const addOfflineExamples = useCallback(
+    async (item: VocabItem) => {
+      const ok = await loadTatoeba()
+      if (!ok) {
+        flash('离线例句未安装：先跑 `node tools/build-tatoeba.mjs <sentences.csv> <links.csv>` 生成 public/tatoeba-en.tsv')
+        return
+      }
+      const ex = tatoebaExamples(item.word, item.lemma)
+      if (!ex.length) {
+        flash(`离线例句库里没找到「${item.word}」`)
+        return
+      }
+      if (item.examples.length >= MAX_EXAMPLES) {
+        flash(`「${item.word}」例句已有 ${MAX_EXAMPLES} 条（上限），先删几条再补`)
+        return
+      }
+      persist(
+        applyExamples(library, [
+          { word: item.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) },
+        ]),
+      )
+      flash(`已加入 ${ex.length} 条离线例句（Tatoeba）`)
+    },
+    [library, persist, flash],
+  )
+
+  /** 记一条复述打卡。 */
+  const saveRetell = useCallback(
+    (text: string) => {
+      const t = text.trim()
+      if (!t || !articleIdentity) return
+      const words = t.split(/\s+/).filter(Boolean).length
+      setRetells((prev) =>
+        [{ at: new Date().toISOString(), articleId: articleIdentity, text: t, words }, ...prev].slice(0, 200),
+      )
+      recordActivity('write', 1)
+      flash('已记录复述 ✅')
+    },
+    [articleIdentity, setRetells, recordActivity, flash],
+ )
+
+  const deleteRetell = useCallback((at: string) => setRetells((prev) => prev.filter((r) => r.at !== at)), [setRetells])
+
   /** 文章测验可出题数（设置面板提示用）。 */
   const articleQuizCount = useMemo(
     () => buildArticleQuestions(doc?.sentences ?? [], { kinds: quizArticleKinds as ArticleQuizKind[] }).length,
@@ -1926,7 +2121,9 @@ export default function ReaderApp() {
         batch: batch.length,
         unqueried: library.items.filter((it) => it.status === 'unqueried').length,
         noMeaning: library.items.filter((it) => !it.meaning).length,
-        noExampleUsage: library.items.filter((it) => it.examples.length === 0 || it.usage.length === 0).length,
+        noExampleUsage: library.items.filter(
+          (it) => !hasOwnExamples(it) || (it.usage.length === 0 && !it.phrases?.length),
+        ).length,
         noPhonetic: library.items.filter((it) => !it.phonetic).length,
         confusableMissing: confusableTodo.length,
         lemmaCandidates: lemmaCandidates.length,
@@ -1964,6 +2161,58 @@ export default function ReaderApp() {
         return null
     }
   }
+
+  /** 精读工作流：某一步「跳到对应工具」。 */
+  const openIntensiveStage = useCallback(
+    (key: IntensiveStageKey) => {
+      setIntensiveOpen(false)
+      if (key === 'skim') openSpeedRead()
+      else if (key === 'recall') startStudy()
+      else if (key === 'produce') openWriting()
+      // vocab / chunks / comprehend / grammar：一键跑批会把音标·释义·例句·词组·习语·
+      // 语法标记·翻译·语言点一次补齐
+      else void runAiLocal()
+    },
+    [openSpeedRead, startStudy, openWriting, runAiLocal],
+  )
+
+  /** 精读工作流：快捷「拷打」（只针对本篇）。 */
+  const startIntensiveDrill = useCallback(
+    (kind: DrillKind) => {
+      setIntensiveOpen(false)
+      if (kind === 'memory') startQuizDrill(['spell', 'meaning', 'choice'], 'article')
+      else if (kind === 'chunk') startQuizDrill(['usage', 'cloze', 'collocation', 'prep', 'idiom'], 'article')
+      else if (kind === 'deep') startQuizDrill(['define', 'defineChoice'], 'article')
+      else if (kind === 'mark') startQuizDrill(['mark'], 'article')
+      else if (kind === 'grammar')
+        startQuizArticleDrill(['grammar', 'phraseBlank', 'translate2', 'functionWord', 'ordering'])
+      else if (kind === 'listen') startQuizDrill(['listen'], 'article')
+    },
+    [startQuizDrill, startQuizArticleDrill],
+  )
+
+  /** 错题包围战：错题 + 优先重排 + 常错 + 学不稳 一起围剿，开「反复鞭打」打到全对。 */
+  const startSiege = useCallback(() => {
+    const picked = buildSiege(library.items, mistakes, { scope: 'all', limit: 40 })
+    if (!picked.length) {
+      flash('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
+      return
+    }
+    setIntensiveOpen(false)
+    setQuizLoopWrong(true)
+    setQuizScope('lapses')
+    startQuizItems(
+      picked.map((x) => x.item.id),
+      ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
+    )
+    flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
+  }, [library.items, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash])
+
+  const toggleSkimmed = useCallback(() => {
+    setSkimmedArticles((prev) =>
+      prev.includes(articleIdentity) ? prev.filter((x) => x !== articleIdentity) : [...prev, articleIdentity],
+    )
+  }, [articleIdentity, setSkimmedArticles])
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
@@ -2014,6 +2263,7 @@ export default function ReaderApp() {
             readingAll={readingAll}
             onToggleReadAll={readingAll ? stopReadAll : startReadAll}
             onSpeedRead={openSpeedRead}
+            onOpenIntensive={() => setIntensiveOpen(true)}
             ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
@@ -2104,6 +2354,7 @@ export default function ReaderApp() {
             onInputChange={setStudyInput}
             onCheckSpelling={() => setStudyChecked(true)}
             onSpeak={speak}
+            onFetchExamples={() => studyCard && void addOfflineExamples(studyCard)}
             onOpenEdit={openStudyEdit}
             onDelete={studyDelete}
             onDraftChange={setStudyDraft}
@@ -2140,6 +2391,8 @@ export default function ReaderApp() {
             onAutoChange={setQuizAuto}
             onUniqueChange={setQuizUnique}
             onSpeakChange={setQuizSpeak}
+            loopWrong={quizLoopWrong}
+            onLoopWrongChange={setQuizLoopWrong}
             onCancel={() => setQuizSetupOpen(false)}
             onStart={startQuiz}
             onStartArticle={startArticleQuiz}
@@ -2159,6 +2412,7 @@ export default function ReaderApp() {
             input={quizInput}
             result={quizResult}
             items={library.items}
+            drillRound={quizDrillRound}
             onClose={closeQuiz}
             onSpeak={speak}
             onResetSpeech={resetSpeech}
@@ -2268,6 +2522,31 @@ export default function ReaderApp() {
               setPlanOpen(false)
               openSpeedRead()
             }}
+          />
+        )}
+
+        {intensiveOpen && (
+          <IntensivePanel
+            onClose={() => setIntensiveOpen(false)}
+            articleTitle={articleTitle}
+            hasDoc={!!doc}
+            plan={intensivePlan}
+            skimmed={intensiveSkimmed}
+            onToggleSkimmed={toggleSkimmed}
+            onRunBatch={() => void runAiLocal()}
+            batchRunning={aiLocalRunning}
+            batchRound={aiLocalRound}
+            batchPhase={aiLocalPhase}
+            batchDone={aiLocalDone}
+            batchTotal={aiLocalTotal}
+            batchError={aiLocalError}
+            board={outputBoard}
+            retells={myRetells}
+            onSaveRetell={saveRetell}
+            onDeleteRetell={deleteRetell}
+            onStage={openIntensiveStage}
+            onDrill={startIntensiveDrill}
+            onSiege={startSiege}
           />
         )}
 
@@ -2459,6 +2738,7 @@ export default function ReaderApp() {
           readyRows={readyRows}
           boardAction={boardAction}
           onRetryVocab={retryMistakeVocab}
+          onSiege={startSiege}
           onRetryListen={retryMistakeListen}
           onRetryDict={retryMistakeDict}
           onClearMistakes={() => setMistakes([])}

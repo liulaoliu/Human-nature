@@ -38,6 +38,12 @@ describe('cleanText', () => {
     expect(cleanText('He left.\nNext day it rained.')).toBe('He left. Next day it rained.')
   })
 
+  it('保留手动加的「【…】」标题 / 导语，单独成段不并入正文', () => {
+    expect(cleanText('【标题】\n【导语】\nBody text here.')).toBe('【标题】\n\n【导语】\n\nBody text here.')
+    // 缩进的标记行也认
+    expect(cleanText('  【标题】\nBody.')).toBe('【标题】\n\nBody.')
+  })
+
   it('空行切段落', () => {
     expect(cleanText('First paragraph.\n\nSecond paragraph.')).toBe(
       'First paragraph.\n\nSecond paragraph.',

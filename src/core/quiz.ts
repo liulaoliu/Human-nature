@@ -16,13 +16,47 @@ import type { VocabItem } from '../types/document'
  */
 
 /** 词级题型（按生词出题，现有考试）。 */
-export type VocabQuizKind = 'spell' | 'cloze' | 'usage' | 'listen' | 'choice' | 'meaning' | 'ear'
+export type VocabQuizKind =
+  | 'spell'
+  | 'cloze'
+  | 'usage'
+  | 'listen'
+  | 'choice'
+  | 'meaning'
+  | 'ear'
+  // 精读专用（更细、更针对）：
+  | 'define' // 英英释义 → 写单词
+  | 'defineChoice' // 英英释义 → 选单词
+  | 'collocation' // 搭配默写：写出一条该词的搭配/词组
+  | 'prep' // 介词/小品词填空：搭配里挖掉 on/in/to…，选一个
+  | 'mark' // 语法标记判断：可数/不可数、及物/不及物、可分级/不可分级
+  | 'idiom' // 习语填空：习语里挖掉目标词，写回来
 /** 文章级题型（按句子/段落出题，考理解与结构）。 */
-export type ArticleQuizKind = 'translate' | 'translate2' | 'functionWord' | 'ordering' | 'grammar'
+export type ArticleQuizKind =
+  | 'translate'
+  | 'translate2'
+  | 'functionWord'
+  | 'ordering'
+  | 'grammar'
+  | 'phraseBlank' // 词组/习语填空：把句中的词组/习语挖空，选回去
 export type QuizKind = VocabQuizKind | ArticleQuizKind
 
-export const VOCAB_KINDS: VocabQuizKind[] = ['spell', 'cloze', 'usage', 'listen', 'choice', 'meaning', 'ear']
-export const ARTICLE_KINDS: ArticleQuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'grammar']
+export const VOCAB_KINDS: VocabQuizKind[] = [
+  'spell',
+  'cloze',
+  'usage',
+  'listen',
+  'choice',
+  'meaning',
+  'ear',
+  'define',
+  'defineChoice',
+  'collocation',
+  'prep',
+  'mark',
+  'idiom',
+]
+export const ARTICLE_KINDS: ArticleQuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'grammar', 'phraseBlank']
 
 export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   spell: '拼写',
@@ -32,11 +66,18 @@ export const QUIZ_KIND_LABEL: Record<QuizKind, string> = {
   choice: '词形辨析',
   meaning: '看词选义',
   ear: '听音拼词',
+  define: '英英释义（写）',
+  defineChoice: '英英释义（选）',
+  collocation: '搭配默写',
+  prep: '介词填空',
+  mark: '语法标记',
+  idiom: '习语填空',
   translate: '英译中',
   translate2: '中译英',
   functionWord: '功能词填空',
   ordering: '句子排序',
   grammar: '结构 / 语法',
+  phraseBlank: '词组/习语填空',
 }
 
 const ALL_KINDS: QuizKind[] = [...VOCAB_KINDS, ...ARTICLE_KINDS]
@@ -233,6 +274,55 @@ export function pickMeaningDistractors(
   return out
 }
 
+/** 该词可练的「词块」：用法 + 词组（去空、去重、去掉等于词本身的）。 */
+export function chunkList(it: VocabItem): string[] {
+  const word = it.word.trim().toLowerCase()
+  const out: string[] = []
+  for (const c of [...it.usage, ...(it.phrases ?? [])]) {
+    const t = c.trim()
+    if (!t || t.toLowerCase() === word) continue
+    if (!out.some((x) => x.toLowerCase() === t.toLowerCase())) out.push(t)
+  }
+  return out
+}
+
+/** 常见介词 / 小品词（做填空干扰项）。 */
+const PARTICLES = [
+  'on', 'in', 'at', 'of', 'to', 'for', 'with', 'from', 'about', 'into', 'over',
+  'by', 'up', 'out', 'down', 'off', 'away', 'against', 'upon', 'through', 'after', 'under', 'across',
+]
+
+/** 把搭配里最后一个介词/小品词挖空（run out of → run out ____）。没有则返回 null。 */
+export function blankParticle(collocation: string): { blanked: string; particle: string } | null {
+  const spans = wordSpans(collocation)
+  for (let i = spans.length - 1; i >= 0; i--) {
+    if (PARTICLES.includes(spans[i].text.toLowerCase())) {
+      const w = spans[i]
+      return { blanked: `${collocation.slice(0, w.start)}____${collocation.slice(w.end)}`, particle: w.text }
+    }
+  }
+  return null
+}
+
+/** 语法标记成对题（可数/不可数、及物/不及物、可分级/不可分级）。 */
+const MARK_PAIRS: { a: string; b: string; label: string }[] = [
+  { a: '可数', b: '不可数', label: '这个名词（此义）可数吗？' },
+  { a: '及物', b: '不及物', label: '这个动词（此义）及物吗？（要不要跟宾语）' },
+  { a: '可分级', b: '不可分级', label: '这个形容词可分级吗？（能不能用 more/most 比较）' },
+]
+
+/** 由语法标记生成一道「判断」题（兼类 / 无标记 → 没有唯一答案，返回 null）。 */
+export function markQuestion(it: VocabItem): { label: string; answer: string; options: string[] } | null {
+  const marks = it.grammarMarks ?? []
+  for (const p of MARK_PAIRS) {
+    const hasA = marks.includes(p.a)
+    const hasB = marks.includes(p.b)
+    if (hasA === hasB) continue
+    return { label: p.label, answer: hasA ? p.a : p.b, options: [p.a, p.b] }
+  }
+  return null
+}
+
 /** 由词条 + 题型出一道题；数据不够（无释义 / 无句子）返回 null。 */
 export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = []): QuizQuestion | null {
   // 文章级题型要整篇 doc（句子/段落），这里（词级）出不了
@@ -345,6 +435,138 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
     return null
   }
 
+  // 英英释义 → 写单词（考「用英文理解英文」）
+  if (kind === 'define') {
+    const def = (it.definition ?? '').trim()
+    if (!def) return null
+    return {
+      id: `${it.id}:define`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: def,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      answer: word,
+      accept: baseAccept(it, word),
+    }
+  }
+
+  // 英英释义 → 选单词（同上，选择题版）
+  if (kind === 'defineChoice') {
+    const def = (it.definition ?? '').trim()
+    if (!def) return null
+    const distractors = pickDistractors(it, pool, 3)
+    if (distractors.length < 1) return null
+    return {
+      id: `${it.id}:defineChoice`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: def,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      options: shuffleQuiz([word, ...distractors]),
+      answer: word,
+      accept: baseAccept(it, word),
+    }
+  }
+
+  // 搭配默写：给单词 + 中文，写出一条它的搭配 / 词组
+  if (kind === 'collocation') {
+    const chunks = chunkList(it)
+    if (!chunks.length) return null
+    const answer = chunks[0]
+    return {
+      id: `${it.id}:collocation`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: word,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      context: chunks.join('；'),
+      answer,
+      accept: [...new Set(chunks.map((c) => normalizeAnswer(c)))],
+    }
+  }
+
+  // 介词 / 小品词填空：从搭配里挖掉 on/in/to…，选一个
+  if (kind === 'prep') {
+    for (const c of chunkList(it)) {
+      const b = blankParticle(c)
+      if (!b) continue
+      const answer = b.particle.toLowerCase()
+      const others = shuffleQuiz(PARTICLES.filter((p) => p !== answer)).slice(0, 3)
+      return {
+        id: `${it.id}:prep`,
+        itemId: it.id,
+        lemma: it.lemma,
+        kind,
+        word,
+        prompt: b.blanked,
+        meaning: it.meaning,
+        partOfSpeech: it.partOfSpeech,
+        phonetic: it.phonetic,
+        context: c,
+        options: shuffleQuiz([answer, ...others]),
+        answer,
+        accept: [normalizeAnswer(answer)],
+      }
+    }
+    return null
+  }
+
+  // 语法标记判断：可数/不可数、及物/不及物、可分级/不可分级
+  if (kind === 'mark') {
+    const m = markQuestion(it)
+    if (!m) return null
+    return {
+      id: `${it.id}:mark`,
+      itemId: it.id,
+      lemma: it.lemma,
+      kind,
+      word,
+      prompt: m.label,
+      meaning: it.meaning,
+      partOfSpeech: it.partOfSpeech,
+      phonetic: it.phonetic,
+      context: `${word}${it.meaning ? ' — ' + it.meaning : ''}`,
+      options: shuffleQuiz(m.options),
+      answer: m.answer,
+      accept: [normalizeAnswer(m.answer)],
+    }
+  }
+
+  // 习语填空：习语里挖掉目标词
+  if (kind === 'idiom') {
+    for (const s of it.idioms ?? []) {
+      const b = blankWord(s, it.lemma)
+      if (!b) continue
+      return {
+        id: `${it.id}:idiom`,
+        itemId: it.id,
+        lemma: it.lemma,
+        kind,
+        word,
+        prompt: b.blanked,
+        meaning: it.meaning,
+        partOfSpeech: it.partOfSpeech,
+        phonetic: it.phonetic,
+        context: s,
+        answer: b.surface,
+        accept: baseAccept(it, b.surface),
+      }
+    }
+    return null
+  }
+
   // usage
   for (const u of it.usage) {
     const b = blankWord(u, it.lemma)
@@ -388,13 +610,32 @@ export function countQuestions(items: VocabItem[], kinds: QuizKind[]): number {
   const wantMeaningKinds = kinds.includes('spell') || kinds.includes('choice') || kinds.includes('meaning')
   const wantCtx = kinds.includes('cloze') || kinds.includes('listen')
   const wantUsage = kinds.includes('usage')
+  const wantDefine = kinds.includes('define') || kinds.includes('defineChoice')
+  const wantChunk = kinds.includes('collocation') || kinds.includes('prep')
+  const wantMark = kinds.includes('mark')
+  const wantIdiom = kinds.includes('idiom')
   let n = 0
   for (const it of items) {
     if (!it.word.trim()) continue
     const hasMeaning = !!it.meaning
     const hasCtx = it.examples.some((e) => e.text.trim()) || !!it.source?.sentenceText
     const hasUsage = it.usage.length > 0
-    if (wantEar || (wantMeaningKinds && hasMeaning) || (wantCtx && hasCtx) || (wantUsage && hasUsage)) n += 1
+    const hasDefine = !!it.definition
+    const hasChunk = chunkList(it).length > 0
+    const hasMark = markQuestion(it) !== null
+    const hasIdiom = (it.idioms ?? []).some((s) => blankWord(s, it.lemma) !== null)
+    if (
+      wantEar ||
+      (wantMeaningKinds && hasMeaning) ||
+      (wantCtx && hasCtx) ||
+      (wantUsage && hasUsage) ||
+      (wantDefine && hasDefine) ||
+      (wantChunk && hasChunk) ||
+      (wantMark && hasMark) ||
+      (wantIdiom && hasIdiom)
+    ) {
+      n += 1
+    }
   }
   return n
 }
@@ -432,11 +673,14 @@ export function isCorrect(q: QuizQuestion, input: string): boolean {
   const n = normalizeAnswer(input)
   if (!n) return false
   if (q.accept.includes(n)) return true
-  if (lemmaOf(n) === q.lemma) return true
   const c = canonical(n)
-  if (!c) return false
-  if (q.accept.some((a) => canonical(a) === c)) return true
-  return canonical(q.lemma) === c
+  if (c && q.accept.some((a) => canonical(a) === c)) return true
+  // 词形兜底（run / running）只在「标准答案本身就是该词」时生效；
+  // 否则搭配默写写个光杆单词也算对。
+  const answerIsWord = lemmaOf(q.answer) === q.lemma
+  if (answerIsWord && lemmaOf(n) === q.lemma) return true
+  if (answerIsWord && c && canonical(q.lemma) === c) return true
+  return false
 }
 
 /** Fisher–Yates 洗牌（可注入随机源，便于测试）。 */
