@@ -6,6 +6,7 @@ import {
   applyExamples,
   articleWordsOf,
   dedupeLibrary,
+  displayMeaning,
   editItem,
   hasOwnExamples,
   isDue,
@@ -97,6 +98,8 @@ import JournalPanel from './panels/JournalPanel'
 import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
 import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
+import { addReadDone, readDoneOn, removeReadDone, type ReadDone } from '../core/goals'
+import GoalPanel from './panels/GoalPanel'
 import { buildHeatmap } from '../core/activity'
 import {
   persistentBool,
@@ -976,6 +979,11 @@ export default function ReaderApp() {
   const [journalDay, setJournalDay] = useState(() => dayKeyLocal(new Date()))
   /** 打印 / 导出面板。 */
   const [exportOpen, setExportOpen] = useState(false)
+  /** 目标备忘面板 + 今日读文目标 + 自由备忘。 */
+  const [goalOpen, setGoalOpen] = useState(false)
+  const [readDone, setReadDone] = useLocalStorageState<ReadDone[]>('reader:readDone', [])
+  const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, persistentNumber)
+  const [goalMemo, setGoalMemo] = useLocalStorageState('reader:goalMemo', '', persistentString)
   /** 生词本排序方式。 */
   const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
     'reader:vocabSort',
@@ -2077,6 +2085,25 @@ export default function ReaderApp() {
     if (next !== library) persist(next)
   }, [tatoebaReady, library, persist])
 
+  /** 记「今天读完这篇」。速读推到结尾会自动调，也可在目标面板手动标记。 */
+  const markReadDone = useCallback(() => {
+    if (!articleIdentity) return
+    setReadDone((prev) =>
+      addReadDone(prev, {
+        day: todayKey,
+        articleId: articleIdentity,
+        title: articleTitle || articleKey || '未命名',
+        at: new Date().toISOString(),
+      }),
+    )
+  }, [articleIdentity, articleTitle, articleKey, todayKey, setReadDone])
+
+  const todayReadDone = useMemo(() => readDoneOn(readDone, todayKey), [readDone, todayKey])
+  const undoReadDone = useCallback(
+    (articleId: string) => setReadDone((prev) => removeReadDone(prev, todayKey, articleId)),
+    [todayKey, setReadDone],
+  )
+
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(
     () => ({
@@ -2366,6 +2393,7 @@ export default function ReaderApp() {
             onSpeedRead={openSpeedRead}
             onOpenIntensive={() => setIntensiveOpen(true)}
             onOpenJournal={() => setJournalOpen(true)}
+            onOpenGoals={() => setGoalOpen(true)}
             ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
@@ -2590,6 +2618,11 @@ export default function ReaderApp() {
             ttsState={ttsState}
             onAddItems={addItemsToVocab}
             isKnown={(w) => knownLemmas.has(lemmaOf(w))}
+            wordMeaning={(w) => {
+              const it = library.items.find((x) => x.lemma === lemmaOf(w) || x.word.toLowerCase() === w.toLowerCase())
+              return it ? displayMeaning(it) || it.meaning || null : null
+            }}
+            onFinishRead={markReadDone}
             wordsInSentence={wordsInSentence}
             onRemoveWord={removeWordFromVocab}
             vocabMode={vocabMode}
@@ -2648,6 +2681,22 @@ export default function ReaderApp() {
             onStage={openIntensiveStage}
             onDrill={startIntensiveDrill}
             onSiege={startSiege}
+          />
+        )}
+
+        {goalOpen && (
+          <GoalPanel
+            onClose={() => setGoalOpen(false)}
+            todayKey={todayKey}
+            done={todayReadDone}
+            goal={readGoal}
+            onGoalChange={setReadGoal}
+            memo={goalMemo}
+            onMemoChange={setGoalMemo}
+            articleTitle={articleTitle}
+            articleDone={todayReadDone.some((d) => d.articleId === articleIdentity)}
+            onMarkDone={markReadDone}
+            onUndo={undoReadDone}
           />
         )}
 

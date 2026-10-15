@@ -992,6 +992,28 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   background: var(--panel-2);
 }
 .expick-chip button { padding: 0 5px; font-size: 12px; }
+
+/* 目标备忘 */
+.goal-panel { width: min(660px, 94vw); }
+.gsec { border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.gsec > b { font-size: 13px; }
+.grow { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.gtip { line-height: 1.6; }
+.glist { display: flex; flex-direction: column; gap: 4px; }
+.gitem { display: flex; align-items: baseline; gap: 8px; font-size: 13px; }
+.gitem-time { flex: 0 0 auto; font-size: 11px; }
+.gitem-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gitem button { padding: 0 7px; font-size: 12px; }
+.gmemo {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--fg);
+  resize: vertical;
+}
 .extip { line-height: 1.6; }
 
 /* 学习日志：热力图 + 日期列表 */

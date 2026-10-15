@@ -27,6 +27,10 @@ export interface SpeedReadPanelProps {
   onAddItems: (items: { word: string; sentenceId: string | null; sentenceText: string }[]) => void
   /** 该词是否已在生词本（用于标记 / 禁用快捷词）。 */
   isKnown: (word: string) => boolean
+  /** 已在生词本里的词的「含义」（速读时悬浮显示；返回 null 表示没有） */
+  wordMeaning?: (word: string) => string | null
+  /** 这篇过完时回调一次（「读完」目标记一笔）。 */
+  onFinishRead?: () => void
   /** 本句来源的词条（含短语），用于「本句已在生词本」行。 */
   wordsInSentence: (sentenceId: string) => string[]
   /** 把误加的词从生词本移除（调用方自行做两步确认 UI）。 */
@@ -71,7 +75,7 @@ function loadCollected(docKey: string): CollectedItem[] {
  * 逐句速读：一次一句 → 我先读 → 空格揭示释义/语言点；超时算「不太理解」→ 四选一拷打；
  * 理解后下一句。带配速条、目标 WPM、进度与总结。拷打时原文隐藏，只给挖空句与选项。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
@@ -92,6 +96,19 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
 
   const sentence = sentences[index] as Sentence | undefined
   const done = index >= n
+
+  /** 这篇过完（推到结尾）→ 回调一次，用于「目标备忘 · 今日读文」记账。 */
+  const finishedRef = useRef(false)
+  useEffect(() => {
+    if (!done) {
+      finishedRef.current = false
+      return
+    }
+    if (finishedRef.current) return
+    finishedRef.current = true
+    onFinishRead?.()
+  }, [done, onFinishRead])
+
   const target = sentence ? targetMs(sentence.text, wpm) : 0
   const words = sentence ? wordCount(sentence.text) : 0
   const summary = useMemo(() => summarize(rows), [rows])
@@ -268,15 +285,15 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       if (w.start > pos) nodes.push(text.slice(pos, w.start))
       const known = isKnown(w.text)
       const sel = isSel(i)
+      const meaning = known ? wordMeaning?.(w.text) ?? null : null
+      const hint = pickMode
+        ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
+        : '选词模式未开（勾上顶栏「选词模式」才能点选 / 右键入库）'
       nodes.push(
         <span
           key={i}
           className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '') + (pickMode ? ' pick' : '')}
-          title={
-            pickMode
-              ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
-              : '选词模式未开（勾上顶栏「选词模式」才能点选 / 右键入库）'
-          }
+          title={meaning ? `含义：${meaning}\n${hint}` : hint}
           onClick={(e) => {
             e.stopPropagation()
             if (pickMode) toggleSel(i)
@@ -295,7 +312,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     })
     if (pos < text.length) nodes.push(text.slice(pos))
     return nodes
-  }, [sentence, spans, isSel, toggleSel, isKnown, addDirect, pickMode])
+  }, [sentence, spans, isSel, toggleSel, isKnown, wordMeaning, addDirect, pickMode])
 
   useEffect(() => {
     if (phase !== 'read' || done) return

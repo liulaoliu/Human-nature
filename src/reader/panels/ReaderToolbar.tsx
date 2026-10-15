@@ -41,6 +41,7 @@ export interface ReaderToolbarProps {
   onSpeedRead: () => void
   onOpenIntensive: () => void
   onOpenJournal: () => void
+  onOpenGoals: () => void
   ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
@@ -119,6 +120,7 @@ export default function ReaderToolbar({
   onSpeedRead,
   onOpenIntensive,
   onOpenJournal,
+  onOpenGoals,
   ttsState,
   ttsVoice,
   onTtsVoiceChange,
@@ -309,6 +311,9 @@ export default function ReaderToolbar({
           📅 日志
         </button>
       )}
+      <button onClick={onOpenGoals} title="目标备忘：今天读完了几篇（可设目标）+ 随手记">
+        📌 目标
+      </button>
       {hasDoc && !editing && (
         <button onClick={onEnterEdit} title="改正文；完成时重新切句，已粘回的分析按句保留">
           编辑正文
