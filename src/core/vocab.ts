@@ -503,6 +503,8 @@ export interface MarkInput {
   sentenceId?: string | null
   /** 标词时所在的整句原文，用于回填例句与来源 */
   sentenceText?: string
+  /** 已知的释义（如「词组 — 中文」里的中文），标词时直接写上 */
+  meaning?: string
 }
 
 export interface MarkResult {
@@ -540,12 +542,14 @@ export function markWord(
   }
 
   const existing = library.items.find((it) => it.lemma === lemma)
+  const given = input.meaning?.trim() || null
   if (existing) {
     const merged: VocabItem = {
       ...existing,
       examples: mergeExamples(existing.examples, [example]),
       source: betterSource(existing.source, source),
-      contexts: upsertContext(existing.contexts, contextFromSource(source, iso)),
+      contexts: upsertContext(existing.contexts, contextFromSource(source, iso, given ?? undefined)),
+      meaning: existing.meaning ?? given,
       updatedAt: iso,
     }
     return { library: replaceItem(library, merged), item: merged, created: false }
@@ -557,19 +561,31 @@ export function markWord(
     lemma,
     phonetic: null,
     partOfSpeech: null,
-    meaning: null,
+    meaning: given,
     usage: [],
     examples: [example],
     source,
-    status: 'unqueried',
+    status: given ? 'queried' : 'unqueried',
     note: '',
     tags: [],
-    contexts: [contextFromSource(source, iso)],
+    contexts: [contextFromSource(source, iso, given ?? undefined)],
     reviewState: defaultReviewState(),
     createdAt: iso,
     updatedAt: iso,
   }
   return { library: { ...library, items: [...library.items, item] }, item, created: true }
+}
+
+/** 把「英文 — 中文」拆成 `{ word, gloss }`（也认 – / - 破折号）。用于把语言点里的词组/习语加进生词本。 */
+export function splitGloss(raw: string): { word: string; gloss?: string } {
+  const s = raw.trim()
+  const parts = s.split(/\s+[—–-]\s+/)
+  if (parts.length >= 2) {
+    const word = parts[0].trim()
+    const gloss = parts.slice(1).join(' — ').trim()
+    if (word) return { word, gloss: gloss || undefined }
+  }
+  return { word: s }
 }
 
 /**

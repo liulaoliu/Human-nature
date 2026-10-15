@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
 import { getSentenceLanguages } from '../../core/language'
+import LangPhrases from './LangPhrases'
 import type { Paragraph, Sentence } from '../../types/document'
 
 /** 把一句话渲染成「词 span（生词包成 .vw + 序号上标） + 标点文本」，选中的词加 .hl。
@@ -92,6 +93,8 @@ export interface ReaderBodyProps {
   karaoke: { sid: string; activeIndex: number | null } | null
   /** 点某个词 → 从该词起播。 */
   onWordSeek: (sid: string, wordIndex: number) => void
+  /** 把语言点里的词组 / 习语一键加入生词本。 */
+  onAddPhrase?: (items: string[], sentence: Sentence) => void
 }
 
 /** 阅读正文：段落/句子 + 生词高亮 + 译文/语言点 + 点句选中 + 选词气泡。 */
@@ -117,6 +120,7 @@ export default function ReaderBody({
   onAltCopyText,
   karaoke,
   onWordSeek,
+  onAddPhrase,
 }: ReaderBodyProps) {
   return (
     <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
@@ -191,8 +195,8 @@ export default function ReaderBody({
                       {L.source === 'manual' && <div className="lang-src">手动</div>}
                       {L.structure && <div>结构：{L.structure}</div>}
                       {L.grammar && <div>语法：{L.grammar}</div>}
-                      {L.idioms?.length ? <div>习语：{L.idioms.join('；')}</div> : null}
-                      {L.phrases?.length ? <div>词组：{L.phrases.join('；')}</div> : null}
+                      <LangPhrases label="习语" items={L.idioms ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
+                      <LangPhrases label="词组" items={L.phrases ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
                       {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
                     </span>
                   ))}

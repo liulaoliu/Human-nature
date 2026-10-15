@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
+import LangPhrases from './LangPhrases'
 import { getSentenceLanguages } from '../../core/language'
 import {
   DEFAULT_WPM,
@@ -31,6 +32,10 @@ export interface SpeedReadPanelProps {
   wordMeaning?: (word: string) => string | null
   /** 这篇过完时回调一次（「读完」目标记一笔）。 */
   onFinishRead?: () => void
+  /** 把语言点里的词组 / 习语一键加入生词本（`英文 — 中文` 会拆成词条 + 释义）。 */
+  onAddPhrases?: (items: string[], sentence: Sentence) => void
+  /** 轻提示（如「先勾选词模式」）。 */
+  onHint?: (msg: string) => void
   /** 本句来源的词条（含短语），用于「本句已在生词本」行。 */
   wordsInSentence: (sentenceId: string) => string[]
   /** 把误加的词从生词本移除（调用方自行做两步确认 UI）。 */
@@ -75,7 +80,7 @@ function loadCollected(docKey: string): CollectedItem[] {
  * 逐句速读：一次一句 → 我先读 → 空格揭示释义/语言点；超时算「不太理解」→ 四选一拷打；
  * 理解后下一句。带配速条、目标 WPM、进度与总结。拷打时原文隐藏，只给挖空句与选项。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
@@ -297,9 +302,14 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
           onClick={(e) => {
             e.stopPropagation()
             if (pickMode) toggleSel(i)
+            else onHint?.('先勾上顶栏「选词模式」才能点选 / 右键入库')
           }}
           onContextMenu={(e) => {
-            if (!pickMode) return
+            if (!pickMode) {
+              e.preventDefault()
+              onHint?.('先勾上顶栏「选词模式」才能右键入库')
+              return
+            }
             e.preventDefault()
             e.stopPropagation()
             addDirect(i)
@@ -643,8 +653,8 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
                       {L.source === 'manual' && <div className="muted">手动语言点</div>}
                       {L.structure && <div>结构：{L.structure}</div>}
                       {L.grammar && <div>语法：{L.grammar}</div>}
-                      {L.idioms?.length ? <div>习语：{L.idioms.join('；')}</div> : null}
-                      {L.phrases?.length ? <div>词组：{L.phrases.join('；')}</div> : null}
+                      <LangPhrases label="习语" items={L.idioms ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
+                      <LangPhrases label="词组" items={L.phrases ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
                       {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
                     </div>
                   ))}

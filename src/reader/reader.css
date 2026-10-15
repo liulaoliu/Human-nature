@@ -705,6 +705,19 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .vblock-label::after { content: '：'; }
 .vblock-lines { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .vblock-line { font-size: 14px; line-height: 1.6; }
+.lang-phrases { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.phrase-add {
+  font-size: 12.5px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: inherit;
+}
+.phrase-add:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); border-style: solid; }
+.phrase-add:disabled { cursor: default; opacity: 0.9; }
+.phrase-add .phrase-plus { margin-left: 5px; color: var(--accent); font-weight: 700; }
+.phrase-add.all { border-style: solid; }
 .vblock-source .vblock-line,
 .vblock-confusables .vblock-line { color: var(--dim); font-size: 13px; }
 .study-blocks .vblock { justify-content: center; text-align: left; }

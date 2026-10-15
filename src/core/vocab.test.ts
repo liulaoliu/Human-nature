@@ -45,6 +45,7 @@ import {
   reviewItem,
   setStatus,
   sortItems,
+  splitGloss,
   unprintedItems,
   upsertContext,
   vocabCardBlocks,
@@ -655,6 +656,27 @@ describe('upsertContext / betterSource（多篇语境 / 来源）', () => {
     const s = (fileName: string, sentenceText: string) => ({ articleId: fileName, fileName, sentenceId: null, sentenceText })
     expect(betterSource(s('A', 'x'), s('B', ''))?.fileName).toBe('A')
     expect(betterSource(s('A', ''), s('B', 'y'))?.fileName).toBe('B')
+  })
+})
+
+describe('markWord 词组 / 带释义 / -ed 还原', () => {
+  it('markWord 可带释义（词组 — 中文 拆出来的），并直接标 queried', () => {
+    const r = markWord(createLibrary(), { word: 'fall back on', articleId: 'a1', meaning: '转而依靠' }, NOW)
+    expect(r.created).toBe(true)
+    expect(r.item.meaning).toBe('转而依靠')
+    expect(r.item.status).toBe('queried')
+    expect(r.item.lemma).toBe('fall back on') // 短语不做词形还原
+  })
+  it('splitGloss：拆「英文 — 中文」（也认 – / -）', () => {
+    expect(splitGloss('run out — 用完')).toEqual({ word: 'run out', gloss: '用完' })
+    expect(splitGloss('take its toll – 造成损害')).toEqual({ word: 'take its toll', gloss: '造成损害' })
+    expect(splitGloss('ensconced')).toEqual({ word: 'ensconced' })
+  })
+  it('ensconced：启发式 lemma 不完美（ensconc），但原词形保留 + 词典可纠正', () => {
+    const r = markWord(createLibrary(), { word: 'ensconced', articleId: 'a1', sentenceText: 'He is ensconced in the job.' }, NOW)
+    expect(r.created).toBe(true)
+    expect(r.item.word).toBe('ensconced') // 原词形原样留着
+    expect(r.item.lemma).toBe('ensconc') // 启发式还原（离线词典就绪后会被自动纠正为 ensconce）
   })
 })
 

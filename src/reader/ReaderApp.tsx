@@ -19,6 +19,7 @@ import {
   removeItem,
   reviewItem,
   sortItems,
+  splitGloss,
   type ReviewGrade,
   type VocabSortBy,
 } from '../core/vocab'
@@ -1158,6 +1159,32 @@ export default function ReaderApp() {
       flash(created ? `已加入 ${created} 个生词：${names}` : `已在生词本：${names}`)
     },
     [library, articleIdentity, articleTitle, articleKey, persist, flash],
+  )
+
+  /** 把语言点里的词组 / 习语一键加入生词本：`英文 — 中文` 拆成 词条 + 释义。 */
+  const addPhrasesToVocab = useCallback(
+    (items: string[], sentence: Sentence | null) => {
+      if (!items.length) return
+      let lib = library
+      let created = 0
+      for (const raw of items) {
+        const { word, gloss } = splitGloss(raw)
+        if (!word) continue
+        const r = markWord(lib, {
+          word,
+          articleId: articleTitle || articleKey || '手动粘贴',
+          fileName: articleIdentity,
+          sentenceId: sentence?.id ?? null,
+          sentenceText: sentence?.text ?? '',
+          meaning: gloss,
+        })
+        lib = r.library
+        if (r.created) created++
+      }
+      persist(lib)
+      flash(created ? `已加入 ${created} 个词组 / 习语${created < items.length ? '（其余已在生词本）' : ''}` : '这些词组 / 习语都已在生词本里')
+    },
+    [library, articleTitle, articleKey, articleIdentity, persist, flash],
   )
 
   /** 速读里把误加的词从生词本移出（两步确认在面板里做）。 */
@@ -2649,6 +2676,8 @@ export default function ReaderApp() {
               return it ? displayMeaning(it) || it.meaning || null : null
             }}
             onFinishRead={markReadDone}
+            onAddPhrases={addPhrasesToVocab}
+            onHint={flash}
             wordsInSentence={wordsInSentence}
             onRemoveWord={removeWordFromVocab}
             vocabMode={vocabMode}
@@ -2908,6 +2937,7 @@ export default function ReaderApp() {
                     const s = doc?.sentences.find((x) => x.id === sid)
                     if (s) speakFromWord(s.text, i)
                   }}
+                  onAddPhrase={addPhrasesToVocab}
                 />
               </>
             )}

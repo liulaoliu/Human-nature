@@ -11,7 +11,7 @@ const wordsTsv = [
   'bnconly\t\t\t\t\t\t0\t0\t0\t0',
 ].join('\n')
 
-const formsTsv = ['running\trun', 'hobbled\thobble'].join('\n')
+const formsTsv = ['running\trun', 'hobbled\thobble', 'ensconced\tensconce'].join('\n')
 
 const dict = parseEcdict(wordsTsv, formsTsv)
 
@@ -31,6 +31,8 @@ describe('parseEcdict / resolveWord / dictLemmaOf', () => {
     expect(dictLemmaOf(dict, 'hobbled')).toBe('hobble')
     expect(dictLemmaOf(dict, 'hobble')).toBe('hobble')
     expect(dictLemmaOf(dict, 'zzzz')).toBeNull()
+    // 启发式会错成 ensconc 的，词典能给对的（加载时会据此自动纠正）
+    expect(dictLemmaOf(dict, 'ensconced')).toBe('ensconce')
   })
 })
 
