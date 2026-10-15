@@ -3,6 +3,7 @@ import VocabList, { type VocabEditPatch } from '../VocabList'
 import type { VocabItem } from '../../types/document'
 import type { ReviewGrade, VocabSortBy } from '../../core/vocab'
 import { fmtDur } from '../format'
+import { calendarDayKey } from '../../core/activity'
 
 export interface SideVocabStats {
   totals: { picked: number; seconds: number }
@@ -151,7 +152,7 @@ export default function SideVocab({
   onEdit,
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
-  const printedDate = articlePrintedAt ? articlePrintedAt.slice(0, 10) : ''
+  const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
   return (
     <div className="side-sec" data-sec="vocab">
       <div className="section-title">

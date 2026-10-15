@@ -3,6 +3,7 @@ import {
   activityStreak,
   addActivity,
   buildHeatmap,
+  calendarDayKey,
   dayKeyLocal,
   dayTotal,
   levelFor,
@@ -10,9 +11,17 @@ import {
   type DayActivity,
 } from './activity'
 
-describe('dayKeyLocal', () => {
-  it('本地 YYYY-MM-DD', () => {
-    expect(dayKeyLocal(new Date(2026, 9, 3))).toBe('2026-10-03')  })
+describe('dayKeyLocal / calendarDayKey（结算点 04:00）', () => {
+  it('白天用当天；凌晨（00:00–03:59）算前一天', () => {
+    expect(dayKeyLocal(new Date(2026, 9, 3, 10, 0))).toBe('2026-10-03')
+    expect(dayKeyLocal(new Date(2026, 9, 3, 3, 59))).toBe('2026-10-02') // 凌晨 → 前一天
+    expect(dayKeyLocal(new Date(2026, 9, 3, 4, 0))).toBe('2026-10-03') // 4 点整 → 新的一天
+    expect(dayKeyLocal(new Date(2026, 9, 3, 0, 0))).toBe('2026-10-02')
+  })
+  it('calendarDayKey 就是那一天（不做结算偏移）', () => {
+    expect(calendarDayKey(new Date(2026, 9, 3, 0, 0))).toBe('2026-10-03')
+    expect(calendarDayKey(new Date(2026, 9, 3, 23, 59))).toBe('2026-10-03')
+  })
 })
 
 describe('addActivity', () => {
@@ -72,11 +81,11 @@ describe('activityStreak', () => {
       { day: '2026-10-02', counts: { vocab: 1 } },
       { day: '2026-10-03', counts: { vocab: 1 } },
     ]
-    expect(activityStreak(list, new Date(2026, 9, 3))).toBe(3)
+    expect(activityStreak(list, new Date(2026, 9, 3, 10, 0))).toBe(3)
     // 今天还没记，但昨天有 → 从昨天数
-    expect(activityStreak(list, new Date(2026, 9, 4))).toBe(3)
+    expect(activityStreak(list, new Date(2026, 9, 4, 10, 0))).toBe(3)
     // 断档
-    expect(activityStreak(list, new Date(2026, 9, 6))).toBe(0)
+    expect(activityStreak(list, new Date(2026, 9, 6, 10, 0))).toBe(0)
   })
 })
 
@@ -92,7 +101,7 @@ describe('levelFor', () => {
 })
 
 describe('buildHeatmap', () => {
-  const today = new Date(2026, 9, 3) // 2026-10-03
+  const today = new Date(2026, 9, 3, 10, 0) // 2026-10-03（白天，逻辑日=日历日）
   it('列数 / 行数正确，今天落在最后一列', () => {
     const hm = buildHeatmap({}, 13, today)
     expect(hm.columns).toBe(13)
@@ -100,7 +109,7 @@ describe('buildHeatmap', () => {
     expect(hm.cells.every((c) => c.length === 7)).toBe(true)
     const last = hm.cells[12]
     const todayCell = last[today.getDay()]
-    expect(todayCell.key).toBe(dayKeyLocal(today))
+    expect(todayCell.key).toBe(calendarDayKey(today))
     expect(todayCell.future).toBe(false)
   })
   it('未来日期留空', () => {
@@ -116,6 +125,15 @@ describe('buildHeatmap', () => {
     expect(cell.count).toBe(6)
     expect(cell.level).toBe(3)
     expect(hm.max).toBe(6)
+  })
+  it('凌晨 1 点的活动算前一天（04:00 结算），落在前一天的格子里', () => {
+    const at1am = new Date(2026, 9, 16, 1, 0)
+    expect(dayKeyLocal(at1am)).toBe('2026-10-15')
+    const hm = buildHeatmap({ [dayKeyLocal(at1am)]: 5 }, 13, new Date(2026, 9, 16, 10, 0))
+    const cell = hm.cells.flat().find((c) => c.key === '2026-10-15')
+    expect(cell?.count).toBe(5)
+    const next = hm.cells.flat().find((c) => c.key === '2026-10-16')
+    expect(next?.count).toBe(0)
   })
   it('有月份标注', () => {
     const hm = buildHeatmap({}, 13, today)

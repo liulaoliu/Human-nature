@@ -5,6 +5,7 @@ import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../adapters/articleRepo'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import type { DayActivity } from '../../core/activity'
+import { dayKeyLocal } from '../../core/activity'
 import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
@@ -146,7 +147,7 @@ export function useExport({
       practice,
       mistakes,
     }
-    const day = new Date().toISOString().slice(0, 10)
+    const day = dayKeyLocal()
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
   }
 
@@ -216,7 +217,7 @@ export function useExport({
       ? [...items].sort((a, b) => (numberOf(a) ?? 1e9) - (numberOf(b) ?? 1e9))
       : sortItems(items, 'word')
     const groups = numberOf ? [{ key: '', items: sorted }] : groupItems(sorted, opts?.groupBy ?? 'alphabet')
-    const day = new Date().toISOString().slice(0, 10)
+    const day = dayKeyLocal()
     const html = renderPrintHTML({
       title,
       groups,

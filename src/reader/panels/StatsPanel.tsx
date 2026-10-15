@@ -3,6 +3,7 @@ import {
   ACTIVITY_LABEL,
   activityStreak,
   buildHeatmap,
+  calendarDayKey,
   dayKeyLocal,
   dayTotal,
   sumCats,
@@ -36,7 +37,7 @@ export default function StatsPanel({
     d.setDate(d.getDate() - 6)
     return dayKeyLocal(d)
   })()
-  const monthFrom = dayKeyLocal(new Date(today.getFullYear(), today.getMonth(), 1))
+  const monthFrom = calendarDayKey(new Date(today.getFullYear(), today.getMonth(), 1))
 
   const todayCats = sumCats(activity, tk, tk)
   const weekCats = sumCats(activity, weekFrom, tk)
@@ -49,8 +50,8 @@ export default function StatsPanel({
 
   const pct = (s: { total: number; correct: number }) =>
     s.total ? `${s.correct}/${s.total}（${Math.round((s.correct / s.total) * 100)}%）` : '—'
-  const weekPractice = sumPractice(practice.filter((r) => r.at.slice(0, 10) >= weekFrom))
-  const monthPractice = sumPractice(practice.filter((r) => r.at.slice(0, 10) >= monthFrom))
+  const weekPractice = sumPractice(practice.filter((r) => dayKeyLocal(new Date(r.at)) >= weekFrom))
+  const monthPractice = sumPractice(practice.filter((r) => dayKeyLocal(new Date(r.at)) >= monthFrom))
   const allPractice = sumPractice(practice)
   const kindSums = sumByKind(practice)
 

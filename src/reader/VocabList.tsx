@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react'
 import type { VocabItem } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
 import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
+import { dayKeyLocal } from '../core/activity'
 import VocabBlocks from './panels/VocabBlocks'
 
 /** 生词本里可改的字段（单词本身、音标、词性、释义、用法、词组、习语、语法标记）。 */
@@ -297,7 +298,7 @@ export default function VocabList({
                 状态：{it.status}
                 {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
                 {it.source ? ` · ${it.source.articleId}` : ''}
-                {it.createdAt ? ` · 加入 ${it.createdAt.slice(0, 10)}` : ''}
+                {it.createdAt ? ` · 加入 ${dayKeyLocal(new Date(it.createdAt))}` : ''}
               </div>
               <div className="row">
                 <button onClick={() => onReview(it.id, 'again')}>重来</button>

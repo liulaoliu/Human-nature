@@ -1,4 +1,5 @@
 import type { VocabItem } from '../types/document'
+import { dayKeyLocal } from './activity'
 
 /** 一次选词会话（与 reader 的 sessions 结构一致）。 */
 export interface PickSession {
@@ -14,11 +15,8 @@ export interface StudyDay {
   cards: number
 }
 
-/** 本机时区的日期键 YYYY-MM-DD。 */
-function dayKey(d: Date): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
+/** 逻辑「今天」的日期键（本地时区，04:00 结算，与全局一致）。 */
+const dayKey = dayKeyLocal
 
 /** 所有选词会话的累计（词数 / 秒数）。 */
 export function sessionTotals(sessions: PickSession[]): { picked: number; seconds: number } {
@@ -74,7 +72,7 @@ export function last7Days(sessions: PickSession[], now = new Date()): { key: str
     const d = new Date(now)
     d.setDate(d.getDate() - i)
     const k = dayKey(d)
-    out.push({ key: k, label: String(d.getDate()), picked: byDay.get(k) ?? 0 })
+    out.push({ key: k, label: String(Number(k.slice(8, 10))), picked: byDay.get(k) ?? 0 })
   }
   return out
 }
@@ -96,7 +94,7 @@ export function dueForecast(
     const d = new Date(now)
     d.setDate(d.getDate() + i)
     const k = dayKey(d)
-    out.push({ key: k, label: i === 0 ? '今天' : String(d.getDate()), count: byDay.get(k) ?? 0 })
+    out.push({ key: k, label: i === 0 ? '今天' : String(Number(k.slice(8, 10))), count: byDay.get(k) ?? 0 })
   }
   return out
 }

@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import { buildHeatmap } from '../../core/activity'
+import { dayKeyLocal } from '../../core/activity'
 
 export type PrintGroup = 'alphabet' | 'article' | 'date' | 'status'
 
@@ -32,7 +33,7 @@ export interface ExportPanelProps {
   onExportWordList: (items: VocabItem[], name?: string) => void
 }
 
-const day = (it: VocabItem) => it.createdAt.slice(0, 10)
+const day = (it: VocabItem) => dayKeyLocal(new Date(it.createdAt))
 
 type Scope = 'article' | 'byArticle' | 'date' | 'unprinted' | 'all'
 

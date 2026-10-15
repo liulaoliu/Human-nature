@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../adapters/articleRepo'
+import { calendarDayKey } from '../core/activity'
 
 interface Props {
   book: ArticleBook | null
@@ -119,8 +120,8 @@ export default function ArticlePicker({
                       </button>
                       {(single || isOpenGroup) &&
                         list.map((a) => {
-                          const created = (a.createdAt ?? a.updatedAt).slice(0, 10)
-                          const edited = a.updatedAt.slice(0, 10)
+                          const created = calendarDayKey(new Date(a.createdAt ?? a.updatedAt))
+                          const edited = calendarDayKey(new Date(a.updatedAt))
                           return (
                             <button
                               key={a.id}

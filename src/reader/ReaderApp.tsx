@@ -123,12 +123,6 @@ interface Doc {
   sentences: Sentence[]
 }
 
-/** 本机时区的日期键 YYYY-MM-DD */
-function localDayKey(d: Date = new Date()): string {
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`
-}
-
 const TASKS: { task: AnalysisTask; label: string }[] = [
   { task: 'translate', label: '翻译' },
   { task: 'lookup', label: '查词' },
@@ -480,12 +474,12 @@ export default function ReaderApp() {
     parse: (raw) => {
       try {
         const obj = JSON.parse(raw) as { day?: string; count?: number } | null
-        return obj && obj.day === localDayKey() && typeof obj.count === 'number' ? obj.count : 0
+        return obj && obj.day === dayKeyLocal() && typeof obj.count === 'number' ? obj.count : 0
       } catch {
         return 0
       }
     },
-    serialize: (count) => JSON.stringify({ day: localDayKey(), count }),
+    serialize: (count) => JSON.stringify({ day: dayKeyLocal(), count }),
   })
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
@@ -738,7 +732,7 @@ export default function ReaderApp() {
   const studyFlush = useCallback((seconds: number, cards: number) => {
     if (seconds <= 0 && cards <= 0) return
     setStudyDays((prev) => {
-      const day = localDayKey()
+      const day = dayKeyLocal()
       const i = prev.findIndex((d) => d.day === day)
       if (i < 0) return [...prev, { day, seconds, cards }]
       const next = [...prev]
@@ -749,14 +743,14 @@ export default function ReaderApp() {
 
   /** 今天学过的不同单词 id（每日目标进度）。 */
   const studiedTodayIds = useMemo(() => {
-    const t = localDayKey()
+    const t = dayKeyLocal()
     return studiedDays.find((d) => d.day === t)?.ids ?? []
   }, [studiedDays])
 
   /** 记「今天学过这个词」（每日目标按不同单词计数）。 */
   const markStudied = useCallback((itemId: string) => {
     setStudiedDays((prev) => {
-      const day = localDayKey()
+      const day = dayKeyLocal()
       const cur = prev.find((d) => d.day === day)
       if (cur) {
         if (cur.ids.includes(itemId)) return prev

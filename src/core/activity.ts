@@ -23,10 +23,23 @@ export interface DayActivity {
   counts: Partial<Record<ActivityCat, number>>
 }
 
-/** 本地日期键 YYYY-MM-DD。 */
-export function dayKeyLocal(d: Date): string {
+/** 「新的一天」从凌晨几点开始（0–23）。设 4 = 00:00–03:59 仍算前一天（熬夜不跨天）。 */
+export const DAY_ROLLOVER_HOUR = 4
+
+/** 纯日历日期键 YYYY-MM-DD（就是那一天本身，不做结算偏移）——热力图格子、打印日期用。 */
+export function calendarDayKey(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/**
+ * 逻辑「今天」的日期键 YYYY-MM-DD（**本地时区**）。
+ *
+ * 结算点在**凌晨 4 点**：00:00–03:59 的学习/背词算**前一天**，
+ * 免得学到半夜跨过 0 点就被切成两天（目标、连续天数、日志都用它）。
+ */
+export function dayKeyLocal(d: Date = new Date()): string {
+  return calendarDayKey(new Date(d.getTime() - DAY_ROLLOVER_HOUR * 3600 * 1000))
 }
 
 /** 把某天某类活动加 n（同一天合并；超过上限截断）。纯函数。 */
@@ -75,10 +88,12 @@ export function sumCats(list: DayActivity[], from: string, to: string): Record<A
 /** 连续有活动的天数（从今天或昨天往前数）。 */
 export function activityStreak(list: DayActivity[], today: Date = new Date()): number {
   const has = new Set(list.filter((a) => dayTotal(a) > 0).map((a) => a.day))
-  const cursor = new Date(today.getFullYear(), today.getMonth(), today.getDate())
-  if (!has.has(dayKeyLocal(cursor))) cursor.setDate(cursor.getDate() - 1)
+  // 先取「逻辑今天」的日历日（含 04:00 结算），再按日历往前一天天数
+  const [y, m, d] = dayKeyLocal(today).split('-').map(Number)
+  const cursor = new Date(y, m - 1, d)
+  if (!has.has(calendarDayKey(cursor))) cursor.setDate(cursor.getDate() - 1)
   let streak = 0
-  while (has.has(dayKeyLocal(cursor))) {
+  while (has.has(calendarDayKey(cursor))) {
     streak += 1
     cursor.setDate(cursor.getDate() - 1)
   }
@@ -135,7 +150,7 @@ export function buildHeatmap(
     for (let r = 0; r < 7; r++) {
       const d = new Date(start)
       d.setDate(start.getDate() + c * 7 + r)
-      const key = dayKeyLocal(d)
+      const key = calendarDayKey(d) // 格子用纯日历日；counts 的键是「逻辑日」（见 dayKeyLocal）
       const count = d > today0 ? 0 : counts[key] ?? 0
       const future = d > today0
       if (!future && !firstColOfMonth.has(d.getMonth())) firstColOfMonth.set(d.getMonth(), c)

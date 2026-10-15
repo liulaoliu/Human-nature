@@ -48,7 +48,7 @@ describe('studyTotals', () => {
 })
 
 describe('pickDayStats / last7Days', () => {
-  const now = new Date(2026, 9, 5) // 2026-10-05
+  const now = new Date(2026, 9, 5, 10) // 2026-10-05（白天）
   const sessions = [
     { at: new Date(2026, 9, 5, 10).toISOString(), seconds: 0, picked: 4 },
     { at: new Date(2026, 9, 4, 10).toISOString(), seconds: 0, picked: 6 },
@@ -73,7 +73,7 @@ describe('pickDayStats / last7Days', () => {
 
 describe('dueForecast', () => {
   it('未来 N 天到期计数，首日标签「今天」', () => {
-    const now = new Date(2026, 9, 5)
+    const now = new Date(2026, 9, 5, 10)
     const items = [
       mkItem({ reviewState: review(new Date(2026, 9, 5, 8).toISOString()) }),
       mkItem({ reviewState: review(new Date(2026, 9, 7, 8).toISOString()) }),

@@ -12,6 +12,7 @@ import type {
 } from '../types/document'
 import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import type { PosRow } from './analyzer'
+import { dayKeyLocal } from './activity'
 
 /**
  * 词库逻辑：生词数据「怎么变」的规则层。
@@ -931,7 +932,7 @@ export function groupItems(items: VocabItem[], by: VocabGroupBy): VocabGroup[] {
     } else if (by === 'article') {
       key = it.source?.articleId ?? '未分类'
     } else if (by === 'date') {
-      key = it.createdAt.slice(0, 10)
+      key = dayKeyLocal(new Date(it.createdAt))
     } else {
       key = it.status
     }
