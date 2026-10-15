@@ -109,6 +109,9 @@ export interface Paragraph {
   sentenceIds: string[]
 }
 
+/** 例句来源：来源句 / AI 生成 / 离线例句库（Tatoeba）。 */
+export type VocabExampleOrigin = 'article' | 'ai' | 'tatoeba'
+
 /** 生词例句。 */
 export interface VocabExample {
   /** 英文例句 */
@@ -121,6 +124,8 @@ export interface VocabExample {
   fileName?: string
   /** 来自哪个句子 */
   sentenceId?: string
+  /** 例句来源（老数据没有 → 当 AI/来源句；用于卡片上区分「AI / 离线」） */
+  origin?: VocabExampleOrigin
 }
 
 /** 生词来源：标词时自动回填，便于回看与"例句回填"。 */

@@ -2,6 +2,7 @@ import type {
   ReviewState,
   VocabConfusable,
   VocabExample,
+  VocabExampleOrigin,
   VocabItem,
   VocabLibrary,
   VocabSource,
@@ -175,23 +176,55 @@ function mergeOptionalList(a: string[] | undefined, b: string[] | undefined): st
 /** 一个词最多保留几条例句（避免反复查词越堆越多）。 */
 export const MAX_EXAMPLES = 6
 
-/** 把 AI 生成的用法示例并入词条（按 lemma / 词形匹配；例句按文本去重）。 */
+/**
+ * 把一批例句并入词条（按 lemma / 词形匹配）。
+ *
+ * - `origin`：这批例句的来源（AI 生成 / 离线例句库）。
+ * - 同一正文的已有例句**不重复加**，但 AI 例句会把它的来源「认领」成 `ai`
+ *   （这样「还缺 AI 例句」的判据不会因为离线例句先到而永远为真 → 防死循环），并顺手补上缺的翻译。
+ */
 export function applyExamples(
   library: VocabLibrary,
   rows: { word: string; examples: { text: string; translation?: string }[] }[],
+  now: Date = new Date(),
+  origin: VocabExampleOrigin = 'ai',
 ): VocabLibrary {
-  const iso = new Date().toISOString()
+  const iso = now.toISOString()
   let changed = false
   const items = library.items.map((it) => {
     const row = rows.find((r) => lemmaOf(r.word) === it.lemma || normalizeWord(r.word) === normalizeWord(it.word))
     if (!row) return it
-    const merged = mergeExamples(
-      it.examples,
-      row.examples.map((e) => ({ text: e.text, translation: e.translation })),
-    )
-    // 保留最早的（含来源句），只裁掉后面多出来的
-    const capped = merged.length > MAX_EXAMPLES ? merged.slice(0, MAX_EXAMPLES) : merged
-    if (capped.length === it.examples.length) return it
+    const next = [...it.examples]
+    let touched = false
+    for (const inc of row.examples) {
+      const text = inc.text.trim()
+      if (!text) continue
+      const i = next.findIndex((x) => x.text.trim() === text)
+      if (i >= 0) {
+        const cur = next[i]
+        const claim = origin === 'ai' && cur.origin !== 'ai'
+        const fillTr = !cur.translation && !!inc.translation
+        if (claim || fillTr) {
+          next[i] = { ...cur, origin: claim ? 'ai' : cur.origin, translation: fillTr ? inc.translation : cur.translation }
+          touched = true
+        }
+      } else {
+        next.push({ text, translation: inc.translation, origin })
+        touched = true
+      }
+    }
+    if (!touched) return it
+    const capped = next.length > MAX_EXAMPLES ? next.slice(0, MAX_EXAMPLES) : next
+    // 裁剪后内容没变（例如已经满了）→ 不算改动，避免反复写库
+    const same =
+      capped.length === it.examples.length &&
+      capped.every(
+        (x, i) =>
+          x.text === it.examples[i].text &&
+          x.origin === it.examples[i].origin &&
+          x.translation === it.examples[i].translation,
+      )
+    if (same) return it
     changed = true
     return { ...it, examples: capped, updatedAt: iso }
   })
@@ -275,6 +308,15 @@ export function hasOwnExamples(item: VocabItem): boolean {
   return ownExamples(item).length > 0
 }
 
+/**
+ * 「还需要 AI 例句吗」：自己的例句里还没有 AI 生成的（离线例句不算数）。
+ * 离线例句先补上时，AI 仍会给一份带中文的；AI 回来后就不再排（防死循环）。
+ */
+export function needsAiExamples(item: VocabItem): boolean {
+  const src = (item.source?.sentenceText ?? '').trim()
+  return item.examples.every((e) => e.origin === 'tatoeba' || e.text.trim() === src)
+}
+
 /** 卡片上带小标题的一段内容（规范化「用法 / 词组 / 习语 / 例句 / 来源 / 易混」）。 */
 export interface VocabCardBlock {
   key: 'usage' | 'phrases' | 'idioms' | 'examples' | 'source' | 'confusables'
@@ -298,7 +340,10 @@ export function vocabCardBlocks(item: VocabItem, opts: { maxExamples?: number } 
   push('phrases', '词组', (item.phrases ?? []).map((s) => s.trim()).filter(Boolean))
   push('idioms', '习语', (item.idioms ?? []).map((s) => s.trim()).filter(Boolean))
 
-  const examples = ownExamples(item).map((e) => (e.translation ? `${e.text} — ${e.translation}` : e.text))
+  const examples = ownExamples(item).map((e) => {
+    const tag = e.origin === 'tatoeba' ? '[离线] ' : e.origin === 'ai' ? '[AI] ' : ''
+    return `${tag}${e.translation ? `${e.text} — ${e.translation}` : e.text}`
+  })
   push('examples', '例句', opts.maxExamples != null ? examples.slice(0, opts.maxExamples) : examples)
 
   const sentence = item.source?.sentenceText?.trim()
@@ -360,6 +405,7 @@ export function markWord(
     articleId: input.articleId,
     fileName: input.fileName ?? undefined,
     sentenceId: input.sentenceId ?? undefined,
+    origin: 'article',
   }
   const source: VocabSource = {
     articleId: input.articleId,

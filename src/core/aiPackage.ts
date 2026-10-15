@@ -20,7 +20,7 @@ import {
 } from './analyzer'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
-import { hasOwnExamples, isMarkablePos, normalizeWord } from './vocab'
+import { isMarkablePos, needsAiExamples, normalizeWord } from './vocab'
 import type { Sentence, VocabItem } from '../types/document'
 
 /** 可以打包的 AI 任务类型（与 ReaderApp 的 lastTask 对齐）。 */
@@ -335,9 +335,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       part.map((it) => it.word),
     )
   }
-  // 例句（没「自己的例句」就生成；来源句不算自己的例句）→ 生成「好例句」：
-  // 短、单一目标词、体现该义项与典型搭配。
-  const exampleTodo = base.filter((it) => it.meaning && !hasOwnExamples(it)).slice(0, 30)
+  // 例句（还没「AI 例句」就生成；离线例句不算数，AI 仍会给一份带中文的）
+  const exampleTodo = base.filter((it) => it.meaning && needsAiExamples(it)).slice(0, 30)
   if (exampleTodo.length) {
     push(
       'example',
@@ -536,7 +535,7 @@ export function countAiJobs(input: AiJobsInput): number {
     confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
-  if (base.some((it) => it.meaning && !hasOwnExamples(it))) n++
+  if (base.some((it) => it.meaning && needsAiExamples(it))) n++
   if (base.some((it) => it.meaning && it.phrases === undefined)) n++
   if (!input.autoVocabDone && input.sentences.length) n++
   if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++

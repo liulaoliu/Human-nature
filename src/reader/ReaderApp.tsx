@@ -2006,14 +2006,77 @@ export default function ReaderApp() {
         return
       }
       persist(
-        applyExamples(library, [
-          { word: item.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) },
-        ]),
+        applyExamples(
+          library,
+          [{ word: item.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) }],
+          new Date(),
+          'tatoeba',
+        ),
       )
       flash(`已加入 ${ex.length} 条离线例句（Tatoeba）`)
     },
     [library, persist, flash],
   )
+
+  /** 一键：给「还没有自己例句」的本篇生词，批量补离线例句（Tatoeba）。 */
+  const enrichExamplesFromTatoeba = useCallback(async () => {
+    const ok = await loadTatoeba()
+    if (!ok) {
+      flash('离线例句未安装：先跑 `node tools/build-tatoeba.mjs <sentences.tsv> <links.tsv> cmn --en-only` 生成 public/tatoeba-en.tsv')
+      return
+    }
+    const targets = articleWords.filter((it) => !hasOwnExamples(it))
+    if (!targets.length) {
+      flash('本篇生词都已经有例句了（只有「来源句」的会算缺）')
+      return
+    }
+    const rows: { word: string; examples: { text: string; translation?: string }[] }[] = []
+    let missing = 0
+    for (const it of targets) {
+      const ex = tatoebaExamples(it.word, it.lemma)
+      if (!ex.length) {
+        missing++
+        continue
+      }
+      rows.push({ word: it.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) })
+    }
+    if (!rows.length) {
+      flash(`离线例句库里有 ${missing} 个都查不到（可让 AI 补例句）`)
+      return
+    }
+    persist(applyExamples(library, rows, new Date(), 'tatoeba'))
+    flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
+  }, [articleWords, library, persist, flash])
+
+  /** 离线例句库是否就绪（加载一次，全库通用）。 */
+  const [tatoebaReady, setTatoebaReady] = useState(false)
+  useEffect(() => {
+    let alive = true
+    void loadTatoeba().then((ok) => {
+      if (alive) setTatoebaReady(ok)
+    })
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  /**
+   * **建词即补**：生词一多出「还没有自己例句」的，就自动从离线例句库补上（Tatoeba）。
+   * 只补没有例句的；AI 例句不受影响（`needsAiExamples` 仍会让 AI 给一份带中文的）。
+   */
+  useEffect(() => {
+    if (!tatoebaReady) return
+    const targets = library.items.filter((it) => !!it.meaning && !hasOwnExamples(it))
+    if (!targets.length) return
+    const rows: { word: string; examples: { text: string; translation?: string }[] }[] = []
+    for (const it of targets) {
+      const ex = tatoebaExamples(it.word, it.lemma)
+      if (ex.length) rows.push({ word: it.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) })
+    }
+    if (!rows.length) return
+    const next = applyExamples(library, rows, new Date(), 'tatoeba')
+    if (next !== library) persist(next)
+  }, [tatoebaReady, library, persist])
 
   /** 记一条复述打卡。 */
   const saveRetell = useCallback(
@@ -2803,6 +2866,7 @@ export default function ReaderApp() {
           dictReady={dictReady}
           onPickFromDict={pickFromDict}
           onEnrichFromDict={enrichFromDict}
+          onEnrichExamples={() => void enrichExamplesFromTatoeba()}
           onFixLemmasFromDict={fixLemmasFromDict}
           onConfuseFromDict={confuseFromDict}
           aiFileRef={aiFileRef}

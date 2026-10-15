@@ -58,6 +58,8 @@ export interface SidePickProps {
   onEnrichFromDict: () => void
   onFixLemmasFromDict: () => void
   onConfuseFromDict: () => void
+  /** 离线例句（Tatoeba）：给还没有例句的本篇生词批量补。 */
+  onEnrichExamples: () => void
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
 
@@ -144,6 +146,7 @@ export default function SidePick({
   onEnrichFromDict,
   onFixLemmasFromDict,
   onConfuseFromDict,
+  onEnrichExamples,
   aiFileRef,
   onAiFile,
   localConfigured,
@@ -295,6 +298,12 @@ export default function SidePick({
             title="用词典给缺混淆项的词本地生成干扰项（拼写形近、含义不同）"
           >
             补混淆项
+          </button>
+          <button
+            onClick={onEnrichExamples}
+            title="从离线例句库（Tatoeba）给「还没有例句」的本篇生词批量补真实例句；需先跑 tools/build-tatoeba.mjs"
+          >
+            📖 补离线例句
           </button>
         </div>
       </div>

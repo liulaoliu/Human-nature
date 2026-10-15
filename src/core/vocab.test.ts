@@ -27,6 +27,7 @@ import {
   lemmaOf,
   markPrinted,
   markWord,
+  needsAiExamples,
   normalizeWord,
   normalizePos,
   nextDayIso,
@@ -86,6 +87,27 @@ describe('applyExamples', () => {
     expect(item.examples.length).toBeLessThanOrEqual(6)
     // 最早的那条（来源句）保留
     expect(item.examples.map((e) => e.text)).toContain('run')
+  })
+
+  it('标记例句来源：article / ai / tatoeba', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1', sentenceText: 'He runs fast.' }, NOW).library
+    expect(lib.items[0].examples[0].origin).toBe('article')
+    lib = applyExamples(lib, [{ word: 'run', examples: [{ text: 'Friendly words mitigate fury.' }] }], NOW, 'tatoeba')
+    expect(lib.items[0].examples.find((e) => e.text.startsWith('Friendly'))?.origin).toBe('tatoeba')
+    lib = applyExamples(lib, [{ word: 'run', examples: [{ text: 'I run daily.', translation: '我每天跑。' }] }], NOW)
+    expect(lib.items[0].examples.find((e) => e.text === 'I run daily.')?.origin).toBe('ai')
+  })
+
+  it('离线例句先到，AI 仍会认领（防死循环）', () => {
+    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'a1', sentenceText: 'x' }, NOW).library
+    lib = applyExamples(lib, [{ word: 'mitigate', examples: [{ text: 'Algeria needs to mitigate its vulnerabilities.' }] }], NOW, 'tatoeba')
+    expect(needsAiExamples(lib.items[0])).toBe(true) // 只有离线 → 还缺 AI 例句
+    // AI 回了同一句（被去重）→ 也要认领成 ai，否则会一直排
+    lib = applyExamples(lib, [{ word: 'mitigate', examples: [{ text: 'Algeria needs to mitigate its vulnerabilities.', translation: '阿尔及利亚需要降低其脆弱性。' }] }], NOW)
+    const ex = lib.items[0].examples.find((e) => e.text.startsWith('Algeria'))
+    expect(ex?.origin).toBe('ai')
+    expect(ex?.translation).toBe('阿尔及利亚需要降低其脆弱性。')
+    expect(needsAiExamples(lib.items[0])).toBe(false)
   })
 })
 import type { VocabItem } from '../types/document'
