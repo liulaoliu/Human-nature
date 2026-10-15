@@ -232,6 +232,35 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs.map((j) => j.task).sort()).toEqual(['lemma', 'pos'])
   })
 
+  it('本篇里重新选中的词（已有释义、但本篇语境还没释义）→ 按本篇语境重查一次', () => {
+    const now = new Date().toISOString()
+    const withCtx = mkItem({
+      word: 'oldword',
+      lemma: 'oldword',
+      meaning: '旧义',
+      contexts: [
+        { articleId: 'art-1', fileName: 'art-1', sentenceId: 's1', sentenceText: 'A sentence.', meaning: '旧义', at: now },
+        { articleId: 'art-1', fileName: 'art-1', sentenceId: 's2', sentenceText: 'B sentence.', at: now },
+      ],
+    })
+    const jobs = buildAiJobs(emptyInput({ items: [withCtx], articleWords: [withCtx] }))
+    const job = jobs.find((j) => j.task === 'lookup' && j.label.includes('本篇语境'))
+    expect(job?.askedWords).toEqual(['oldword'])
+    expect(job?.prompt).toContain('B sentence.') // 用本篇那句做上下文
+    // 本篇语境已有释义 → 不再重查
+    const done = mkItem({
+      word: 'oldword',
+      lemma: 'oldword',
+      meaning: '新义',
+      contexts: [{ articleId: 'art-1', fileName: 'art-1', sentenceId: 's2', sentenceText: 'B sentence.', meaning: '新义', at: now }],
+    })
+    expect(
+      buildAiJobs(emptyInput({ items: [done], articleWords: [done] })).find(
+        (j) => j.task === 'lookup' && j.label.includes('本篇语境'),
+      ),
+    ).toBeUndefined()
+  })
+
   it('名词/动词缺语法标记 → 生成语法标记任务；标过就不再排', () => {
     const need = buildAiJobs(emptyInput({ items: [mkItem({ word: 'water', lemma: 'water' })] }))
     expect(need.find((j) => j.task === 'grammar_mark')?.askedWords).toEqual(['water'])

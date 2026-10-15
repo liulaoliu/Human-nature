@@ -355,6 +355,26 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       phraseTodo.map((it) => it.word),
     )
   }
+  // 本篇里刚选中的词（手动或自动标词都算）、但「本篇语境」还没释义 → 按**本篇上下文**重查一次。
+  // 查完会把释义写进该语境 → 不再是待办（天然的终结标记，不会无限重跑）。
+  const ctxTodo = base
+    .filter((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === input.articleId && !c.meaning))
+    .slice(0, 30)
+  if (ctxTodo.length) {
+    push(
+      'lookup',
+      `按本篇语境重查（${ctxTodo.length}）`,
+      buildBatchLookupPrompt(
+        ctxTodo.map((it) => ({
+          word: it.word,
+          context:
+            (it.contexts ?? []).find((c) => c.fileName === input.articleId && !c.meaning)?.sentenceText ||
+            it.source?.sentenceText,
+        })),
+      ),
+      ctxTodo.map((it) => it.word),
+    )
+  }
   // 疑似非原型 → 校正原形
   const lemmaCandidates = base.filter((it) => normalizeWord(it.word) !== it.lemma).slice(0, 100)
   if (lemmaCandidates.length) {
@@ -535,6 +555,7 @@ export function countAiJobs(input: AiJobsInput): number {
     confusableTodo,
     input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
   ).length
+  if (base.some((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === input.articleId && !c.meaning))) n++
   if (base.some((it) => it.meaning && needsAiExamples(it))) n++
   if (base.some((it) => it.meaning && it.phrases === undefined)) n++
   if (!input.autoVocabDone && input.sentences.length) n++
