@@ -11,7 +11,6 @@ import {
   isDue,
   lemmaOf,
   markWord,
-  MAX_EXAMPLES,
   normalizeWord,
   pickOfflineExamples,
   removeItem,
@@ -1989,36 +1988,6 @@ export default function ReaderApp() {
     })
   }, [kindStats, articleIdentity, writingHistory, articleWords, myRetells, activity])
 
-  /** 从离线例句库（Tatoeba）给某个词补例句。 */
-  const addOfflineExamples = useCallback(
-    async (item: VocabItem) => {
-      const ok = await loadTatoeba()
-      if (!ok) {
-        flash('离线例句未安装：先跑 `node tools/build-tatoeba.mjs <sentences.csv> <links.csv>` 生成 public/tatoeba-en.tsv')
-        return
-      }
-      const ex = tatoebaExamples(item.word, item.lemma)
-      if (!ex.length) {
-        flash(`离线例句库里没找到「${item.word}」`)
-        return
-      }
-      if (item.examples.length >= MAX_EXAMPLES) {
-        flash(`「${item.word}」例句已有 ${MAX_EXAMPLES} 条（上限），先删几条再补`)
-        return
-      }
-      persist(
-        applyExamples(
-          library,
-          [{ word: item.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) }],
-          new Date(),
-          'tatoeba',
-        ),
-      )
-      flash(`已加入 ${ex.length} 条离线例句（Tatoeba）`)
-    },
-    [library, persist, flash],
-  )
-
   /** 一键：给「还没有自己例句」的本篇生词，批量补离线例句（Tatoeba）。 */
   const enrichExamplesFromTatoeba = useCallback(async () => {
     const ok = await loadTatoeba()
@@ -2427,7 +2396,6 @@ export default function ReaderApp() {
             onInputChange={setStudyInput}
             onCheckSpelling={() => setStudyChecked(true)}
             onSpeak={speak}
-            onFetchExamples={() => studyCard && void addOfflineExamples(studyCard)}
             onOpenEdit={openStudyEdit}
             onDelete={studyDelete}
             onDraftChange={setStudyDraft}
@@ -2868,6 +2836,7 @@ export default function ReaderApp() {
           onPickFromDict={pickFromDict}
           onEnrichFromDict={enrichFromDict}
           onEnrichExamples={() => void enrichExamplesFromTatoeba()}
+          examplesReady={tatoebaReady}
           onFixLemmasFromDict={fixLemmasFromDict}
           onConfuseFromDict={confuseFromDict}
           aiFileRef={aiFileRef}

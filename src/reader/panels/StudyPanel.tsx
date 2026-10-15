@@ -75,8 +75,6 @@ export interface StudyPanelProps {
   onInputChange: (value: string) => void
   onCheckSpelling: () => void
   onSpeak: (word: string) => void
-  /** 从离线例句库（Tatoeba）给当前词补例句。 */
-  onFetchExamples: () => void
   onOpenEdit: () => void
   onDelete: () => void
   onDraftChange: (draft: StudyDraft) => void
@@ -358,7 +356,6 @@ export default function StudyPanel({
   onInputChange,
   onCheckSpelling,
   onSpeak,
-  onFetchExamples,
   onOpenEdit,
   onDelete,
   onDraftChange,
@@ -572,9 +569,6 @@ export default function StudyPanel({
               <div className="bar study-tools">
                 <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
                   ✎ 编辑
-                </button>
-                <button onClick={onFetchExamples} title="从离线例句库（Tatoeba）给这个词补几条例句；需先跑 tools/build-tatoeba.mjs">
-                  📖 离线例句
                 </button>
                 <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
                   {delArmed ? '确认删除' : '删除'}

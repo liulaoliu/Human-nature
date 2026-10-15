@@ -60,6 +60,8 @@ export interface SidePickProps {
   onConfuseFromDict: () => void
   /** 离线例句（Tatoeba）：给还没有例句的本篇生词批量补。 */
   onEnrichExamples: () => void
+  /** 离线例句库是否已加载。 */
+  examplesReady: boolean
   aiFileRef: RefObject<HTMLInputElement>
   onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
 
@@ -147,6 +149,7 @@ export default function SidePick({
   onFixLemmasFromDict,
   onConfuseFromDict,
   onEnrichExamples,
+  examplesReady,
   aiFileRef,
   onAiFile,
   localConfigured,
@@ -270,6 +273,9 @@ export default function SidePick({
 
       <div className="dict-tools">
         <div className="muted">📖 离线词典：{dictReady ? '已就绪（ECDICT）' : '未加载（跑 npm run ecdict:build）'}</div>
+        <div className="muted">
+          🗣 离线例句：{examplesReady ? '已就绪（Tatoeba，建词自动补 3 条）' : '未安装（跑 npm run tatoeba:build）'}
+        </div>
         <div className="bar">
           <button
             onClick={onPickFromDict}
