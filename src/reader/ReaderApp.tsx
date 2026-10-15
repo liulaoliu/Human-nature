@@ -4,6 +4,7 @@ import { wordSpans } from '../core/wordSelect'
 import {
   createLibrary,
   applyExamples,
+  applyLemmaMap,
   articleWordsOf,
   dedupeLibrary,
   displayMeaning,
@@ -13,6 +14,7 @@ import {
   lemmaOf,
   markWord,
   normalizeWord,
+  normalizeGrammarMarks,
   pickOfflineExamples,
   removeItem,
   reviewItem,
@@ -89,6 +91,8 @@ import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
 import { loadTatoeba, tatoebaExamples } from './tatoeba'
+import { dictionary } from './dictionary'
+import { dictLemmaOf } from '../core/ecdict'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
@@ -615,7 +619,7 @@ export default function ReaderApp() {
     r.load()
       .then((lib) => {
         // 加载时合并去重，保证不会出现两个同根词
-        const fixed = dedupeLibrary(lib)
+        const fixed = normalizeGrammarMarks(dedupeLibrary(lib))
         setLibrary(fixed)
         if (fixed.items.length !== lib.items.length) r.save(fixed).catch(() => {})
       })
@@ -1750,6 +1754,10 @@ export default function ReaderApp() {
     recordActivity,
     ecdictLevel: vocabLevel,
     articleText: (doc?.sentences ?? []).map((s) => s.text).join(' '),
+    sentenceForWord: (word) => {
+      const it = batchItemsFromWords([word])[0]
+      return { sentence: it?.sentence ?? '', sentenceId: it?.sentenceId ?? null }
+    },
     setDoc,
     setPendingSave,
     setListenQuiz,
@@ -2215,6 +2223,24 @@ export default function ReaderApp() {
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictReady = useDictionary()
+
+  /**
+   * 离线词典就绪后：把「非原型」的词条自动归一到词典原形并合并（幂等）。
+   * 修的是 `overthrown`（没释义）、`sprawling`（和 `sprawl` 并列）这类残留。
+   * 手动改过（edited/mastered）的不动。
+   */
+  useEffect(() => {
+    if (!dictReady) return
+    const dict = dictionary()
+    if (!dict) return
+    const pairs = library.items
+      .filter((it) => it.status !== 'edited' && it.status !== 'mastered')
+      .map((it) => ({ from: it.word, to: dictLemmaOf(dict, it.word) }))
+      .filter((p): p is { from: string; to: string } => !!p.to && normalizeWord(p.from) !== p.to)
+    if (!pairs.length) return
+    persist(dedupeLibrary(applyLemmaMap(library, pairs)))
+  }, [dictReady, library, persist])
+
   const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
     library,
     persist,

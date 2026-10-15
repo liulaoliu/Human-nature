@@ -1,6 +1,7 @@
 import type {
   ReviewState,
   VocabConfusable,
+  VocabContext,
   VocabExample,
   VocabExampleOrigin,
   VocabItem,
@@ -152,6 +153,49 @@ function replaceItem(library: VocabLibrary, item: VocabItem): VocabLibrary {
   }
 }
 
+/** 来源句是否「有用」（有原句，或有句子 id）。 */
+function sourceHasText(s: VocabSource | null | undefined): boolean {
+  return !!s && (!!s.sentenceText?.trim() || !!s.sentenceId)
+}
+
+/** 有原句的来源优先；都没有就用新的（保证来源不空）。 */
+export function betterSource(a: VocabSource | null | undefined, b: VocabSource): VocabSource {
+  return sourceHasText(a) ? (a as VocabSource) : b
+}
+
+/** 记一条「出现语境」：同篇同句只留一条；同篇新句追加（保留最近 20 条）。 */
+export function upsertContext(list: VocabContext[] | undefined, ctx: VocabContext, cap = 20): VocabContext[] {
+  const cur = list ?? []
+  if (!ctx.fileName && !ctx.sentenceText) return cur
+  const key = (c: VocabContext) => `${c.fileName ?? c.articleId}|${c.sentenceId ?? c.sentenceText}`
+  const k = key(ctx)
+  const i = cur.findIndex((c) => key(c) === k)
+  if (i >= 0) {
+    const prev = cur[i]
+    const next: VocabContext = {
+      ...prev,
+      ...ctx,
+      meaning: ctx.meaning ?? prev.meaning,
+      at: prev.at || ctx.at,
+    }
+    if (next.meaning === prev.meaning && next.sentenceText === prev.sentenceText) return cur
+    return cur.map((c, j) => (j === i ? next : c))
+  }
+  return [...cur, ctx].slice(-cap)
+}
+
+/** 由「来源」造一条语境。 */
+export function contextFromSource(source: VocabSource, at: string, meaning?: string): VocabContext {
+  return {
+    articleId: source.articleId,
+    fileName: source.fileName,
+    sentenceId: source.sentenceId,
+    sentenceText: source.sentenceText,
+    meaning,
+    at,
+  }
+}
+
 function mergeExamples(a: VocabExample[], b: VocabExample[]): VocabExample[] {
   const out = [...a]
   for (const e of b) {
@@ -263,9 +307,59 @@ export function applyPhrases(
   return changed ? { ...library, items } : library
 }
 
+/** 语法标记归属的类别：可数性只对名词、及物性只对动词、可分级只对形容词。 */
+const MARK_GROUP: Record<string, 'noun' | 'verb' | 'adj'> = {
+  可数: 'noun',
+  不可数: 'noun',
+  及物: 'verb',
+  不及物: 'verb',
+  可分级: 'adj',
+  不可分级: 'adj',
+}
+
+/** 词性是否含某一类（n./v./adj）。 */
+function posHas(pos: string | null | undefined, kind: 'noun' | 'verb' | 'adj'): boolean {
+  const tokens = normalizePos(pos)
+    .split(/[\/,，;；\s]+/)
+    .map((s) => s.replace(/\.+$/, '').trim().toLowerCase())
+  const words = kind === 'noun' ? ['n', 'noun'] : kind === 'verb' ? ['v', 'verb'] : ['adj', 'adjective']
+  return tokens.some((t) => words.includes(t))
+}
+
+/**
+ * 按词性过滤语法标记：**可数/不可数只对名词、及物/不及物只对动词、可分级只对形容词**。
+ * 治的是 AI 给形容词（sprawling）也标「不可数」这种张冠李戴。
+ * 不在受控词表里的标记（未来的扩展）一律保留。
+ */
+export function marksForPos(marks: string[], pos: string | null | undefined): string[] {
+  const known = !!normalizePos(pos).trim()
+  return marks
+    .map((m) => m.trim())
+    .filter((m) => {
+      if (!m) return false
+      const g = MARK_GROUP[m]
+      if (!g) return true // 不在受控词表里的扩展标记：保留
+      if (!known) return true // 词性还没标注：没法判断，先保留
+      return posHas(pos, g)
+    })
+}
+
+/** 整库修一遍语法标记（清掉与词性不匹配的）；加载时跑一次即可，幂等。 */
+export function normalizeGrammarMarks(library: VocabLibrary): VocabLibrary {
+  let changed = false
+  const items = library.items.map((it) => {
+    if (!it.grammarMarks?.length) return it
+    const fixed = marksForPos(it.grammarMarks, it.partOfSpeech)
+    if (fixed.length === it.grammarMarks.length) return it
+    changed = true
+    return { ...it, grammarMarks: fixed }
+  })
+  return changed ? { ...library, items } : library
+}
+
 /**
  * 把 AI 标注的「语法标记」（可数/不可数、及物/不及物…）并入词条。
- * 按 lemma / 词形匹配，去重合并。
+ * 按 lemma / 词形匹配，去重合并，并**按词性过滤**（不匹配的丢掉）。
  *
  * 关键：**被 AI 列出的词 = 已标注过**。哪怕该词没有可标项（marks 为空，如 mrs），
  * 也要把 `grammarMarks` 写成空数组，表示「查过、无可标」，否则会永远重复待办。
@@ -281,7 +375,7 @@ export function applyGrammarMarks(
   const items = library.items.map((it) => {
     const row = rows.find((r) => lemmaOf(r.word) === it.lemma || normalizeWord(r.word) === normalizeWord(it.word))
     if (!row) return it
-    const marks = mergeUnique(it.grammarMarks ?? [], row.marks.map((m) => m.trim()).filter(Boolean))
+    const marks = mergeUnique(it.grammarMarks ?? [], marksForPos(row.marks, it.partOfSpeech))
     // 已标注过且没有新增 → 不动（避免无意义地刷新 updatedAt）
     if (it.grammarMarks !== undefined && marks.length === it.grammarMarks.length) return it
     changed = true
@@ -338,9 +432,9 @@ export function needsAiExamples(item: VocabItem): boolean {
   return item.examples.every((e) => e.origin === 'tatoeba' || e.text.trim() === src)
 }
 
-/** 卡片上带小标题的一段内容（规范化「用法 / 词组 / 习语 / 例句 / 来源 / 易混」）。 */
+/** 卡片上带小标题的一段内容（规范化「语境 / 用法 / 词组 / 习语 / 例句 / 来源 / 易混」）。 */
 export interface VocabCardBlock {
-  key: 'usage' | 'phrases' | 'idioms' | 'examples' | 'source' | 'confusables'
+  key: 'context' | 'usage' | 'phrases' | 'idioms' | 'examples' | 'source' | 'confusables'
   /** 小标题，如「例句」。 */
   label: string
   lines: string[]
@@ -357,6 +451,16 @@ export function vocabCardBlocks(item: VocabItem, opts: { maxExamples?: number } 
   }
 
   push('usage', '用法', item.usage.map((s) => s.trim()).filter(Boolean))
+
+  // 语境：在哪些句子里出现过（最近 2 条）；有「此处含义」就带上
+  const ctxs = [...(item.contexts ?? [])].reverse().slice(0, 2)
+  push(
+    'context',
+    '语境',
+    ctxs
+      .filter((c) => c.sentenceText.trim())
+      .map((c) => `${c.sentenceText.trim()}${c.meaning ? ` — 此处：${c.meaning}` : ''}`),
+  )
 
   push('phrases', '词组', (item.phrases ?? []).map((s) => s.trim()).filter(Boolean))
   push('idioms', '习语', (item.idioms ?? []).map((s) => s.trim()).filter(Boolean))
@@ -440,7 +544,8 @@ export function markWord(
     const merged: VocabItem = {
       ...existing,
       examples: mergeExamples(existing.examples, [example]),
-      source: existing.source ?? source,
+      source: betterSource(existing.source, source),
+      contexts: upsertContext(existing.contexts, contextFromSource(source, iso)),
       updatedAt: iso,
     }
     return { library: replaceItem(library, merged), item: merged, created: false }
@@ -459,6 +564,7 @@ export function markWord(
     status: 'unqueried',
     note: '',
     tags: [],
+    contexts: [contextFromSource(source, iso)],
     reviewState: defaultReviewState(),
     createdAt: iso,
     updatedAt: iso,
@@ -506,6 +612,7 @@ export function applyWordAnalysis(
           examples,
           source: defaultSource ?? null,
           status: 'queried',
+          contexts: defaultSource ? [contextFromSource(defaultSource, iso, cleanGloss(wa.meaning) || undefined)] : undefined,
           note: '',
           tags: [],
           reviewState: defaultReviewState(),
@@ -521,6 +628,7 @@ export function applyWordAnalysis(
     // 查询结果里的「原形」优先：连 word/lemma/id 一起改，保持三者一致（手动改过的不动）
     const newWord = locked ? cur.word : wa.word?.trim() || cur.word
     const newLemma = locked ? cur.lemma : lemmaOf(newWord) || cur.lemma
+    const ctxMeaning = cleanGloss(wa.meaning) || undefined
     const merged: VocabItem = {
       ...cur,
       id: locked ? cur.id : `vocab:${newLemma}`,
@@ -532,6 +640,8 @@ export function applyWordAnalysis(
       definition: locked && cur.definition ? cur.definition : cleanGloss(wa.definition) || cur.definition,
       usage: mergeUnique(cur.usage, wa.usage ?? []),
       examples: mergeExamples(cur.examples, examples),
+      source: betterSource(cur.source, defaultSource ?? { articleId: '', fileName: null, sentenceId: null, sentenceText: '' }),
+      contexts: defaultSource ? upsertContext(cur.contexts, contextFromSource(defaultSource, iso, ctxMeaning)) : cur.contexts,
       status: locked ? cur.status : 'queried',
       updatedAt: iso,
     }
@@ -914,6 +1024,7 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
     examples: mergeExamples(a.examples, b.examples),
     tags: [...new Set([...a.tags, ...b.tags])],
     confusables: mergeConfusables(a.confusables, b.confusables),
+    contexts: (a.contexts ?? []).concat(b.contexts ?? []).reduce<VocabContext[]>((acc, c) => upsertContext(acc, c), []),
     priorityUntil: [a.priorityUntil, b.priorityUntil].filter(Boolean).sort().pop() ?? null,
     note: a.note || b.note,
     source: a.source ?? b.source,

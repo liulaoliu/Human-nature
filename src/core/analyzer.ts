@@ -59,7 +59,7 @@ export function buildPrompt(input: BuildPromptInput): string {
       return buildAutoVocabPrompt(text)
     case 'lookup': {
       const words = (input.words?.length ? input.words : [text]).join(', ')
-      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
+      return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /ˈrʌnɪŋ/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；中文含义用**词典式简短释义**（核心义，每个义项 ≤8 字、最多 2 个义项，用「；」分隔）——**不要按语境意译成长句**，语境用词尽量还原成词典里的说法（例：splinter 在语境里指"分裂出的小派别"，就写「分裂；小派别」，而不是整句解释）；用法有多条用「；」分隔，**每条搭配都要带简短中文**（格式：搭配 — 中文，如 run out — 用完；run a business — 经营公司）；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词：${words}\n上下文（帮助判断词义）：\n${quoted(text)}`
     }
   }
 }
@@ -222,7 +222,7 @@ export function buildBatchLookupPrompt(entries: { word: string; context?: string
   const lines = unique
     .map((e) => (e.context ? `- ${e.word}  （上下文：${e.context}）` : `- ${e.word}`))
     .join('\n')
-  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /rʌn/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；用法有多条用「；」分隔；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词与上下文：\n${lines}`
+  return `${HEADER}\n请对下面每个单词输出一行，字段用 | 分隔，顺序固定：\n单词 | 音标 | 词性 | 中文含义 | 用法/搭配 | 例句(英+中) | 英文释义\n单词列一律输出**合适的原形**：名词用单数（companies→company），动词用一般现在时原形（running→run、went→go、Bahrainis→Bahraini），形容词/副词用原级（better→good）。现在分词（-ing）和过去分词（-ed）一律先判断它在上下文里是不是动词用法：只要是动词用法（含作定语但表示动作、构成进行时、构成分词短语等），一律还原为动词原形（dulling→dull、tinkering→tinker、swelling→swell、expunging→expunge）；只有已固化为独立形容词的分词才保持原样（exciting、interesting、expected、complicated、advanced），**不要因为 -ing 形式就默认它是形容词**；独立名词（savings、belongings）保持；音标必须给国际音标（IPA，用斜杠包住，如 /rʌn/，按原形给），每个词都要有；词性用 v./n./adj./prep. 等缩写；中文含义用**词典式简短释义**（核心义，每个义项 ≤8 字、最多 2 个义项，用「；」分隔）——**不要按语境意译成长句**，语境用词尽量还原成词典里的说法（例：splinter 在语境里指"分裂出的小派别"，就写「分裂；小派别」，而不是整句解释）；用法有多条用「；」分隔，**每条搭配都要带简短中文**（格式：搭配 — 中文，如 run out — 用完；run a business — 经营公司）；例句要短（≤12 词）、只体现该义项、带典型搭配，英文和中文用「 — 」分隔；英文释义用学习者词典风格的一句话（用简单英文解释，不要照抄中文）；确实没把握的才留空，不要编造。\n示例：\nrunning | /rʌn/ | v. | 跑步 | run out；run a business | I run every day. — 我每天跑步。 | to move quickly on foot\n单词与上下文：\n${lines}`
 }
 
 /**
@@ -307,12 +307,13 @@ export function buildPhrasePrompt(entries: { word: string; meaning?: string | nu
 下面每个单词，请给出它的**常用词组 / 搭配**和**固定习语**（有就给，没有就写「无」）。
 - 词组：该词组成的常用搭配或短语（2–4 条），如 run out、run a business；
 - 习语：该词参与的固定习语 / 俚语（0–2 条），如 run in the family；确实没有就写「无」；
+- **每条都要带简短中文释义**（格式：英文 — 中文，如 run out — 用完）；
 - 只放该词真实常见的说法，不要与单词本身重复，不要解释，不要造句。
 **每个词都必须输出一行**（哪一类没有就写「无」，不要漏行）。
 每个词输出一行，字段用 | 分隔，顺序固定：单词 | 词组1；词组2 | 习语1；习语2
 词组、习语有多条都用「；」分隔；某一类没有就写「无」。
 示例：
-run | run out；run a business | run in the family
+run | run out — 用完；run a business — 经营公司 | run in the family — 家族遗传
 mrs | 无 | 无
 只输出这些行，不要编号、不要标题、不要解释。
 词与含义：

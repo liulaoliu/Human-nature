@@ -139,6 +139,21 @@ export interface VocabSource {
   sentenceText: string
 }
 
+/**
+ * 该词在某篇文章里的**出现语境**（一句话 + 可选「此处含义」）。
+ * 同一个词在多篇里出现会累积多条 —— 用来回答「B 篇里的 oldword 是什么意思」。
+ */
+export interface VocabContext {
+  articleId: string
+  fileName: string | null
+  sentenceId: string | null
+  sentenceText: string
+  /** 在这个语境下的释义（AI 按本篇上下文给的；可能没有） */
+  meaning?: string
+  /** 记录时刻 ISO */
+  at: string
+}
+
 /** 生词状态流转。 */
 export type VocabStatus = 'unqueried' | 'queried' | 'edited' | 'mastered'
 
@@ -198,6 +213,8 @@ export interface VocabItem {
   examples: VocabExample[]
   /** 来源 */
   source: VocabSource | null
+  /** 在哪些文章里、各自什么语境出现过（多义词据此区分） */
+  contexts?: VocabContext[]
   /** 状态 */
   status: VocabStatus
   /** 个人笔记 */

@@ -8,6 +8,7 @@ import {
   applyPosAnalysis,
   applyWordAnalysis,
   articleWordsOf,
+  betterSource,
   buildLearnQueue,
   buildReviewQueue,
   buildStudyQueue,
@@ -27,8 +28,10 @@ import {
   lemmaOf,
   markPrinted,
   markWord,
+  marksForPos,
   MAX_EXAMPLES,
   needsAiExamples,
+  normalizeGrammarMarks,
   normalizeWord,
   normalizePos,
   nextDayIso,
@@ -43,6 +46,7 @@ import {
   setStatus,
   sortItems,
   unprintedItems,
+  upsertContext,
   vocabCardBlocks,
 } from './vocab'
 
@@ -590,17 +594,67 @@ describe('articleWordsOf（本篇生词归属）', () => {
     expect(words).toEqual(['bungle', 'estrange'])
   })
 
-  it('markWord 去重会沿用旧来源 → 只按 source 过滤会漏（回归）', () => {
-    // 先在某篇里标了这个词
-    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'art-A', fileName: 'art-A' }, NOW).library
-    // 再在另一篇里标注同一个词（AI 自动标词直入）
-    lib = markWord(lib, { word: 'Mitigating', articleId: 'art-B', fileName: 'art-B' }, NOW).library
+  it('markWord 去重：有句子的来源优先，多篇则都进 contexts（回归）', () => {
+    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'art-A', fileName: 'art-A', sentenceText: 'A sentence.' }, NOW).library
+    lib = markWord(lib, { word: 'Mitigating', articleId: 'art-B', fileName: 'art-B', sentenceText: 'B sentence.' }, NOW).library
     expect(lib.items).toHaveLength(1)
-    expect(lib.items[0].source?.fileName).toBe('art-A') // 来源留在 art-A
+    // 有句子的来源保留 A（先来的），B 篇的语境另存 —— 不丢信息
+    expect(lib.items[0].source?.fileName).toBe('art-A')
+    expect(lib.items[0].contexts?.map((c) => c.fileName).sort()).toEqual(['art-A', 'art-B'])
     // 旧逻辑（只看 source）：art-B 本篇 0 个
     expect(lib.items.filter((it) => it.source?.fileName === 'art-B')).toHaveLength(0)
     // 新逻辑（正文出现过）：art-B 本篇 1 个
     expect(articleWordsOf(lib, 'art-B', new Set(['mitigate']))).toHaveLength(1)
+  })
+
+  it('来源为空时用新的（不管手动还是自动选词，来源都要带上）', () => {
+    let lib = markWord(createLibrary(), { word: 'x', articleId: 'art-A' }, NOW).library // 没给句子 → 来源为空
+    expect(lib.items[0].source?.sentenceText).toBe('')
+    lib = markWord(lib, { word: 'x', articleId: 'art-B', fileName: 'art-B', sentenceText: 'B sentence.' }, NOW).library
+    expect(lib.items[0].source?.fileName).toBe('art-B')
+    expect(lib.items[0].source?.sentenceText).toBe('B sentence.')
+  })
+})
+
+describe('marksForPos / normalizeGrammarMarks（按词性过滤语法标记）', () => {
+  it('可数性只对名词、及物性只对动词、可分级只对形容词', () => {
+    expect(marksForPos(['不可数'], 'v.')).toEqual([]) // sprawl 是动词 → 不该标「不可数」
+    expect(marksForPos(['可数', '不及物'], 'n./v.')).toEqual(['可数', '不及物'])
+    expect(marksForPos(['及物'], 'adj.')).toEqual([])
+    expect(marksForPos(['可分级'], 'adj.')).toEqual(['可分级'])
+  })
+  it('词性未知 → 先保留；不在受控词表里的扩展标记也保留', () => {
+    expect(marksForPos(['不可数'], null)).toEqual(['不可数'])
+    expect(marksForPos(['专有名词'], 'n.')).toEqual(['专有名词'])
+  })
+  it('normalizeGrammarMarks 一次清掉全库不匹配的', () => {
+    const lib = { schemaVersion: 1, items: [item({ partOfSpeech: 'v.', grammarMarks: ['不可数', '不及物'] })] }
+    expect(normalizeGrammarMarks(lib).items[0].grammarMarks).toEqual(['不及物'])
+  })
+})
+
+describe('upsertContext / betterSource（多篇语境 / 来源）', () => {
+  const ctx = (sentenceText: string, meaning?: string) => ({
+    articleId: 'a',
+    fileName: 'a',
+    sentenceId: null,
+    sentenceText,
+    meaning,
+    at: NOW.toISOString(),
+  })
+  it('同篇同句只留一条；新句追加；带了新信息才更新', () => {
+    let list = upsertContext(undefined, ctx('One.'))
+    expect(list).toHaveLength(1)
+    expect(upsertContext(list, ctx('One.'))).toHaveLength(1)
+    list = upsertContext(list, ctx('One.', '此处：一'))
+    expect(list[0].meaning).toBe('此处：一')
+    list = upsertContext(list, ctx('Two.'))
+    expect(list.map((x) => x.sentenceText)).toEqual(['One.', 'Two.'])
+  })
+  it('betterSource：有句子的优先，都空则用新的（来源不空）', () => {
+    const s = (fileName: string, sentenceText: string) => ({ articleId: fileName, fileName, sentenceId: null, sentenceText })
+    expect(betterSource(s('A', 'x'), s('B', ''))?.fileName).toBe('A')
+    expect(betterSource(s('A', ''), s('B', 'y'))?.fileName).toBe('B')
   })
 })
 

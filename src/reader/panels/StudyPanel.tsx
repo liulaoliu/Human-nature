@@ -10,7 +10,6 @@ import {
   type ReviewGrade,
   type StudyMode,
 } from '../../core/vocab'
-import { diffWords, type DiffToken } from '../../core/dictation'
 import { fmtDue, fmtDur, fmtInterval } from '../format'
 import VocabBlocks from './VocabBlocks'
 
@@ -100,16 +99,15 @@ function hash(s: string): number {
 }
 
 interface DrillStep {
-  kind: 'spell' | 'meaning' | 'usage' | 'dictation'
+  kind: 'spell' | 'meaning' | 'usage'
 }
 
-/** 由当前卡构造「强制锤炼」步骤（有数据的才出）。 */
+/** 由当前卡构造「强制锤炼」步骤（有数据的才出）。听写句子那一步已去掉。 */
 function buildSteps(card: VocabItem, items: VocabItem[]): DrillStep[] {
   const steps: DrillStep[] = []
   if (card.word) steps.push({ kind: 'spell' })
   if (card.meaning && items.filter((it) => it.id !== card.id && it.meaning).length >= 3) steps.push({ kind: 'meaning' })
   if (card.usage.length || card.phrases?.length) steps.push({ kind: 'usage' })
-  if (card.source?.sentenceText) steps.push({ kind: 'dictation' })
   return steps
 }
 
@@ -137,7 +135,6 @@ const STEP_LABEL: Record<DrillStep['kind'], string> = {
   spell: '拼写',
   meaning: '选词义',
   usage: '写搭配',
-  dictation: '听写句子',
 }
 
 /** 超时「强制锤炼」：拼写 → 选词义 → 写搭配 → 听写句子，全过才解锁评分。 */
@@ -157,14 +154,11 @@ function DrillBoard({
   const [step, setStep] = useState(0)
   const [text, setText] = useState('')
   const [wrong, setWrong] = useState(false)
-  const [dictDiff, setDictDiff] = useState<DiffToken[] | null>(null)
-
   // 换卡重置
   useEffect(() => {
     setStep(0)
     setText('')
     setWrong(false)
-    setDictDiff(null)
   }, [card.id])
 
   const cur = steps[step]
@@ -173,7 +167,6 @@ function DrillBoard({
   const next = () => {
     setText('')
     setWrong(false)
-    setDictDiff(null)
     if (step + 1 >= total) onDone()
     else setStep(step + 1)
   }
@@ -190,13 +183,6 @@ function DrillBoard({
       })
       if (ok) next()
       else setWrong(true)
-    } else if (cur.kind === 'dictation') {
-      const d = diffWords(card.source?.sentenceText ?? '', text)
-      if (d.correct) next()
-      else {
-        setDictDiff(d.tokens)
-        setWrong(true)
-      }
     } else {
       next()
     }
@@ -276,31 +262,6 @@ function DrillBoard({
           />
           {wrong && collocationsOf(card).length > 0 && (
             <div className="muted">参考：{collocationsOf(card).join('；')}</div>
-          )}
-        </div>
-      )}
-
-      {cur.kind === 'dictation' && (
-        <div className="drill-body">
-          <button className="primary" onClick={() => onSpeak(card.source?.sentenceText ?? '')}>
-            🔊 播放句子
-          </button>
-          <textarea
-            className="study-input"
-            autoFocus
-            placeholder="听写这一句，回车提交"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), submit())}
-          />
-          {wrong && dictDiff && (
-            <div className="dict-diff">
-              {dictDiff.map((t, i) => (
-                <span key={i} className={'dt ' + t.type}>
-                  {t.text}{' '}
-                </span>
-              ))}
-            </div>
           )}
         </div>
       )}

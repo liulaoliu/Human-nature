@@ -65,6 +65,8 @@ export interface UseApplyTaskResultParams {
   ecdictLevel: EcdictLevel
   /** 当前文章正文（AI 给词太少时，用离线词典补几个）。 */
   articleText: string
+  /** 某个词在本篇里的那句来源（写回来源/语境用）。 */
+  sentenceForWord: (word: string) => { sentence: string; sentenceId: string | null }
   setDoc: Dispatch<SetStateAction<ReaderDoc | null>>
   setPendingSave: (v: boolean) => void
   setListenQuiz: (q: ListeningQuiz | null) => void
@@ -102,6 +104,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     recordActivity,
     ecdictLevel,
     articleText,
+    sentenceForWord,
     setDoc,
     setPendingSave,
     setListenQuiz,
@@ -392,14 +395,18 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
             definition: w.definition || mw?.en || (e?.en ? firstLine(e.en) : undefined),
           }
         })
-        next = dedupeLibrary(
-          applyWordAnalysis(next, wordsForApply, new Date(), {
+        // 逐词写回，带上它在**本篇**里的那句来源（来源不空 + 记一条本篇语境）
+        let applied = next
+        for (const w of wordsForApply) {
+          const ctx = sentenceForWord(w.word)
+          applied = applyWordAnalysis(applied, [w], new Date(), {
             articleId: articleTitle || articleKey || '手动粘贴',
             fileName: articleIdentity,
-            sentenceId: null,
-            sentenceText: '',
-          }),
-        )
+            sentenceId: ctx.sentenceId,
+            sentenceText: ctx.sentence,
+          })
+        }
+        next = dedupeLibrary(applied)
       }
       if (result.sentences?.length) {
         const map = new Map(result.sentences.map((x) => [x.sentenceId, x]))
