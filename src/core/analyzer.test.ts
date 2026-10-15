@@ -13,6 +13,7 @@ import {
   buildPrompt,
   buildTranslateAllPrompt,
   cleanExampleText,
+  cleanVocabWord,
   parseAnalysis,
   parseConfusables,
   parseExampleTable,
@@ -244,6 +245,14 @@ describe('parseAnalysis', () => {
 describe('parseWordList', () => {
   it('逗号/顿号/换行都能拆并去重', () => {
     expect(parseWordList('run, mitigate、run\nphonics')).toEqual(['run', 'mitigate', 'phonics'])
+  })
+  it('cleanVocabWord 清掉编号/markdown/词性/中文注释', () => {
+    expect(cleanVocabWord('1. **impeachment (n.)** — 弹劾')).toBe('impeachment')
+    expect(cleanVocabWord('- oust')).toBe('oust')
+    expect(cleanVocabWord('coalition  n. 联盟')).toBe('coalition')
+    expect(cleanVocabWord('brinkmanship：边缘政策')).toBe('brinkmanship')
+    expect(cleanVocabWord('well-known')).toBe('well-known')
+    expect(cleanVocabWord('没事')).toBe('')
   })
 })
 

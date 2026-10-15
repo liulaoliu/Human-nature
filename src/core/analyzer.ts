@@ -72,6 +72,20 @@ function splitList(raw: string): string[] {
     .filter(Boolean)
 }
 
+/**
+ * 把 AI 返回的一个「词条行」清成单词：去编号 / 项目符号、去 markdown、
+ * 去掉后面粘的注释（词性、中文、括号说明），只保留开头的英文词。
+ * 例：`1. **impeachment (n.)** — 弹劾` → `impeachment`。
+ */
+export function cleanVocabWord(raw: string): string {
+  let w = raw.replace(/[*_`]/g, '').trim()
+  w = w.replace(/^[-–•·\s]*\d+\s*[).、]?\s*/, '') // 1. / 1) / 1、
+  w = w.replace(/^[-–•·\s]+/, '')
+  w = w.split(/[\s—–:：,，;；(（\[【"“”|/]+/)[0] ?? '' // 取第一个 token
+  w = w.replace(/[^A-Za-z'\-].*$/u, '')
+  return w.trim()
+}
+
 /** 提取词形列表：逗号/顿号/换行都能拆，去重。 */
 export function parseWordList(raw: string): string[] {
   const out: string[] = []

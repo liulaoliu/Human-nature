@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dictLemmaOf, isAboveLevel, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
+import { dictLemmaOf, isAboveLevel, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
 
 // 构造与构建脚本一致的 TSV（\t 分隔；\n 表示换行由脚本转义为 \\n）
 const wordsTsv = [
@@ -8,6 +8,7 @@ const wordsTsv = [
   'run\t\t\tv. move fast\tn. 跑\tcet4\t5\t1\t100\t100',
   'hobble\t\'hɒbl\t\tvt. prevent\tt. 阻碍\tky\t2\t0\t5000\t6000',
   'carbonfibre\t\t\t\t\tgre\t0\t0\t0\t0',
+  'bnconly\t\t\t\t\t\t0\t0\t5000\t0',
 ].join('\n')
 
 const formsTsv = ['running\trun', 'hobbled\thobble'].join('\n')
@@ -45,5 +46,12 @@ describe('isAboveLevel / pickAboveLevelWords', () => {
   })
   it('词典没有的词不挑', () => {
     expect(pickAboveLevelWords(dict, 'zzzz qqqq', 'cet4')).toEqual([])
+  })
+
+  it('levelVerdict 区分 超纲/档内/太生僻/未收录', () => {
+    expect(levelVerdict(dict, 'hobble', 'cet4')).toBe('above')
+    expect(levelVerdict(dict, 'allow', 'cet4')).toBe('within') // 含 cet4
+    expect(levelVerdict(dict, 'bnconly', 'cet4')).toBe('rare') // 无标签/无频次（只靠 bnc）→ 太生僻
+    expect(levelVerdict(dict, 'unlisted', 'cet4')).toBe('unknown') // 词典没收录
   })
 })

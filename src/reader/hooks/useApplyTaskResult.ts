@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
 import {
   applyToSentence,
+  cleanVocabWord,
   parseAnalysis,
   parseConfusables,
   parseExampleTable,
@@ -27,7 +28,7 @@ import {
 } from '../../core/vocab'
 import type { Sentence, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import { dictLemmaOf, firstLine, isAboveLevel, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import { dictLemmaOf, firstLine, levelVerdict, resolveWord, type EcdictLevel } from '../../core/ecdict'
 import { dictionary, mwldLookupWord } from '../dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
@@ -120,12 +121,17 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         persist(next)
       }
 
-      // 自动标词：AI 返回的是一串单词 → 用离线词典归一到原形、按级别过滤 → 进「待选」
+      // 自动标词：AI 返回的是一串单词 → 清洗 → 用离线词典归一到原形、按级别过滤 → 进「待选」
       if (task === 'auto_vocab') {
-        let words = parseWordList(text)
+        // AI 常在词后带词性/中文/编号（`1. **impeachment (n.)** — 弹劾`），先清成干净单词
+        const parsed = parseWordList(text).map(cleanVocabWord).filter(Boolean)
+        let words = [...new Set(parsed)]
         if (!words.length)
           return { report: ['没解析出单词（应为一行一个，或逗号/顿号分隔）'], missing: null, ok: false }
-        let dropped = 0
+        let within = 0
+        let rare = 0
+        let unknown = 0
+        let fellBack = false
         const dict = dictionary()
         if (dict) {
           const byLemma = new Map<string, string>()
@@ -136,29 +142,39 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
           }
           const kept: string[] = []
           for (const w of byLemma.values()) {
-            if (isAboveLevel(dict, w, ecdictLevel)) kept.push(w)
-            else dropped++
+            const verdict = levelVerdict(dict, w, ecdictLevel)
+            if (verdict === 'within') within++
+            else if (verdict === 'rare') rare++
+            else {
+              if (verdict === 'unknown') unknown++ // 词典没收录：不能因此丢掉
+              kept.push(w)
+            }
           }
-          words = kept
+          // 兜底：词典把 AI 给的词全筛了 → 宁可保留 AI 原词，也别一个都不给
+          if (kept.length) words = kept
+          else if (words.length) fellBack = true
         }
         if (!words.length)
-          return { report: [`词典筛完后没有超纲词（已滤掉 ${dropped} 个非超纲）`], missing: null, ok: true }
+          return { report: ['自动标词没产出词（换「词汇标准」后重试，或点「开启自动标词」重跑）'], missing: null, ok: true }
+        const notes: string[] = []
+        if (fellBack) notes.push('词典把这些词都判成「非超纲」，已按 AI 原词保留')
+        if (within) notes.push(`滤掉 ${within} 个本档以内`)
+        if (rare) notes.push(`滤掉 ${rare} 个太生僻`)
+        if (unknown) notes.push(`${unknown} 个词典未收录已保留`)
+        const note = notes.length ? `（${notes.join('；')}）` : ''
         const items = batchItemsFromWords(words)
         if (autoVocabDirect) {
           // 直入模式：跳过「待选」，直接进生词本（状态未查），下次跑批自动补音标/释义
           commitBatchItems(items)
           return {
-            report: [
-              `已直接加入生词本 ${words.length} 个词${dropped ? `（词典筛掉 ${dropped} 个非超纲）` : ''}`,
-              '下次跑批会补齐它们的音标/释义',
-            ],
+            report: [`已直接加入生词本 ${words.length} 个词${note}`, '下次跑批会补齐它们的音标/释义'],
             missing: null,
             ok: true,
           }
         }
         mergeBatch(items)
         return {
-          report: [`已加入待选 ${words.length} 个词${dropped ? `（词典筛掉 ${dropped} 个非超纲）` : ''}，可增删后再查词`],
+          report: [`已加入待选 ${words.length} 个词${note}，可增删后再查词`],
           missing: null,
           ok: true,
         }

@@ -126,14 +126,28 @@ const WITHIN: Record<EcdictLevel, string[]> = {
   ielts65: ['zk', 'gk', 'cet4', 'cet6', 'ielts', 'toefl'],
 }
 
+/** 分级判定结果。 */
+export type LevelVerdict = 'above' | 'within' | 'rare' | 'unknown'
+
+/**
+ * 判定一个词相对某词汇水平的位置：
+ *   - `above`   超纲（该留）
+ *   - `within`  在档内（不该留）
+ *   - `rare`    词典里是「太生僻」（无标签/无频次）
+ *   - `unknown` 词典里根本没收录 —— **不能因此判定它不超纲**
+ */
+export function levelVerdict(dict: Ecdict, word: string, level: EcdictLevel): LevelVerdict {
+  const hit = resolveWord(dict, word)
+  if (!hit) return 'unknown'
+  const tags = hit.entry.tag.split(/\s+/).filter(Boolean)
+  if (WITHIN[level].some((t) => tags.includes(t))) return 'within'
+  const common = tags.length > 0 || hit.entry.collins >= 1 || hit.entry.oxford === 1 || hit.entry.frq > 0
+  return common ? 'above' : 'rare'
+}
+
 /** 是否"超出某词汇水平"（词典里有、且不属于该档、且是常用词）。 */
 export function isAboveLevel(dict: Ecdict, word: string, level: EcdictLevel): boolean {
-  const hit = resolveWord(dict, word)
-  if (!hit) return false
-  const tags = hit.entry.tag.split(/\s+/).filter(Boolean)
-  if (WITHIN[level].some((t) => tags.includes(t))) return false
-  // 排除过于生僻的：要有标签或高频/柯林斯/牛津
-  return tags.length > 0 || hit.entry.collins >= 1 || hit.entry.oxford === 1 || hit.entry.frq > 0
+  return levelVerdict(dict, word, level) === 'above'
 }
 
 /** 首行非空文本（ECDICT 的中英释义都是多行）。 */

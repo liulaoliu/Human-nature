@@ -150,8 +150,11 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     if (round.length > 0) {
       return `本轮已跑完；还有 ${round.length} 项没补全（多半是模型没返回这些词）：可点「📖 补齐生词本」（离线），或删掉不需要的词。`
     }
+    if (autoVocabDone.includes(jobsInput.articleId)) {
+      return '本篇已「自动标过词」，所以不再生成标词待办；想重新标词点「↺ 重置自动标词」，或改用「📖 离线挑超纲词」。'
+    }
     return '本篇待办已全部完成 🎉'
-  }, [jobsInput.batch.length, localRunning, localRound, localPhase, localDone, localTotal, pending, round.length])
+  }, [jobsInput.batch.length, jobsInput.articleId, autoVocabDone, localRunning, localRound, localPhase, localDone, localTotal, pending, round.length])
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
