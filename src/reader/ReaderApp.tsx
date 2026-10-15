@@ -1704,6 +1704,7 @@ export default function ReaderApp() {
     writingTask,
     recordActivity,
     ecdictLevel: vocabLevel,
+    articleText: (doc?.sentences ?? []).map((s) => s.text).join(' '),
     setDoc,
     setPendingSave,
     setListenQuiz,

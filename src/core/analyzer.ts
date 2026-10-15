@@ -494,7 +494,7 @@ const LEVEL_DESC: Record<VocabLevel, string> = {
  * 结果是一串「原形」单词，粘回后进入「待选」清单，人工增删后再查词。
  */
 export function buildAutoVocabPrompt(text: string, level: VocabLevel = 'cet6'): string {
-  return `${HEADER}\n请${LEVEL_DESC[level]}，从下面这篇文章里挑出**超出该水平、值得查词学习**的单词。\n要求：\n- 每个词输出**原形**：名词用单数、动词用一般现在时（如 running→run、went→go）；\n- 去掉重复；只输出**单个单词**，不要短语、不要编号、不要解释、不要分点，用换行分隔；\n- 数量按文章长度取 15–40 个，按在文中出现的先后顺序。\n文章：\n${quoted(text)}`
+  return `${HEADER}\n请${LEVEL_DESC[level]}，从下面这篇文章里挑出**超出该水平、值得查词学习**的单词。\n要求：\n- 每个词输出**原形**：名词用单数、动词用一般现在时（如 running→run、went→go）；\n- 去掉重复；只输出**单个单词**，不要短语、不要编号、不要解释、不要分点；\n- **每个词单独一行**（不要一行里写好几个词，也不要加词性/中文/序号）；\n- 数量按文章长度取 20–40 个，按在文中出现的先后顺序。\n文章：\n${quoted(text)}`
 }
 
 export interface ConfusableEntry {
