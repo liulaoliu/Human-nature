@@ -66,17 +66,17 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, su
                 </span>
               ))}
             </div>
-            <div className="heat-grid" style={{ gridTemplateColumns: `repeat(${heat.columns}, 12px)` }}>
+            <div className="heat-grid">
               {heat.cells.map((col, ci) =>
                 col.map((cell, ri) => (
-                  <button
+                  <span
                     key={`${ci}-${ri}`}
                     className={
                       'heat-cell' + (cell.future ? ' future' : ' lv' + cell.level) + (cell.key === day ? ' on' : '')
                     }
-                    disabled={cell.future}
+                    role={cell.future ? undefined : 'button'}
                     title={cell.future ? '' : `${cell.key}：活动 ${cell.count}（点击查看当天日志）`}
-                    onClick={() => onDayChange(cell.key)}
+                    onClick={cell.future ? undefined : () => onDayChange(cell.key)}
                   />
                 )),
               )}

@@ -33,9 +33,11 @@ export interface ExportPanelProps {
 
 const day = (it: VocabItem) => it.createdAt.slice(0, 10)
 
+type Scope = 'article' | 'byArticle' | 'date' | 'unprinted' | 'all'
+
 /**
- * 打印 / 导出面板：按**篇**、按**具体日期**、未打印或全部，选好范围与分组，
- * 再决定 A4 打印 / Anki CSV / TXT。省得在一堆按钮里猜哪个是哪个。
+ * 打印 / 导出面板：按**篇**（可多选）、按**具体日期**（可多选）、未打印或全部，
+ * 选好范围与分组，再决定 A4 打印 / Anki CSV / TXT。
  */
 export default function ExportPanel({
   onClose,
@@ -48,48 +50,72 @@ export default function ExportPanel({
   onExportAnki,
   onExportWordList,
 }: ExportPanelProps) {
-  const [scope, setScope] = useState<'article' | 'byArticle' | 'date' | 'unprinted' | 'all'>(
-    articleWords.length ? 'article' : 'all',
-  )
-  const [articleId, setArticleId] = useState(articles[0]?.id ?? '')
-  const [dateKey, setDateKey] = useState(todayKey)
+  const [scope, setScope] = useState<Scope>(articleWords.length ? 'article' : 'all')
+  const [pickedArticles, setPickedArticles] = useState<Set<string>>(() => new Set(articles.map((a) => a.id)))
+  const [pickedDates, setPickedDates] = useState<Set<string>>(() => new Set([todayKey]))
   const [group, setGroup] = useState<PrintGroup>('alphabet')
 
-  /** 词库里出现过的日期（倒序）。 */
+  /** 词库里出现过的日期（倒序，带当天词数）。 */
   const dates = useMemo(() => {
-    const set = new Set<string>()
+    const m = new Map<string, number>()
     for (const it of libraryItems) {
       const d = day(it)
-      if (d) set.add(d)
+      if (d) m.set(d, (m.get(d) ?? 0) + 1)
     }
-    return [...set].sort((a, b) => b.localeCompare(a))
+    return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [libraryItems])
 
-  const unprintedCount = useMemo(() => libraryItems.filter((it) => !it.lastPrintedAt).length, [libraryItems])
+  const articleCount = useMemo(
+    () => new Map(articles.map((a) => [a.id, libraryItems.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma)).length])),
+    [articles, libraryItems],
+  )
 
-  const title = useMemo(() => {
-    if (scope === 'article') return articleTitle || '本篇生词'
-    if (scope === 'byArticle') return `词表-${articles.find((a) => a.id === articleId)?.title ?? '未知篇'}`
-    if (scope === 'date') return `词表-新增-${dateKey}`
-    if (scope === 'unprinted') return '全部生词（未打印）'
-    return '全部生词'
-  }, [scope, articleTitle, articles, articleId, dateKey])
+  const unprinted = useMemo(() => libraryItems.filter((it) => !it.lastPrintedAt), [libraryItems])
 
   const items = useMemo(() => {
     if (scope === 'article') return articleWords
     if (scope === 'byArticle') {
-      const a = articles.find((x) => x.id === articleId)
-      if (!a) return []
-      return libraryItems.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma))
+      const picked = articles.filter((a) => pickedArticles.has(a.id))
+      const out: VocabItem[] = []
+      const seen = new Set<string>()
+      for (const a of picked) {
+        for (const it of libraryItems) {
+          if (seen.has(it.id)) continue
+          if (it.source?.fileName === a.id || a.lemmas.has(it.lemma)) {
+            seen.add(it.id)
+            out.push(it)
+          }
+        }
+      }
+      return out
     }
-    if (scope === 'date') return libraryItems.filter((it) => day(it) === dateKey)
-    if (scope === 'unprinted') return libraryItems.filter((it) => !it.lastPrintedAt)
+    if (scope === 'date') return libraryItems.filter((it) => pickedDates.has(day(it)))
+    if (scope === 'unprinted') return unprinted
     return libraryItems
-  }, [scope, articleWords, articles, articleId, dateKey, libraryItems])
+  }, [scope, articleWords, articles, pickedArticles, pickedDates, libraryItems, unprinted])
 
-  // 本篇打印仍按「正文出现顺序」编号；其余按所选分组
+  const title = useMemo(() => {
+    if (scope === 'article') return articleTitle || '本篇生词'
+    if (scope === 'byArticle') {
+      const names = articles.filter((a) => pickedArticles.has(a.id)).map((a) => a.title)
+      return names.length === 1 ? `词表-${names[0]}` : `词表-${names.length}篇`
+    }
+    if (scope === 'date') {
+      const ds = [...pickedDates].sort()
+      return ds.length === 1 ? `词表-新增-${ds[0]}` : `词表-新增-${ds.length}天`
+    }
+    if (scope === 'unprinted') return '全部生词（未打印）'
+    return '全部生词'
+  }, [scope, articleTitle, articles, pickedArticles, pickedDates])
+
+  const toggleIn = (set: Set<string>, v: string) => {
+    const next = new Set(set)
+    if (next.has(v)) next.delete(v)
+    else next.add(v)
+    return next
+  }
+
   const isArticleOrder = scope === 'article'
-  const groupLabel = isArticleOrder ? '按正文顺序编号' : ''
   const canAct = items.length > 0
 
   return (
@@ -110,38 +136,68 @@ export default function ExportPanel({
             </label>
             <label className="check-inline">
               <input type="radio" checked={scope === 'byArticle'} onChange={() => setScope('byArticle')} disabled={!articles.length} />
-              按文章
+              按文章（可多选）
             </label>
             <label className="check-inline">
               <input type="radio" checked={scope === 'date'} onChange={() => setScope('date')} disabled={!dates.length} />
-              按日期
+              按日期（可多选）
             </label>
             <label className="check-inline">
-              <input type="radio" checked={scope === 'unprinted'} onChange={() => setScope('unprinted')} disabled={!unprintedCount} />
-              未打印（{unprintedCount}）
+              <input type="radio" checked={scope === 'unprinted'} onChange={() => setScope('unprinted')} disabled={!unprinted.length} />
+              未打印（{unprinted.length}）
             </label>
             <label className="check-inline">
               <input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} />
               全部（{libraryItems.length}）
             </label>
           </div>
+
           {scope === 'byArticle' && (
-            <select value={articleId} onChange={(e) => setArticleId(e.target.value)}>
-              {articles.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.title}
-                </option>
-              ))}
-            </select>
+            <div className="expick">
+              <div className="exrow">
+                <span className="muted">已选 {pickedArticles.size} 篇</span>
+                <button onClick={() => setPickedArticles(new Set(articles.map((a) => a.id)))}>全选</button>
+                <button onClick={() => setPickedArticles(new Set())}>清空</button>
+              </div>
+              <div className="exlist">
+                {articles.map((a) => (
+                  <label className="check-inline" key={a.id}>
+                    <input
+                      type="checkbox"
+                      checked={pickedArticles.has(a.id)}
+                      onChange={() => setPickedArticles((s) => toggleIn(s, a.id))}
+                    />
+                    <span className="ellipsis" title={a.title}>
+                      {a.title}
+                    </span>
+                    <span className="muted">{articleCount.get(a.id) ?? 0}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
+
           {scope === 'date' && (
-            <select value={dateKey} onChange={(e) => setDateKey(e.target.value)}>
-              {dates.map((d) => (
-                <option key={d} value={d}>
-                  {d}（{libraryItems.filter((it) => day(it) === d).length} 词）
-                </option>
-              ))}
-            </select>
+            <div className="expick">
+              <div className="exrow">
+                <span className="muted">已选 {pickedDates.size} 天</span>
+                <button onClick={() => setPickedDates(new Set(dates.map(([d]) => d)))}>全选</button>
+                <button onClick={() => setPickedDates(new Set())}>清空</button>
+              </div>
+              <div className="exlist">
+                {dates.map(([d, n]) => (
+                  <label className="check-inline" key={d}>
+                    <input
+                      type="checkbox"
+                      checked={pickedDates.has(d)}
+                      onChange={() => setPickedDates((s) => toggleIn(s, d))}
+                    />
+                    <span>{d}</span>
+                    <span className="muted">{n} 词</span>
+                  </label>
+                ))}
+              </div>
+            </div>
           )}
         </div>
 
@@ -168,7 +224,7 @@ export default function ExportPanel({
               className="primary"
               disabled={!canAct}
               onClick={() => onPrint(items, title, undefined, { groupBy: isArticleOrder ? undefined : group })}
-              title={isArticleOrder ? '按正文顺序打印 A4' : `按「${groupLabel || '所选分组'}」打印 A4`}
+              title={isArticleOrder ? '按正文顺序打印 A4' : '按所选分组打印 A4'}
             >
               🖨 A4 打印
             </button>
@@ -180,7 +236,7 @@ export default function ExportPanel({
             </button>
           </div>
           <div className="muted extip">
-            打印后会记「已打印」，勾「未打印」可只打新词；导出文件名会带上范围名（如「词表-新增-2026-10-15-vocab-anki.csv」）。
+            按文章/日期可**勾选多个**（同一词只算一次）。打印后会记「已打印」，选「未打印」可只打新词。
           </div>
         </div>
       </div>

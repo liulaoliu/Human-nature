@@ -12,8 +12,7 @@ import {
 
 describe('dayKeyLocal', () => {
   it('本地 YYYY-MM-DD', () => {
-    expect(dayKeyLocal(new Date(2026, 9, 3))).toBe('2026-10-03')
-  })
+    expect(dayKeyLocal(new Date(2026, 9, 3))).toBe('2026-10-03')  })
 })
 
 describe('addActivity', () => {
@@ -122,5 +121,19 @@ describe('buildHeatmap', () => {
     const hm = buildHeatmap({}, 13, today)
     expect(hm.monthLabels.length).toBeGreaterThan(0)
     expect(hm.monthLabels.every((m) => m.col >= 0 && m.col < 13)).toBe(true)
+  })
+
+  it('日期与格子的对应关系锁死：最后一列 = 本周，行 = 周几', () => {
+    const thu = new Date(2026, 9, 15) // 2026-10-15 周四（getDay=4）
+    const hm = buildHeatmap({ '2026-07-19': 1, '2026-10-15': 2 }, 13, thu)
+    expect(hm.cells[0][0].key).toBe('2026-07-19') // 13 周前那个周日
+    expect(hm.cells[12][4].key).toBe('2026-10-15') // 本周（最后一列）第 4 行 = 周四
+    expect(hm.cells[12][4].count).toBe(2)
+    expect(hm.cells[12][5].future).toBe(true) // 周五还没到
+    // 每一列的 7 格必须是连续 7 天
+    for (let c = 0; c < 13; c++) {
+      const days = hm.cells[c].map((x) => x.key)
+      expect(new Set(days).size).toBe(7)
+    }
   })
 })
