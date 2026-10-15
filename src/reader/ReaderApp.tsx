@@ -4,6 +4,7 @@ import { wordSpans } from '../core/wordSelect'
 import {
   createLibrary,
   applyExamples,
+  articleWordsOf,
   dedupeLibrary,
   editItem,
   hasOwnExamples,
@@ -499,10 +500,36 @@ export default function ReaderApp() {
     },
     [articleIdentity, setKindStats],
   )
+
+  /** 每个句子的 lemma 集合（只随 doc 变，避免「本篇」过滤时对每个词条重扫全文）。 */
+  const sentenceLemmas = useMemo(() => {
+    const m = new Map<string, Set<string>>()
+    if (doc) {
+      for (const s of doc.sentences) {
+        const set = new Set<string>()
+        for (const w of wordSpans(s.text)) set.add(lemmaOf(w.text))
+        m.set(s.id, set)
+      }
+    }
+    return m
+  }, [doc])
+  /** 全文出现过的 lemma 集合（「本篇」范围用）。 */
+  const docLemmas = useMemo(() => {
+    const all = new Set<string>()
+    for (const set of sentenceLemmas.values()) for (const l of set) all.add(l)
+    return all
+  }, [sentenceLemmas])
+
+  /**
+   * 本篇生词：**来源是本文**，或**本文正文里出现过**该词。
+   * 后者很关键：`markWord` 去重时沿用旧来源，从别的文章带过来的同一词来源留在那边，
+   * 只按 source 过滤的话「本篇生词」会一直不涨。
+   */
   const articleWords = useMemo(
-    () => library.items.filter((it) => it.source?.fileName === articleIdentity),
-    [library.items, articleIdentity],
+    () => articleWordsOf(library, articleIdentity, docLemmas),
+    [library, articleIdentity, docLemmas],
   )
+
   /** 生词本已有原形集合（速读里标记「已收录」）。 */
   const knownLemmas = useMemo(() => new Set(library.items.map((it) => it.lemma)), [library.items])
   /** 本篇已有语言点的句子数（侧栏显示用）。 */
@@ -684,25 +711,6 @@ export default function ReaderApp() {
     },
     [confirmDel, library, persist],
   )
-
-  /** 每个句子的 lemma 集合（只随 doc 变，避免「本篇」过滤时对每个词条重扫全文）。 */
-  const sentenceLemmas = useMemo(() => {
-    const m = new Map<string, Set<string>>()
-    if (doc) {
-      for (const s of doc.sentences) {
-        const set = new Set<string>()
-        for (const w of wordSpans(s.text)) set.add(lemmaOf(w.text))
-        m.set(s.id, set)
-      }
-    }
-    return m
-  }, [doc])
-  /** 全文出现过的 lemma 集合（「本篇」范围用）。 */
-  const docLemmas = useMemo(() => {
-    const all = new Set<string>()
-    for (const set of sentenceLemmas.values()) for (const l of set) all.add(l)
-    return all
-  }, [sentenceLemmas])
 
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {

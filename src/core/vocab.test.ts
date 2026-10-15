@@ -7,6 +7,7 @@ import {
   applyGrammarMarks,
   applyPosAnalysis,
   applyWordAnalysis,
+  articleWordsOf,
   buildLearnQueue,
   buildReviewQueue,
   buildStudyQueue,
@@ -503,6 +504,35 @@ describe('出错加权（lapses）', () => {
   })
   it('老数据没有 lapses 时按 0 起算', () => {
     expect(review({ ease: 2.5, due: null, interval: 1, repetitions: 1 }, 'again').lapses).toBe(1)
+  })
+})
+
+describe('articleWordsOf（本篇生词归属）', () => {
+  it('来源是本文 → 算本篇；来源在别处但正文出现过 → 也算本篇', () => {
+    const lib = {
+      schemaVersion: 1,
+      items: [
+        item({ id: 'vocab:a', lemma: 'estrange', word: 'estrange', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' } }),
+        item({ id: 'vocab:b', lemma: 'bungle', word: 'bungle', source: null }),
+        item({ id: 'vocab:c', lemma: 'unrelated', word: 'unrelated', source: null }),
+      ],
+    }
+    const docLemmas = new Set(['bungle']) // 本文正文里出现了 bungle
+    const words = articleWordsOf(lib, 'art-A', docLemmas).map((it) => it.lemma).sort()
+    expect(words).toEqual(['bungle', 'estrange'])
+  })
+
+  it('markWord 去重会沿用旧来源 → 只按 source 过滤会漏（回归）', () => {
+    // 先在某篇里标了这个词
+    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'art-A', fileName: 'art-A' }, NOW).library
+    // 再在另一篇里标注同一个词（AI 自动标词直入）
+    lib = markWord(lib, { word: 'Mitigating', articleId: 'art-B', fileName: 'art-B' }, NOW).library
+    expect(lib.items).toHaveLength(1)
+    expect(lib.items[0].source?.fileName).toBe('art-A') // 来源留在 art-A
+    // 旧逻辑（只看 source）：art-B 本篇 0 个
+    expect(lib.items.filter((it) => it.source?.fileName === 'art-B')).toHaveLength(0)
+    // 新逻辑（正文出现过）：art-B 本篇 1 个
+    expect(articleWordsOf(lib, 'art-B', new Set(['mitigate']))).toHaveLength(1)
   })
 })
 

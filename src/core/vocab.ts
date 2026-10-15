@@ -661,6 +661,23 @@ export function nextDayIso(now: Date = new Date()): string {
   return addDays(now, 1).toISOString()
 }
 
+/**
+ * 某篇文章的「本篇生词」：来源是本文，**或本文正文里出现过该词**。
+ *
+ * 为什么不能只看 `source`：`markWord` 按 lemma 去重时沿用**旧来源**
+ * （`source: existing.source ?? source`），所以从别的文章带过来的同一个词，
+ * 来源会留在旧文章 —— 只按 source 过滤，「本篇生词」会一直不涨。
+ */
+export function articleWordsOf(
+  library: VocabLibrary,
+  articleIdentity: string,
+  docLemmas: Set<string>,
+): VocabItem[] {
+  return library.items.filter(
+    (it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma),
+  )
+}
+
 /** 是否打印过（老数据没有 lastPrintedAt，按未打印算）。 */export function isPrinted(item: VocabItem): boolean {
   return !!item.lastPrintedAt
 }
