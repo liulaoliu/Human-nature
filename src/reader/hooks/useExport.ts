@@ -113,14 +113,14 @@ export function useExport({
     URL.revokeObjectURL(url)
   }
 
-  const doExportAnki = (items: VocabItem[]) =>
-    download('vocab-anki.csv', toAnkiCSV(sortItems(items, 'word')), 'text/csv;charset=utf-8')
+  const doExportAnki = (items: VocabItem[], name?: string) =>
+    download(`${name ? name + '-' : ''}vocab-anki.csv`, toAnkiCSV(sortItems(items, 'word')), 'text/csv;charset=utf-8')
 
   const exportJson = () => download('vocab.json', exportLibraryJSON(library), 'application/json')
 
   /** 导出纯单词表 TXT（每行一个单词；跳过词组），给外部词书 App 导入。 */
-  const exportWordList = (items: VocabItem[]) =>
-    download('wordlist.txt', toWordListTXT(items), 'text/plain;charset=utf-8')
+  const exportWordList = (items: VocabItem[], name?: string) =>
+    download(`${name ? name + '-' : ''}wordlist.txt`, toWordListTXT(items), 'text/plain;charset=utf-8')
 
   const exportBatch = () =>
     download(

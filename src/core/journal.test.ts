@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildJournalDay, journalDays, type JournalInput } from './journal'
+import { buildJournalDay, journalDays, journalSummary, type JournalInput } from './journal'
 import type { VocabItem } from '../types/document'
 
 const item = (id: string, createdAt: string): VocabItem => ({
@@ -72,6 +72,19 @@ describe('journalDays / buildJournalDay', () => {
     expect(j.addedLanguages[0]).toMatchObject({ sentenceId: 's1', manual: false, grammar: 'x' })
     expect(j.activity).toEqual({ vocab: 2, read: 5 })
     expect(j.practice).toEqual([{ kind: 'quiz', total: 6, correct: 5 }])
+  })
+
+  it('journalSummary：每天一行的小结（倒序）', () => {
+    const s = journalSummary(
+      input({
+        studied: [{ day: '2026-10-15', ids: ['a', 'a', 'b'] }],
+        items: [item('x', '2026-10-14T00:00:00.000Z'), item('y', '2026-10-15T00:00:00.000Z')],
+        activity: [{ day: '2026-10-15', counts: { vocab: 2, read: 3 } }],
+      }),
+    )
+    expect(s.map((r) => r.day)).toEqual(['2026-10-15', '2026-10-14'])
+    expect(s[0]).toMatchObject({ addedWords: 1, studied: 2, activity: 5 })
+    expect(s[1]).toMatchObject({ addedWords: 1, studied: 0 })
   })
 
   it('没有记录的日期 → 空明细（不炸）', () => {

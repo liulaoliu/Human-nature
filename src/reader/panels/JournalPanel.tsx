@@ -1,4 +1,5 @@
-import type { JournalDay } from '../../core/journal'
+import type { JournalDay, JournalSummaryRow } from '../../core/journal'
+import type { Heatmap } from '../../core/activity'
 
 export interface JournalPanelProps {
   onClose: () => void
@@ -7,6 +8,10 @@ export interface JournalPanelProps {
   day: string
   onDayChange: (day: string) => void
   data: JournalDay
+  /** 每天一行的小结（日期列表） */
+  summary: JournalSummaryRow[]
+  /** 活动热力图 */
+  heat: Heatmap
   /** 点词朗读 */
   onSpeak: (text: string) => void
 }
@@ -17,7 +22,7 @@ const CAT_LABEL: Record<string, string> = { read: '读', vocab: '词', listen: '
  * 学习日志：按天回顾 —— 那天新增了哪些生词 / 语言点、背过哪些词、活动量与练习成绩。
  * 数据来自本地（生词 createdAt、studiedToday、语言点 at、activity、practice）。
  */
-export default function JournalPanel({ onClose, days, day, onDayChange, data, onSpeak }: JournalPanelProps) {
+export default function JournalPanel({ onClose, days, day, onDayChange, data, summary, heat, onSpeak }: JournalPanelProps) {
   const idx = days.indexOf(day)
   const prev = idx >= 0 && idx + 1 < days.length ? days[idx + 1] : null // days 是倒序：下一个更早
   const next = idx > 0 ? days[idx - 1] : null
@@ -50,6 +55,54 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, on
             新增 {data.addedWords.length} 词 · 背了 {data.studied.length} 词 · 语言点 {data.addedLanguages.length}
           </span>
           <button onClick={onClose}>关闭</button>
+        </div>
+
+        <div className="jheat">
+          <div className="heat">
+            <div className="heat-months">
+              {heat.monthLabels.map((m) => (
+                <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
+                  {m.label}月
+                </span>
+              ))}
+            </div>
+            <div className="heat-grid" style={{ gridTemplateColumns: `repeat(${heat.columns}, 12px)` }}>
+              {heat.cells.map((col, ci) =>
+                col.map((cell, ri) => (
+                  <button
+                    key={`${ci}-${ri}`}
+                    className={
+                      'heat-cell' + (cell.future ? ' future' : ' lv' + cell.level) + (cell.key === day ? ' on' : '')
+                    }
+                    disabled={cell.future}
+                    title={cell.future ? '' : `${cell.key}：活动 ${cell.count}（点击查看当天日志）`}
+                    onClick={() => onDayChange(cell.key)}
+                  />
+                )),
+              )}
+            </div>
+          </div>
+          <div className="muted heat-legend">
+            少 <span className="heat-cell lv0" /> <span className="heat-cell lv1" /> <span className="heat-cell lv2" />{' '}
+            <span className="heat-cell lv3" /> <span className="heat-cell lv4" /> 多
+          </div>
+        </div>
+
+        <div className="jdays">
+          {summary.slice(0, 30).map((r) => (
+            <button
+              className={'jday' + (r.day === day ? ' on' : '')}
+              key={r.day}
+              onClick={() => onDayChange(r.day)}
+              title="看这一天的日志"
+            >
+              <b>{r.day}</b>
+              <span className="muted">
+                新增 {r.addedWords} · 背 {r.studied} · 语言点 {r.languages} · 活动 {r.activity}
+              </span>
+            </button>
+          ))}
+          {!summary.length && <div className="muted">还没有任何记录</div>}
         </div>
 
         {act.length > 0 && (

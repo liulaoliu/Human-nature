@@ -48,7 +48,7 @@ import {
 import { buildReadiness } from '../core/readiness'
 import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
-import { activityStreak, addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../core/activity'
+import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat, type DayActivity } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
 import { createVocabRepo } from '../adapters/vocabRepo'
@@ -94,8 +94,10 @@ import { useWriting } from './hooks/useWriting'
 import FishLayer from '../ui/FishLayer'
 import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
 import JournalPanel from './panels/JournalPanel'
+import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
-import { buildJournalDay, journalDays } from '../core/journal'
+import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
+import { buildHeatmap } from '../core/activity'
 import {
   persistentBool,
   persistentEnum,
@@ -972,6 +974,8 @@ export default function ReaderApp() {
   /** 学习日志面板 + 选中的日期。 */
   const [journalOpen, setJournalOpen] = useState(false)
   const [journalDay, setJournalDay] = useState(() => dayKeyLocal(new Date()))
+  /** 打印 / 导出面板。 */
+  const [exportOpen, setExportOpen] = useState(false)
   /** 生词本排序方式。 */
   const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
     'reader:vocabSort',
@@ -2086,6 +2090,23 @@ export default function ReaderApp() {
   )
   const journalAllDays = useMemo(() => journalDays(journalInput), [journalInput])
   const journalData = useMemo(() => buildJournalDay(journalInput, journalDay), [journalInput, journalDay])
+  const journalSummaryRows = useMemo(() => journalSummary(journalInput), [journalInput])
+  const journalHeat = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const a of activity) counts[a.day] = dayTotal(a)
+    return buildHeatmap(counts, 13)
+  }, [activity])
+
+  /** 打印面板：已保存文章 + 每篇正文里的 lemma（用于「按篇」）。 */
+  const exportArticles = useMemo(
+    () =>
+      saved.map((a) => {
+        const lemmas = new Set<string>()
+        for (const s of a.sentences) for (const w of wordSpans(s.text)) lemmas.add(lemmaOf(w.text))
+        return { id: a.id, title: a.title, lemmas }
+      }),
+    [saved],
+  )
 
   /** 记一条复述打卡。 */
   const saveRetell = useCallback(    (text: string) => {
@@ -2630,6 +2651,20 @@ export default function ReaderApp() {
           />
         )}
 
+        {exportOpen && (
+          <ExportPanel
+            onClose={() => setExportOpen(false)}
+            libraryItems={library.items}
+            articleTitle={articleTitle}
+            articleWords={articleWords}
+            articles={exportArticles}
+            todayKey={todayKey}
+            onPrint={doPrint}
+            onExportAnki={doExportAnki}
+            onExportWordList={exportWordList}
+          />
+        )}
+
         {journalOpen && (
           <JournalPanel
             onClose={() => setJournalOpen(false)}
@@ -2637,6 +2672,8 @@ export default function ReaderApp() {
             day={journalDay}
             onDayChange={setJournalDay}
             data={journalData}
+            summary={journalSummaryRows}
+            heat={journalHeat}
             onSpeak={speak}
           />
         )}
@@ -2979,7 +3016,7 @@ export default function ReaderApp() {
           onBrowseAll={() => setBrowseAll(true)}
           onExportAnki={doExportAnki}
           onPrint={doPrint}
-          todayKey={todayKey}
+          onOpenExport={() => setExportOpen(true)}
           printTitle={articleTitle || articleKey || '本篇生词'}
           onExportJson={exportJson}
           onExportWordList={exportWordList}

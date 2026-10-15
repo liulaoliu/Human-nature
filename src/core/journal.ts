@@ -86,9 +86,55 @@ export function journalDays(i: JournalInput): string[] {
   return [...set].sort((a, b) => b.localeCompare(a))
 }
 
+export interface JournalSummaryRow {
+  day: string
+  /** 当天新增生词数 */
+  addedWords: number
+  /** 当天背过的词数 */
+  studied: number
+  /** 当天新增语言点数 */
+  languages: number
+  /** 当天活动总量 */
+  activity: number
+}
+
+/**
+ * 每天一行的小结（给日志的日期列表用）。一趟扫完，按日期倒序。
+ */
+export function journalSummary(i: JournalInput): JournalSummaryRow[] {
+  const m = new Map<string, JournalSummaryRow>()
+  const row = (day: string): JournalSummaryRow => {
+    let r = m.get(day)
+    if (!r) {
+      r = { day, addedWords: 0, studied: 0, languages: 0, activity: 0 }
+      m.set(day, r)
+    }
+    return r
+  }
+  for (const it of i.items) {
+    const d = dayOf(it.createdAt)
+    if (d) row(d).addedWords += 1
+  }
+  for (const s of i.studied) {
+    if (s.ids.length) row(s.day).studied += new Set(s.ids).size
+  }
+  for (const a of i.activity) {
+    const n = dayTotal(a)
+    if (n > 0) row(a.day).activity += n
+  }
+  for (const a of i.articles) {
+    for (const s of a.sentences) {
+      for (const L of getSentenceLanguages(s)) {
+        const d = dayOf(L.at)
+        if (d) row(d).languages += 1
+      }
+    }
+  }
+  return [...m.values()].sort((a, b) => b.day.localeCompare(a.day))
+}
+
 /** 某一天的明细。 */
-export function buildJournalDay(i: JournalInput, day: string): JournalDay {
-  const byId = new Map(i.items.map((it) => [it.id, it]))
+export function buildJournalDay(i: JournalInput, day: string): JournalDay {  const byId = new Map(i.items.map((it) => [it.id, it]))
 
   // 当天背过的词（按记录顺序，去重）
   const studied: VocabItem[] = []
