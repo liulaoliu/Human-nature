@@ -159,8 +159,9 @@ export function parseLanguage(raw: string): LanguageRow[] {
  * 把语言点写回句子（按 id 匹配）：**替换/AI 生成的那条，保留手动添加的若干条**。
  * 纯函数，方便单测；返回新的 sentences 数组。
  */
-export function applyLanguage(sentences: Sentence[], rows: LanguageRow[]): Sentence[] {
+export function applyLanguage(sentences: Sentence[], rows: LanguageRow[], now: Date = new Date()): Sentence[] {
   if (!rows.length) return sentences
+  const at = now.toISOString()
   const byId = new Map(rows.map((r) => [r.id, r]))
   return sentences.map((s) => {
     const r = byId.get(s.id)
@@ -172,6 +173,7 @@ export function applyLanguage(sentences: Sentence[], rows: LanguageRow[]): Sente
       phrases: r.phrases,
       usage: r.usage,
       source: 'ai',
+      at,
     }
     const manual = getSentenceLanguages(s).filter((x) => x.source === 'manual')
     return { ...s, languages: [ai, ...manual], language: undefined }

@@ -118,16 +118,24 @@ export default function ArticlePicker({
                         {single ? '单篇' : `📖 ${bookName}`}（{list.length}）
                       </button>
                       {(single || isOpenGroup) &&
-                        list.map((a) => (
-                          <button
-                            key={a.id}
-                            className={'picker-item sub' + (currentValue === `s:${a.id}` ? ' on' : '')}
-                            onClick={() => choose(`s:${a.id}`)}
-                            title={a.title}
-                          >
-                            {single ? a.title : a.title.replace(`${bookName} · `, '')}
-                          </button>
-                        ))}
+                        list.map((a) => {
+                          const created = (a.createdAt ?? a.updatedAt).slice(0, 10)
+                          const edited = a.updatedAt.slice(0, 10)
+                          return (
+                            <button
+                              key={a.id}
+                              className={'picker-item sub' + (currentValue === `s:${a.id}` ? ' on' : '')}
+                              onClick={() => choose(`s:${a.id}`)}
+                              title={`${a.title}\n新增：${created}${edited !== created ? `\n最后修改：${edited}` : ''}`}
+                            >
+                              <span className="picker-item-title">{single ? a.title : a.title.replace(`${bookName} · `, '')}</span>
+                              <span className="picker-item-date">
+                                {created}
+                                {edited !== created ? ` · 改 ${edited}` : ''}
+                              </span>
+                            </button>
+                          )
+                        })}
                     </div>
                   )
                 })}

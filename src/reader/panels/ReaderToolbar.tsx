@@ -40,6 +40,7 @@ export interface ReaderToolbarProps {
   onToggleReadAll: () => void
   onSpeedRead: () => void
   onOpenIntensive: () => void
+  onOpenJournal: () => void
   ttsState: 'idle' | 'loading' | 'playing'
   ttsVoice: string
   onTtsVoiceChange: (value: string) => void
@@ -117,6 +118,7 @@ export default function ReaderToolbar({
   onToggleReadAll,
   onSpeedRead,
   onOpenIntensive,
+  onOpenJournal,
   ttsState,
   ttsVoice,
   onTtsVoiceChange,
@@ -297,6 +299,14 @@ export default function ReaderToolbar({
           title="精读工作流：通读 → 查词 → 词块 → 句子 → 拷打 → 仿写 → 语法，按进度一步步带你做深"
         >
           🎯 精读
+        </button>
+      )}
+      {hasDoc && !editing && (
+        <button
+          onClick={onOpenJournal}
+          title="学习日志：按天看那天新增了哪些生词/语言点、背过哪些词、练习成绩"
+        >
+          📅 日志
         </button>
       )}
       {hasDoc && !editing && (

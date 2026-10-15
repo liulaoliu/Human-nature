@@ -957,9 +957,28 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 }
 .iretell-item button { padding: 0 7px; font-size: 12px; flex: 0 0 auto; }
 
+.picker-item-date { float: right; margin-left: 10px; font-size: 11px; opacity: 0.72; }
+
+/* 学习日志 */
+.journal-panel { width: min(760px, 94vw); }
+.jsec { border-top: 1px dashed var(--line); padding-top: 10px; display: flex; flex-direction: column; gap: 6px; }
+.jsec > b { font-size: 13px; }
+.jchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.jchip {
+  font-size: 13px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+}
+.jchip:hover { border-color: var(--accent); }
+.jlist { display: flex; flex-direction: column; gap: 8px; }
+.jlang { border-left: 2px solid var(--line); padding-left: 8px; font-size: 13px; line-height: 1.6; }
+.jlang-src { font-size: 11px; }
+.jlang-sent { color: #c8ced9; }
+
 /* 精读工作流 */
-.intensive-panel { width: min(720px, 94vw); }
-.intensive-art { margin-top: -6px; }
+.intensive-panel { width: min(720px, 94vw); }.intensive-art { margin-top: -6px; }
 .intensive-run {
   display: flex;
   gap: 8px;

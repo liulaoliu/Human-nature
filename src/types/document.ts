@@ -71,6 +71,8 @@ export interface SentenceLanguage {
   usage?: string[]
   /** 来源：AI 生成 / 手动添加（一句可有多条；AI 的只保留一条） */
   source?: 'ai' | 'manual'
+  /** 添加/生成时刻（ISO 8601；老数据没有）。用于「哪天加的语言点」 */
+  at?: string
 }
 
 /** 单个句子，精读与复读的共同最小单元。 */

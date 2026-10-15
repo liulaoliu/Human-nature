@@ -82,10 +82,11 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   const commit = () => {
     const entry = toEntry(form)
     if (!Object.keys(entry).length) return
+    const now = new Date().toISOString()
     if (editIdx === null) {
-      setLangs((l) => [...l, { ...entry, source: 'manual' }])
+      setLangs((l) => [...l, { ...entry, source: 'manual', at: now }])
     } else {
-      setLangs((l) => l.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual' } : x)))
+      setLangs((l) => l.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual', at: x.at ?? now } : x)))
     }
     startNew()
   }
@@ -97,8 +98,9 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
     const entry = toEntry(form)
     let list = langs
     if (Object.keys(entry).length) {
-      if (editIdx === null) list = [...langs, { ...entry, source: 'manual' }]
-      else list = langs.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual' } : x))
+      const now = new Date().toISOString()
+      if (editIdx === null) list = [...langs, { ...entry, source: 'manual', at: now }]
+      else list = langs.map((x, k) => (k === editIdx ? { ...entry, source: x.source ?? 'manual', at: x.at ?? now } : x))
     }
     onSave(list)
   }

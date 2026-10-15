@@ -20,6 +20,8 @@ export interface SavedArticle {
   text: string
   paragraphs: Paragraph[]
   sentences: Sentence[]
+  /** 首次创建时间（老数据没有 → 用 updatedAt 兜底） */
+  createdAt?: string
   updatedAt: string
 }
 
@@ -73,7 +75,14 @@ export class IdbArticleRepo implements ArticleRepoPort {
   }
 
   async save(article: SavedArticle): Promise<void> {
-    await this.run('readwrite', (s) => s.put(article))
+    // 统一在这里补 createdAt：所有写入方（保存/改名/自动存/导入）都不用自己管，
+    // 老数据第一次被重存时也自动补上；已存在的 createdAt 不会被覆盖。
+    const prev = article.createdAt ? null : await this.get(article.id)
+    const next: SavedArticle = {
+      ...article,
+      createdAt: article.createdAt ?? prev?.createdAt ?? new Date().toISOString(),
+    }
+    await this.run('readwrite', (s) => s.put(next))
   }
 
   async remove(id: string): Promise<void> {
@@ -90,7 +99,8 @@ export class MemoryArticleRepo implements ArticleRepoPort {
     return this.map.get(id) ?? null
   }
   async save(a: SavedArticle) {
-    this.map.set(a.id, a)
+    const prev = this.map.get(a.id)
+    this.map.set(a.id, { ...a, createdAt: a.createdAt ?? prev?.createdAt ?? new Date().toISOString() })
   }
   async remove(id: string) {
     this.map.delete(id)

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
 import type { VocabItem } from '../../types/document'
-import type { ReviewGrade } from '../../core/vocab'
+import type { ReviewGrade, VocabSortBy } from '../../core/vocab'
 import { fmtDur } from '../format'
 
 export interface SideVocabStats {
@@ -22,6 +22,9 @@ export interface SideVocabProps {
   libraryItems: VocabItem[]
   view: 'card' | 'table'
   onViewChange: (view: 'card' | 'table') => void
+  /** 生词排序方式。 */
+  sortBy: VocabSortBy
+  onSortChange: (v: VocabSortBy) => void
 
   // 学习 / 练习
   hasDoc: boolean
@@ -52,7 +55,14 @@ export interface SideVocabProps {
   // 库 / 导出
   onBrowseAll: () => void
   onExportAnki: (items: VocabItem[]) => void
-  onPrint: (items: VocabItem[], title: string, numberOf?: (item: VocabItem) => number | null) => void
+  onPrint: (
+    items: VocabItem[],
+    title: string,
+    numberOf?: (item: VocabItem) => number | null,
+    opts?: { groupBy?: 'alphabet' | 'article' | 'date' | 'status' },
+  ) => void
+  /** 今天的日期键（YYYY-MM-DD，用于「今天新增」打印范围）。 */
+  todayKey: string
   printTitle: string
   onExportJson: () => void
   onExportWordList: (items: VocabItem[]) => void
@@ -90,6 +100,8 @@ export default function SideVocab({
   libraryItems,
   view,
   onViewChange,
+  sortBy,
+  onSortChange,
   hasDoc,
   hasItems,
   hasLapses,
@@ -113,6 +125,7 @@ export default function SideVocab({
   onBrowseAll,
   onExportAnki,
   onPrint,
+  todayKey,
   printTitle,
   onExportJson,
   onExportWordList,
@@ -138,9 +151,31 @@ export default function SideVocab({
   onEdit,
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
-  /** 整库打印时是否只打没打印过的词。 */
-  const [onlyUnprinted, setOnlyUnprinted] = useState(false)
+  /** 整库打印范围：全部 / 未打印 / 今天新增 / 最近 7 天新增。 */
+  const [printScope, setPrintScope] = useState<'all' | 'unprinted' | 'today' | 'week'>('all')
+  /** 打印分组方式。 */
+  const [printGroup, setPrintGroup] = useState<'alphabet' | 'article' | 'date' | 'status'>('alphabet')
   const unprintedCount = libraryItems.filter((it) => !it.lastPrintedAt).length
+  const createdDay = (it: VocabItem) => it.createdAt.slice(0, 10)
+  const weekAgoKey = (() => {
+    const d = new Date(`${todayKey}T00:00:00`)
+    d.setDate(d.getDate() - 6)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  })()
+  const printItems = (() => {
+    if (printScope === 'unprinted') return libraryItems.filter((it) => !it.lastPrintedAt)
+    if (printScope === 'today') return libraryItems.filter((it) => createdDay(it) === todayKey)
+    if (printScope === 'week') return libraryItems.filter((it) => createdDay(it) >= weekAgoKey)
+    return libraryItems
+  })()
+  const printScopeLabel =
+    printScope === 'unprinted'
+      ? '全部生词（未打印）'
+      : printScope === 'today'
+        ? `新增生词（${todayKey}）`
+        : printScope === 'week'
+          ? '新增生词（近 7 天）'
+          : '全部生词'
   const printedDate = articlePrintedAt ? articlePrintedAt.slice(0, 10) : ''
   return (
     <div className="side-sec" data-sec="vocab">
@@ -158,6 +193,12 @@ export default function SideVocab({
             表格
           </button>
         </span>
+        <select value={sortBy} onChange={(e) => onSortChange(e.target.value as VocabSortBy)} title="排序方式">
+          <option value="updatedAt">最近改动</option>
+          <option value="createdAt">加入时间</option>
+          <option value="due">到期时间</option>
+          <option value="word">字母</option>
+        </select>
       </div>
       <div className="side-label">学习 / 练习</div>
       <div className="bar">
@@ -278,29 +319,33 @@ export default function SideVocab({
         <button onClick={() => onExportAnki(libraryItems)} disabled={!hasItems} title="导出整库生词为 Anki CSV">
           Anki（整库）
         </button>
+        <select
+          value={printScope}
+          onChange={(e) => setPrintScope(e.target.value as typeof printScope)}
+          title="A4（整库）打印哪些词"
+        >
+          <option value="all">全部生词</option>
+          <option value="unprinted">只打未打印（{unprintedCount}）</option>
+          <option value="today">今天新增</option>
+          <option value="week">近 7 天新增</option>
+        </select>
+        <select
+          value={printGroup}
+          onChange={(e) => setPrintGroup(e.target.value as typeof printGroup)}
+          title="打印时怎么分组"
+        >
+          <option value="alphabet">按字母</option>
+          <option value="article">按文章</option>
+          <option value="date">按加入日期</option>
+          <option value="status">按状态</option>
+        </select>
         <button
-          onClick={() =>
-            onPrint(
-              onlyUnprinted ? libraryItems.filter((it) => !it.lastPrintedAt) : libraryItems,
-              onlyUnprinted ? '全部生词（未打印）' : '全部生词',
-            )
-          }
-          disabled={!hasItems || (onlyUnprinted && unprintedCount === 0)}
-          title={onlyUnprinted ? `只打印没打印过的 ${unprintedCount} 个词（A4）` : '打印整库生词（A4）'}
+          onClick={() => onPrint(printItems, printScopeLabel, undefined, { groupBy: printGroup })}
+          disabled={!hasItems || printItems.length === 0}
+          title={`打印 ${printItems.length} 个词（A4）`}
         >
-          A4（整库）
+          A4（整库）· {printItems.length}
         </button>
-        <label
-          className="check-inline"
-          title="勾上后「A4（整库）」只打印没打印过的词；打印过的会记住，不会再重复出。"
-        >
-          <input
-            type="checkbox"
-            checked={onlyUnprinted}
-            onChange={(e) => setOnlyUnprinted(e.target.checked)}
-          />
-          只打未打印{unprintedCount ? `（${unprintedCount}）` : ''}
-        </label>
         <button onClick={onExportJson} disabled={!hasItems}>
           导出 JSON
         </button>

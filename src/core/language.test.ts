@@ -75,4 +75,9 @@ describe('applyLanguage', () => {
     expect(out[0].languages?.[0]).toMatchObject({ structure: '主谓', source: 'ai' })
     expect(out[0].languages?.[1]).toMatchObject({ grammar: '手动语法', source: 'manual' })
   })
+  it('写入时间戳 at（用于「哪天加的语言点」）', () => {
+    const now = new Date('2026-10-15T03:00:00.000Z')
+    const out = applyLanguage([sentence('s001')], [{ id: 's001', grammar: 'x' }], now)
+    expect(out[0].languages?.[0].at).toBe('2026-10-15T03:00:00.000Z')
+  })
 })

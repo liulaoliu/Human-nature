@@ -17,6 +17,7 @@ import {
   reviewItem,
   sortItems,
   type ReviewGrade,
+  type VocabSortBy,
 } from '../core/vocab'
 import {
   buildBatchLookupPrompt,
@@ -92,7 +93,9 @@ import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
 import FishLayer from '../ui/FishLayer'
 import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
+import JournalPanel from './panels/JournalPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
+import { buildJournalDay, journalDays } from '../core/journal'
 import {
   persistentBool,
   persistentEnum,
@@ -397,23 +400,26 @@ export default function ReaderApp() {
     [],
   )
 
-  /** 今天学过的不同单词 id（每日目标进度） */
-  const [studiedToday, setStudiedToday] = useLocalStorageState<{ day: string; ids: string[] }>(
+  /**
+   * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）。
+   * 兼容旧格式（单个 `{ day, ids }` 对象 → 收成一条）。
+   */
+  const [studiedDays, setStudiedDays] = useLocalStorageState<{ day: string; ids: string[] }[]>(
     'reader:studiedToday',
-    { day: localDayKey(), ids: [] },
+    [],
     {
       parse: (raw) => {
         try {
-          const obj = JSON.parse(raw) as { day?: string; ids?: unknown } | null
-          if (obj && Array.isArray(obj.ids)) {
-            return obj.day === localDayKey()
-              ? { day: obj.day as string, ids: obj.ids as string[] }
-              : { day: localDayKey(), ids: [] }
-          }
+          const v = JSON.parse(raw) as unknown
+          const ok = (x: unknown): x is { day: string; ids: string[] } =>
+            !!x && typeof x === 'object' && typeof (x as { day?: unknown }).day === 'string' &&
+            Array.isArray((x as { ids?: unknown }).ids)
+          if (Array.isArray(v)) return v.filter(ok).map((x) => ({ day: x.day, ids: x.ids.filter((i): i is string => typeof i === 'string') }))
+          if (ok(v)) return [{ day: v.day, ids: v.ids.filter((i): i is string => typeof i === 'string') }]
         } catch {
           // 忽略
         }
-        return { day: localDayKey(), ids: [] }
+        return []
       },
     },
   )
@@ -731,13 +737,23 @@ export default function ReaderApp() {
     })
   }, [])
 
+  /** 今天学过的不同单词 id（每日目标进度）。 */
+  const studiedTodayIds = useMemo(() => {
+    const t = localDayKey()
+    return studiedDays.find((d) => d.day === t)?.ids ?? []
+  }, [studiedDays])
+
   /** 记「今天学过这个词」（每日目标按不同单词计数）。 */
   const markStudied = useCallback((itemId: string) => {
-    setStudiedToday((prev) => {
+    setStudiedDays((prev) => {
       const day = localDayKey()
-      const base = prev.day === day ? prev : { day, ids: [] }
-      if (base.ids.includes(itemId)) return base
-      return { day, ids: [...base.ids, itemId] }
+      const cur = prev.find((d) => d.day === day)
+      if (cur) {
+        if (cur.ids.includes(itemId)) return prev
+        return prev.map((d) => (d.day === day ? { ...d, ids: [...d.ids, itemId] } : d))
+      }
+      // 只留最近 200 天，免得无限长
+      return [...prev, { day, ids: [itemId] }].slice(-200)
     })
   }, [])
 
@@ -953,6 +969,15 @@ export default function ReaderApp() {
   const [planOpen, setPlanOpen] = useState(false)
   /** 精读工作流面板。 */
   const [intensiveOpen, setIntensiveOpen] = useState(false)
+  /** 学习日志面板 + 选中的日期。 */
+  const [journalOpen, setJournalOpen] = useState(false)
+  const [journalDay, setJournalDay] = useState(() => dayKeyLocal(new Date()))
+  /** 生词本排序方式。 */
+  const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
+    'reader:vocabSort',
+    'updatedAt',
+    persistentEnum(['word', 'createdAt', 'updatedAt', 'due'] as const, 'updatedAt'),
+  )
   /** 已「通读」的文章标识（勾选，本地持久化）。 */
   const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>('reader:intensiveSkimmed', [])
   const openSpeedRead = useCallback(() => {
@@ -2048,9 +2073,22 @@ export default function ReaderApp() {
     if (next !== library) persist(next)
   }, [tatoebaReady, library, persist])
 
+  /** 学习日志：按天回顾。 */
+  const journalInput = useMemo(
+    () => ({
+      studied: studiedDays,
+      items: library.items,
+      articles: saved.map((a) => ({ id: a.id, title: a.title, sentences: a.sentences })),
+      activity,
+      practice,
+    }),
+    [studiedDays, library.items, saved, activity, practice],
+  )
+  const journalAllDays = useMemo(() => journalDays(journalInput), [journalInput])
+  const journalData = useMemo(() => buildJournalDay(journalInput, journalDay), [journalInput, journalDay])
+
   /** 记一条复述打卡。 */
-  const saveRetell = useCallback(
-    (text: string) => {
+  const saveRetell = useCallback(    (text: string) => {
       const t = text.trim()
       if (!t || !articleIdentity) return
       const words = t.split(/\s+/).filter(Boolean).length
@@ -2139,8 +2177,8 @@ export default function ReaderApp() {
     flash,
   })
 
-  const articleList = sortItems(articleWords, 'updatedAt')
-  const allList = sortItems(library.items, 'updatedAt')
+  const articleList = sortItems(articleWords, vocabSort)
+  const allList = sortItems(library.items, vocabSort)
   const handleReview = useCallback(
     (id: string, grade: ReviewGrade) => persist(reviewItem(library, id, grade)),
     [library, persist],
@@ -2306,6 +2344,7 @@ export default function ReaderApp() {
             onToggleReadAll={readingAll ? stopReadAll : startReadAll}
             onSpeedRead={openSpeedRead}
             onOpenIntensive={() => setIntensiveOpen(true)}
+            onOpenJournal={() => setJournalOpen(true)}
             ttsState={ttsState}
             ttsVoice={ttsVoice}
             onTtsVoiceChange={setTtsVoice}
@@ -2327,7 +2366,7 @@ export default function ReaderApp() {
             streak={dayStats.streak}
             totalPicked={totals.picked}
             totalSeconds={totals.seconds}
-            studiedCount={studiedToday.ids.length}
+            studiedCount={studiedTodayIds.length}
             dailyGoal={dailyGoal}
             libraryCount={library.items.length}
             fontSize={fontSize}
@@ -2588,6 +2627,17 @@ export default function ReaderApp() {
             onStage={openIntensiveStage}
             onDrill={startIntensiveDrill}
             onSiege={startSiege}
+          />
+        )}
+
+        {journalOpen && (
+          <JournalPanel
+            onClose={() => setJournalOpen(false)}
+            days={journalAllDays}
+            day={journalDay}
+            onDayChange={setJournalDay}
+            data={journalData}
+            onSpeak={speak}
           />
         )}
 
@@ -2883,6 +2933,8 @@ export default function ReaderApp() {
           libraryItems={library.items}
           view={vocabView}
           onViewChange={setVocabView}
+          sortBy={vocabSort}
+          onSortChange={setVocabSort}
           hasDoc={!!doc}
           hasItems={!!library.items.length}
           hasLapses={library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
@@ -2927,6 +2979,7 @@ export default function ReaderApp() {
           onBrowseAll={() => setBrowseAll(true)}
           onExportAnki={doExportAnki}
           onPrint={doPrint}
+          todayKey={todayKey}
           printTitle={articleTitle || articleKey || '本篇生词'}
           onExportJson={exportJson}
           onExportWordList={exportWordList}
@@ -2943,7 +2996,7 @@ export default function ReaderApp() {
             studyTodaySeconds,
             studyTotalSeconds,
             studyTotalCards,
-            studiedCount: studiedToday.ids.length,
+            studiedCount: studiedTodayIds.length,
             dailyGoal,
             last7,
             dueForecast: dueForecastRows,

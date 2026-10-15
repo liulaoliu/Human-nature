@@ -206,7 +206,7 @@ export function useExport({
     items: VocabItem[],
     title: string,
     numberOf?: (it: VocabItem) => number | null,
-    opts?: { mark?: boolean },
+    opts?: { groupBy?: 'alphabet' | 'article' | 'date' | 'status'; mark?: boolean },
   ) => {
     if (!items.length) {
       flash('没有可打印的词')
@@ -215,7 +215,7 @@ export function useExport({
     const sorted = numberOf
       ? [...items].sort((a, b) => (numberOf(a) ?? 1e9) - (numberOf(b) ?? 1e9))
       : sortItems(items, 'word')
-    const groups = numberOf ? [{ key: '', items: sorted }] : groupItems(sorted, 'alphabet')
+    const groups = numberOf ? [{ key: '', items: sorted }] : groupItems(sorted, opts?.groupBy ?? 'alphabet')
     const day = new Date().toISOString().slice(0, 10)
     const html = renderPrintHTML({
       title,

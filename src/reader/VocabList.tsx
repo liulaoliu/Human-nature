@@ -297,6 +297,7 @@ export default function VocabList({
                 状态：{it.status}
                 {it.reviewState.lapses ? ` · 错 ${it.reviewState.lapses}` : ''}
                 {it.source ? ` · ${it.source.articleId}` : ''}
+                {it.createdAt ? ` · 加入 ${it.createdAt.slice(0, 10)}` : ''}
               </div>
               <div className="row">
                 <button onClick={() => onReview(it.id, 'again')}>重来</button>
