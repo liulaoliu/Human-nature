@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import type { VocabItem } from '../../types/document'
+import { buildHeatmap } from '../../core/activity'
 
 export type PrintGroup = 'alphabet' | 'article' | 'date' | 'status'
 
@@ -64,6 +65,15 @@ export default function ExportPanel({
     }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
   }, [libraryItems])
+  /** 日期 → 当天新增词数（热力图 + 回显用）。 */
+  const dateCount = useMemo(() => new Map(dates), [dates])
+  const hasWordsOn = (d: string) => (dateCount.get(d) ?? 0) > 0
+  /** 新增生词的热力图（近 13 周；只用于按日期选范围）。 */
+  const dateHeat = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const [d, n] of dates) counts[d] = n
+    return buildHeatmap(counts, 13)
+  }, [dates])
 
   const articleCount = useMemo(
     () => new Map(articles.map((a) => [a.id, libraryItems.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma)).length])),
@@ -181,9 +191,75 @@ export default function ExportPanel({
             <div className="expick">
               <div className="exrow">
                 <span className="muted">已选 {pickedDates.size} 天</span>
-                <button onClick={() => setPickedDates(new Set(dates.map(([d]) => d)))}>全选</button>
+                <button onClick={() => setPickedDates(new Set(dates.filter(([d]) => hasWordsOn(d)).map(([d]) => d)))}>
+                  全选
+                </button>
                 <button onClick={() => setPickedDates(new Set())}>清空</button>
               </div>
+
+              {/* 热力图选日：点格子加/减；只允许点「有新增生词」的天 */}
+              <div className="exheat">
+                <div className="heat">
+                  <div className="heat-months">
+                    {dateHeat.monthLabels.map((m) => (
+                      <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
+                        {m.label}月
+                      </span>
+                    ))}
+                  </div>
+                  <div className="heat-grid">
+                    {dateHeat.cells.map((col, ci) =>
+                      col.map((cell, ri) => {
+                        const on = pickedDates.has(cell.key)
+                        const usable = !cell.future && hasWordsOn(cell.key)
+                        return (
+                          <span
+                            key={`${ci}-${ri}`}
+                            className={
+                              'heat-cell' +
+                              (cell.future ? ' future' : ' lv' + cell.level) +
+                              (on ? ' on' : '') +
+                              (usable ? ' act' : '')
+                            }
+                            title={
+                              cell.future
+                                ? ''
+                                : usable
+                                  ? `${cell.key}：新增 ${cell.count} 词（点击${on ? '移出' : '加入'}）`
+                                  : `${cell.key}：没有新增生词`
+                            }
+                            onClick={usable ? () => setPickedDates((s) => toggleIn(s, cell.key)) : undefined}
+                          />
+                        )
+                      }),
+                    )}
+                  </div>
+                </div>
+                <div className="muted heat-legend">
+                  少 <span className="heat-cell lv0" /> <span className="heat-cell lv1" />{' '}
+                  <span className="heat-cell lv2" /> <span className="heat-cell lv3" />{' '}
+                  <span className="heat-cell lv4" /> 多（点格子选日期）
+                </div>
+              </div>
+
+              {/* 选了哪些天 —— 热力图日期不明显，这里明确列出来（可单条移除） */}
+              {pickedDates.size > 0 && (
+                <div className="expicked">
+                  {[...pickedDates]
+                    .sort()
+                    .reverse()
+                    .map((d) => (
+                      <span className="expick-chip" key={d}>
+                        {d}
+                        <span className="muted"> {dateCount.get(d) ?? 0} 词</span>
+                        <button onClick={() => setPickedDates((s) => toggleIn(s, d))} title="移出这一天">
+                          ×
+                        </button>
+                      </span>
+                    ))}
+                </div>
+              )}
+
               <div className="exlist">
                 {dates.map(([d, n]) => (
                   <label className="check-inline" key={d}>
