@@ -143,7 +143,11 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
   选择框分「内置（articles.json）」和「已保存」两组，同一篇保存过就优先用保存版。
 - **排版**：顶栏可调**字号**（小/中/大/特大）、**加粗**、**衬线字体**，都记在本机。
 - **复习**：词条上有「重来 / 记得 / 简单」，按 SM-2 变体排期；也可以导出到 Anki 让 Anki 排。**答错的词会自动进错题本，并标「🔥 优先重练」到次日 —— 明天复习队列排最前。**
-- **📖 离线例句**：背单词卡上点「📖 离线例句」，从本地 Tatoeba 例句库给这个词补真实例句（英文 + 中文）。需先跑 `npm run tatoeba:build -- <sentences.csv> <links.csv>`（数据：Tatoeba，CC BY 2.0 FR）生成 `public/tatoeba-en.tsv`。
+- **📖 离线例句**：背单词卡上点「📖 离线例句」，从本地 **Tatoeba** 例句库给这个词补真实例句（有中译就带中译）。数据不随仓库走（`.gitignore` 忽略 `*.tsv`），本地生成一次即可、**全库通用**：
+  - 从 `downloads.tatoeba.org/exports/per_language/` 下三份并解压：`eng/eng_sentences.tsv.bz2`、`cmn/cmn_sentences.tsv.bz2`、`eng/eng-cmn_links.tsv.bz2`；
+  - 合并两个 sentences：`cat data/tatoeba/eng_sentences.tsv data/tatoeba/cmn_sentences.tsv > data/tatoeba/sentences.tsv`；
+  - 生成：`node tools/build-tatoeba.mjs data/tatoeba/sentences.tsv data/tatoeba/links.tsv cmn --en-only`。
+  - `--en-only` 会给**没有中译例句的词**补纯英文短句（高级词在 Tatoeba 大多只有纯英文句）。来源：Tatoeba（**CC BY 2.0 FR**）。
 
 **选择**：单击 = 整句；拖动 = 按整词吸附；Ctrl 点 = 单个词。顶栏「选词模式」（快捷键 `W`）下点/划直接把词攒进「待选」，可一键**复制查词提示词**或**导出 CSV**。
 
