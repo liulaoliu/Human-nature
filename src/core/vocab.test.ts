@@ -27,11 +27,13 @@ import {
   lemmaOf,
   markPrinted,
   markWord,
+  MAX_EXAMPLES,
   needsAiExamples,
   normalizeWord,
   normalizePos,
   nextDayIso,
   ownExamples,
+  pickOfflineExamples,
   prioritizeItems,
   relemmaLibrary,
   removeByLemma,
@@ -98,8 +100,52 @@ describe('applyExamples', () => {
     expect(lib.items[0].examples.find((e) => e.text === 'I run daily.')?.origin).toBe('ai')
   })
 
-  it('离线例句先到，AI 仍会认领（防死循环）', () => {
-    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'a1', sentenceText: 'x' }, NOW).library
+  it('pickOfflineExamples：AI 例句存在时也补离线（目标 3 条、幂等）', () => {
+    // 只有来源句 + 1 条 AI 例句
+    const it = item({
+      examples: [
+        { text: 'Src sentence.', origin: 'article' },
+        { text: 'AI example.', origin: 'ai' },
+      ],
+    })
+    const cands = [
+      { text: 'Off one.', translation: '一' },
+      { text: 'Off two.' },
+      { text: 'Off three.' },
+      { text: 'Off four.' },
+    ]
+    // 空位 4（上限 6），目标补 3 条 → 取前 3
+    expect(pickOfflineExamples(it, cands).map((e) => e.text)).toEqual(['Off one.', 'Off two.', 'Off three.'])
+    // 已经有 3 条离线 → 幂等，不再补
+    const done = item({
+      examples: [
+        { text: 'Src.', origin: 'article' },
+        { text: 'AI.', origin: 'ai' },
+        { text: 'O1.', origin: 'tatoeba' },
+        { text: 'O2.', origin: 'tatoeba' },
+        { text: 'O3.', origin: 'tatoeba' },
+      ],
+    })
+    expect(pickOfflineExamples(done, cands)).toEqual([])
+  })
+
+  it('pickOfflineExamples：跳过已有的相同句子、受卡片上限约束', () => {
+    const it = item({
+      examples: [
+        { text: 'Src.', origin: 'article' },
+        { text: 'Already there.', origin: 'ai' },
+      ],
+    })
+    const cands = [{ text: 'Already there.' }, { text: 'New one.' }]
+    expect(pickOfflineExamples(it, cands).map((e) => e.text)).toEqual(['New one.'])
+    // 已满 6 条 → 一条也不补
+    const full = item({
+      examples: Array.from({ length: MAX_EXAMPLES }, (_, i) => ({ text: `e${i}`, origin: 'ai' as const })),
+    })
+    expect(pickOfflineExamples(full, cands)).toEqual([])
+  })
+
+  it('离线例句先到，AI 仍会认领（防死循环）', () => {    let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'a1', sentenceText: 'x' }, NOW).library
     lib = applyExamples(lib, [{ word: 'mitigate', examples: [{ text: 'Algeria needs to mitigate its vulnerabilities.' }] }], NOW, 'tatoeba')
     expect(needsAiExamples(lib.items[0])).toBe(true) // 只有离线 → 还缺 AI 例句
     // AI 回了同一句（被去重）→ 也要认领成 ai，否则会一直排

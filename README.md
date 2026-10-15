@@ -143,7 +143,7 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
   选择框分「内置（articles.json）」和「已保存」两组，同一篇保存过就优先用保存版。
 - **排版**：顶栏可调**字号**（小/中/大/特大）、**加粗**、**衬线字体**，都记在本机。
 - **复习**：词条上有「重来 / 记得 / 简单」，按 SM-2 变体排期；也可以导出到 Anki 让 Anki 排。**答错的词会自动进错题本，并标「🔥 优先重练」到次日 —— 明天复习队列排最前。**
-- **📖 离线例句**：生词建好后会**自动**从本地 **Tatoeba** 例句库补真实例句（有中译就带中译），卡片的「例句」块会标出来源：**`[AI]`** = AI 生成、**`[离线]`** = Tatoeba。也可手动补：背单词卡上「📖 离线例句」，或侧栏「选词·分析 → 📖 补离线例句」（批量给本篇还没有例句的词补）。数据不随仓库走（`.gitignore` 忽略 `*.tsv`），本地生成一次即可、**全库通用**：
+- **📖 离线例句**：每个生词会**自动**补 **3 条**本地 **Tatoeba** 例句（幂等、离线，**和 AI 例句并存**，不是二选一），卡片的「例句」块标出来源：**`[AI]`** = AI 生成、**`[离线]`** = Tatoeba。也可手动补：背单词卡上「📖 离线例句」，或侧栏「选词·分析 → 📖 补离线例句」（批量给本篇补）。数据不随仓库走（`.gitignore` 忽略 `*.tsv`），本地生成一次即可、**全库通用**：
   - 从 `downloads.tatoeba.org/exports/per_language/` 下三份并解压：`eng/eng_sentences.tsv.bz2`、`cmn/cmn_sentences.tsv.bz2`、`eng/eng-cmn_links.tsv.bz2`；
   - 合并两个 sentences：`cat data/tatoeba/eng_sentences.tsv data/tatoeba/cmn_sentences.tsv > data/tatoeba/sentences.tsv`；
   - 生成：`node tools/build-tatoeba.mjs data/tatoeba/sentences.tsv data/tatoeba/links.tsv cmn --en-only`。

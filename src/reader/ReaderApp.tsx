@@ -13,6 +13,7 @@ import {
   markWord,
   MAX_EXAMPLES,
   normalizeWord,
+  pickOfflineExamples,
   removeItem,
   reviewItem,
   sortItems,
@@ -2061,17 +2062,17 @@ export default function ReaderApp() {
   }, [])
 
   /**
-   * **建词即补**：生词一多出「还没有自己例句」的，就自动从离线例句库补上（Tatoeba）。
-   * 只补没有例句的；AI 例句不受影响（`needsAiExamples` 仍会让 AI 给一份带中文的）。
+   * **每个词都补离线例句**：不管有没有 AI 例句，离线例句都补齐到目标条数（幂等、无网络）。
+   * 只填「还差几条 / 卡片还有空位」的部分。
    */
   useEffect(() => {
     if (!tatoebaReady) return
-    const targets = library.items.filter((it) => !!it.meaning && !hasOwnExamples(it))
-    if (!targets.length) return
     const rows: { word: string; examples: { text: string; translation?: string }[] }[] = []
-    for (const it of targets) {
-      const ex = tatoebaExamples(it.word, it.lemma)
-      if (ex.length) rows.push({ word: it.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) })
+    for (const it of library.items) {
+      if (!it.meaning) continue
+      const found = tatoebaExamples(it.word, it.lemma).map((e) => ({ text: e.en, translation: e.zh }))
+      const add = pickOfflineExamples(it, found)
+      if (add.length) rows.push({ word: it.word, examples: add })
     }
     if (!rows.length) return
     const next = applyExamples(library, rows, new Date(), 'tatoeba')

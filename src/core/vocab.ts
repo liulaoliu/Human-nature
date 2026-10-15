@@ -308,6 +308,27 @@ export function hasOwnExamples(item: VocabItem): boolean {
   return ownExamples(item).length > 0
 }
 
+/** 每个词目标补几条离线例句（离线、免费，和 AI 例句并存）。 */
+export const TARGET_OFFLINE_EXAMPLES = 3
+
+/**
+ * 从候选里挑出「该补的离线例句」：
+ *   - 目标：每词 `target` 条离线例句（按 `origin === 'tatoeba'` 计）——所以是幂等的；
+ *   - 不超卡片上限 `MAX_EXAMPLES`，也不重复已有的句子。
+ */
+export function pickOfflineExamples(
+  item: VocabItem,
+  candidates: { text: string; translation?: string }[],
+  target = TARGET_OFFLINE_EXAMPLES,
+): { text: string; translation?: string }[] {
+  const have = new Set(item.examples.map((e) => e.text.trim()))
+  const offline = item.examples.filter((e) => e.origin === 'tatoeba').length
+  const room = MAX_EXAMPLES - item.examples.length
+  const want = Math.min(Math.max(0, target - offline), Math.max(0, room))
+  if (want <= 0) return []
+  return candidates.filter((c) => c.text.trim() && !have.has(c.text.trim())).slice(0, want)
+}
+
 /**
  * 「还需要 AI 例句吗」：自己的例句里还没有 AI 生成的（离线例句不算数）。
  * 离线例句先补上时，AI 仍会给一份带中文的；AI 回来后就不再排（防死循环）。
