@@ -130,18 +130,30 @@ const WITHIN: Record<EcdictLevel, string[]> = {
 export type LevelVerdict = 'above' | 'within' | 'rare' | 'unknown'
 
 /**
+ * 无级别标签的词，用词频排名兜底：排名 ≤ 这个数（越大越生僻）算「常见词」，不算超纲。
+ * 治的是 `entirely / john / killer` 这类 ECDICT 漏标的基本词。
+ */
+const CORE_FREQ_RANK = 5000
+
+/**
  * 判定一个词相对某词汇水平的位置：
  *   - `above`   超纲（该留）
- *   - `within`  在档内（不该留）
+ *   - `within`  在档内 / 属于基础常见词（不该留）
  *   - `rare`    词典里是「太生僻」（无标签/无频次）
  *   - `unknown` 词典里根本没收录 —— **不能因此判定它不超纲**
  */
 export function levelVerdict(dict: Ecdict, word: string, level: EcdictLevel): LevelVerdict {
   const hit = resolveWord(dict, word)
   if (!hit) return 'unknown'
-  const tags = hit.entry.tag.split(/\s+/).filter(Boolean)
+  const e = hit.entry
+  const tags = e.tag.split(/\s+/).filter(Boolean)
   if (WITHIN[level].some((t) => tags.includes(t))) return 'within'
-  const common = tags.length > 0 || hit.entry.collins >= 1 || hit.entry.oxford === 1 || hit.entry.frq > 0
+  // 无级别标签 → 用词频排名兜底（ECDICT 标签不全，entirely/整类基础词常没标签）
+  if (!tags.length) {
+    const ranks = [e.bnc, e.frq].filter((n) => n > 0)
+    if (ranks.length && Math.min(...ranks) <= CORE_FREQ_RANK) return 'within'
+  }
+  const common = tags.length > 0 || e.collins >= 1 || e.oxford === 1 || e.frq > 0 || e.bnc > 0
   return common ? 'above' : 'rare'
 }
 
@@ -161,7 +173,20 @@ export function firstLine(s: string): string {
 
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g
 
-/** 从一段英文里挑"超出某水平"的词（按出现顺序、去重、返回原形）。纯本地，不用 AI。 */
+/** 这个位置是不是「句首」（前一个非空白字符是句末标点/引号，或文本开头）。 */
+function isSentenceStart(text: string, index: number): boolean {
+  let i = index - 1
+  while (i >= 0 && /\s/.test(text[i])) i--
+  if (i < 0) return true
+  return /[.!?…。！？"'“”‘’)\]】）]/.test(text[i])
+}
+
+/**
+ * 从一段英文里挑"超出某水平"的词（按出现顺序、去重、返回原形）。纯本地，不用 AI。
+ *
+ * 会跳过**句中大写**的词（`Trump` / `Islamic` / `CIA` 这类专有名词），
+ * 但句首大写照常收（那可能只是句首字母大写）。
+ */
 export function pickAboveLevelWords(dict: Ecdict, text: string, level: EcdictLevel, max = 40): string[] {
   const seen = new Set<string>()
   const out: string[] = []
@@ -170,6 +195,9 @@ export function pickAboveLevelWords(dict: Ecdict, text: string, level: EcdictLev
     const lower = surface.toLowerCase()
     if (seen.has(lower)) continue
     seen.add(lower)
+    // 句中大写 → 多半是专有名词，跳过；全大写缩写（CIA / NATO）也跳过
+    if (/^[A-Z]{2,}$/.test(surface)) continue
+    if (/^[A-Z]/.test(surface) && !isSentenceStart(text, m.index)) continue
     const hit = resolveWord(dict, surface)
     if (!hit) continue
     if (hit.lemma.length < 3) continue

@@ -8,7 +8,7 @@ const wordsTsv = [
   'run\t\t\tv. move fast\tn. 跑\tcet4\t5\t1\t100\t100',
   'hobble\t\'hɒbl\t\tvt. prevent\tt. 阻碍\tky\t2\t0\t5000\t6000',
   'carbonfibre\t\t\t\t\tgre\t0\t0\t0\t0',
-  'bnconly\t\t\t\t\t\t0\t0\t5000\t0',
+  'bnconly\t\t\t\t\t\t0\t0\t0\t0',
 ].join('\n')
 
 const formsTsv = ['running\trun', 'hobbled\thobble'].join('\n')
@@ -53,5 +53,32 @@ describe('isAboveLevel / pickAboveLevelWords', () => {
     expect(levelVerdict(dict, 'allow', 'cet4')).toBe('within') // 含 cet4
     expect(levelVerdict(dict, 'bnconly', 'cet4')).toBe('rare') // 无标签/无频次（只靠 bnc）→ 太生僻
     expect(levelVerdict(dict, 'unlisted', 'cet4')).toBe('unknown') // 词典没收录
+  })
+
+  it('无级别标签的词用词频兜底：超高频基础词不算超纲（修 entirely/john 这类漏标）', () => {
+    const d = parseEcdict(
+      [
+        'word\tphonetic\tpos\ten\tzh\ttag\tcollins\toxford\tbnc\tfrq',
+        'entirely\t\t\t\t\t\t3\t1\t1367\t1858', // 无标签，但排名很靠前 → 常见词
+        'impeachment\t\t\t\t\t\t0\t0\t26724\t7636', // 无标签，中等频次 → 仍算超纲
+      ].join('\n'),
+      '',
+    )
+    expect(levelVerdict(d, 'entirely', 'cet6')).toBe('within')
+    expect(levelVerdict(d, 'impeachment', 'cet6')).toBe('above')
+  })
+
+  it('pickAboveLevelWords 跳过句中大写专有名词与全大写缩写', () => {
+    const d = parseEcdict(
+      [
+        'word\tphonetic\tpos\ten\tzh\ttag\tcollins\toxford\tbnc\tfrq',
+        'trump\t\t\t\t\tgre\t0\t0\t14687\t12616',
+        'hobble\t\t\t\t\tky\t2\t0\t5000\t6000',
+        'cia\t\t\t\t\tgre\t0\t0\t1\t1',
+      ].join('\n'),
+      '',
+    )
+    // 句首大写的 hobble 收；句中大写的 Trump / 全大写 CIA 跳过
+    expect(pickAboveLevelWords(d, 'Hobble the plan with Trump and CIA meddling.', 'cet4')).toEqual(['hobble'])
   })
 })

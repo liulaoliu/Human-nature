@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, normalizePos, normalizeWord } from '../../core/vocab'
+import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, lemmaOf, normalizePos, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 
@@ -89,9 +89,17 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
       flash('词典没挑出超纲词')
       return
     }
+    const existing = new Set(library.items.map((it) => it.lemma))
+    const fresh = words.filter((w) => !existing.has(lemmaOf(w))).length
     mergeBatch(batchItemsFromWords(words))
-    flash(`已按词典挑出 ${words.length} 个超纲词进「待选」`)
-  }, [doc, level, mergeBatch, batchItemsFromWords, flash])
+    flash(
+      fresh
+        ? `已按词典挑出 ${words.length} 个超纲词，其中「新 ${fresh}」个进「待选」${
+            words.length - fresh ? `（另 ${words.length - fresh} 个已在生词本）` : ''
+          }`
+        : `挑出的 ${words.length} 个词都已在生词本里了 —— 去「生词本 / 全部生词」看`,
+    )
+  }, [doc, level, mergeBatch, batchItemsFromWords, flash, library])
 
   /** 用词典给缺混淆项的词本地生成干扰项（形近、义不同）。 */
   const confuseFromDict = useCallback(() => {

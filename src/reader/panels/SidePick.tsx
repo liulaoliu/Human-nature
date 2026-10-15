@@ -184,30 +184,40 @@ export default function SidePick({
 }: SidePickProps) {
   return (
     <div className="side-sec" data-sec="pick">
-      {visibleBatch.length > 0 && (
+      {batchCount > 0 && (
         <div className="picked batch">
           <div className="picked-head">
             <span className="tag exact">待选 {visibleBatch.length}</span>
-            <span className="muted">点正文里的词可加 / 减</span>
+            <span className="muted">
+              {visibleBatch.length ? '点正文里的词可加 / 减' : '挑出的词都已在生词本里'}
+            </span>
           </div>
-          <div className="chips">
-            {visibleBatch.map((b) => (
-              <button key={b.word} className="chipx" onClick={() => onRemoveWord(b)} title="点击移除">
-                {b.word} ×
-              </button>
-            ))}
-          </div>
+          {visibleBatch.length > 0 && (
+            <div className="chips">
+              {visibleBatch.map((b) => (
+                <button key={b.word} className="chipx" onClick={() => onRemoveWord(b)} title="点击移除">
+                  {b.word} ×
+                </button>
+              ))}
+            </div>
+          )}
           <div className="tasks">
-            <button className="primary" onClick={onCommitBatch}>
+            <button className="primary" onClick={onCommitBatch} disabled={!visibleBatch.length}>
               加入生词本
             </button>
-            <button onClick={onCopyBatchPrompt}>复制查词提示词</button>
-            <button onClick={onExportBatch}>导出 CSV</button>
+            <button onClick={onCopyBatchPrompt} disabled={!visibleBatch.length}>
+              复制查词提示词
+            </button>
+            <button onClick={onExportBatch} disabled={!visibleBatch.length}>
+              导出 CSV
+            </button>
             <button onClick={onClearBatch}>清空</button>
           </div>
           {batchCount > visibleBatch.length && (
             <div className="muted hint">
-              另有 {batchCount - visibleBatch.length} 个已入库，不再显示（清空可重置）。
+              {visibleBatch.length
+                ? `另有 ${batchCount - visibleBatch.length} 个已入库，不再显示（清空可重置）。`
+                : `挑出的 ${batchCount} 个词**都已在生词本里**了 —— 去「生词本 / 全部生词」看；待选只显示未入库的词。`}
             </div>
           )}
         </div>
