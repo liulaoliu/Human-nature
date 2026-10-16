@@ -163,7 +163,12 @@ export default function ReaderToolbar({
     <div className="bar reader-toolbar">
       <strong>学吧老哥</strong>
       {book && editions.length > 1 && (
-        <select value={edition} onChange={(e) => onEditionChange(e.target.value)} title="按期次筛选内置文章">
+        <select
+          className="tb-edition"
+          value={edition}
+          onChange={(e) => onEditionChange(e.target.value)}
+          title="按期次筛选内置文章"
+        >
           <option value="全部">全部期次（{bookKeysCount}）</option>
           {editions.map(([label, n]) => (
             <option key={label} value={label}>
@@ -208,6 +213,7 @@ export default function ReaderToolbar({
       {hasDoc && !editing && (
         <>
           <select
+            className="tb-level"
             value={vocabLevel}
             onChange={(e) => onVocabLevelChange(e.target.value as VocabLevel)}
             title="自动标词的词汇标准"
@@ -225,6 +231,7 @@ export default function ReaderToolbar({
       )}
       {hasDoc && !editing && (
         <select
+          className="tb-view"
           value={translateView}
           onChange={(e) => onTranslateViewChange(e.target.value as 'off' | 'below' | 'only')}
           title="译文显示：只看原文 / 原文+译文 / 只看译文"
@@ -242,6 +249,7 @@ export default function ReaderToolbar({
       )}
       {hasDoc && !editing && (
         <select
+          className="tb-voice"
           value={ttsVoice}
           onChange={(e) => onTtsVoiceChange(e.target.value)}
           title="朗读口音（Edge TTS 音色）：美式 / 英式 / 澳式 / 印度…；改完下一个朗读即生效"
@@ -257,14 +265,19 @@ export default function ReaderToolbar({
           ))}
         </select>
       )}
-      {hasDoc && !editing && selectedId && (
-        <button onClick={onSpeakSelected} title="朗读当前选中句（已缓存则秒播）">
+      {hasDoc && !editing && (
+        <button
+          className="tb-speak"
+          onClick={onSpeakSelected}
+          disabled={!selectedId}
+          title={selectedId ? '朗读当前选中句（已缓存则秒播）' : '先点一句，再朗读那句'}
+        >
           {ttsState === 'loading' ? '🔊 合成中…' : ttsState === 'playing' ? '🔊 朗读中' : '🔊 读本句'}
         </button>
       )}
       {hasDoc && !editing && (
         <button
-          className={readingAll ? 'danger' : ''}
+          className={'tb-readall' + (readingAll ? ' danger' : '')}
           onClick={onToggleReadAll}
           title="用 TTS 逐句朗读整篇；再点一次停止"
         >
@@ -279,14 +292,20 @@ export default function ReaderToolbar({
       )}
       {hasDoc && !editing && (
         <button
-          className={pregenRunning ? 'danger' : ''}
+          className={'tb-pregen' + (pregenRunning ? ' danger' : '')}
           onClick={pregenRunning ? onCancelPregenerate : onPregenerate}
-          title="把整篇的朗读音频一次性生成并缓存到本机；之后连播 / 点句起播零延迟"
+          title={
+            pregenRunning
+              ? '正在把整篇朗读音频生成并缓存到本机；再点一次取消'
+              : pregenAllCached
+                ? '整篇朗读音频都已缓存（点一下可重查）'
+                : '把整篇的朗读音频一次性生成并缓存到本机；之后连播 / 点句起播零延迟'
+          }
         >
           {pregenRunning
-            ? `⏳ 生成中 ${pregenDone}/${pregenTotal}（点此取消）`
+            ? `⏳ 生成中 ${pregenDone}/${pregenTotal}`
             : pregenAllCached
-              ? '✅ 已全部缓存（点此重查）'
+              ? '✅ 已全部缓存'
               : '⬇ 预生成朗读'}
         </button>
       )}
@@ -349,7 +368,7 @@ export default function ReaderToolbar({
           {confirmDelSave ? '确认删除保存' : '删除保存'}
         </button>
       )}
-      <span className="muted">{libraryCount} 个生词</span>
+      <span className="muted lib-count">{libraryCount} 个生词</span>
       <span className="muted goal-chip" title="今日目标（按学过的不同单词数）；点「统计」可改目标">
         🎯 {studiedCount}
         {dailyGoal > 0 ? `/${dailyGoal}` : ''} · 🔥{streak}
