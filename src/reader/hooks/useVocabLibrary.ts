@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VocabLibrary } from '../../types/document'
 import type { VocabRepoPort } from '../../core/ports'
-import { createLibrary, dedupeLibrary, normalizeGrammarMarks } from '../../core/vocab'
+import { createLibrary } from '../../core/vocab'
+import { migrateLibrary } from '../../core/migrations'
+import { libraryErrors } from '../../core/libraryValidate'
 import { countRescueWords, recoverLibrary, rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
 import { rebuildFromArticleMarks, type ArticleWithMarks } from '../../core/libraryFromArticles'
 import { readJson } from '../storage'
-import { repairLanguageKinds } from '../../core/langPoints'
 import { createVocabRepo } from '../../adapters/vocabRepo'
 
 /**
@@ -77,12 +78,17 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     const r = createRepo()
     repo.current = r
     r.load()
-      .then((lib) => {
-        const fixed = normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(lib)))
+      .then((raw) => {
+        // 老数据兼容 / 清洗 / 去重**统一收口**在 core/migrations；顺手自检不变量
+        const fixed = migrateLibrary(raw)
+        if (import.meta.env?.DEV) {
+          const errors = libraryErrors(fixed)
+          if (errors.length) console.warn('[词库] 迁移后仍有问题：', errors.slice(0, 10))
+        }
         libraryRef.current = fixed
         setLibrary(fixed)
         setLibraryLoad('ok')
-        const dirty = fixed.items.length !== lib.items.length || fixed.items.some((it, i) => it !== lib.items[i])
+        const dirty = fixed.items.length !== raw.items.length || fixed.items.some((it, i) => it !== raw.items[i])
         if (dirty) r.save(fixed).catch(() => {})
       })
       .catch(() => {

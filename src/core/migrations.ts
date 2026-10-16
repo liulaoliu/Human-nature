@@ -1,0 +1,189 @@
+/**
+ * 词库的老数据兼容 / 迁移**唯一收口**。
+ *
+ * 以前这些散落在加载路径上：`dedupeLibrary` → `normalizeGrammarMarks` → `repairLanguageKinds`，
+ * 各自还带一点「缺字段怎么办」的临时判断；时间一长没人知道总共迁过什么。
+ * 现在：**新老字段差异、兼容、去重、清洗全在这里**，加载只调一次 `migrateLibrary`。
+ *
+ * 约定：
+ *   - 只做「补默认值 / 归一 / 去重 / 丢弃无法修复的条目」，**绝不删用户的正常数据**；
+ *   - 迁移必须**幂等**（跑两遍结果一样）；
+ *   - 破坏性变更要升 `SCHEMA_VERSION`，在老版本上先补一个 `migrateVnToVn+1`。
+ */
+import type { VocabItem, VocabKind, VocabLibrary } from '../types/document'
+import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
+import { KIND_ORDER } from './entryKind'
+import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
+import { repairLanguageKinds } from './langPoints'
+
+const KINDS = new Set<string>(KIND_ORDER)
+const STATUSES = new Set(['unqueried', 'queried', 'edited', 'mastered'])
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : '')
+const strOrNull = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v : null)
+const strArray = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [])
+const iso = (v: unknown, fallback: string): string => {
+  const s = str(v)
+  return s && !Number.isNaN(Date.parse(s)) ? s : fallback
+}
+
+const ISO_ISH = /^\d{4}-\d{2}-\d{2}T/
+
+/**
+ * 已经是当前结构的条目：**原样返回引用**。
+ *
+ * 为什么在意这点：加载路径会用「条目引用有没有变」判断要不要写库。
+ * 如果这里每次都重建对象，就会**每打开一次页面白写一次词库**（还顺带追加快照）。
+ */
+function looksCurrent(o: Record<string, unknown>): boolean {
+  const rs = (o.reviewState ?? {}) as Record<string, unknown>
+  return (
+    typeof o.id === 'string' &&
+    !!o.id &&
+    typeof o.word === 'string' &&
+    !!o.word.trim() &&
+    typeof o.lemma === 'string' &&
+    !!o.lemma.trim() &&
+    (o.kind === undefined || (typeof o.kind === 'string' && KINDS.has(o.kind))) &&
+    typeof o.status === 'string' &&
+    STATUSES.has(o.status) &&
+    Array.isArray(o.examples) &&
+    Array.isArray(o.usage) &&
+    typeof o.createdAt === 'string' &&
+    ISO_ISH.test(o.createdAt) &&
+    typeof o.updatedAt === 'string' &&
+    ISO_ISH.test(o.updatedAt) &&
+    typeof rs.ease === 'number' &&
+    typeof rs.interval === 'number' &&
+    typeof rs.repetitions === 'number' &&
+    (rs.due === null || typeof rs.due === 'string' || rs.due === undefined)
+  )
+}
+
+/** 把一条（可能来自老版本 / 手改过的 JSON 的）记录洗成合法词条；修不出来就返回 null。 */
+function migrateItem(raw: unknown, now: string): VocabItem | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  if (looksCurrent(o)) return raw as VocabItem // 已是当前结构：保住引用，别让加载路径白写库
+  const word = str(o.word).trim()
+  const lemma = str(o.lemma).trim() || word.toLowerCase()
+  if (!word || !lemma) return null
+
+  const kind = typeof o.kind === 'string' && KINDS.has(o.kind) ? (o.kind as VocabKind) : undefined
+  const status = typeof o.status === 'string' && STATUSES.has(o.status)
+    ? (o.status as VocabItem['status'])
+    : o.meaning
+      ? 'queried'
+      : 'unqueried'
+  const rs = (o.reviewState ?? {}) as Record<string, unknown>
+  const due = strOrNull(rs.due)
+
+  return {
+    id: str(o.id).trim() || `vocab:${lemma}`,
+    word,
+    lemma,
+    kind,
+    langPointId: typeof o.langPointId === 'string' ? o.langPointId : undefined,
+    phonetic: strOrNull(o.phonetic),
+    partOfSpeech: strOrNull(o.partOfSpeech),
+    meaning: cleanGloss(str(o.meaning)) || null,
+    grammarMarks: Array.isArray(o.grammarMarks) ? strArray(o.grammarMarks) : undefined,
+    definition: cleanGloss(str(o.definition)) || null,
+    usage: strArray(o.usage),
+    phrases: Array.isArray(o.phrases) ? strArray(o.phrases) : undefined,
+    idioms: Array.isArray(o.idioms) ? strArray(o.idioms) : undefined,
+    examples: (Array.isArray(o.examples) ? o.examples : []).flatMap((e) => {
+      const ex = (e ?? {}) as Record<string, unknown>
+      const text = str(ex.text).trim()
+      if (!text) return []
+      return [
+        {
+          text,
+          translation: strOrNull(ex.translation) ?? undefined,
+          articleId: strOrNull(ex.articleId) ?? undefined,
+          fileName: strOrNull(ex.fileName) ?? undefined,
+          sentenceId: strOrNull(ex.sentenceId) ?? undefined,
+          origin: (['article', 'ai', 'tatoeba'] as const).includes(ex.origin as never) ? (ex.origin as never) : undefined,
+        },
+      ]
+    }),
+    source: (() => {
+      const s = (o.source ?? null) as Record<string, unknown> | null
+      if (!s || typeof s !== 'object') return null
+      const articleId = str(s.articleId).trim()
+      if (!articleId) return null
+      return {
+        articleId,
+        fileName: strOrNull(s.fileName),
+        sentenceId: strOrNull(s.sentenceId),
+        sentenceText: str(s.sentenceText),
+      }
+    })(),
+    contexts: (Array.isArray(o.contexts) ? o.contexts : []).flatMap((c) => {
+      const cc = (c ?? {}) as Record<string, unknown>
+      const articleId = str(cc.articleId).trim()
+      if (!articleId) return []
+      return [
+        {
+          articleId,
+          fileName: strOrNull(cc.fileName),
+          sentenceId: strOrNull(cc.sentenceId),
+          sentenceText: str(cc.sentenceText),
+          meaning: strOrNull(cc.meaning) ?? undefined,
+          at: iso(cc.at, now),
+        },
+      ]
+    }),
+    status,
+    note: str(o.note),
+    tags: strArray(o.tags),
+    lastPrintedAt: strOrNull(o.lastPrintedAt),
+    confusables: Array.isArray(o.confusables)
+      ? (o.confusables as unknown[]).flatMap((c) => {
+          const cc = (c ?? {}) as Record<string, unknown>
+          const w = str(cc.word).trim()
+          return w ? [{ word: w, meaning: strOrNull(cc.meaning) ?? undefined }] : []
+        })
+      : undefined,
+    priorityUntil: strOrNull(o.priorityUntil),
+    reviewState: {
+      ease: typeof rs.ease === 'number' && rs.ease > 0 ? rs.ease : 2.5,
+      due,
+      interval: typeof rs.interval === 'number' && rs.interval >= 0 ? rs.interval : 0,
+      repetitions: typeof rs.repetitions === 'number' && rs.repetitions >= 0 ? rs.repetitions : 0,
+      lapses: typeof rs.lapses === 'number' && rs.lapses >= 0 ? rs.lapses : undefined,
+    },
+    createdAt: iso(o.createdAt, now),
+    updatedAt: iso(o.updatedAt, now),
+  }
+}
+
+/**
+ * 把任意（老版本的 / 手改过的 / 半坏的）词库迁成当前结构：
+ * 逐条洗 → 早先版本误标的类型修正 → 按词性过滤语法标记 → 按 lemma 去重。
+ * **幂等**：已经是当前结构的库，跑完内容和原样一致（引用都会尽量复用）。
+ */
+export function migrateLibrary(raw: unknown, now: Date = new Date()): VocabLibrary {
+  if (!raw || typeof raw !== 'object') return { schemaVersion: SCHEMA_VERSION, items: [] }
+  const o = raw as Record<string, unknown>
+  const list = Array.isArray(o.items) ? o.items : []
+  const at = now.toISOString()
+  const items = list.flatMap((it) => {
+    const migrated = migrateItem(it, at)
+    return migrated ? [migrated] : []
+  })
+  const library: VocabLibrary = { schemaVersion: SCHEMA_VERSION, items }
+  return normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(library)))
+}
+
+/** 老版本 → 当前版本要做的破坏性兼容都写在这里（现在只有 v1，占位给未来）。 */
+export function migrateToCurrent(library: VocabLibrary): VocabLibrary {
+  if (library.schemaVersion === SCHEMA_VERSION) return library
+  // 未来：case 0: return migrateV0ToV1(library) …
+  return { ...library, schemaVersion: SCHEMA_VERSION }
+}
+
+/** 只给测试/文档用：当前的复习状态默认值（避免各处重复 new 一份）。 */
+export function defaultReviewStateForTest() {
+  return defaultReviewState()
+}
