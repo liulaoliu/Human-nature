@@ -168,6 +168,18 @@ function parseLookupLine(line) {
 /** localStorage dump：{ 'reader:batch': '<json字符串>', ... } 或已解析的对象 */
 function readDump(file) {
   const json = JSON.parse(readFileSync(file, 'utf8'))
+  // 应用「导出全部」的备份：articles[].sentences[].vocab 就是**正文里标记过的词**（最准的来源）
+  if (Array.isArray(json.articles)) {
+    for (const a of json.articles) {
+      for (const s of a?.sentences ?? []) {
+        for (const w of s?.vocab ?? []) add(w, { articleId: a.id, sentence: s.text, sentenceId: s.id })
+      }
+    }
+  }
+  // 备份里若还有词库本身，也一并收下
+  if (json.library && Array.isArray(json.library.items)) {
+    for (const it of json.library.items) add(it?.word, { articleId: it?.source?.articleId, sentence: it?.source?.sentenceText })
+  }
   const get = (key) => {
     const v = json[key]
     if (v == null) return null
@@ -405,9 +417,16 @@ for (const f of candidates) {
     } else if (/jobs-/.test(n)) {
       const got = readJobs(f)
       console.log(`· 读到工作包：${f}（${got} 个词）`)
-    } else {
+    } else if (/out-|results/.test(n)) {
       const got = readResults(f)
       console.log(`· 读到 AI 结果：${f}（${got} 行）`)
+    } else {
+      // 兜底：任何 JSON 都当「dump / 导出全部备份」试一遍（按内容识别 articles / library）
+      if (existsSync(f)) {
+        const before = collected.size
+        readDump(f)
+        console.log(`· 按备份解析：${f}（+${collected.size - before} 个词）`)
+      }
     }
   } catch (e) {
     console.log(`· 跳过 ${f}：${e.message}`)

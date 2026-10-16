@@ -3,6 +3,7 @@ import type { VocabLibrary } from '../../types/document'
 import type { VocabRepoPort } from '../../core/ports'
 import { createLibrary, dedupeLibrary, normalizeGrammarMarks } from '../../core/vocab'
 import { rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
+import { rebuildFromArticleMarks, type ArticleWithMarks } from '../../core/libraryFromArticles'
 import { readJson } from '../storage'
 import { repairLanguageKinds } from '../../core/langPoints'
 import { createVocabRepo } from '../../adapters/vocabRepo'
@@ -41,6 +42,8 @@ export interface UseVocabLibraryResult {
   restorePrev: () => Promise<void>
   /** 从本机其它记录（待选清单 / 错题本）把词条找回来 */
   rescueFromLocalRecords: () => void
+  /** 从**正文标记**（Sentence.vocab）重建词条 —— 丢词后最准的一条路 */
+  rebuildFromArticles: (articles: ArticleWithMarks[]) => void
 }
 
 /** 本机还留着词的几处记录（救援素材）。 */
@@ -128,5 +131,22 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     flash(`已从本机记录找回 ${out.added} 个词条（释义可用「补齐生词本」本地补）`)
   }, [libraryLoad, flash, persist])
 
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords }
+  const rebuildFromArticles = useCallback(
+    (articles: ArticleWithMarks[]) => {
+      if (libraryLoad === 'failed') {
+        flash('词库没读出来：先「恢复上一版词库」或刷新，再试重建')
+        return
+      }
+      const out = rebuildFromArticleMarks(libraryRef.current, articles)
+      if (!out.added) {
+        flash(out.found ? `正文标记里 ${out.found} 个词都已在词库里` : '正文里没有标记过的词（Sentence.vocab 是空的）')
+        return
+      }
+      persist(out.library)
+      flash(`已从正文标记重建 ${out.added} 个词条（释义可用「补齐生词本」本地补）`)
+    },
+    [libraryLoad, flash, persist],
+  )
+
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles }
 }

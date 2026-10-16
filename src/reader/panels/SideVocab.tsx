@@ -80,6 +80,10 @@ export interface SideVocabProps {
   onRestorePrev?: () => void
   /** 从本机其它记录（待选清单 / 错题本）找回词条 */
   onRescueLocal?: () => void
+  /** 正文标记（Sentence.vocab）里能认出的词数 */
+  markedWordCount?: number
+  /** 从正文标记重建词条 */
+  onRebuildFromMarks?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -145,6 +149,8 @@ export default function SideVocab({
   libraryLoadFailed,
   onRestorePrev,
   onRescueLocal,
+  markedWordCount,
+  onRebuildFromMarks,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -306,6 +312,14 @@ export default function SideVocab({
         </button>
       </div>
 
+      {onRebuildFromMarks && (markedWordCount ?? 0) > 0 && (
+        <div className="side-warn">
+          📄 正文里还留着 <b>{markedWordCount}</b> 个标记过的词（当年粘回的 AI 词表，存在文章里，不受词库影响）。
+          <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }}>
+            从正文标记重建词库
+          </button>
+        </div>
+      )}
       {looksWiped && (
         <div className="side-warn">
           ⚠ 词库里**一个普通单词都没有**（只剩 {libraryItems.length} 条语言点），像是被覆盖过。按顺序试：

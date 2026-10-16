@@ -85,6 +85,8 @@ import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useReadDone } from './hooks/useReadDone'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
+import { useArticleMarks } from './hooks/useArticleMarks'
+import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
@@ -113,7 +115,7 @@ import {
   persistentString,
   useLocalStorageState,
 } from './hooks/useLocalStorageState'
-import type { Paragraph, Sentence, SentenceLanguage, VocabItem } from '../types/document'
+import type { Paragraph, Sentence, SentenceLanguage, } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
 
@@ -191,7 +193,7 @@ export default function ReaderApp() {
   }, [])
 
   // 词库：读回 / 去重修数据 / 唯一写入口 / 上一版恢复 / 找回词条 —— 全在 hooks/useVocabLibrary
-  const { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev: restorePrevLibrary, rescueFromLocalRecords } = useVocabLibrary({ flash })
+  const { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
   /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
@@ -559,37 +561,12 @@ export default function ReaderApp() {
         .map((it) => it.word),
     [library.items, articleIdentity],
   )
-  /**
-   * 本篇生词编号：按**手动标记顺序**（createdAt 升序），同一时刻批量加入的
-   * （如「自动标词」一次入库）再按**正文出现顺序**兜底，所以自动标词自然就是文中顺序。
-   * 每篇文章独立编号，跨篇重置。`articleFirst` 记录每个词在正文首次出现的位置（用于上标）。
-   */
-  const { articleNums, articleFirst } = useMemo(() => {
-    const nums = new Map<string, number>()
-    const first = new Set<string>()
-    if (!doc) return { articleNums: nums, articleFirst: first }
-    const byLemma = new Map<string, VocabItem>()
-    for (const it of articleWords) byLemma.set(it.lemma, it)
-    // 每个 lemma 在正文的首次出现位置与顺序
-    const docOrder = new Map<string, number>()
-    for (const s of doc.sentences) {
-      wordSpans(s.text).forEach((w, i) => {
-        const lem = lemmaOf(w.text)
-        if (byLemma.has(lem) && !docOrder.has(lem)) {
-          docOrder.set(lem, docOrder.size)
-          first.add(`${s.id}:${i}`)
-        }
-      })
-    }
-    const ordered = [...articleWords].sort(
-      (a, b) =>
-        a.createdAt.localeCompare(b.createdAt) ||
-        (docOrder.get(a.lemma) ?? 1e9) - (docOrder.get(b.lemma) ?? 1e9) ||
-        a.lemma.localeCompare(b.lemma),
-    )
-    ordered.forEach((it, i) => nums.set(it.lemma, i + 1))
-    return { articleNums: nums, articleFirst: first }
-  }, [doc, articleWords])
+  /** 本篇生词编号（规则在 core/articleNums，已单测） */
+  const { nums: articleNums, firstOccurrence: articleFirst } = useMemo(
+    () => articleNumbering(doc?.sentences, articleWords),
+    [doc, articleWords],
+  )
+
   /** 本篇打印情况：最近打印时间 + 是否全部打印过（用于「不重复打印」提示）。 */
   const articlePrintedAt = useMemo(() => {
     let latest: string | null = null
@@ -2079,6 +2056,14 @@ export default function ReaderApp() {
     flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
   }, [articleWords, library, persist, flash])
 
+  /** 正文标记（Sentence.vocab）→ 统计 + 一键重建（丢词时最准的数据源） */
+  const marks = useArticleMarks({
+    saved,
+    sentences: doc?.sentences ?? null,
+    articleIdentity,
+    rebuild: rebuildFromArticles,
+  })
+
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(
     () => ({
@@ -3071,6 +3056,8 @@ export default function ReaderApp() {
           libraryLoadFailed={libraryLoad === 'failed'}
           onRestorePrev={() => void restorePrevLibrary()}
           onRescueLocal={() => rescueFromLocalRecords()}
+          markedWordCount={marks.markedWordCount}
+          onRebuildFromMarks={marks.rebuildFromMarks}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}
