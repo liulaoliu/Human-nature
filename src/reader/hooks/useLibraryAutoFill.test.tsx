@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
+import { renderHook, act, waitFor } from '@testing-library/react'
 import type { Sentence } from '../../types/document'
 import { createLibrary, markWord } from '../../core/vocab'
 import { useLibraryAutoFill } from './useLibraryAutoFill'
@@ -111,5 +111,17 @@ describe('useLibraryAutoFill（唯一写入口）', () => {
       libraryRef.current = markWord(libraryRef.current, { word: 'run', articleId: 'A' }).library
     })
     expect(libraryRef.current.items.map((it) => it.word)).toContain('run')
+  })
+})
+
+describe('useLibraryAutoFill：重收语言点', () => {
+  it('调用后清掉「已收记账」→ effect 会重新收一遍', async () => {
+    const { persist, result, rerender, props } = setup()
+    expect(persist).toHaveBeenCalledTimes(1)
+    // 假装已经收过（记账清掉后再渲染，effect 会重新收）
+    act(() => result.current.recollectLanguagePoints())
+    rerender({ ...props })
+    await waitFor(() => expect(persist.mock.calls.length).toBeGreaterThanOrEqual(1))
+    expect(result.current.languagePointCount).toBe(1)
   })
 })

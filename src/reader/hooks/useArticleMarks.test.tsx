@@ -84,3 +84,20 @@ describe('useArticleMarks：自动找回（0 点击）的三条边界', () => {
     expect(rebuild).not.toHaveBeenCalled()
   })
 })
+
+describe('useArticleMarks：与「一键全捞」配合的计数', () => {
+  it('articles 暴露给调用方（全捞要用它扫正文标记）', () => {
+    const { result } = setup()
+    expect(result.current.articles[0].id).toBe('A 篇')
+    expect(result.current.articles[0].sentences[0].vocab).toEqual(['ensconced', 'job'])
+  })
+
+  it('已保存文章 + 当前文章都算进来（当前这篇可为空）', () => {
+    const { result } = setup({
+      sentences: [{ id: 's9', text: 'Plain.', vocab: ['havoc'] }],
+      articleIdentity: 'B 篇',
+    })
+    expect(result.current.markedWordCount).toBe(3) // ensconced/job + havoc
+    expect(result.current.articles.map((a) => a.id)).toEqual(['A 篇', 'B 篇'])
+  })
+})
