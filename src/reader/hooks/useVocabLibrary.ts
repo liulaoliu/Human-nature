@@ -184,14 +184,18 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         return
       }
       const before = libraryRef.current.items.length
-      const out = rebuildFromArticleMarks(createLibrary(), articles)
+      // 用**你自己的数据**重建：文章标记（Sentence.vocab）+ 待选清单（自动标词的结果，按篇存的）+ 错题本
+      const out = recoverLibrary(createLibrary(), { articles, records: readRescueRecords() })
       if (!out.added) {
-        flash('正文里没有标记过的词（Sentence.vocab 是空的），这一步做不了')
+        flash('没找到可用的标记（正文 Sentence.vocab 与待选清单都是空的），这一步做不了')
         return
       }
       const next = enrich ? enrich(out.library) : out.library
       persist(next) // 覆盖整库：覆盖前那一版已进历史快照，可回退
-      flash(`已只保留正文标记过的 ${out.added} 个词（原库 ${before} 条已进历史快照，可回退）`)
+      flash(
+        `已按你原来的标记重建 ${out.added} 个词条（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}）；` +
+          `原库 ${before} 条已进历史快照，可回退`,
+      )
     },
     [libraryLoad, flash, persist],
   )

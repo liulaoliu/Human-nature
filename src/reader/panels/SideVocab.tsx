@@ -332,9 +332,9 @@ export default function SideVocab({
                   setArmedKeep(false)
                   onKeepOnlyMarked()
                 }}
-                title="把词库换成「你当初在正文里标过的那些词」（覆盖前那一版会进历史快照，可回退）"
+                title="用你自己的数据重建：正文标记（Sentence.vocab）+ 待选清单（自动标词的结果，按篇存的）+ 错题本。覆盖前那一版会进历史快照，可回退"
               >
-                {armedKeep ? '确认：只保留这些词' : '只保留正文标过的词'}
+                {armedKeep ? '确认：用这些标记重建' : '用我原来的标记重建词库'}
               </button>
               {!armedKeep && (
                 <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }} title="把这些词**追加**进当前词库（不删东西）">
