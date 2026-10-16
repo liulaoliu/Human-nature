@@ -1,4 +1,43 @@
-# 项目约定（给 AI agent）
+# AGENTS.md — 项目开发约定（给 AI agent）
+
+本项目自动加载此文件。**开工前读它 + `docs/ARCHITECTURE.md` + `docs/TESTING.md`**。
+
+## 项目简介
+
+「学吧老哥」——英语精读/背单词 Web 应用（React + TS + Vite；IndexedDB 存词库与文章）。
+分层、依赖方向、新代码放哪里：见 **`docs/ARCHITECTURE.md`**（那份是可执行的约定）。
+测试分层、门禁、踩坑清单：见 **`docs/TESTING.md`**。
+
+## 工作流（硬规则）
+
+- **说做就做，不反问**：用户指出问题就改代码/跑命令，不要先问「要我改吗」再等。
+- **一个主题一次 commit**：一次改动含多个独立主题时，每完成一个主题立刻单独 commit
+  （代码 + 连带测试/文档同批进该 commit），不攒到最后拆。message 用
+  `feat:` / `fix:` / `refactor:` / `chore:` / `docs:` + 中文简述。
+- **TDD × 分层**（`docs/TESTING.md` §1 判定矩阵）：
+  1. 先想「这块判断能不能抽成纯函数」——能就抽到 `src/core/` 先写测试，再写实现；
+  2. 按矩阵补齐该层测试；
+  3. 收尾逐条勾 `docs/TESTING.md` §2「需求完成门禁」。
+- **收尾门禁**（提交前必跑，别把不绿的留给我）：
+  ```bash
+  npm run gates    # tsc -b + 全部测试 + 上帝文件门禁 + 架构门禁
+  ```
+  - 上帝文件门禁：**新文件超 800 行直接失败**；存量超限登记在
+    `tool/check_god_file.mjs` 的 `BASELINE`，**只准变小**（拆分后同步下调）。
+  - 架构门禁：`tool/check_architecture.mjs` 的 R1–R7（依赖方向 / SSOT / 日期键 / 模块必须有测试）。
+    真留着的存量违规要在 `EXCEPTIONS` 里**写明理由**（每次运行都会打印出来当债务）。
+- **文档同步**（同一次提交里改）：结构/分层/新目录 → `docs/ARCHITECTURE.md`；
+  新增踩坑 → `docs/TESTING.md` §3 补一条（编号 +1）；依赖原生/浏览器能力的用例 → §4 人工用例。
+- **不重复跑已验证的东西**：跑过的门禁没受影响就别重跑；长命令放后台跑完再汇报。
+
+## 两条最容易踩的硬约定（详见 ARCHITECTURE §三）
+
+1. **同一份状态只允许一个写入方**：词库的自动补全统一走 `core/libraryAutoFill.ts`（纯函数、幂等）；
+   React 里**只允许一个 effect** 调它，且依赖里不放 `library`（要读就读 ref）。
+   加新的「自动补全」→ 往 `autoFillLibrary` 加一格，**别写第二个读写词库的 effect**。
+2. **谁是事实来源谁负责算**：词条类型 → `core/entryKind.ts`；打印口径 → `core/printPlan.ts`；
+   日期键 → `core/activity.ts`；语言点键/签名 → `core/langPoints.ts`。
+   视图里不许出现这些规则的第二份实现（门禁会拦）。
 
 ## 处理 AI 工作包：`new/ai-jobs-*.json`
 
