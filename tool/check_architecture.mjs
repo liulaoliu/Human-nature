@@ -25,8 +25,6 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
 
 /** 存量违规（路径 → 理由）。能修就修，登记只是让门禁先能上线。 */
 const EXCEPTIONS = {
-  'src/reader/panels/SpeedReadPanel.tsx': 'R3：速读的本地 UI 状态（读到的位置/已收词）直接写 localStorage；待抽到 reader/storage.ts',
-  'src/reader/panels/PlanPanel.tsx': 'R3：每日计划打勾状态直接写 localStorage；待抽到 reader/storage.ts',
   'src/core/stateBackup.ts': 'R6：备份文件名里的日期（UTC），不是学习日，故意不动',
   'src/ui/App.tsx': 'R3：跟读练习（旧模块）直接读写 localStorage 保存校准/脚本，独立于精读词库，暂不动',
   'src/ui/ChunkSplitter.tsx': 'R3：同上（跟读切块参数）',

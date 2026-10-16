@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
+import { readJson, readNum, writeJson, writeNum } from '../storage'
 import LangPhrases from './LangPhrases'
 import { KIND_LABEL } from '../../core/entryKind'
 import { getSentenceLanguages } from '../../core/language'
@@ -51,11 +52,7 @@ export interface SpeedReadPanelProps {
 
 const cursorKey = (docKey: string) => `reader:speedCursor:${docKey}`
 function readCursor(k: string): number {
-  try {
-    return parseInt(localStorage.getItem(k) || '0', 10) || 0
-  } catch {
-    return 0
-  }
+  return readNum(k, 0)
 }
 
 /** 「本页加入」清单里的一项：词/词组 + 来源句（跨句累积、持久化）。 */
@@ -66,15 +63,8 @@ interface CollectedItem {
 }
 const collectedKey = (docKey: string) => `reader:speedCollected:${docKey}`
 function loadCollected(docKey: string): CollectedItem[] {
-  try {
-    const raw = localStorage.getItem(collectedKey(docKey))
-    const arr = raw ? JSON.parse(raw) : []
-    return Array.isArray(arr)
-      ? arr.filter((x): x is CollectedItem => !!x && typeof x.word === 'string')
-      : []
-  } catch {
-    return []
-  }
+  const arr = readJson<unknown>(collectedKey(docKey), [])
+  return Array.isArray(arr) ? arr.filter((x): x is CollectedItem => !!x && typeof x.word === 'string') : []
 }
 
 /**
@@ -144,7 +134,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   // 本页加入清单落盘（翻页 / 关掉重开都不丢）
   useEffect(() => {
     try {
-      localStorage.setItem(collectedKey(docKey), JSON.stringify(collected))
+      writeJson(collectedKey(docKey), collected)
     } catch {
       // 忽略
     }
@@ -343,7 +333,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       setRows((r) => [...r, { words, ms: readMs || elapsed, slow, drillOk: okForDrill }])
       const next = index + 1
       try {
-        localStorage.setItem(cursorKey(docKey), String(next < n ? next : 0))
+        writeNum(cursorKey(docKey), next < n ? next : 0)
       } catch {
         // 忽略
       }
@@ -402,7 +392,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       setReadMs(0)
       setSlow(false)
       try {
-        localStorage.setItem(cursorKey(docKey), String(next))
+        writeNum(cursorKey(docKey), next)
       } catch {
         // 忽略
       }
@@ -495,7 +485,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     setReadMs(0)
     setSlow(false)
     try {
-      localStorage.setItem(cursorKey(docKey), '0')
+      writeNum(cursorKey(docKey), 0)
     } catch {
       // 忽略
     }

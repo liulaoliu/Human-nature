@@ -30,5 +30,9 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
+    // 组件 / 钩子测试用 `// @vitest-environment jsdom` 单独打开。
+    // 必须给个真实 origin：不给的话 jsdom 的**不透明来源**会让 localStorage 取值抛
+    // SecurityError，vitest 于是干脆不把它挂到全局上（表现为「没有 localStorage」）。
+    environmentOptions: { jsdom: { url: 'http://localhost/' } },
   },
 })

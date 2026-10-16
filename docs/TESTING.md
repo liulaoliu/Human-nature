@@ -10,8 +10,8 @@
 |---|---|---|
 | 纯逻辑（计算 / 规则 / 解析 / 键规则） | **单测**（`src/core/*.test.ts`） | 已有 40+ 文件、800 项 |
 | 数据层（IndexedDB / fetch / 备份） | 单测（内存兜底实现 / 假端口） | `adapters/` 的 Memory* 实现 |
-| 有状态编排（effect / 会话状态机 / 写入策略） | **单测 + 把判断抽成纯函数** | `core/libraryAutoFill.ts`、`core/printPlan.ts` 就是这么抽出来的 |
-| 单个面板 / 列表 / 对话框 | 组件测试（**待补**，见 §5） | `reader/panels/*` |
+| 有状态编排（effect / 会话状态机 / 写入策略） | **钩子测试 + 把判断抽成纯函数** | `hooks/useLibraryAutoFill.test.tsx`、`hooks/useReadDone.test.tsx`、`core/libraryAutoFill.ts` |
+| 单个面板 / 列表 / 对话框 | 组件测试（环境已就绪，待补） | `reader/panels/*` |
 | 浏览器能力（打印对话框 / TTS / 剪贴板 / IndexedDB 真库） | **人工用例**（§4） | 登记，不写自动化 |
 
 **判定原则**：先问「这块判断能不能抽成纯函数」。能 → 抽出去写单测（最便宜、最稳）；
@@ -61,15 +61,22 @@
 | 语言点自动收藏 | 跑一次「语言点」AI 任务并粘回 → 刷新 | 侧栏「语言点」页签出现词组/习语/用法；删掉一条后刷新**不会**自己回来 |
 | IndexedDB 持久化 | 加几个生词 → 刷新 → 换文章再回来 | 词库在；来源文章/句子正确 |
 
-## 五、待办（分层还没补齐的部分）
+## 五、已经就绪的层 / 还差什么
 
-- **组件测试层**：需要 `npm i -D jsdom @testing-library/react @testing-library/dom`，
-  在 `vite.config.ts` 里加 `test.environment: 'jsdom'`（或按文件 `// @vitest-environment jsdom`）。
-  第一批建议覆盖：`ExportPanel`（范围/内容切换后的条目数与标题）、`SideVocab`（生词/语言点两个页签）、
-  `SpeedReadPanel`（一次一句推进）。**没做之前，这些面板的改动必须手动验一遍。**
-- **写入策略的集成测试**：`autoFillLibrary` 已用纯函数覆盖「跑两遍/拿旧快照重跑都稳定」；
-  等组件层就绪后，再加一条「挂载 ReaderApp（假仓储）→ 幂等 effect 不产生额外写」的测试。
-- **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先不求百分比，先求「该测的层有测试」）。
+**已就绪**：纯逻辑单测（`src/core/*.test.ts`）+ **钩子接线测试**（`src/reader/hooks/*.test.tsx`）。
+
+组件/钩子测试的三个坑（都踩过了，照着做）：
+1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
+2. jsdom 的 `localStorage` **取不到**（不透明来源会被 vitest 跳过），Node 26 又自带一个**只读**的全局
+   `localStorage`，直接赋值会静默失败 —— 一律用 `src/reader/testStorage.ts` 的 `installFakeStorage()`
+   （defineProperty 覆盖 + 测完还原）。
+3. 钩子依赖 IO 时**注入假实现**（如 `persist` / `libraryRef`），别真的开 IndexedDB。
+
+**还差**：
+- **组件测试**（`reader/panels/*`）：`ExportPanel`（范围×内容×分组后的条目数与标题）、
+  `SideVocab`（生词/语言点两个页签）、`SpeedReadPanel`（逐句推进）——测试环境已就绪，随时可补。
+- **跨模块集成**：挂载 `ReaderApp` + 假仓储，断言「自动补全只写一次 + 导入 AI 结果不重不漏」。
+- **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
 ## 六、执行
 

@@ -34,8 +34,8 @@ import {
 import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
 import { isWordEntry } from '../core/entryKind'
-import { languagePointsOf, repairLanguageKinds, splitGlossText } from '../core/langPoints'
-import { autoFillLibrary, collectOfflineExampleRows } from '../core/libraryAutoFill'
+import { repairLanguageKinds, splitGlossText } from '../core/langPoints'
+import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
   practiceForArticle,
@@ -85,6 +85,8 @@ import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
 import { useStudySession } from './hooks/useStudySession'
 import { useArticleImport } from './hooks/useArticleImport'
+import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
+import { useReadDone } from './hooks/useReadDone'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
@@ -104,7 +106,6 @@ import JournalPanel from './panels/JournalPanel'
 import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
 import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
-import { addReadDone, readDayOf, readDoneOn, removeReadDone, type ReadDone } from '../core/goals'
 import GoalPanel from './panels/GoalPanel'
 import { buildHeatmap } from '../core/activity'
 import {
@@ -712,6 +713,20 @@ export default function ReaderApp() {
     repo.current?.save(lib).catch(() => {})
   }, [])
 
+  /**
+   * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句）。
+   * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
+   */
+  const { lookupTatoeba, tatoebaReady } = useLibraryAutoFill({
+    sentences: doc?.sentences ?? null,
+    saved,
+    articleIdentity,
+    libraryRef,
+    libraryLoaded,
+    persist,
+  })
+
+
   /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
   const askDelete = useCallback(
     (id: string) => {
@@ -986,11 +1001,9 @@ export default function ReaderApp() {
   const [exportOpen, setExportOpen] = useState(false)
   /** 目标备忘面板 + 今日读文目标 + 自由备忘。 */
   const [goalOpen, setGoalOpen] = useState(false)
-  const [readDone, setReadDone] = useLocalStorageState<ReadDone[]>('reader:readDone', [])
   const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, persistentNumber)
   const [goalMemo, setGoalMemo] = useLocalStorageState('reader:goalMemo', '', persistentString)
-  /** 语言点自动收藏的记账：文章标识 → 已收过的语言点签名（防重复收、也防删了又冒出来）。 */
-  const [langCollected, setLangCollected] = useLocalStorageState<Record<string, string>>('reader:langCollected', {})  /** 生词本排序方式。 */
+  /** 生词本排序方式。 */
   const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
     'reader:vocabSort',
     'updatedAt',
@@ -1880,6 +1893,15 @@ export default function ReaderApp() {
   }, [pasteMissing, library.items, flash])
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
+  /** 「读完一篇」的记账（localStorage + 派生值 + 动作）——接线在 hooks/useReadDone，规则在 core/goals。 */
+  const { readDone, todayReadDone, articleReadDay, readDays, markReadDone, undoReadDone, setReadDone } = useReadDone({
+    articleIdentity,
+    articleTitle,
+    articleKey,
+    todayKey,
+    flash,
+  })
+
   const {
     download,
     doExportAnki,
@@ -1918,6 +1940,7 @@ export default function ReaderApp() {
     setReadGoal,
     setGoalMemo,
   })
+
 
   /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
   const aiJobsInput = useMemo<AiJobsInput>(
@@ -2089,91 +2112,6 @@ export default function ReaderApp() {
     persist(applyExamples(library, rows, new Date(), 'tatoeba'))
     flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
   }, [articleWords, library, persist, flash])
-
-  /** 离线例句库是否就绪（加载一次，全库通用）。 */
-  const [tatoebaReady, setTatoebaReady] = useState(false)
-  useEffect(() => {
-    let alive = true
-    void loadTatoeba().then((ok) => {
-      if (alive) setTatoebaReady(ok)
-    })
-    return () => {
-      alive = false
-    }
-  }, [])
-
-  /** 离线例句查询（Tatoeba）：手动按钮与自动补全共用同一份。 */
-  const lookupTatoeba = useCallback(
-    (it: { word: string; lemma: string }) =>
-      tatoebaExamples(it.word, it.lemma).map((e) => ({ text: e.en, translation: e.zh })),
-    [],
-  )
-
-  /**
-   * 记「读完这篇」。速读推到结尾会自动调，也可在目标面板手动标记。
-   * **同一篇只记第一次**：已在某天读过就不再计入（也不会第二天又被列入），只给个提示。
-   */
-  const markReadDone = useCallback(() => {
-    if (!articleIdentity) return
-    const already = readDayOf(readDone, articleIdentity)
-    if (already) {
-      if (already !== todayKey) flash(`这篇已于 ${already} 读过，不重复计入（换一天重读也不算）`)
-      return
-    }
-    setReadDone((prev) =>
-      addReadDone(prev, {
-        day: todayKey,
-        articleId: articleIdentity,
-        title: articleTitle || articleKey || '未命名',
-        at: new Date().toISOString(),
-      }),
-    )
-  }, [articleIdentity, articleTitle, articleKey, todayKey, setReadDone, readDone, flash])
-
-  const todayReadDone = useMemo(() => readDoneOn(readDone, todayKey), [readDone, todayKey])
-  /** 当前这篇第一次读完是哪天（没读过为 null）。 */
-  const articleReadDay = useMemo(() => readDayOf(readDone, articleIdentity), [readDone, articleIdentity])
-  /** 文章标识 → 第一次读完的日期键（文章选择器里标「✓ 已读」）。 */
-  const readDays = useMemo(
-    () => Object.fromEntries(readDone.map((d) => [d.articleId, d.day])) as Record<string, string>,
-    [readDone],
-  )
-  const undoReadDone = useCallback(
-    (articleId: string) => setReadDone((prev) => removeReadDone(prev, articleId)),
-    [setReadDone],
-  )
-
-  /**
-   * 语言点自动收藏的**素材**：AI 在速读里总结的 **词组 / 习语 / 用法** 收进词库，
-   * 之后就能跟生词一样筛选、分组、打印（整套打印/导出选项直接复用）。
-   * 真正「收」的动作在下面那个唯一的自动补全 effect 里（按每篇内容签名只收一遍：
-   * 收过就不再折腾，用户手动删掉的条目不会被自动加回来）。
-   */
-  const languagePoints = useMemo(() => {
-    const others = saved.filter((a) => a.id !== articleIdentity)
-    const out = others.flatMap((a) => languagePointsOf(a.sentences, { articleId: a.id, fileName: a.id }))
-    // 当前这篇放最后：同样的句子，当前的原文更新
-    if (articleIdentity && doc) out.push(...languagePointsOf(doc.sentences, { articleId: articleIdentity, fileName: articleIdentity }))
-    return out
-  }, [saved, doc, articleIdentity])
-
-  /**
-   * 词库自动补全的**唯一写入口**：语言点收藏 + 离线例句补全（纯计划见 core/libraryAutoFill.ts）。
-   *
-   * ⚠️ 两条硬约定（违反就会回到「两个 effect 互相覆盖、词库数量来回跳」的坑，见 docs/TESTING.md 踩坑 #1）：
-   *   1. 依赖里**不放 `library`**：要读当前词库就读 `libraryRef.current`；
-   *   2. 新的「自动补全」一律加进 `autoFillLibrary`，**不要再写第二个 effect 去读/写词库**。
-   */
-  useEffect(() => {
-    if (!libraryLoaded) return
-    const out = autoFillLibrary(libraryRef.current, {
-      langPoints: languagePoints,
-      collected: langCollected,
-      offline: tatoebaReady ? { lookup: lookupTatoeba } : undefined,
-    })
-    if (!out.libraryUntouched) persist(out.library)
-    if (!out.collectedUntouched) setLangCollected(out.collected)
-  }, [libraryLoaded, languagePoints, langCollected, tatoebaReady, lookupTatoeba, persist, setLangCollected])
 
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(

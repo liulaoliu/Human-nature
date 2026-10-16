@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { readJson, writeJson } from '../storage'
 
 export interface PlanPanelProps {
   onClose: () => void
@@ -32,13 +33,8 @@ const STEPS: Step[] = [
 
 const planKey = (day: string) => `reader:plan:${day}`
 function loadChecked(day: string): string[] {
-  try {
-    const raw = localStorage.getItem(planKey(day))
-    const v = raw ? (JSON.parse(raw) as { checked?: unknown }) : null
-    return v && Array.isArray(v.checked) ? v.checked.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
+  const v = readJson<{ checked?: unknown } | null>(planKey(day), null)
+  return v && Array.isArray(v.checked) ? v.checked.filter((x): x is string => typeof x === 'string') : []
 }
 
 /**
@@ -62,11 +58,7 @@ export default function PlanPanel({
     setChecked(loadChecked(todayKey))
   }, [todayKey])
   useEffect(() => {
-    try {
-      localStorage.setItem(planKey(todayKey), JSON.stringify({ checked }))
-    } catch {
-      // 忽略
-    }
+    writeJson(planKey(todayKey), { checked })
   }, [todayKey, checked])
 
   const toggle = (id: string) =>
