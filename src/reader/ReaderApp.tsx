@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import { wordSpans } from '../core/wordSelect'
 import {
-  createLibrary,
   applyExamples,
   applyLemmaMap,
   articleWordsOf,
@@ -14,7 +13,6 @@ import {
   lemmaOf,
   markWord,
   normalizeWord,
-  normalizeGrammarMarks,
   removeItem,
   reviewItem,
   sortItems,
@@ -34,7 +32,7 @@ import {
 import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
 import { isWordEntry } from '../core/entryKind'
-import { repairLanguageKinds, splitGlossText } from '../core/langPoints'
+import { splitGlossText } from '../core/langPoints'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
@@ -56,7 +54,6 @@ import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat, type DayActivity } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
-import { createVocabRepo } from '../adapters/vocabRepo'
 import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import StatsPanel from './panels/StatsPanel'
@@ -87,6 +84,7 @@ import { useStudySession } from './hooks/useStudySession'
 import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useReadDone } from './hooks/useReadDone'
+import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
@@ -115,8 +113,7 @@ import {
   persistentString,
   useLocalStorageState,
 } from './hooks/useLocalStorageState'
-import type { VocabRepoPort } from '../core/ports'
-import type { Paragraph, Sentence, SentenceLanguage, VocabLibrary, VocabItem } from '../types/document'
+import type { Paragraph, Sentence, SentenceLanguage, VocabItem } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
 
@@ -159,12 +156,7 @@ export default function ReaderApp() {
   /** 精确选区：哪个句子 + 哪些词（可离散，支持下划线多选） */
   const [selSid, setSelSid] = useState<string | null>(null)
   const [selIndices, setSelIndices] = useState<number[]>([])
-  const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
-  /** 词库是否已从 IndexedDB 读回来（读完才做「语言点自动收藏」，避免和加载抢写）。 */
-  const [libraryLoaded, setLibraryLoaded] = useState(false)
   /** 词库的可变引用：跑批里多条任务挨个应用时用它串起来，避免相互覆盖（见 useApplyTaskResult）。 */
-  const libraryRef = useRef(library)
-  libraryRef.current = library
   const [pasted, setPasted] = useState('')
   /** 上次「复制提示词」请求的词（用于校验 AI 返回是否齐全） */
   const askedWordsRef = useRef<string[]>([])
@@ -192,6 +184,14 @@ export default function ReaderApp() {
     | null
   >(null)
   const [toast, setToast] = useState('')
+
+  const flash = useCallback((message: string) => {
+    setToast(message)
+    window.setTimeout(() => setToast(''), 1900)
+  }, [])
+
+  // 词库：读回 / 去重修数据 / 唯一写入口 / 上一版恢复 / 找回词条 —— 全在 hooks/useVocabLibrary
+  const { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev: restorePrevLibrary, rescueFromLocalRecords } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
   /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
@@ -600,7 +600,6 @@ export default function ReaderApp() {
   }, [articleWords])
   const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
   const applyingDom = useRef(false)
-  const repo = useRef<VocabRepoPort | null>(null)
   const articles = useRef<ArticleRepoPort | null>(null)
   const batchMapRef = useRef<Record<string, BatchItem[]>>(loadBatchMap())
   const vocabStartRef = useRef<number | null>(null)
@@ -613,25 +612,6 @@ export default function ReaderApp() {
   const rightDownRef = useRef(false)
 
   useEffect(() => {
-    const r = createVocabRepo()
-    repo.current = r
-    r.load()
-      .then((lib) => {
-        // 加载时合并去重，保证不会出现两个同根词；顺手修早先版本误标的类型
-        const fixed = normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(lib)))
-        libraryRef.current = fixed
-        setLibrary(fixed)
-        setLibraryLoaded(true)
-        const dirty = fixed.items.length !== lib.items.length || fixed.items.some((it, i) => it !== lib.items[i])
-        if (dirty) r.save(fixed).catch(() => {})
-      })
-      .catch(() => setLibraryLoaded(true))
-    // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
-    try {
-      void navigator.storage?.persist?.()
-    } catch {
-      // 老浏览器忽略
-    }
     const ar = createArticleRepo()
     articles.current = ar
     ar
@@ -689,10 +669,6 @@ export default function ReaderApp() {
       // 忽略
     }
   }, [batch, articleIdentity])
-  const flash = useCallback((message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(''), 1900)
-  }, [])
 
   /** 按住 Alt 点句子：把文本复制到剪贴板（方便拿去翻译）。 */
   const altCopyText = useCallback(
@@ -707,12 +683,6 @@ export default function ReaderApp() {
     [flash],
   )
 
-  const persist = useCallback((lib: VocabLibrary) => {
-    libraryRef.current = lib
-    setLibrary(lib)
-    repo.current?.save(lib).catch(() => {})
-  }, [])
-
   /**
    * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句）。
    * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
@@ -725,7 +695,6 @@ export default function ReaderApp() {
     libraryLoaded,
     persist,
   })
-
 
   /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
   const askDelete = useCallback(
@@ -1538,7 +1507,6 @@ export default function ReaderApp() {
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
   toggleVocabRef.current = toggleVocabMode
 
-
   const resetSelection = useCallback(() => {
     setSelectedId(null)
     setExact('')
@@ -1614,7 +1582,6 @@ export default function ReaderApp() {
   })
 
   const currentValue = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
-
 
   /** 选区所在的句子 —— 默认的操作对象。 */
   const sentence = useMemo(() => {
@@ -1940,7 +1907,6 @@ export default function ReaderApp() {
     setReadGoal,
     setGoalMemo,
   })
-
 
   /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
   const aiJobsInput = useMemo<AiJobsInput>(
@@ -3102,6 +3068,9 @@ export default function ReaderApp() {
           onToggleStats={() => setStatsOpen((v) => !v)}
           onExportWrong={doExportWrong}
           onExportAll={exportAll}
+          libraryLoadFailed={libraryLoad === 'failed'}
+          onRestorePrev={() => void restorePrevLibrary()}
+          onRescueLocal={() => rescueFromLocalRecords()}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}

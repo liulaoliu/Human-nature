@@ -92,8 +92,8 @@ function setup(over: Partial<SideVocabProps> = {}) {
 describe('SideVocab：生词 / 语言点 分开显示', () => {
   it('两个页签各带条数，默认停在「生词」', () => {
     setup()
-    expect(screen.getByRole('button', { name: /生词 2/ })).toBeTruthy()
-    expect(screen.getByRole('button', { name: /语言点 2/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /生词（2）/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /语言点（2）/ })).toBeTruthy()
     // 默认显示生词：有 run，没有语言点
     expect(screen.getByText('run')).toBeTruthy()
     expect(screen.queryByText('fall back on')).toBeNull()
@@ -101,7 +101,7 @@ describe('SideVocab：生词 / 语言点 分开显示', () => {
 
   it('切到语言点：显示词组/习语/用法，生词消失', () => {
     setup()
-    fireEvent.click(screen.getByRole('button', { name: /语言点 2/ }))
+    fireEvent.click(screen.getByRole('button', { name: /语言点（2）/ }))
     expect(screen.getByText('fall back on')).toBeTruthy()
     expect(screen.getByText('注意 subject to 是形容词')).toBeTruthy()
     expect(screen.queryByText('run')).toBeNull()
@@ -109,7 +109,7 @@ describe('SideVocab：生词 / 语言点 分开显示', () => {
 
   it('打印/Anki 只交当前页签的条目，标题标出「语言点」', () => {
     const { onPrint, onExportAnki } = setup()
-    fireEvent.click(screen.getByRole('button', { name: /语言点 2/ }))
+    fireEvent.click(screen.getByRole('button', { name: /语言点（2）/ }))
     fireEvent.click(screen.getByRole('button', { name: /A4（本篇）/ }))
     const [items, title] = onPrint.mock.calls[0]
     expect(items.map((it: { id: string }) => it.id)).toEqual(['p1', 'u1'])
@@ -121,7 +121,7 @@ describe('SideVocab：生词 / 语言点 分开显示', () => {
 
   it('本篇没有语言点时，语言点页签给提示而不是空白', () => {
     setup({ articleWords: words })
-    fireEvent.click(screen.getByRole('button', { name: /语言点 0/ }))
+    fireEvent.click(screen.getByRole('button', { name: /语言点（0）/ }))
     expect(screen.getByText(/还没有语言点/)).toBeTruthy()
   })
 })

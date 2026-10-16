@@ -36,24 +36,43 @@ function setup(over: Partial<Parameters<typeof ExportPanel>[0]> = {}) {
   return { onPrint, onExportAnki, onExportWordList }
 }
 
-const pick = (label: string) => fireEvent.click(screen.getByLabelText(label))
+const pick = (label: string | RegExp) => fireEvent.click(screen.getByLabelText(label))
+/** 表头那句「将处理 N 条（范围）」 */
+const header = () => document.querySelector('.plan-head .muted')?.textContent ?? ''
 
 describe('ExportPanel：内容口径', () => {
-  it('默认全部；切「词组 / 习语」后只把词组交给打印', () => {
+  it('默认全部；切「词组 / 习语」后只把词组交给打印（表头写清范围）', () => {
     const { onPrint } = setup()
-    expect(screen.getByText('将处理 3 条')).toBeTruthy()
-    pick('词组 / 习语')
-    expect(screen.getByText('将处理 1 条')).toBeTruthy()
+    expect(header()).toContain('3 条')
+    expect(header()).toContain('本篇')
+    pick(/词组 \/ 习语/)
+    expect(header()).toContain('1 条')
     fireEvent.click(screen.getByRole('button', { name: /A4 打印/ }))
     const [items, title] = onPrint.mock.calls[0]
     expect(items.map((it: { word: string }) => it.word)).toEqual(['fall back on'])
     expect(title).toBe('A 篇·词组习语表')
   })
 
+  it('内容选项自带各类条数（用户不用猜 135 是什么）', () => {
+    setup()
+    const row = document.querySelector('.exsec')?.textContent ?? ''
+    expect(row).toContain('单词')
+    expect(row).toContain('1') // 1 个单词
+    expect(row).toContain('词组 / 习语')
+    expect(row).toContain('用法笔记')
+  })
+
+  it('面板上能看到打印标题（不用真打印才知道叫什么）', () => {
+    setup()
+    expect(screen.getByText('打印 / 导出标题：').parentElement?.textContent).toContain('A 篇')
+    pick(/词组 \/ 习语/)
+    expect(screen.getByText(/词组习语表/)).toBeTruthy()
+  })
+
   it('用法笔记：内容选「用法笔记」时 TXT 按钮禁用（导不出单词表）', () => {
     setup()
-    pick('用法笔记')
-    expect(screen.getByText('将处理 1 条')).toBeTruthy()
+    pick(/用法笔记/)
+    expect(header()).toContain('1 条')
     const txt = screen.getByRole('button', { name: /单词表 TXT/ }) as HTMLButtonElement
     expect(txt.disabled).toBe(true)
   })

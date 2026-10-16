@@ -13,6 +13,14 @@ import {
 
 export type { PrintContent, PrintGroupBy }
 
+const SCOPE_LABEL: Record<PrintScope, string> = {
+  article: '本篇',
+  byArticle: '按文章',
+  date: '按日期',
+  unprinted: '未打印',
+  all: '全部',
+}
+
 export interface ExportArticleRef {
   id: string
   title: string
@@ -77,7 +85,7 @@ export default function ExportPanel({
       }),
     [libraryItems, articleWords, articleTitle, articles, pickedArticles, pickedDates, content, scope],
   )
-  const { pool, articlePool, items, title, dates, articleCount, unprinted, isArticleOrder, canAct } = plan
+  const { contentCounts, pool, articlePool, items, title, dates, articleCount, unprinted, isArticleOrder, canAct } = plan
   const effectiveScope: PrintScope = scope === 'article' && !articlePool.length ? 'all' : scope
 
   /** 新增生词的热力图（近 13 周；只用于按日期选范围） */
@@ -101,7 +109,9 @@ export default function ExportPanel({
       <div className="plan-panel export-panel" onClick={(e) => e.stopPropagation()}>
         <div className="bar plan-head">
           <b>🖨 打印 / 导出</b>
-          <span className="muted">将处理 {items.length} 条</span>
+          <span className="muted">
+            将处理 {items.length} 条（{SCOPE_LABEL[effectiveScope]}）
+          </span>
           <button onClick={onClose}>关闭</button>
         </div>
 
@@ -112,6 +122,7 @@ export default function ExportPanel({
               <label className="check-inline" key={c}>
                 <input type="radio" checked={content === c} onChange={() => setContent(c)} />
                 {PRINT_CONTENT_LABEL[c]}
+                <span className="muted">{contentCounts[c]}</span>
               </label>
             ))}
             <span className="muted">共 {pool.length} 条</span>
@@ -298,6 +309,9 @@ export default function ExportPanel({
             >
               📄 单词表 TXT
             </button>
+          </div>
+          <div className="expick-title">
+            打印 / 导出标题：<b>{title}</b>
           </div>
           <div className="muted extip">
             按文章/日期可**勾选多个**（同一条只算一次）。打印后会记「已打印」，选「未打印」可只打新的。

@@ -9,7 +9,7 @@
  * 现在面板只负责「收集用户选择 + 渲染」，判断全在这里，单测覆盖。
  */
 import type { VocabItem } from '../types/document'
-import { filterByKind } from './entryKind'
+import { filterByKind, kindOf } from './entryKind'
 import { dayKeyLocal } from './activity'
 import type { VocabKind } from '../types/document'
 
@@ -65,6 +65,8 @@ export interface PrintPlanInput {
 }
 
 export interface PrintPlan {
+  /** 每个「内容」口径有多少条（面板上直接显示，免得用户猜） */
+  contentCounts: Record<PrintContent, number>
   /** 内容过滤后的全库 / 本篇 */
   pool: VocabItem[]
   articlePool: VocabItem[]
@@ -89,6 +91,13 @@ const dayOf = (it: VocabItem) => dayKeyLocal(new Date(it.createdAt))
  */
 export function planPrint(input: PrintPlanInput): PrintPlan {
   const kinds = contentKinds(input.content)
+  const contentCounts: Record<PrintContent, number> = { all: input.libraryItems.length, word: 0, phrases: 0, usage: 0 }
+  for (const it of input.libraryItems) {
+    const k = kindOf(it)
+    if (k === 'word') contentCounts.word++
+    else if (k === 'usage') contentCounts.usage++
+    else contentCounts.phrases++
+  }
   const pool = filterByKind(input.libraryItems, kinds)
   const articlePool = filterByKind(input.articleItems, kinds)
   const scope: PrintScope = input.scope === 'article' && !articlePool.length ? 'all' : input.scope
@@ -141,6 +150,7 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
   else title = `全部${input.content === 'all' ? '生词' : PRINT_CONTENT_LABEL[input.content]}`
 
   return {
+    contentCounts,
     pool,
     articlePool,
     items,

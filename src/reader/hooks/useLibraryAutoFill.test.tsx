@@ -81,11 +81,12 @@ describe('useLibraryAutoFill（唯一写入口）', () => {
     expect(libraryRef.current.items.map((it) => it.word).sort()).toEqual(['fall back on', 'take its toll'])
   })
 
-  it('词库还没加载完不写（避免和 IndexedDB 读回来的那次抢写）', () => {
+  it('词库没读成功就绝不写 —— 「读失败→空库被覆盖」那次丢词事故的回归测试', () => {
     const { persist, rerender, props } = setup({ libraryLoaded: false })
     expect(persist).not.toHaveBeenCalled()
     rerender({ ...props, libraryLoaded: true })
     expect(persist).toHaveBeenCalledTimes(1)
+    // 关键：failed 期间一次都没写（否则空库会覆盖回 IndexedDB，生词全丢）
   })
 
   it('没有语言点：一个字都不写', () => {

@@ -189,4 +189,6 @@ export interface VocabRepoPort {
   load(): Promise<VocabLibrary>
   save(library: VocabLibrary): Promise<void>
   clear(): Promise<void>
+  /** 取「覆盖前那一版」快照（有的实现没有 → null）。用来从误清/读失败里救回词库。 */
+  loadPrev?(): Promise<VocabLibrary | null>
 }

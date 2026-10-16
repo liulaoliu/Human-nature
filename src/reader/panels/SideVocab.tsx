@@ -74,6 +74,12 @@ export interface SideVocabProps {
   onToggleStats: () => void
   onExportWrong: (items: VocabItem[]) => void
   onExportAll: () => void
+  /** 词库读取是否出错（出错时本次不写入任何东西，提供恢复入口） */
+  libraryLoadFailed?: boolean
+  /** 从「上一版」快照恢复词库 */
+  onRestorePrev?: () => void
+  /** 从本机其它记录（待选清单 / 错题本）找回词条 */
+  onRescueLocal?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -136,6 +142,9 @@ export default function SideVocab({
   onToggleStats,
   onExportWrong,
   onExportAll,
+  libraryLoadFailed,
+  onRestorePrev,
+  onRescueLocal,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -154,6 +163,10 @@ export default function SideVocab({
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
   const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
+  /** 词库里还有多少「普通单词」（判断是不是被覆盖过） */
+  const wordCount = useMemo(() => wordEntries(libraryItems).length, [libraryItems])
+  const looksWiped = wordCount === 0 && libraryItems.length > 0
+
   /** 生词 / 语言点 两个页签：两类数据形状不同（单词 vs 词组·习语·用法说明），混在一列很难读 */
   const [tab, setTab] = useState<'word' | 'lang'>('word')
   const words = useMemo(() => wordEntries(articleWords), [articleWords])
@@ -165,16 +178,16 @@ export default function SideVocab({
     <div className="side-sec" data-sec="vocab">
       <div className="section-title">
         生词本 · 本篇（{articleWords.length}）
-        <span className="view-toggle">
-          <button className={tab === 'word' ? 'primary' : ''} onClick={() => setTab('word')} title="普通单词">
-            生词 {words.length}
+        <span className="view-toggle tab-toggle">
+          <button className={tab === 'word' ? 'primary' : ''} onClick={() => setTab('word')} title="普通单词（要背/要考的那些）">
+            生词（{words.length}）
           </button>
           <button
             className={tab === 'lang' ? 'primary' : ''}
             onClick={() => setTab('lang')}
             title="速读里 AI 总结的词组 / 习语 / 用法（自动收藏，可打印）"
           >
-            语言点 {langs.length}
+            语言点（{langs.length}）
           </button>
         </span>
         <span className="view-toggle">
@@ -293,7 +306,21 @@ export default function SideVocab({
         </button>
       </div>
 
+      {looksWiped && (
+        <div className="side-warn">
+          ⚠ 词库里**一个普通单词都没有**（只剩 {libraryItems.length} 条语言点），像是被覆盖过。按顺序试：
+          <b>① 恢复上一版词库</b> → <b>② 找回词条</b>（从待选清单/错题本捞） →{' '}
+          <b>③ 打印/导出 → 导入备份</b>（以前导出的 economist-backup-*.json）。
+          实在没有备份就按篇重来：侧栏「用词典挑词」是**本地词典、不用 AI**，挑完再「补齐生词本」。
+        </div>
+      )}
       <div className="side-label">库 / 导出</div>
+      {libraryLoadFailed && (
+        <div className="side-warn">
+          ⚠ 词库没读出来：本次**不会写入任何东西**（免得把空库覆盖回去）。先点下面「恢复上一版词库」，
+          或刷新页面重试。
+        </div>
+      )}
       <div className="bar">
         <button onClick={onBrowseAll} disabled={!hasItems} title="查看全部生词（跨文章）">
           全部生词
@@ -312,6 +339,22 @@ export default function SideVocab({
         >
           {articleAllPrinted ? 'A4（本篇）✓' : 'A4（本篇）'}
         </button>
+        {onRestorePrev && (
+          <button
+            onClick={onRestorePrev}
+            title="把词库退回上一次覆盖前的版本（防误清 / 读取出错；取更完整的那一份）"
+          >
+            恢复上一版词库
+          </button>
+        )}
+        {onRescueLocal && (
+          <button
+            onClick={onRescueLocal}
+            title="从本机还留着的记录里把词找回来：待选清单（词 + 原句）+ 错题本。释义可再用「补齐生词本」本地补"
+          >
+            找回词条
+          </button>
+        )}
         <button onClick={() => onExportAnki(libraryItems)} disabled={!hasItems} title="导出整库生词为 Anki CSV">
           Anki（整库）
         </button>
@@ -454,6 +497,13 @@ export default function SideVocab({
         </div>
       )}
 
+      {tab === 'word' && !words.length && langs.length > 0 && (
+        <div className="side-warn">
+          这篇没有普通单词，只有语言点 —— 点上面「语言点」页签看。
+          若你**原来的生词本里本来是有词的**，多半是词库读取出了岔子：先点「恢复上一版词库」，
+          不行再刷新页面。
+        </div>
+      )}
       {tab === 'lang' ? (
         <LangPointList
           items={sortItems(langs, sortBy)}
