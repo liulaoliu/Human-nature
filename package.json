@@ -15,7 +15,10 @@
     "ai:agent": "node tools/ai-agent.mjs",
     "ecdict:build": "node tools/build-ecdict.mjs",
     "mwld:build": "node tools/build-mwld.mjs",
-    "tatoeba:build": "node tools/build-tatoeba.mjs"
+    "tatoeba:build": "node tools/build-tatoeba.mjs",
+    "gates": "tsc -b && vitest run && node tool/check_god_file.mjs && node tool/check_architecture.mjs",
+    "check:size": "node tool/check_god_file.mjs",
+    "check:arch": "node tool/check_architecture.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",
