@@ -42,8 +42,8 @@ export interface UseVocabLibraryResult {
   restorePrev: () => Promise<void>
   /** 从本机其它记录（待选清单 / 错题本）把词条找回来 */
   rescueFromLocalRecords: () => void
-  /** 从**正文标记**（Sentence.vocab）重建词条 —— 丢词后最准的一条路 */
-  rebuildFromArticles: (articles: ArticleWithMarks[]) => void
+  /** 从**正文标记**（Sentence.vocab）重建词条 —— 丢词后最准的一条路（可选带一步本地补释义） */
+  rebuildFromArticles: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
 }
 
 /** 本机还留着词的几处记录（救援素材）。 */
@@ -132,7 +132,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
   }, [libraryLoad, flash, persist])
 
   const rebuildFromArticles = useCallback(
-    (articles: ArticleWithMarks[]) => {
+    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
       if (libraryLoad === 'failed') {
         flash('词库没读出来：先「恢复上一版词库」或刷新，再试重建')
         return
@@ -142,8 +142,10 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         flash(out.found ? `正文标记里 ${out.found} 个词都已在词库里` : '正文里没有标记过的词（Sentence.vocab 是空的）')
         return
       }
-      persist(out.library)
-      flash(`已从正文标记重建 ${out.added} 个词条（释义可用「补齐生词本」本地补）`)
+      // 补一步**本地**释义（离线词典）：同一次落库，避免「用旧闭包再写一遍」把重建结果覆盖掉
+      const next = enrich ? enrich(out.library) : out.library
+      persist(next)
+      flash(`已从正文标记重建 ${out.added} 个词条（音标/释义已用离线词典补上）`)
     },
     [libraryLoad, flash, persist],
   )

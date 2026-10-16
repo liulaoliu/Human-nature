@@ -2056,13 +2056,7 @@ export default function ReaderApp() {
     flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
   }, [articleWords, library, persist, flash])
 
-  /** 正文标记（Sentence.vocab）→ 统计 + 一键重建（丢词时最准的数据源） */
-  const marks = useArticleMarks({
-    saved,
-    sentences: doc?.sentences ?? null,
-    articleIdentity,
-    rebuild: rebuildFromArticles,
-  })
+  /** 正文标记（Sentence.vocab）→ 统计 + 自动/一键重建（丢词时最准的数据源） */
 
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(
@@ -2190,7 +2184,7 @@ export default function ReaderApp() {
     persist(dedupeLibrary(applyLemmaMap(library, pairs)))
   }, [dictReady, library, persist])
 
-  const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
+  const { enrichFromDict, enrichLibrary, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
     library,
     persist,
     doc,
@@ -2198,6 +2192,11 @@ export default function ReaderApp() {
     mergeBatch,
     batchItemsFromWords,
     flash,
+  })
+
+  const marks = useArticleMarks({
+    saved, sentences: doc?.sentences ?? null, articleIdentity,
+    rebuild: rebuildFromArticles, enrich: enrichLibrary, library, libraryLoad, flash,
   })
 
   const allList = sortItems(library.items, vocabSort)

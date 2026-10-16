@@ -1,8 +1,9 @@
 import { useCallback } from 'react'
-import { dictConfusables, dictLemmaPairs, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, lemmaOf, normalizePos } from '../../core/vocab'
+import { dictConfusables, dictLemmaPairs, pickAboveLevelWords, type EcdictLevel } from '../../core/ecdict'
+import { applyConfusables, applyLemmaMap, dedupeLibrary, lemmaOf } from '../../core/vocab'
+import { enrichWithDict } from '../../core/dictEnrich'
 import { isWordEntry } from '../../core/entryKind'
-import type { VocabItem, VocabLibrary } from '../../types/document'
+import type { VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
@@ -22,37 +23,31 @@ export interface UseDictToolsParams {
  * 词典未加载时全部 no-op（并提示）。
  */
 export function useDictTools({ library, persist, doc, level, mergeBatch, batchItemsFromWords, flash }: UseDictToolsParams) {
-  /** 用词典给生词本补齐缺失字段（音标/词性/中文释义/英英释义）。 */
+  /**
+   * 用离线词典补音标/词性/中英释义（纯逻辑在 core/dictEnrich，本地、幂等）。
+   * 返回「补过的词库」；词典没就绪就原样返回 —— 自动找回词条时可以直接接在重建后面。
+   */
+  const enrichLibrary = useCallback(
+    (lib: VocabLibrary): VocabLibrary => {
+      const dict = dictionary()
+      if (!dict) return lib
+      return enrichWithDict(lib, dict, (w) => mwldLookupWord(w), new Date()).library
+    },
+    [],
+  )
+
+  /** 手动按钮：全库补一遍 + 提示补了多少 */
   const enrichFromDict = useCallback(() => {
-    const dict = dictionary()
-    if (!dict) {
+    if (!dictionary()) {
       flash('词典未加载（先跑 npm run ecdict:build）')
       return
     }
-    let filled = 0
-    const items = library.items.map((it) => {
-      const hit = resolveWord(dict, it.word) ?? resolveWord(dict, it.lemma)
-      const mw = mwldLookupWord(it.word) ?? mwldLookupWord(it.lemma)
-      if (!hit && !mw) return it
-      const e = hit?.entry
-      const patch: Partial<VocabItem> = {}
-      const ph = mw?.phonetic || e?.phonetic
-      if (!it.phonetic && ph) patch.phonetic = `/${ph.replace(/^\/+|\/+$/g, '')}/`
-      if (!it.partOfSpeech && (mw?.pos || e?.pos)) {
-        patch.partOfSpeech = normalizePos(mw?.pos || e?.pos || '') || undefined
-      }
-      if (!it.meaning && e?.zh) patch.meaning = cleanGloss(firstLine(e.zh)) || undefined
-      if (!it.definition && (mw?.en || e?.en)) patch.definition = cleanGloss(mw?.en || firstLine(e?.en ?? '')) || undefined
-      if (!Object.keys(patch).length) return it
-      filled++
-      if (it.status === 'unqueried') patch.status = 'queried'
-      return { ...it, ...patch, updatedAt: new Date().toISOString() }
-    })
+    const { library: next, filled } = enrichWithDict(library, dictionary()!, (w) => mwldLookupWord(w), new Date())
     if (!filled) {
       flash('没有可补齐的（词典里没有，或已有数据）')
       return
     }
-    persist({ ...library, items })
+    persist(next)
     flash(`已用词典补齐 ${filled} 个词`)
   }, [library, persist, flash])
 
@@ -121,5 +116,5 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
     flash(`已用词典给 ${results.length} 个词生成混淆项`)
   }, [library, persist, flash])
 
-  return { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict }
+  return { enrichFromDict, enrichLibrary, fixLemmasFromDict, pickFromDict, confuseFromDict }
 }
