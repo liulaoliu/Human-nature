@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VocabLibrary } from '../../types/document'
 import type { VocabRepoPort } from '../../core/ports'
 import { createLibrary, dedupeLibrary, normalizeGrammarMarks } from '../../core/vocab'
-import { recoverLibrary, rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
+import { countRescueWords, recoverLibrary, rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
 import { rebuildFromArticleMarks, type ArticleWithMarks } from '../../core/libraryFromArticles'
 import { readJson } from '../storage'
 import { repairLanguageKinds } from '../../core/langPoints'
@@ -48,6 +48,8 @@ export interface UseVocabLibraryResult {
   recoverAll: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
   /** **只保留正文标记过的词**（覆盖整库）——从「导入的大库」回到你当初标过的数量 */
   keepOnlyMarked: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
+  /** 本机记录里能捞多少词（待选清单 / 错题本）—— 让用户「先看数、再决定」 */
+  rescueCounts: { batch: number; mistakes: number; total: number }
 }
 
 /** 本机还留着词的几处记录（救援素材）。 */
@@ -63,6 +65,8 @@ export function readRescueRecords(): RescueRecords {
 export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVocabLibraryParams): UseVocabLibraryResult {
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
   const [libraryLoad, setLibraryLoad] = useState<LibraryLoadState>('pending')
+  /** 本机记录的可用词数（挂载时统计一次；找回后再统计一次） */
+  const [rescueCounts, setRescueCounts] = useState(() => countRescueWords(readRescueRecords()))
   const repo = useRef<VocabRepoPort | null>(null)
   const libraryRef = useRef(library)
   libraryRef.current = library
@@ -162,6 +166,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       }
       const records = readRescueRecords()
       const out = recoverLibrary(libraryRef.current, { articles, records })
+      setRescueCounts({ batch: 0, mistakes: 0, total: 0 })
       if (!out.added) {
         flash(
           out.fromMarks || out.fromRecords
@@ -186,6 +191,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       const before = libraryRef.current.items.length
       // 用**你自己的数据**重建：文章标记（Sentence.vocab）+ 待选清单（自动标词的结果，按篇存的）+ 错题本
       const out = recoverLibrary(createLibrary(), { articles, records: readRescueRecords() })
+      setRescueCounts({ batch: 0, mistakes: 0, total: 0 })
       if (!out.added) {
         flash('没找到可用的标记（正文 Sentence.vocab 与待选清单都是空的），这一步做不了')
         return
@@ -200,5 +206,5 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     [libraryLoad, flash, persist],
   )
 
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked }
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked, rescueCounts }
 }

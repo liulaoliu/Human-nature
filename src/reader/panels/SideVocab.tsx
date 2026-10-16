@@ -88,6 +88,9 @@ export interface SideVocabProps {
   onRecoverAll?: () => void
   /** **只保留正文标记过的词**（覆盖整库；数量回到当初标过的样子） */
   onKeepOnlyMarked?: () => void
+  /** 本机记录里能捞回的词数（待选清单 / 错题本）——用于「先看数、再决定」 */
+  rescueBatch?: number
+  rescueMistakes?: number
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -157,6 +160,8 @@ export default function SideVocab({
   onRebuildFromMarks,
   onRecoverAll,
   onKeepOnlyMarked,
+  rescueBatch,
+  rescueMistakes,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -320,9 +325,10 @@ export default function SideVocab({
         </button>
       </div>
 
-      {onRebuildFromMarks && (markedWordCount ?? 0) > 0 && (
+      {(markedWordCount ?? 0) + (rescueBatch ?? 0) + (rescueMistakes ?? 0) > 0 && (
         <div className="side-warn">
-          📄 正文里还留着 <b>{markedWordCount}</b> 个标记过的词（存在文章里，不受词库影响）。
+          🔎 本机还能找回：正文标记 <b>{markedWordCount ?? 0}</b> · 待选清单（自动标词的结果，按篇存的）{' '}
+          <b>{rescueBatch ?? 0}</b> · 错题本 <b>{rescueMistakes ?? 0}</b> —— 都来自你自己的数据，不用重跑 AI。
           {onKeepOnlyMarked ? (
             <div style={{ marginTop: 6 }}>
               <button

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { recoverLibrary, rescueLibrary } from './libraryRescue'
+import { countRescueWords, recoverLibrary, rescueLibrary } from './libraryRescue'
 import { createLibrary, markWord } from './vocab'
 import { TEST_NOW } from './testFixtures'
 
@@ -97,5 +97,18 @@ describe('recoverLibrary（一次全捞）', () => {
     const out = recoverLibrary(createLibrary(), {}, TEST_NOW)
     expect(out.added).toBe(0)
     expect(out.library.items).toHaveLength(0)
+  })
+})
+
+describe('countRescueWords（先看数）', () => {
+  it('待选清单 / 错题本 各算多少，去重且不重复计', () => {
+    const n = countRescueWords({
+      batch: { A: [{ word: 'run' }, { word: 'Run' }], B: [{ word: 'wall' }] },
+      mistakeWords: ['vocab:run', 'vocab:havoc', 'wall'],
+    })
+    expect(n).toEqual({ batch: 2, mistakes: 1, total: 3 }) // havoc 才算错题本新增
+  })
+  it('空记录 → 全 0', () => {
+    expect(countRescueWords({})).toEqual({ batch: 0, mistakes: 0, total: 0 })
   })
 })

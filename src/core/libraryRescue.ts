@@ -127,3 +127,22 @@ export function recoverLibrary(library: VocabLibrary, sources: RecoverSources, n
   }
   return { library: lib, added, fromMarks, fromRecords }
 }
+
+/** 统计「本机记录」里能认出多少词（只数，不建条目）——给侧栏「先看数」用。 */
+export function countRescueWords(records: RescueRecords): { batch: number; mistakes: number; total: number } {
+  const inBatch = new Set<string>()
+  for (const list of Object.values(records.batch ?? {})) {
+    for (const b of list ?? []) {
+      const w = (b?.word ?? '').trim()
+      if (w) inBatch.add(w.toLowerCase())
+    }
+  }
+  const inMistakes = new Set<string>()
+  for (const raw of records.mistakeWords ?? []) {
+    const w = (raw ?? '').trim()
+    if (!w) continue
+    const word = w.startsWith('vocab:') ? w.slice(6) : w
+    if (word && !inBatch.has(word.toLowerCase())) inMistakes.add(word.toLowerCase())
+  }
+  return { batch: inBatch.size, mistakes: inMistakes.size, total: inBatch.size + inMistakes.size }
+}
