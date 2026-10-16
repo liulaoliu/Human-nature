@@ -63,19 +63,21 @@
 
 ## 五、已经就绪的层 / 还差什么
 
-**已就绪**：纯逻辑单测（`src/core/*.test.ts`）+ **钩子接线测试**（`src/reader/hooks/*.test.tsx`）。
+**已就绪**：纯逻辑单测（`src/core/*.test.ts`）+ **钩子接线测试**（`src/reader/hooks/*.test.tsx`）
++ **组件测试**（`src/reader/panels/*.test.tsx`：`ExportPanel`（内容×范围×动作交给打印的条目与标题）、
+`SideVocab`（生词/语言点两个页签、打印只交当前页签）、`LangPointList`（分组/来源句/两步删除））。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
 2. jsdom 的 `localStorage` **取不到**（不透明来源会被 vitest 跳过），Node 26 又自带一个**只读**的全局
    `localStorage`，直接赋值会静默失败 —— 一律用 `src/reader/testStorage.ts` 的 `installFakeStorage()`
    （defineProperty 覆盖 + 测完还原）。
-3. 钩子依赖 IO 时**注入假实现**（如 `persist` / `libraryRef`），别真的开 IndexedDB。
+3. 钩子/面板依赖 IO 时**注入假实现**（`persist` / `libraryRef` / `onPrint` 这类回调），别真的开 IndexedDB、
+   别真的调 TTS/打印。
 
 **还差**：
-- **组件测试**（`reader/panels/*`）：`ExportPanel`（范围×内容×分组后的条目数与标题）、
-  `SideVocab`（生词/语言点两个页签）、`SpeedReadPanel`（逐句推进）——测试环境已就绪，随时可补。
 - **跨模块集成**：挂载 `ReaderApp` + 假仓储，断言「自动补全只写一次 + 导入 AI 结果不重不漏」。
+- **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
 ## 六、执行
