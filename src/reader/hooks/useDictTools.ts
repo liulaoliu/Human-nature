@@ -23,19 +23,6 @@ export interface UseDictToolsParams {
  * 词典未加载时全部 no-op（并提示）。
  */
 export function useDictTools({ library, persist, doc, level, mergeBatch, batchItemsFromWords, flash }: UseDictToolsParams) {
-  /**
-   * 用离线词典补音标/词性/中英释义（纯逻辑在 core/dictEnrich，本地、幂等）。
-   * 返回「补过的词库」；词典没就绪就原样返回 —— 自动找回词条时可以直接接在重建后面。
-   */
-  const enrichLibrary = useCallback(
-    (lib: VocabLibrary): VocabLibrary => {
-      const dict = dictionary()
-      if (!dict) return lib
-      return enrichWithDict(lib, dict, (w) => mwldLookupWord(w), new Date()).library
-    },
-    [],
-  )
-
   /** 手动按钮：全库补一遍 + 提示补了多少 */
   const enrichFromDict = useCallback(() => {
     if (!dictionary()) {
@@ -116,5 +103,5 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
     flash(`已用词典给 ${results.length} 个词生成混淆项`)
   }, [library, persist, flash])
 
-  return { enrichFromDict, enrichLibrary, fixLemmasFromDict, pickFromDict, confuseFromDict }
+  return { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict }
 }

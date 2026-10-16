@@ -9,13 +9,12 @@
 | 存什么 | 存哪 | 谁写 | 备注 |
 |---|---|---|---|
 | **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | IndexedDB `shadowing-vocab` → store `library`（单条记录） | 只由 `hooks/useVocabLibrary.persist` 写 | 覆盖前自动留 `library:prev` 与历史快照 `snapshots`（最近 8 版 + 最大的一版永久保留） |
-| **文章**（正文、句子、语言点、每句 `vocab`） | IndexedDB `shadowing-reader` → store `articles`（keyPath `id`） | `adapters/articleRepo` | 文章是语言点与「标过的词」的第二份副本 |
+| **文章**（正文、句子、语言点、每句 `vocab`） | IndexedDB `shadowing-reader` → store `articles`（keyPath `id`） | `adapters/articleRepo` | 文章是语言点与「标过的词」的第二份副本；坏了可用「导出全部」再导入 |
 | 待选清单（自动标词的结果，按篇） | localStorage `reader:batch` | `ReaderApp` / 各会话 hook | `{ [articleId]: {word, sentence, sentenceId}[] }` —— **找回词库最准的一手数据** |
 | 错题本 | localStorage `reader:mistakes` | 各练习 hook | `itemId` 形如 `vocab:run` |
 | 读完记录 / 目标 / 备忘 | localStorage `reader:readDone` / `readGoal` / `goalMemo` | `hooks/useReadDone` | 按逻辑日（04:00 结算） |
 | 学习活动 / 日志 / 练习 / 打卡 | localStorage `reader:activity` / `reader:practice` / `reader:studiedToday` … | 各 hook | 纯统计，丢了不影响学习数据 |
 | 语言点「已收过」记账 | localStorage `reader:langCollected` | `hooks/useLibraryAutoFill` | 清空 = 从文章重收一遍 |
-| 找回工具标记 | localStorage `reader:marksAutoHealDone` | `hooks/useArticleMarks` | 只自动救回一次 |
 
 ## 二、核心结构（`src/types/document.ts`）
 

@@ -74,25 +74,8 @@ export interface SideVocabProps {
   onToggleStats: () => void
   onExportWrong: (items: VocabItem[]) => void
   onExportAll: () => void
-  /** 词库读取是否出错（出错时本次不写入任何东西，提供恢复入口） */
-  libraryLoadFailed?: boolean
-  /** 从「上一版」快照恢复词库 */
+  /** 从「上一版」快照恢复词库（数据安全：覆盖前那一版） */
   onRestorePrev?: () => void
-  /** 从本机其它记录（待选清单 / 错题本）找回词条 */
-  onRescueLocal?: () => void
-  /** 正文标记（Sentence.vocab）里能认出的词数 */
-  markedWordCount?: number
-  /** 从正文标记重建词条 */
-  onRebuildFromMarks?: () => void
-  /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补释义 */
-  onRecoverAll?: () => void
-  /** **只保留正文标记过的词**（覆盖整库；数量回到当初标过的样子） */
-  onKeepOnlyMarked?: () => void
-  /** 本机记录里能捞回的词数（待选清单 / 错题本）——用于「先看数、再决定」 */
-  rescueBatch?: number
-  rescueMistakes?: number
-  /** 重收语言点（清掉「哪篇已收过」的记账） */
-  onRecollectLang?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -155,16 +138,7 @@ export default function SideVocab({
   onToggleStats,
   onExportWrong,
   onExportAll,
-  libraryLoadFailed,
   onRestorePrev,
-  onRescueLocal,
-  markedWordCount,
-  onRebuildFromMarks,
-  onRecoverAll,
-  onKeepOnlyMarked,
-  rescueBatch,
-  rescueMistakes,
-  onRecollectLang,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -183,14 +157,8 @@ export default function SideVocab({
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
   const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
-  /** 词库里还有多少「普通单词」（判断是不是被覆盖过） */
-  const wordCount = useMemo(() => wordEntries(libraryItems).length, [libraryItems])
-  const looksWiped = wordCount === 0 && libraryItems.length > 0
-
   /** 生词 / 语言点 两个页签：两类数据形状不同（单词 vs 词组·习语·用法说明），混在一列很难读 */
   const [tab, setTab] = useState<'word' | 'lang'>('word')
-  /** 「只保留标过的词」要两步确认（会覆盖整库） */
-  const [armedKeep, setArmedKeep] = useState(false)
   const words = useMemo(() => wordEntries(articleWords), [articleWords])
   const langs = useMemo(() => langEntries(articleWords), [articleWords])
   /** 当前页签下要展示 / 打印的条目 */
@@ -328,61 +296,7 @@ export default function SideVocab({
         </button>
       </div>
 
-      {(markedWordCount ?? 0) + (rescueBatch ?? 0) + (rescueMistakes ?? 0) > 0 && (
-        <div className="side-warn">
-          🔎 本机还能找回：正文标记 <b>{markedWordCount ?? 0}</b> · 待选清单（自动标词的结果，按篇存的）{' '}
-          <b>{rescueBatch ?? 0}</b> · 错题本 <b>{rescueMistakes ?? 0}</b> —— 都来自你自己的数据，不用重跑 AI。
-          {onKeepOnlyMarked ? (
-            <div style={{ marginTop: 6 }}>
-              <button
-                className={armedKeep ? 'danger' : 'primary'}
-                onClick={() => {
-                  if (!armedKeep) return setArmedKeep(true)
-                  setArmedKeep(false)
-                  onKeepOnlyMarked()
-                }}
-                title="用你自己的数据重建：正文标记（Sentence.vocab）+ 待选清单（自动标词的结果，按篇存的）+ 错题本。覆盖前那一版会进历史快照，可回退"
-              >
-                {armedKeep ? '确认：用这些标记重建' : '用我原来的标记重建词库'}
-              </button>
-              {!armedKeep && (
-                <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }} title="把这些词**追加**进当前词库（不删东西）">
-                  追加这些词
-                </button>
-              )}
-            </div>
-          ) : (
-            <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }}>
-              从正文标记重建词库
-            </button>
-          )}
-        </div>
-      )}
-      {onRecoverAll && looksWiped && (
-        <div className="side-warn">
-          <b>一键找回</b>：正文标记 {markedWordCount ?? 0} 个词 · 待选清单 · 错题本 —— 全部本地完成，不用 AI。
-          <div style={{ marginTop: 6 }}>
-            <button className="primary" onClick={onRecoverAll}>
-              一键全部重建词库
-            </button>
-          </div>
-        </div>
-      )}
-      {looksWiped && (
-        <div className="side-warn">
-          ⚠ 词库里**一个普通单词都没有**（只剩 {libraryItems.length} 条语言点），像是被覆盖过。按顺序试：
-          <b>① 恢复上一版词库</b> → <b>② 找回词条</b>（从待选清单/错题本捞） →{' '}
-          <b>③ 打印/导出 → 导入备份</b>（以前导出的 economist-backup-*.json）。
-          实在没有备份就按篇重来：侧栏「用词典挑词」是**本地词典、不用 AI**，挑完再「补齐生词本」。
-        </div>
-      )}
       <div className="side-label">库 / 导出</div>
-      {libraryLoadFailed && (
-        <div className="side-warn">
-          ⚠ 词库没读出来：本次**不会写入任何东西**（免得把空库覆盖回去）。先点下面「恢复上一版词库」，
-          或刷新页面重试。
-        </div>
-      )}
       <div className="bar">
         <button onClick={onBrowseAll} disabled={!hasItems} title="查看全部生词（跨文章）">
           全部生词
@@ -407,14 +321,6 @@ export default function SideVocab({
             title="把词库退回上一次覆盖前的版本（防误清 / 读取出错；取更完整的那一份）"
           >
             恢复上一版词库
-          </button>
-        )}
-        {onRescueLocal && (
-          <button
-            onClick={onRescueLocal}
-            title="从本机还留着的记录里把词找回来：待选清单（词 + 原句）+ 错题本。释义可再用「补齐生词本」本地补"
-          >
-            找回词条
           </button>
         )}
         <button onClick={() => onExportAnki(libraryItems)} disabled={!hasItems} title="导出整库生词为 Anki CSV">
@@ -568,14 +474,6 @@ export default function SideVocab({
       )}
       {tab === 'lang' ? (
         <>
-          {onRecollectLang && (
-            <div className="exrow" style={{ marginBottom: 6 }}>
-              <span className="muted">语言点来自文章里 AI 跑过的结果（按 词组 / 习语 / 用法 分类）</span>
-              <button onClick={onRecollectLang} title="清掉「哪篇已收过」的记账，从文章里重新收集一遍">
-                重收语言点
-              </button>
-            </div>
-          )}
           <LangPointList
           items={sortItems(langs, sortBy)}
           onSpeak={onSpeak}

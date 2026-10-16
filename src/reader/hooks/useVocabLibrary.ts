@@ -4,9 +4,6 @@ import type { VocabRepoPort } from '../../core/ports'
 import { createLibrary } from '../../core/vocab'
 import { migrateLibrary } from '../../core/migrations'
 import { libraryErrors } from '../../core/libraryValidate'
-import { countRescueWords, recoverLibrary, rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
-import { rebuildFromArticleMarks, type ArticleWithMarks } from '../../core/libraryFromArticles'
-import { readJson } from '../storage'
 import { createVocabRepo } from '../../adapters/vocabRepo'
 
 /**
@@ -41,33 +38,11 @@ export interface UseVocabLibraryResult {
   persist: (lib: VocabLibrary) => void
   /** 退回「覆盖前那一版」（防误清 / 读失败事故） */
   restorePrev: () => Promise<void>
-  /** 从本机其它记录（待选清单 / 错题本）把词条找回来 */
-  rescueFromLocalRecords: () => void
-  /** 从**正文标记**（Sentence.vocab）重建词条 —— 丢词后最准的一条路（可选带一步本地补释义） */
-  rebuildFromArticles: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
-  /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补音标/释义（丢词后的总入口） */
-  recoverAll: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
-  /** **只保留正文标记过的词**（覆盖整库）——从「导入的大库」回到你当初标过的数量 */
-  keepOnlyMarked: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
-  /** 本机记录里能捞多少词（待选清单 / 错题本）—— 让用户「先看数、再决定」 */
-  rescueCounts: { batch: number; mistakes: number; total: number }
-}
-
-/** 本机还留着词的几处记录（救援素材）。 */
-export function readRescueRecords(): RescueRecords {
-  const batch = readJson<RescueRecords['batch']>('reader:batch', {})
-  const mistakes = readJson<{ itemId?: string; label?: string }[]>('reader:mistakes', [])
-  const mistakeWords = (mistakes ?? [])
-    .flatMap((m) => [m?.itemId ?? '', m?.label ?? ''])
-    .filter((s) => !!s && /^[A-Za-z][A-Za-z' -]*$/.test(s))
-  return { batch: batch ?? {}, mistakeWords }
 }
 
 export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVocabLibraryParams): UseVocabLibraryResult {
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
   const [libraryLoad, setLibraryLoad] = useState<LibraryLoadState>('pending')
-  /** 本机记录的可用词数（挂载时统计一次；找回后再统计一次） */
-  const [rescueCounts, setRescueCounts] = useState(() => countRescueWords(readRescueRecords()))
   const repo = useRef<VocabRepoPort | null>(null)
   const libraryRef = useRef(library)
   libraryRef.current = library
@@ -130,87 +105,5 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     flash(`已恢复上一版词库：${prev.items.length} 条`)
   }, [flash])
 
-  const rescueFromLocalRecords = useCallback(() => {
-    if (libraryLoad === 'failed') {
-      flash('词库没读出来：先「恢复上一版词库」或刷新，再试找回')
-      return
-    }
-    const records = readRescueRecords()
-    const out = rescueLibrary(libraryRef.current, records)
-    if (!out.added) {
-      flash(out.found ? `素材里 ${out.found} 个词都已在词库里` : '本机没有可找回的记录（待选清单 / 错题本是空的）')
-      return
-    }
-    persist(out.library)
-    flash(`已从本机记录找回 ${out.added} 个词条（释义可用「补齐生词本」本地补）`)
-  }, [libraryLoad, flash, persist])
-
-  const rebuildFromArticles = useCallback(
-    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
-      if (libraryLoad === 'failed') {
-        flash('词库没读出来：先「恢复上一版词库」或刷新，再试重建')
-        return
-      }
-      const out = rebuildFromArticleMarks(libraryRef.current, articles)
-      if (!out.added) {
-        flash(out.found ? `正文标记里 ${out.found} 个词都已在词库里` : '正文里没有标记过的词（Sentence.vocab 是空的）')
-        return
-      }
-      // 补一步**本地**释义（离线词典）：同一次落库，避免「用旧闭包再写一遍」把重建结果覆盖掉
-      const next = enrich ? enrich(out.library) : out.library
-      persist(next)
-      flash(`已从正文标记重建 ${out.added} 个词条（音标/释义已用离线词典补上）`)
-    },
-    [libraryLoad, flash, persist],
-  )
-
-  const recoverAll = useCallback(
-    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
-      if (libraryLoad === 'failed') {
-        flash('词库没读出来：先刷新或「恢复上一版词库」，再试找回')
-        return
-      }
-      const records = readRescueRecords()
-      const out = recoverLibrary(libraryRef.current, { articles, records })
-      setRescueCounts({ batch: 0, mistakes: 0, total: 0 })
-      if (!out.added) {
-        flash(
-          out.fromMarks || out.fromRecords
-            ? `能认出的词都已在词库里（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}）`
-            : '本机没有可找回的记录（正文没标记、待选清单与错题本也是空的）',
-        )
-        return
-      }
-      const next = enrich ? enrich(out.library) : out.library
-      persist(next)
-      flash(`已找回 ${out.added} 个词条（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}），音标/释义已用离线词典补上`)
-    },
-    [libraryLoad, flash, persist],
-  )
-
-  const keepOnlyMarked = useCallback(
-    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
-      if (libraryLoad === 'failed') {
-        flash('词库没读出来：先刷新或「恢复上一版词库」，再试')
-        return
-      }
-      const before = libraryRef.current.items.length
-      // 用**你自己的数据**重建：文章标记（Sentence.vocab）+ 待选清单（自动标词的结果，按篇存的）+ 错题本
-      const out = recoverLibrary(createLibrary(), { articles, records: readRescueRecords() })
-      setRescueCounts({ batch: 0, mistakes: 0, total: 0 })
-      if (!out.added) {
-        flash('没找到可用的标记（正文 Sentence.vocab 与待选清单都是空的），这一步做不了')
-        return
-      }
-      const next = enrich ? enrich(out.library) : out.library
-      persist(next) // 覆盖整库：覆盖前那一版已进历史快照，可回退
-      flash(
-        `已按你原来的标记重建 ${out.added} 个词条（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}）；` +
-          `原库 ${before} 条已进历史快照，可回退`,
-      )
-    },
-    [libraryLoad, flash, persist],
-  )
-
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked, rescueCounts }
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev }
 }

@@ -75,10 +75,10 @@ types ← core ← adapters ← reader
    `core/libraryAutoFill` 这一个 effect 写。新需求加「自动补全」→ 往计划函数里加一格。
 2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示恢复。
 3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 8 版 + 历史最大的一版永久保留），
-   提供 `listSnapshots / loadSnapshot`；侧栏有「恢复上一版词库」。
+   提供 `listSnapshots / loadSnapshot`；侧栏有「恢复上一版词库」（误清/误导入一键退回）。
 4. **同一份事实存多处**：词条 ← 词库(IDB) / 文章 `Sentence.vocab` / 待选清单(localStorage) /
    错题本 / 「导出全部」JSON；语言点 ← 文章 `SentenceLanguage` / 词库里的语言点条目。
-   → 找回工具与「一键全捞」就是靠这个：**任一处还在，就能重建**。
+   → 坏了就靠「导入备份」＋「恢复上一版词库」；写入侧永远走上面三条。
 
 > 新增「用户资产」时先问：**它有第二份吗？** 没有就先补上第二份，再谈别的。
 

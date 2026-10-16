@@ -29,15 +29,11 @@ export interface UseLibraryAutoFillParams {
   libraryLoaded: boolean
   /** 落库（ReaderApp 的 persist） */
   persist: (library: VocabLibrary) => void
-  /** 轻提示（可选） */
-  flash?: (msg: string) => void
 }
 
 export interface UseLibraryAutoFillResult {
   /** 离线例句查询（手动「补齐例句」按钮与自动补全共用） */
   lookupTatoeba: (it: { word: string; lemma: string }) => { text: string; translation?: string }[]
-  /** 重收语言点：清掉「哪篇已收过」的记账，下一篇/下一轮自动重新收集 */
-  recollectLanguagePoints: () => void
   /** 离线例句库是否就绪 */
   tatoebaReady: boolean
   /** 当前待收藏的语言点条数（给面板/调试看） */
@@ -51,7 +47,6 @@ export function useLibraryAutoFill({
   libraryRef,
   libraryLoaded,
   persist,
-  flash = () => {},
 }: UseLibraryAutoFillParams): UseLibraryAutoFillResult {
   /** 每篇文章收过的语言点签名（一篇只收一遍：删掉的条目不会自己回来） */
   const [langCollected, setLangCollected] = useLocalStorageState<Record<string, string>>('reader:langCollected', {})
@@ -101,10 +96,5 @@ export function useLibraryAutoFill({
     if (!out.collectedUntouched) setLangCollected(out.collected)
   }, [libraryLoaded, languagePoints, langCollected, tatoebaReady, lookupTatoeba, persist, setLangCollected, libraryRef])
 
-  const recollectLanguagePoints = useCallback(() => {
-    setLangCollected({})
-    flash('已清除「语言点已收」记账，正在从文章里重收…（语言点页签会慢慢回来）')
-  }, [setLangCollected, flash])
-
-  return { lookupTatoeba, tatoebaReady, languagePointCount: languagePoints.length, recollectLanguagePoints }
+  return { lookupTatoeba, tatoebaReady, languagePointCount: languagePoints.length }
 }

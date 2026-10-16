@@ -85,7 +85,6 @@ import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useReadDone } from './hooks/useReadDone'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
-import { useArticleMarks } from './hooks/useArticleMarks'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
@@ -193,11 +192,8 @@ export default function ReaderApp() {
     window.setTimeout(() => setToast(''), 1900)
   }, [])
 
-  // 词库：读回 / 去重修数据 / 唯一写入口 / 上一版恢复 / 找回词条 —— 全在 hooks/useVocabLibrary
-  const {
-    library, libraryRef, libraryLoad, libraryLoaded, persist,
-    restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked, rescueCounts,
-  } = useVocabLibrary({ flash })
+  // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
+  const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
   /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
@@ -661,14 +657,13 @@ export default function ReaderApp() {
    * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句）。
    * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
    */
-  const { lookupTatoeba, tatoebaReady, recollectLanguagePoints } = useLibraryAutoFill({
+  const { lookupTatoeba, tatoebaReady } = useLibraryAutoFill({
     sentences: doc?.sentences ?? null,
     saved,
     articleIdentity,
     libraryRef,
     libraryLoaded,
     persist,
-    flash,
   })
 
   /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
@@ -2141,7 +2136,7 @@ export default function ReaderApp() {
     persist(dedupeLibrary(applyLemmaMap(library, pairs)))
   }, [dictReady, library, persist])
 
-  const { enrichFromDict, enrichLibrary, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
+  const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
     library,
     persist,
     doc,
@@ -2149,11 +2144,6 @@ export default function ReaderApp() {
     mergeBatch,
     batchItemsFromWords,
     flash,
-  })
-
-  const marks = useArticleMarks({
-    saved, sentences: doc?.sentences ?? null, articleIdentity,
-    rebuild: rebuildFromArticles, enrich: enrichLibrary, library, libraryLoad, flash,
   })
 
   const allList = sortItems(library.items, vocabSort)
@@ -3009,16 +2999,7 @@ export default function ReaderApp() {
           onToggleStats={() => setStatsOpen((v) => !v)}
           onExportWrong={doExportWrong}
           onExportAll={exportAll}
-          libraryLoadFailed={libraryLoad === 'failed'}
           onRestorePrev={() => void restorePrevLibrary()}
-          onRescueLocal={() => rescueFromLocalRecords()}
-          markedWordCount={marks.markedWordCount}
-          onRebuildFromMarks={marks.rebuildFromMarks}
-          onRecoverAll={() => recoverAll(marks.articles, enrichLibrary)}
-          onKeepOnlyMarked={() => keepOnlyMarked(marks.articles, enrichLibrary)}
-          rescueBatch={rescueCounts.batch}
-          rescueMistakes={rescueCounts.mistakes}
-          onRecollectLang={recollectLanguagePoints}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}
