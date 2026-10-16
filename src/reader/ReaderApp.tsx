@@ -86,6 +86,7 @@ import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useReadDone } from './hooks/useReadDone'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useArticleMarks } from './hooks/useArticleMarks'
+import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
@@ -520,24 +521,17 @@ export default function ReaderApp() {
     [articleIdentity, setKindStats],
   )
 
-  /** 每个句子的 lemma 集合（只随 doc 变，避免「本篇」过滤时对每个词条重扫全文）。 */
-  const sentenceLemmas = useMemo(() => {
-    const m = new Map<string, Set<string>>()
-    if (doc) {
-      for (const s of doc.sentences) {
-        const set = new Set<string>()
-        for (const w of wordSpans(s.text)) set.add(lemmaOf(w.text))
-        m.set(s.id, set)
-      }
-    }
-    return m
-  }, [doc])
-  /** 全文出现过的 lemma 集合（「本篇」范围用）。 */
-  const docLemmas = useMemo(() => {
-    const all = new Set<string>()
-    for (const set of sentenceLemmas.values()) for (const l of set) all.add(l)
-    return all
-  }, [sentenceLemmas])
+  /** 正文里哪些词算生词（每句 lemma / 全文 lemma / 未掌握词 / 有生词的句子）—— 见 hooks/useDocVocabSets */
+  const batchSentenceIds = useMemo(() => {
+    const set = new Set<string>()
+    for (const b of batch) if (b.sentenceId) set.add(b.sentenceId)
+    return set
+  }, [batch])
+  const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
+    sentences: doc?.sentences ?? null,
+    items: library.items,
+    batchSentenceIds,
+  })
 
   /**
    * 本篇生词：**来源是本文**，或**本文正文里出现过**该词。
@@ -1356,16 +1350,6 @@ export default function ReaderApp() {
       .slice(0, 60)
   }, [library.items])
 
-  /** 生词本里所有词形 + lemma（正文里据此标出"生词"并可点）。 */
-  const libraryLemmas = useMemo(() => {
-    const s = new Set<string>()
-    for (const it of library.items) {
-      s.add(it.word.toLowerCase())
-      s.add(it.lemma)
-    }
-    return s
-  }, [library.items])
-
   /** 听写会话（队列 / 判分 / 自动下一句 / 错题重练）；逻辑在 hooks/useDictation。 */
   const dictApi = useDictation({
     doc,
@@ -1439,37 +1423,6 @@ export default function ReaderApp() {
     [batch, libraryLemmas],
   )
 
-  /** 未掌握的词（a/d 只在这些句子里跳）。 */
-  const activeLemmas = useMemo(() => {
-    const s = new Set<string>()
-    for (const it of library.items) {
-      if (it.status === 'mastered') continue
-      s.add(it.word.toLowerCase())
-      s.add(it.lemma)
-    }
-    return s
-  }, [library.items])
-
-  /**
-   * 有生词的句子 id，按正文顺序。
-   * 直接看「这句话里有没有生词（按 lemma）」——和正文里的琥珀下划线一致，
-   * 不依赖词条记的 source（更直观，a/d 不会因为没记来源就找不到）。
-   */
-  const vocabSids = useMemo(() => {
-    if (!doc) return []
-    const batchSids = new Set<string>()
-    for (const b of batch) if (b.sentenceId) batchSids.add(b.sentenceId)
-    return doc.sentences
-      .filter((s) => {
-        if (batchSids.has(s.id)) return true
-        const set = sentenceLemmas.get(s.id)
-        if (!set) return false
-        for (const l of set) if (activeLemmas.has(l)) return true
-        return false
-      })
-      .map((s) => s.id)
-  }, [doc, sentenceLemmas, activeLemmas, batch])
-  const vocabSidSet = useMemo(() => new Set(vocabSids), [vocabSids])
 
   // 考试听力题出现时自动朗读（句子 / 单词）
   useEffect(() => {
