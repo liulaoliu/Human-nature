@@ -126,6 +126,12 @@ describe('buildHeatmap', () => {
     expect(cell.level).toBe(3)
     expect(hm.max).toBe(6)
   })
+  it('可以自定义色阶函数（如目标：1/2/3/4+ 篇）', () => {
+    const hm = buildHeatmap({ [calendarDayKey(today)]: 2 }, 13, today, (n) => Math.min(4, n))
+    const cell = hm.cells[12][today.getDay()]
+    expect(cell.count).toBe(2)
+    expect(cell.level).toBe(2)
+  })
   it('凌晨 1 点的活动算前一天（04:00 结算），落在前一天的格子里', () => {
     const at1am = new Date(2026, 9, 16, 1, 0)
     expect(dayKeyLocal(at1am)).toBe('2026-10-15')

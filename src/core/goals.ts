@@ -71,6 +71,15 @@ export function mergeReadDone(a: ReadDone[], b: ReadDone[]): ReadDone[] {
   return [...a, ...add]
 }
 
+/**
+ * 目标热力图的色阶：一天读完几篇（0 空、1–3 逐级加深、≥4 满色）。
+ * 篇数本来就个位数，用活动量那套阈值（1/2/3/6/10）会全是浅色。
+ */
+export function goalLevel(count: number): number {
+  if (count <= 0) return 0
+  return Math.min(4, count)
+}
+
 /** 目标进度百分比（0–100）。target<=0 表示不设目标：读过就算 100，否则 0。 */
 export function goalPct(done: number, target: number): number {
   if (target <= 0) return done > 0 ? 100 : 0

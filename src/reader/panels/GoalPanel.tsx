@@ -1,5 +1,6 @@
-import { useState } from 'react'
-import { goalPct, goalReached, groupReadDone, readDoneTotals, type ReadDone } from '../../core/goals'
+import { useMemo, useState } from 'react'
+import { buildHeatmap } from '../../core/activity'
+import { goalLevel, goalPct, goalReached, groupReadDone, readDoneTotals, type ReadDone } from '../../core/goals'
 
 export interface GoalPanelProps {
   onClose: () => void
@@ -51,9 +52,21 @@ export default function GoalPanel({
   const pct = goalPct(done.length, goal)
   const reached = goalReached(done.length, goal)
   const totals = readDoneTotals(allDone)
-  const history = groupReadDone(allDone).filter((g) => g.day !== todayKey)
   const [showAllHistory, setShowAllHistory] = useState(false)
+  /** 点了热力图某天 → 只看那天的篇目。 */
+  const [pickedDay, setPickedDay] = useState<string | null>(null)
+
+  /** 热力图：每天读完几篇（格 = 一天，色 = 篇数）。 */
+  const heat = useMemo(() => {
+    const counts: Record<string, number> = {}
+    for (const r of allDone) counts[r.day] = (counts[r.day] ?? 0) + 1
+    return buildHeatmap(counts, 13, new Date(), goalLevel)
+  }, [allDone])
+
+  const byDay = groupReadDone(allDone)
+  const history = pickedDay ? byDay.filter((g) => g.day === pickedDay) : byDay.filter((g) => g.day !== todayKey)
   const shownHistory = showAllHistory ? history : history.slice(0, 7)
+  const maxDay = heat.max
 
   return (
     <div className="plan-overlay" onClick={onClose}>
@@ -124,9 +137,48 @@ export default function GoalPanel({
             <span className="muted">
               累计 {totals.articles} 篇 · {totals.days} 天
             </span>
+            {pickedDay && (
+              <button onClick={() => setPickedDay(null)} title="看全部历史">
+                取消筛选 {pickedDay} ×
+              </button>
+            )}
+          </div>
+
+          <div className="gheat">
+            <div className="heat">
+              <div className="heat-months">
+                {heat.monthLabels.map((m) => (
+                  <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
+                    {m.label}月
+                  </span>
+                ))}
+              </div>
+              <div className="heat-grid">
+                {heat.cells.map((col, ci) =>
+                  col.map((cell, ri) => (
+                    <span
+                      key={`${ci}-${ri}`}
+                      className={
+                        'heat-cell' +
+                        (cell.future ? ' future' : ' lv' + cell.level) +
+                        (cell.key === pickedDay ? ' on' : '')
+                      }
+                      role={cell.future ? undefined : 'button'}
+                      title={cell.future ? '' : `${cell.key}：读完 ${cell.count} 篇（点击只看那天）`}
+                      onClick={cell.future ? undefined : () => setPickedDay(cell.key === pickedDay ? null : cell.key)}
+                    />
+                  )),
+                )}
+              </div>
+            </div>
+            <div className="muted heat-legend">
+              少 <span className="heat-cell lv0" /> <span className="heat-cell lv1" /> <span className="heat-cell lv2" />{' '}
+              <span className="heat-cell lv3" /> <span className="heat-cell lv4" /> 多
+              <span className="gheat-note">（格 = 一天，颜色 = 那天读完几篇；单日最多 {maxDay} 篇）</span>
+            </div>
           </div>
           {history.length === 0 ? (
-            <div className="muted">还没有更早的记录</div>
+            <div className="muted">{pickedDay ? `${pickedDay} 没有记录` : '还没有更早的记录'}</div>
           ) : (
             <>
               <div className="glist">

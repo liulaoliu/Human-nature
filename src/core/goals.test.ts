@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   addReadDone,
+  goalLevel,
   goalPct,
   goalReached,
   groupReadDone,
@@ -54,6 +55,13 @@ describe('addReadDone / readDoneOn / removeReadDone', () => {
       ['2026-10-13', 1],
     ])
     expect(readDoneTotals(list)).toEqual({ articles: 4, days: 3 })
+  })
+
+  it('goalLevel：一天读完几篇的色阶（0 空 / 1–3 / ≥4）', () => {
+    expect(goalLevel(0)).toBe(0)
+    expect(goalLevel(1)).toBe(1)
+    expect(goalLevel(3)).toBe(3)
+    expect(goalLevel(9)).toBe(4)
   })
 
   it('mergeReadDone：按 articleId 合并去重', () => {

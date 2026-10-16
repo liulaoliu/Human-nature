@@ -135,6 +135,8 @@ export function buildHeatmap(
   counts: Record<string, number>,
   columns = 13,
   today: Date = new Date(),
+  /** 把「当天数量」映射成色阶（默认沿用活动量的分档；目标篇数可以传自己的）。 */
+  levelFn: (count: number) => number = levelFor,
 ): Heatmap {
   const today0 = new Date(today.getFullYear(), today.getMonth(), today.getDate())
   const thisSunday = new Date(today0)
@@ -155,7 +157,7 @@ export function buildHeatmap(
       const future = d > today0
       if (!future && !firstColOfMonth.has(d.getMonth())) firstColOfMonth.set(d.getMonth(), c)
       if (count > max) max = count
-      col.push({ key, count, level: future ? 0 : levelFor(count), future })
+      col.push({ key, count, level: future ? 0 : levelFn(count), future })
     }
     cells.push(col)
   }
