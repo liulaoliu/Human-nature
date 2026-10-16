@@ -46,6 +46,8 @@ export interface UseVocabLibraryResult {
   rebuildFromArticles: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
   /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补音标/释义（丢词后的总入口） */
   recoverAll: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
+  /** **只保留正文标记过的词**（覆盖整库）——从「导入的大库」回到你当初标过的数量 */
+  keepOnlyMarked: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
 }
 
 /** 本机还留着词的几处记录（救援素材）。 */
@@ -175,5 +177,24 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     [libraryLoad, flash, persist],
   )
 
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll }
+  const keepOnlyMarked = useCallback(
+    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
+      if (libraryLoad === 'failed') {
+        flash('词库没读出来：先刷新或「恢复上一版词库」，再试')
+        return
+      }
+      const before = libraryRef.current.items.length
+      const out = rebuildFromArticleMarks(createLibrary(), articles)
+      if (!out.added) {
+        flash('正文里没有标记过的词（Sentence.vocab 是空的），这一步做不了')
+        return
+      }
+      const next = enrich ? enrich(out.library) : out.library
+      persist(next) // 覆盖整库：覆盖前那一版已进历史快照，可回退
+      flash(`已只保留正文标记过的 ${out.added} 个词（原库 ${before} 条已进历史快照，可回退）`)
+    },
+    [libraryLoad, flash, persist],
+  )
+
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked }
 }

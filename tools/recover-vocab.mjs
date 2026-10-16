@@ -124,6 +124,8 @@ const FORMS = loadForms()
 const inDict = (w) => DICT.has(norm(w)) || DICT.has(lemmaOf(w)) || FORMS.has(norm(w))
 /** word -> { sentence?, sentenceId?, articleId? } */
 const collected = new Map()
+/** 每篇挑了多少（--per-article 时打印） */
+const perArticleCounts = []
 function add(word, extra = {}) {
   const raw = (word ?? '').toString().trim()
   const w = norm(raw)
@@ -288,21 +290,37 @@ function readResults(file) {
 }
 
 /** 兜底：从内置文章正文按「四级以上」重挑（不需要 AI） */
+const PER_ARTICLE = Number(argOf('--per-article', '25')) || 0
 function readFromArticles() {
   const j = JSON.parse(readFileSync('public/articles.json', 'utf8'))
   const dict = DICT
   const stop = new Set('the a an and or of to in on at for with from by as is are was were be been being that this these those it its he she they them his her their our your you we i not no but if then than so such can could may might will would shall should do does did done have has had having more most other some any all each both few many much own same too very just only also'.split(' '))
   for (const v of Object.values(j)) {
+    // 每篇先收集「超纲词 + 稀有度」，再按篇限额挑最难的 N 个（否则一篇能冒出 200+ 个"生词"）
+    const perArticle = []
+    const seen = new Set()
     for (const m of String(v?.text ?? '').matchAll(/[A-Za-z][A-Za-z'-]{3,}/g)) {
       const w = m[0].toLowerCase()
-      if (stop.has(w)) continue
-      // 四级以内（含 cet4/gk/zk/xx）的常见词不收，只要超纲的
+      if (stop.has(w) || seen.has(w)) continue
+      seen.add(w)
       const e = dict.get(w) ?? dict.get(lemmaOf(w))
       if (!e) continue
       const tag = (e.tag || '').toLowerCase()
+      // 只留超纲：带 cet4/gk/zk/xx 且不带 cet6/ky/toefl/ielts/gre 的算「常见词」，跳过
       if (/(cet4|gk|zk|xx)/.test(tag) && !/(cet6|ky|toefl|ielts|gre)/.test(tag)) continue
-      add(w)
+      // 稀有度：bnc/frq 排名越小越常见；取两者较小的当"难度"，越大越难
+      const rank = Math.max(e.bnc ?? 0, e.frq ?? 0)
+      perArticle.push({ w, rank })
     }
+    const picked = PER_ARTICLE > 0
+      ? perArticle.sort((a, b) => b.rank - a.rank).slice(0, PER_ARTICLE)
+      : perArticle
+    for (const p of picked) add(p.w)
+    if (PER_ARTICLE > 0) perArticleCounts.push([String(v?.title ?? ''), picked.length, seen.size])
+  }
+  if (PER_ARTICLE > 0) {
+    const avg = perArticleCounts.reduce((n, [, k]) => n + k, 0) / Math.max(1, perArticleCounts.length)
+    console.log(`· 每篇限额 ${PER_ARTICLE}：共 ${perArticleCounts.length} 篇，平均每篇 ${avg.toFixed(1)} 个`)
   }
 }
 

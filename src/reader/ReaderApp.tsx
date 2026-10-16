@@ -195,7 +195,7 @@ export default function ReaderApp() {
   // 词库：读回 / 去重修数据 / 唯一写入口 / 上一版恢复 / 找回词条 —— 全在 hooks/useVocabLibrary
   const {
     library, libraryRef, libraryLoad, libraryLoaded, persist,
-    restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles, recoverAll,
+    restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles, recoverAll, keepOnlyMarked,
   } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -3061,6 +3061,7 @@ export default function ReaderApp() {
           markedWordCount={marks.markedWordCount}
           onRebuildFromMarks={marks.rebuildFromMarks}
           onRecoverAll={() => recoverAll(marks.articles, enrichLibrary)}
+          onKeepOnlyMarked={() => keepOnlyMarked(marks.articles, enrichLibrary)}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}

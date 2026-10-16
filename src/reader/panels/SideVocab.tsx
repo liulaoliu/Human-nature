@@ -86,6 +86,8 @@ export interface SideVocabProps {
   onRebuildFromMarks?: () => void
   /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补释义 */
   onRecoverAll?: () => void
+  /** **只保留正文标记过的词**（覆盖整库；数量回到当初标过的样子） */
+  onKeepOnlyMarked?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -154,6 +156,7 @@ export default function SideVocab({
   markedWordCount,
   onRebuildFromMarks,
   onRecoverAll,
+  onKeepOnlyMarked,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -178,6 +181,8 @@ export default function SideVocab({
 
   /** 生词 / 语言点 两个页签：两类数据形状不同（单词 vs 词组·习语·用法说明），混在一列很难读 */
   const [tab, setTab] = useState<'word' | 'lang'>('word')
+  /** 「只保留标过的词」要两步确认（会覆盖整库） */
+  const [armedKeep, setArmedKeep] = useState(false)
   const words = useMemo(() => wordEntries(articleWords), [articleWords])
   const langs = useMemo(() => langEntries(articleWords), [articleWords])
   /** 当前页签下要展示 / 打印的条目 */
@@ -317,10 +322,31 @@ export default function SideVocab({
 
       {onRebuildFromMarks && (markedWordCount ?? 0) > 0 && (
         <div className="side-warn">
-          📄 正文里还留着 <b>{markedWordCount}</b> 个标记过的词（当年粘回的 AI 词表，存在文章里，不受词库影响）。
-          <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }}>
-            从正文标记重建词库
-          </button>
+          📄 正文里还留着 <b>{markedWordCount}</b> 个标记过的词（存在文章里，不受词库影响）。
+          {onKeepOnlyMarked ? (
+            <div style={{ marginTop: 6 }}>
+              <button
+                className={armedKeep ? 'danger' : 'primary'}
+                onClick={() => {
+                  if (!armedKeep) return setArmedKeep(true)
+                  setArmedKeep(false)
+                  onKeepOnlyMarked()
+                }}
+                title="把词库换成「你当初在正文里标过的那些词」（覆盖前那一版会进历史快照，可回退）"
+              >
+                {armedKeep ? '确认：只保留这些词' : '只保留正文标过的词'}
+              </button>
+              {!armedKeep && (
+                <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }} title="把这些词**追加**进当前词库（不删东西）">
+                  追加这些词
+                </button>
+              )}
+            </div>
+          ) : (
+            <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }}>
+              从正文标记重建词库
+            </button>
+          )}
         </div>
       )}
       {onRecoverAll && looksWiped && (
