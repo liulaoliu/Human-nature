@@ -91,6 +91,8 @@ export interface SideVocabProps {
   /** 本机记录里能捞回的词数（待选清单 / 错题本）——用于「先看数、再决定」 */
   rescueBatch?: number
   rescueMistakes?: number
+  /** 重收语言点（清掉「哪篇已收过」的记账） */
+  onRecollectLang?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -162,6 +164,7 @@ export default function SideVocab({
   onKeepOnlyMarked,
   rescueBatch,
   rescueMistakes,
+  onRecollectLang,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -564,13 +567,23 @@ export default function SideVocab({
         </div>
       )}
       {tab === 'lang' ? (
-        <LangPointList
+        <>
+          {onRecollectLang && (
+            <div className="exrow" style={{ marginBottom: 6 }}>
+              <span className="muted">语言点来自文章里 AI 跑过的结果（按 词组 / 习语 / 用法 分类）</span>
+              <button onClick={onRecollectLang} title="清掉「哪篇已收过」的记账，从文章里重新收集一遍">
+                重收语言点
+              </button>
+            </div>
+          )}
+          <LangPointList
           items={sortItems(langs, sortBy)}
           onSpeak={onSpeak}
           onDelete={onDelete}
           onEdit={(it) => onEdit(it.id, {})}
           confirmDel={confirmDel}
-        />
+          />
+        </>
       ) : words.length ? (
         <VocabList
           items={sortItems(words, sortBy)}

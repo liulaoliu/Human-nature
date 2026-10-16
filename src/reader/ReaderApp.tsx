@@ -661,13 +661,14 @@ export default function ReaderApp() {
    * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句）。
    * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
    */
-  const { lookupTatoeba, tatoebaReady } = useLibraryAutoFill({
+  const { lookupTatoeba, tatoebaReady, recollectLanguagePoints } = useLibraryAutoFill({
     sentences: doc?.sentences ?? null,
     saved,
     articleIdentity,
     libraryRef,
     libraryLoaded,
     persist,
+    flash,
   })
 
   /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
@@ -3017,6 +3018,7 @@ export default function ReaderApp() {
           onKeepOnlyMarked={() => keepOnlyMarked(marks.articles, enrichLibrary)}
           rescueBatch={rescueCounts.batch}
           rescueMistakes={rescueCounts.mistakes}
+          onRecollectLang={recollectLanguagePoints}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}
