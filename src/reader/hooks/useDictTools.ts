@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
-import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, isWordEntry, lemmaOf, normalizePos, normalizeWord } from '../../core/vocab'
+import { dictConfusables, dictLemmaPairs, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, isWordEntry, lemmaOf, normalizePos } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 
@@ -62,9 +62,7 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
       flash('词典未加载（先跑 npm run ecdict:build）')
       return
     }
-    const pairs = library.items
-      .map((it) => ({ from: it.word, to: dictLemmaOf(dict, it.word) }))
-      .filter((p): p is { from: string; to: string } => !!p.to && normalizeWord(p.from) !== p.to)
+    const pairs = dictLemmaPairs(dict, library.items)
     if (!pairs.length) {
       flash('没有可校正的原形（词典里查不到或已是原型）')
       return

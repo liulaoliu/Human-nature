@@ -140,6 +140,31 @@ export function textKey(raw: string): string {
     .toLowerCase()
 }
 
+/**
+ * 一次性修正（加载时跑，幂等）：早期版本把「用法笔记」的键取成了笔记里那个英文单词，
+ * 于是把**真正的单词词条**误标成了「用法」（不进背单词/考试），也可能把单词标成「词组」。
+ *
+ * 判据：有 `kind` 却没有 `langPointId`（新代码收进来的条目一定带标记）：
+ *   - 用法：word 里没有中日韩字符 → 其实是个单词，改回单词；
+ *   - 词组/习语：归一化后只有一个 token（单个单词）→ 也改回单词。
+ */
+export function repairLanguageKinds(library: VocabLibrary): VocabLibrary {
+  const hasCJK = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/
+  let changed = false
+  const items = library.items.map((it) => {
+    const k = kindOf(it)
+    if (k === 'word' || it.langPointId) return it
+    const english = normalizeWord(it.word)
+    const bogus = k === 'usage' ? !hasCJK.test(it.word) : !english.includes(' ')
+    if (!bogus) return it
+    changed = true
+    const next = { ...it }
+    delete next.kind
+    return next
+  })
+  return changed ? { ...library, items } : library
+}
+
 /** 词性全称 → 缩写（离线词典/AI 有时给 "noun" 全称）。 */
 const POS_ABBR: Record<string, string> = {
   noun: 'n.',
@@ -657,15 +682,28 @@ export function upsertLanguagePoints(
   library.items.forEach((it, i) => {
     if (!index.has(it.lemma)) index.set(it.lemma, i)
   })
+  /** 已收过的语言点标记 → 词条下标（**词典改名也不影响**，避免来回重建）。 */
+  const marked = new Map<string, number>()
+  library.items.forEach((it, i) => {
+    if (it.langPointId && !marked.has(it.langPointId)) marked.set(it.langPointId, i)
+  })
   const items = [...library.items]
   let changed = false
 
   for (const p of points) {
     const word = p.word.trim()
     if (!word) continue
-    const lemma = lemmaOf(word) || textKey(word)
+    const english = normalizeWord(word)
+    // 用法笔记 / 没有英文的说明：整条当键（不与单词、词组撞车），类型记「用法」
+    const isNote = p.kind === 'usage' || !english
+    // 单个英文单词（AI 偶尔把单词写进「词组」栏）：当普通单词，走正常查词与词形归并
+    const asWord = !isNote && !english.includes(' ')
+    const kind: VocabKind | undefined = isNote ? 'usage' : asWord ? undefined : p.kind
+    const lemma = isNote ? textKey(word) : lemmaOf(word) || textKey(word)
     if (!lemma) continue
     const source = p.source
+    /** 这条语言点的稳定身份：同一篇同一句里的同一段文字只收一次 */
+    const pointId = `${kind ?? 'word'}|${source.fileName ?? source.articleId}|${source.sentenceId ?? ''}|${textKey(word)}`
     const gloss = p.gloss?.trim() || null
     const example: VocabExample = {
       text: source.sentenceText?.trim() || word,
@@ -674,13 +712,14 @@ export function upsertLanguagePoints(
       sentenceId: source.sentenceId ?? undefined,
       origin: 'article',
     }
-    const at = index.get(lemma)
+    const at = marked.get(pointId) ?? index.get(lemma)
     if (at === undefined) {
       items.push({
         id: `vocab:${lemma}`,
         word,
         lemma,
-        kind: p.kind,
+        kind: kind === 'word' ? undefined : kind,
+        langPointId: pointId,
         phonetic: null,
         partOfSpeech: null,
         meaning: gloss,
@@ -696,26 +735,30 @@ export function upsertLanguagePoints(
         updatedAt: iso,
       })
       index.set(lemma, items.length - 1)
+      marked.set(pointId, items.length - 1)
       changed = true
       continue
     }
     const cur = items[at]
     const contexts = upsertContext(cur.contexts, contextFromSource(source, iso, gloss ?? undefined))
     const meaning = cur.meaning ?? gloss
-    const kind = cur.kind ?? p.kind
+    // 已存在就不改类型（单词被 AI 误列为词组时不误标）
+    const nextKind = cur.kind ?? (kind === 'word' ? undefined : kind)
     const merged = mergeExamples(cur.examples, [example])
     const examples = merged.length === cur.examples.length ? cur.examples : merged
     if (
       contexts === cur.contexts &&
       meaning === cur.meaning &&
-      kind === cur.kind &&
+      nextKind === cur.kind &&
       examples === cur.examples &&
+      cur.langPointId !== undefined && // 还没打「语言点标记」→ 这次要补上，不算没变
       sourceHasText(cur.source)
     )
       continue
     items[at] = {
       ...cur,
-      kind,
+      kind: nextKind,
+      langPointId: cur.langPointId ?? pointId,
       meaning,
       contexts,
       examples,

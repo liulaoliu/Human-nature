@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { dictLemmaOf, isAboveLevel, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
+import { dictLemmaOf, dictLemmaPairs, isAboveLevel, isDictWord, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
+import { applyLemmaMap, createLibrary, dedupeLibrary, upsertLanguagePoints } from './vocab'
 
 // 构造与构建脚本一致的 TSV（\t 分隔；\n 表示换行由脚本转义为 \\n）
 const wordsTsv = [
@@ -9,9 +10,20 @@ const wordsTsv = [
   'hobble\t\'hɒbl\t\tvt. prevent\tt. 阻碍\tky\t2\t0\t5000\t6000',
   'carbonfibre\t\t\t\t\tgre\t0\t0\t0\t0',
   'bnconly\t\t\t\t\t\t0\t0\t0\t0',
+  'fall back on\t\t\tphr. rely on\tt. 转而依靠\t\t0\t0\t0\t0',
+  'alga\t\t\tn. seaweed\t n. 藻类\t\t0\t0\t0\t0',
+  'algae\t\t\tn. seaweed\t n. 藻类（复数）\t\t0\t0\t0\t0',
 ].join('\n')
 
-const formsTsv = ['running\trun', 'hobbled\thobble', 'ensconced\tensconce'].join('\n')
+const formsTsv = [
+  'running\trun',
+  'hobbled\thobble',
+  'ensconced\tensconce',
+  'falls back on\tfall back on',
+  // 两跳：algaes → algae → alga（真实词典里就有 1224 个这种两跳词形）
+  'algaes\talgae',
+  'algae\talga',
+].join('\n')
 
 const dict = parseEcdict(wordsTsv, formsTsv)
 
@@ -33,6 +45,72 @@ describe('parseEcdict / resolveWord / dictLemmaOf', () => {
     expect(dictLemmaOf(dict, 'zzzz')).toBeNull()
     // 启发式会错成 ensconc 的，词典能给对的（加载时会据此自动纠正）
     expect(dictLemmaOf(dict, 'ensconced')).toBe('ensconce')
+  })
+})
+
+describe('isDictWord / dictLemmaPairs（词形归并只碰单个单词）', () => {
+  it('只认单个英文单词：词组 / 习语 / 用法笔记都不算', () => {
+    expect(isDictWord({ word: 'running' })).toBe(true)
+    expect(isDictWord({ word: 'falls back on' })).toBe(false) // 含空格 = 词组
+    expect(isDictWord({ word: 'fall back on', kind: 'phrase' })).toBe(false)
+    expect(isDictWord({ word: 'take its toll', kind: 'idiom' })).toBe(false)
+    expect(isDictWord({ word: '注意 subject to 是形容词', kind: 'usage' })).toBe(false) // 中文笔记
+    expect(isDictWord({ word: '『』' })).toBe(false) // 归一化后为空
+  })
+
+  it('词组不做词形归并（否则会并进单词、被语言点收藏再加回来 → 数量跳动）', () => {
+    // 词典里确实有 falls back on → fall back on 的映射
+    expect(dictLemmaOf(dict, 'falls back on')).toBe('fall back on')
+    const pairs = dictLemmaPairs(
+      dict,
+      [
+        { word: 'falls back on', lemma: 'falls back on' }, // 词组（含空格）
+        { word: 'running', lemma: 'running' }, // 单词 → 该归并
+        { word: 'hobbled', lemma: 'hobbled', status: 'edited' }, // 手动改过：skipLocked 时不动
+      ],
+      { skipLocked: true },
+    )
+    expect(pairs).toEqual([{ from: 'running', to: 'run' }])
+    expect(dictLemmaPairs(dict, [{ word: 'hobbled', lemma: 'hobbled', status: 'edited' }], { skipLocked: true })).toEqual([])
+    expect(dictLemmaPairs(dict, [{ word: 'hobbled', lemma: 'hobbled' }])).toEqual([{ from: 'hobbled', to: 'hobble' }])
+  })
+
+  it('语言点收藏 + 词典归并交替跑：词库稳定（修「生词数量在 7694/7696 之间跳」）', () => {
+    const source = { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'He falls back on it.' }
+    const points = [{ kind: 'phrase' as const, word: 'falls back on', gloss: '转而依靠', source }]
+    let lib = upsertLanguagePoints(createLibrary(), points)
+    const n = lib.items.length
+    expect(n).toBe(1)
+    // 交替跑三轮：收藏一次 → 词典归并一次；数量必须稳定、且不重复写库
+    for (let i = 0; i < 3; i++) {
+      const before = lib
+      lib = upsertLanguagePoints(lib, points)
+      if (i > 0) expect(lib).toBe(before) // 幂等：不再新增
+      lib = dedupeLibrary(applyLemmaMap(lib, dictLemmaPairs(dict, lib.items, { skipLocked: true })))
+      expect(lib.items.length).toBe(n)
+      expect(lib.items[0].word).toBe('falls back on')
+    }
+  })
+
+  it('词典里的「两跳」词形也不会把收藏的条目翻来覆去（真实数据里 1224 个这种词）', () => {
+    // algaes → algae → alga：老写法每轮会把条目的 lemma 改成 alga，
+    // 而收藏这边按 lemmaOf('algaes') = 'algae' 找 → 找不到就再建一条，来回跳。
+    expect(dictLemmaOf(dict, 'algaes')).toBe('algae')
+    expect(dictLemmaOf(dict, 'algae')).toBe('alga')
+    const source = { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'Algaes grow here.' }
+    const points = [{ kind: 'phrase' as const, word: 'algaes', gloss: '藻类', source }]
+    let lib = upsertLanguagePoints(createLibrary(), points)
+    const counts: number[] = []
+    for (let i = 0; i < 4; i++) {
+      lib = upsertLanguagePoints(lib, points)
+      lib = dedupeLibrary(applyLemmaMap(lib, dictLemmaPairs(dict, lib.items, { skipLocked: true })))
+      counts.push(lib.items.length)
+    }
+    expect(counts).toEqual([1, 1, 1, 1]) // 不增不减（词典改写也不影响）
+    // 单个单词的条目交给词典归一（algaes → alga，这是想要的）；关键是**没有来回重建**
+    expect(lib.items).toHaveLength(1)
+    expect(lib.items[0].kind).toBeUndefined()
+    expect(lib.items[0].langPointId).toContain('algaes')
   })
 })
 

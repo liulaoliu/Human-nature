@@ -4,6 +4,8 @@
  * 纯逻辑：解析紧凑 TSV、查词、词形→原形、判断"是否超出某词汇水平"。
  * 网络加载放在 reader/dictionary.ts（这里不碰浏览器 API，便于单测）。
  */
+import { kindOf, normalizeWord } from './vocab'
+import type { VocabKind } from '../types/document'
 
 export interface EcdictEntry {
   /** 原词形（显示用） */
@@ -94,6 +96,36 @@ export function dictLemmaOf(dict: Ecdict, word: string): string | null {
   const lemma = dict.forms.get(lower)
   if (lemma) return lemma
   return dict.entries.has(lower) ? lower : null
+}
+
+/**
+ * 这个词条能不能交给**单词**词典做词形归并。
+ *
+ * 只有「单个英文单词」才算：词组 / 习语 / 用法笔记不做（词典里没有它们的词形表，
+ * 而且 `lemmaOf` 对含空格的东西本来就是「原样」——把它们并进某个单词，
+ * 「语言点自动收藏」下一轮又会加回来，两边来回打架、词库数量就会跳）。
+ */
+export function isDictWord(item: { word: string; lemma?: string; kind?: VocabKind }): boolean {
+  if (kindOf(item) !== 'word') return false
+  const w = normalizeWord(item.word)
+  return !!w && !w.includes(' ')
+}
+
+/** 由词库 + 词典算出「词形 → 原形」的修正对（幂等）。只处理单个英文单词，见 `isDictWord`。 */
+export function dictLemmaPairs(
+  dict: Ecdict,
+  items: { word: string; lemma?: string; kind?: VocabKind; status?: string }[],
+  opts: { skipLocked?: boolean } = {},
+): { from: string; to: string }[] {
+  const out: { from: string; to: string }[] = []
+  for (const it of items) {
+    if (opts.skipLocked && (it.status === 'edited' || it.status === 'mastered')) continue
+    if (!isDictWord(it)) continue
+    const to = dictLemmaOf(dict, it.word)
+    if (!to || normalizeWord(it.word) === to) continue
+    out.push({ from: it.word, to })
+  }
+  return out
 }
 
 export interface DictConfusable {

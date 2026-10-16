@@ -201,6 +201,11 @@ export interface VocabItem {
   lemma: string
   /** 词条类型（缺省 = 普通单词） */
   kind?: VocabKind
+  /**
+   * 「从哪条语言点收来的」去重标记（词组/习语/用法自动收藏用）。
+   * 有了它，就算词典把词形改写了，也不会重复收同一条。
+   */
+  langPointId?: string
   /** 音标 */
   phonetic: string | null
   /** 词性 */

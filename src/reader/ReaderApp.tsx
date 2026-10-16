@@ -18,6 +18,7 @@ import {
   normalizeGrammarMarks,
   pickOfflineExamples,
   removeItem,
+  repairLanguageKinds,
   reviewItem,
   sortItems,
   splitGloss,
@@ -95,7 +96,7 @@ import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
 import { loadTatoeba, tatoebaExamples } from './tatoeba'
 import { dictionary } from './dictionary'
-import { dictLemmaOf } from '../core/ecdict'
+import { dictLemmaPairs } from '../core/ecdict'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
@@ -160,6 +161,8 @@ export default function ReaderApp() {
   const [selSid, setSelSid] = useState<string | null>(null)
   const [selIndices, setSelIndices] = useState<number[]>([])
   const [library, setLibrary] = useState<VocabLibrary>(() => createLibrary())
+  /** 词库是否已从 IndexedDB 读回来（读完才做「语言点自动收藏」，避免和加载抢写）。 */
+  const [libraryLoaded, setLibraryLoaded] = useState(false)
   /** 词库的可变引用：跑批里多条任务挨个应用时用它串起来，避免相互覆盖（见 useApplyTaskResult）。 */
   const libraryRef = useRef(library)
   libraryRef.current = library
@@ -615,12 +618,15 @@ export default function ReaderApp() {
     repo.current = r
     r.load()
       .then((lib) => {
-        // 加载时合并去重，保证不会出现两个同根词
-        const fixed = normalizeGrammarMarks(dedupeLibrary(lib))
+        // 加载时合并去重，保证不会出现两个同根词；顺手修早先版本误标的类型
+        const fixed = normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(lib)))
+        libraryRef.current = fixed
         setLibrary(fixed)
-        if (fixed.items.length !== lib.items.length) r.save(fixed).catch(() => {})
+        setLibraryLoaded(true)
+        const dirty = fixed.items.length !== lib.items.length || fixed.items.some((it, i) => it !== lib.items[i])
+        if (dirty) r.save(fixed).catch(() => {})
       })
-      .catch(() => {})
+      .catch(() => setLibraryLoaded(true))
     // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
     try {
       void navigator.storage?.persist?.()
@@ -985,7 +991,8 @@ export default function ReaderApp() {
   const [readDone, setReadDone] = useLocalStorageState<ReadDone[]>('reader:readDone', [])
   const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, persistentNumber)
   const [goalMemo, setGoalMemo] = useLocalStorageState('reader:goalMemo', '', persistentString)
-  /** 生词本排序方式。 */
+  /** 语言点自动收藏的记账：文章标识 → 已收过的语言点签名（防重复收、也防删了又冒出来）。 */
+  const [langCollected, setLangCollected] = useLocalStorageState<Record<string, string>>('reader:langCollected', {})  /** 生词本排序方式。 */
   const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
     'reader:vocabSort',
     'updatedAt',
@@ -2159,6 +2166,11 @@ export default function ReaderApp() {
   /**
    * 语言点自动收藏：AI 在速读里总结的 **词组 / 习语 / 用法** 收进词库（幂等、静默），
    * 之后就能跟生词一样筛选、分组、打印（整套打印/导出选项直接复用）。
+   *
+   * ⚠️ 两处刻意设计（都是防「词库数量来回跳」）：
+   *   1. 依赖里**不放 `library`**：否则会和别的「读词库 → 写词库」的 effect 互相覆盖；
+   *   2. 按**每篇的语言点签名**记账（`reader:langCollected`）：一篇收过就不再折腾，
+   *      用户手动删掉的条目也不会又冒出来；语言点变了（重新跑 AI）才会再收。
    */
   const languagePoints = useMemo(() => {
     const others = saved.filter((a) => a.id !== articleIdentity)
@@ -2168,11 +2180,29 @@ export default function ReaderApp() {
     return out
   }, [saved, doc, articleIdentity])
 
+  /** 每篇文章的语言点签名（内容变了才会再收一次）。 */
+  const langSig = useMemo(() => {
+    const byArticle = new Map<string, string[]>()
+    for (const p of languagePoints) {
+      const id = p.source.fileName ?? p.source.articleId
+      const line = `${p.kind}|${p.word}|${p.source.sentenceId ?? ''}|${p.gloss ?? ''}`
+      const list = byArticle.get(id)
+      if (list) list.push(line)
+      else byArticle.set(id, [line])
+    }
+    return Object.fromEntries([...byArticle.entries()].map(([id, list]) => [id, list.sort().join('\u0001')]))
+  }, [languagePoints])
+
   useEffect(() => {
-    if (!languagePoints.length) return
-    const next = upsertLanguagePoints(library, languagePoints)
-    if (next !== library) persist(next)
-  }, [languagePoints, library, persist])
+    if (!libraryLoaded) return
+    const todo = Object.entries(langSig).filter(([id, sig]) => langCollected[id] !== sig)
+    if (!todo.length) return
+    const ids = new Set(todo.map(([id]) => id))
+    const pts = languagePoints.filter((p) => ids.has(p.source.fileName ?? p.source.articleId))
+    const next = upsertLanguagePoints(libraryRef.current, pts)
+    if (next !== libraryRef.current) persist(next)
+    setLangCollected((prev) => ({ ...prev, ...Object.fromEntries(todo) }))
+  }, [libraryLoaded, langSig, languagePoints, langCollected, setLangCollected, persist])
 
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(
@@ -2295,10 +2325,7 @@ export default function ReaderApp() {
     if (!dictReady) return
     const dict = dictionary()
     if (!dict) return
-    const pairs = library.items
-      .filter((it) => it.status !== 'edited' && it.status !== 'mastered')
-      .map((it) => ({ from: it.word, to: dictLemmaOf(dict, it.word) }))
-      .filter((p): p is { from: string; to: string } => !!p.to && normalizeWord(p.from) !== p.to)
+    const pairs = dictLemmaPairs(dict, library.items, { skipLocked: true })
     if (!pairs.length) return
     persist(dedupeLibrary(applyLemmaMap(library, pairs)))
   }, [dictReady, library, persist])

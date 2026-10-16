@@ -45,11 +45,13 @@ import {
   relemmaLibrary,
   removeByLemma,
   removeItem,
+  repairLanguageKinds,
   review,
   reviewItem,
   setStatus,
   sortItems,
   splitGloss,
+  textKey,
   unprintedItems,
   upsertContext,
   upsertLanguagePoints,
@@ -740,8 +742,68 @@ describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () =>
     expect(next.items[0].meaning).toBe('转而依靠')
   })
 
-  it('类型过滤：filterByKind；词组可背、用法笔记不背', () => {
+  it('中文用法笔记不跟单词撞车：另建一条，也不会把已有单词改成「用法」', () => {
+    const lib0 = markWord(createLibrary(), { word: 'purge', articleId: 'A', fileName: 'A' }, NOW).library
     const lib = upsertLanguagePoints(
+      lib0,
+      [{ kind: 'usage', word: '注意 purges 在这里是名词复数', source: src('A', 's1') }],
+      NOW,
+    )
+    expect(lib.items).toHaveLength(2)
+    const word = lib.items.find((it) => it.lemma === 'purge')!
+    expect(kindOf(word)).toBe('word') // 原本的单词还是单词（能背、能出题）
+    const note = lib.items.find((it) => kindOf(it) === 'usage')!
+    expect(note.word).toBe('注意 purges 在这里是名词复数')
+    expect(note.lemma).toBe(textKey('注意 purges 在这里是名词复数')) // 按整条文本做键
+  })
+
+  it('单个英文单词写进「词组」栏：当普通单词收（不标类型），多词的才标 词组', () => {
+    const lib = upsertLanguagePoints(
+      createLibrary(),
+      [
+        { kind: 'phrase', word: 'purges', gloss: '清洗', source: src('A', 's1') },
+        { kind: 'phrase', word: 'fall back on', gloss: '转而依靠', source: src('A', 's2') },
+      ],
+      NOW,
+    )
+    expect(lib.items.find((it) => it.lemma === 'purge')!.kind).toBeUndefined()
+    expect(lib.items.find((it) => it.lemma === 'fall back on')!.kind).toBe('phrase')
+  })
+
+  it('语言点标记（langPointId）：词形被改写后也不会重复收同一条', () => {
+    const src = { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'We fall back on it.' }
+    const points = [{ kind: 'phrase' as const, word: 'fall back on', gloss: '转而依靠', source: src }]
+    const lib = upsertLanguagePoints(createLibrary(), points, NOW)
+    expect(lib.items[0].langPointId).toContain('fall back on')
+    // 模拟词典把它改名成别的词形：再收一次不该新建
+    const renamed = { ...lib, items: [{ ...lib.items[0], word: 'fallback', lemma: 'fallback' }] }
+    const again = upsertLanguagePoints(renamed, points, NOW)
+    expect(again.items).toHaveLength(1)
+  })
+
+  it('repairLanguageKinds：修早先版本误标（单词被标成用法/词组），真笔记不动', () => {
+    const mk = (over: Partial<VocabItem>) => item(over)
+    const lib = dedupeLibrary({
+      schemaVersion: 1,
+      items: [
+        mk({ id: 'a', word: 'purge', lemma: 'purge', kind: 'usage' }), // 单词被误标成用法 → 改回
+        mk({ id: 'b', word: 'alga', lemma: 'alga', kind: 'phrase' }), // 单词被误标成词组 → 改回
+        mk({ id: 'c', word: '注意 purges 是名词', lemma: '注意 purges 是名词', kind: 'usage' }), // 真笔记 → 不动
+        mk({ id: 'd', word: 'fall back on', lemma: 'fall back on', kind: 'phrase' }), // 真词组 → 不动
+        mk({ id: 'e', word: '注意 purges 在这里是名词复数', lemma: '注意 purges 在这里是名词复数', kind: 'usage', langPointId: 'usage|A|s1|注意 purges 在这里是名词复数' }), // 新代码写的 → 不动
+      ],
+    })
+    const out = repairLanguageKinds(lib)
+    const byId = new Map(out.items.map((it) => [it.id, it]))
+    expect(byId.get('a')!.kind).toBeUndefined()
+    expect(byId.get('b')!.kind).toBeUndefined()
+    expect(byId.get('c')!.kind).toBe('usage')
+    expect(byId.get('d')!.kind).toBe('phrase')
+    expect(byId.get('e')!.kind).toBe('usage')
+    expect(repairLanguageKinds(out)).toBe(out) // 幂等
+  })
+
+  it('类型过滤：filterByKind；词组可背、用法笔记不背', () => {    const lib = upsertLanguagePoints(
       createLibrary(),
       [
         { kind: 'phrase', word: 'run out', gloss: '用完', source: src('A', 's1') },
