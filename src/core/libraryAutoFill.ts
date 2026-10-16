@@ -76,7 +76,12 @@ export function autoFillLibrary(
   // 1) 语言点收藏：按「每篇内容签名」只收一遍（删掉的条目不会自己回来）
   if (sources.langPoints.length) {
     const sig = langPointSignature(sources.langPoints)
-    const todo = Object.entries(sig).filter(([id, s]) => collected[id] !== s)
+    /**
+     * 记账与实际不符时也重收：**词库里一条语言点都没有**，但文章里明明有
+     * （换库、导库、早先版本丢过），说明那份「已收过」的记账是旧的 → 当成没收过。
+     */
+    const hasLangItems = lib.items.some((it) => (it.kind ?? 'word') !== 'word')
+    const todo = Object.entries(sig).filter(([id, s]) => !hasLangItems || collected[id] !== s)
     if (todo.length) {
       const ids = new Set(todo.map(([id]) => id))
       const pts = sources.langPoints.filter((p) => ids.has(p.source.fileName ?? p.source.articleId))
