@@ -15,6 +15,8 @@ export interface ReaderToolbarProps {
   saved: SavedArticle[]
   savedGroups: [string, SavedArticle[]][]
   shownKeys: string[]
+  /** 文章标识 → 第一次读完的日期键（选择器里标「✓ 已读」并可只看未读） */
+  readDays?: Record<string, string>
   currentValue: string
   onPickArticle: (value: string) => void
 
@@ -96,6 +98,7 @@ export default function ReaderToolbar({
   saved,
   savedGroups,
   shownKeys,
+  readDays,
   currentValue,
   onPickArticle,
   hasDoc,
@@ -175,6 +178,7 @@ export default function ReaderToolbar({
           saved={saved}
           savedGroups={savedGroups}
           builtinKeys={shownKeys}
+          readDays={readDays}
           currentValue={currentValue}
           onPick={onPickArticle}
         />

@@ -103,7 +103,7 @@ import JournalPanel from './panels/JournalPanel'
 import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
 import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
-import { addReadDone, readDoneOn, removeReadDone, type ReadDone } from '../core/goals'
+import { addReadDone, readDayOf, readDoneOn, removeReadDone, type ReadDone } from '../core/goals'
 import GoalPanel from './panels/GoalPanel'
 import { buildHeatmap } from '../core/activity'
 import {
@@ -1894,6 +1894,9 @@ export default function ReaderApp() {
     writingHistory,
     practice,
     mistakes,
+    readDone,
+    readGoal,
+    goalMemo,
     visibleBatch,
     persist,
     flash,
@@ -1904,6 +1907,9 @@ export default function ReaderApp() {
     setWritingHistory,
     setPractice,
     setMistakes,
+    setReadDone,
+    setReadGoal,
+    setGoalMemo,
   })
 
   /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
@@ -2114,9 +2120,17 @@ export default function ReaderApp() {
     if (next !== library) persist(next)
   }, [tatoebaReady, library, persist])
 
-  /** 记「今天读完这篇」。速读推到结尾会自动调，也可在目标面板手动标记。 */
+  /**
+   * 记「读完这篇」。速读推到结尾会自动调，也可在目标面板手动标记。
+   * **同一篇只记第一次**：已在某天读过就不再计入（也不会第二天又被列入），只给个提示。
+   */
   const markReadDone = useCallback(() => {
     if (!articleIdentity) return
+    const already = readDayOf(readDone, articleIdentity)
+    if (already) {
+      if (already !== todayKey) flash(`这篇已于 ${already} 读过，不重复计入（换一天重读也不算）`)
+      return
+    }
     setReadDone((prev) =>
       addReadDone(prev, {
         day: todayKey,
@@ -2125,12 +2139,19 @@ export default function ReaderApp() {
         at: new Date().toISOString(),
       }),
     )
-  }, [articleIdentity, articleTitle, articleKey, todayKey, setReadDone])
+  }, [articleIdentity, articleTitle, articleKey, todayKey, setReadDone, readDone, flash])
 
   const todayReadDone = useMemo(() => readDoneOn(readDone, todayKey), [readDone, todayKey])
+  /** 当前这篇第一次读完是哪天（没读过为 null）。 */
+  const articleReadDay = useMemo(() => readDayOf(readDone, articleIdentity), [readDone, articleIdentity])
+  /** 文章标识 → 第一次读完的日期键（文章选择器里标「✓ 已读」）。 */
+  const readDays = useMemo(
+    () => Object.fromEntries(readDone.map((d) => [d.articleId, d.day])) as Record<string, string>,
+    [readDone],
+  )
   const undoReadDone = useCallback(
-    (articleId: string) => setReadDone((prev) => removeReadDone(prev, todayKey, articleId)),
-    [todayKey, setReadDone],
+    (articleId: string) => setReadDone((prev) => removeReadDone(prev, articleId)),
+    [setReadDone],
   )
 
   /** 学习日志：按天回顾。 */
@@ -2413,6 +2434,7 @@ export default function ReaderApp() {
             saved={saved}
             savedGroups={savedGroups}
             shownKeys={shownKeys}
+            readDays={readDays}
             currentValue={currentValue}
             onPickArticle={onPick}
             hasDoc={!!doc}
@@ -2738,12 +2760,14 @@ export default function ReaderApp() {
             onClose={() => setGoalOpen(false)}
             todayKey={todayKey}
             done={todayReadDone}
+            allDone={readDone}
             goal={readGoal}
             onGoalChange={setReadGoal}
             memo={goalMemo}
             onMemoChange={setGoalMemo}
             articleTitle={articleTitle}
-            articleDone={todayReadDone.some((d) => d.articleId === articleIdentity)}
+            articleDone={articleReadDay !== null}
+            articleReadDay={articleReadDay}
             onMarkDone={markReadDone}
             onUndo={undoReadDone}
           />

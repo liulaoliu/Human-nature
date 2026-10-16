@@ -9,6 +9,7 @@ import { dayKeyLocal } from '../../core/activity'
 import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
+import { mergeReadDone, type ReadDone } from '../../core/goals'
 import {
   mergeActivity,
   mergeLibraries,
@@ -29,6 +30,10 @@ interface ParsedBackup {
   writingHistory?: WritingRecord[]
   practice?: PracticeRecord[]
   mistakes?: MistakeEntry[]
+  /** 目标 / 备忘 / 读完历史 */
+  readDone?: ReadDone[]
+  readGoal?: number
+  goalMemo?: string
 }
 
 /** 解析导入的 JSON：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
@@ -56,6 +61,9 @@ function parseBackupPayload(data: unknown): ParsedBackup {
     if (Array.isArray(obj.writingHistory)) out.writingHistory = obj.writingHistory as WritingRecord[]
     if (Array.isArray(obj.practice)) out.practice = obj.practice as PracticeRecord[]
     if (Array.isArray(obj.mistakes)) out.mistakes = obj.mistakes as MistakeEntry[]
+    if (Array.isArray(obj.readDone)) out.readDone = obj.readDone as ReadDone[]
+    if (typeof obj.readGoal === 'number') out.readGoal = obj.readGoal
+    if (typeof obj.goalMemo === 'string') out.goalMemo = obj.goalMemo
     if (!out.articles.length && 'sentences' in obj && 'paragraphs' in obj) out.articles = [data as SavedArticle]
   }
   return out
@@ -71,6 +79,9 @@ export interface UseExportParams {
   writingHistory: WritingRecord[]
   practice: PracticeRecord[]
   mistakes: MistakeEntry[]
+  readDone: ReadDone[]
+  readGoal: number
+  goalMemo: string
   visibleBatch: { word: string; sentence: string }[]
   persist: (library: VocabLibrary) => void
   flash: (message: string) => void
@@ -81,6 +92,9 @@ export interface UseExportParams {
   setWritingHistory: (v: WritingRecord[]) => void
   setPractice: (v: PracticeRecord[]) => void
   setMistakes: (v: MistakeEntry[]) => void
+  setReadDone: (v: ReadDone[]) => void
+  setReadGoal: (v: number) => void
+  setGoalMemo: (v: string) => void
 }
 
 /** 导出（Anki/JSON/CSV/打印）与整库备份的导出/导入。 */
@@ -94,6 +108,9 @@ export function useExport({
   writingHistory,
   practice,
   mistakes,
+  readDone,
+  readGoal,
+  goalMemo,
   visibleBatch,
   persist,
   flash,
@@ -104,6 +121,9 @@ export function useExport({
   setWritingHistory,
   setPractice,
   setMistakes,
+  setReadDone,
+  setReadGoal,
+  setGoalMemo,
 }: UseExportParams) {
   const download = (name: string, content: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([content], { type: mime }))
@@ -146,6 +166,9 @@ export function useExport({
       writingHistory,
       practice,
       mistakes,
+      readDone,
+      readGoal,
+      goalMemo,
     }
     const day = dayKeyLocal()
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
@@ -168,6 +191,9 @@ export function useExport({
       if (parsed.writingHistory) setWritingHistory(parsed.writingHistory)
       if (parsed.practice) setPractice(parsed.practice)
       if (parsed.mistakes) setMistakes(parsed.mistakes)
+      if (parsed.readDone) setReadDone(parsed.readDone)
+      if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
+      if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
       setSaved((await articles.current?.list()) ?? [])
       flash(`导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}`)
     } catch {
@@ -195,6 +221,7 @@ export function useExport({
       if (parsed.writingHistory) setWritingHistory(mergeWritingHistory(writingHistory, parsed.writingHistory))
       if (parsed.practice) setPractice(mergePractice(practice, parsed.practice))
       if (parsed.mistakes) setMistakes(mergeMistakes(mistakes, parsed.mistakes))
+      if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
       flash(`合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}`)
     } catch {

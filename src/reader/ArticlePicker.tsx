@@ -10,6 +10,8 @@ interface Props {
   builtinKeys: string[]
   currentValue: string
   onPick: (value: string) => void
+  /** 文章标识（内置=book key，已保存=savedId）→ **第一次**读完的日期键 */
+  readDays?: Record<string, string>
 }
 
 /**
@@ -23,9 +25,11 @@ export default function ArticlePicker({
   builtinKeys,
   currentValue,
   onPick,
+  readDays = {},
 }: Props) {
   const [open, setOpen] = useState(false)
   const [closed, setClosed] = useState<Set<string>>(new Set())
+  const [hideRead, setHideRead] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
@@ -67,6 +71,20 @@ export default function ArticlePicker({
     setOpen(false)
   }
 
+  /** 已读完（会带上「第一次读完」的日期）。 */
+  const readOf = (id: string) => readDays[id]
+  const shownBuiltin = hideRead ? builtinKeys.filter((k) => !readOf(k)) : builtinKeys
+  const shownGroups: [string, SavedArticle[]][] = savedGroups
+    .map(([name, list]): [string, SavedArticle[]] => [name, hideRead ? list.filter((a) => !readOf(a.id)) : list])
+    .filter(([, list]) => list.length > 0)
+
+  const readBadge = (id: string) =>
+    readOf(id) ? (
+      <span className="picker-read" title={`已于 ${readOf(id)} 读完（同一篇不再重复计入）`}>
+        ✓ {readOf(id).slice(5)}
+      </span>
+    ) : null
+
   return (
     <div className="picker" ref={rootRef}>
       <button className={'picker-btn' + (open ? ' open' : '')} onClick={() => setOpen((v) => !v)} title="选择文章">
@@ -76,34 +94,46 @@ export default function ArticlePicker({
 
       {open && (
         <div className="picker-pop" role="listbox">
-          {book && (
+          <div className="picker-filter">
+            <label className="check-inline" title="把已经读完的文章藏起来（同一篇不会重复计入）">
+              <input type="checkbox" checked={hideRead} onChange={(e) => setHideRead(e.target.checked)} />
+              只看未读
+            </label>
+            <span className="muted">
+              已读 {Object.keys(readDays).length} 篇
+              {hideRead ? ` · 未读 ${shownBuiltin.length + shownGroups.reduce((n, [, l]) => n + l.length, 0)} 篇` : ''}
+            </span>
+          </div>
+
+          {book && shownBuiltin.length > 0 && (
             <div className="picker-section">
               <button className="picker-head" onClick={() => toggle('builtin')}>
                 <span className={'caret' + (expanded('builtin') ? '' : ' closed')}>▾</span>
-                内置（{builtinKeys.length}）
+                内置（{shownBuiltin.length}）
               </button>
               {expanded('builtin') &&
-                builtinKeys.map((k) => (
+                shownBuiltin.map((k) => (
                   <button
                     key={k}
-                    className={'picker-item' + (currentValue === `b:${k}` ? ' on' : '')}
+                    className={'picker-item' + (currentValue === `b:${k}` ? ' on' : '') + (readOf(k) ? ' read' : '')}
                     onClick={() => choose(`b:${k}`)}
-                    title={k}
+                    title={readOf(k) ? `${k}\n已读：${readOf(k)}` : k}
                   >
                     {k}
+                    {readBadge(k)}
                   </button>
                 ))}
             </div>
           )}
 
-          {savedGroups.length > 0 && (
+          {shownGroups.length > 0 && (
             <div className="picker-section">
               <button className="picker-head" onClick={() => toggle('saved')}>
                 <span className={'caret' + (expanded('saved') ? '' : ' closed')}>▾</span>
-                已保存（{saved.length}）
+                已保存（{shownGroups.reduce((n, [, l]) => n + l.length, 0)}）
               </button>
               {expanded('saved') &&
-                savedGroups.map(([bookName, list]) => {
+                shownGroups.map(([bookName, list]) => {
                   const gkey = `book:${bookName}`
                   const single = bookName === '单篇'
                   const isOpenGroup = expanded(gkey)
@@ -125,15 +155,20 @@ export default function ArticlePicker({
                           return (
                             <button
                               key={a.id}
-                              className={'picker-item sub' + (currentValue === `s:${a.id}` ? ' on' : '')}
+                              className={
+                                'picker-item sub' + (currentValue === `s:${a.id}` ? ' on' : '') + (readOf(a.id) ? ' read' : '')
+                              }
                               onClick={() => choose(`s:${a.id}`)}
-                              title={`${a.title}\n新增：${created}${edited !== created ? `\n最后修改：${edited}` : ''}`}
+                              title={`${a.title}\n新增：${created}${edited !== created ? `\n最后修改：${edited}` : ''}${
+                                readOf(a.id) ? `\n已读：${readOf(a.id)}` : ''
+                              }`}
                             >
                               <span className="picker-item-title">{single ? a.title : a.title.replace(`${bookName} · `, '')}</span>
                               <span className="picker-item-date">
                                 {created}
                                 {edited !== created ? ` · 改 ${edited}` : ''}
                               </span>
+                              {readBadge(a.id)}
                             </button>
                           )
                         })}
@@ -142,6 +177,8 @@ export default function ArticlePicker({
                 })}
             </div>
           )}
+
+          {shownBuiltin.length === 0 && shownGroups.length === 0 && <div className="muted picker-empty">都读完了 🎉</div>}
         </div>
       )}
     </div>

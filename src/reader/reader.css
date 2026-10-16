@@ -1017,6 +1017,9 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .gitem-time { flex: 0 0 auto; font-size: 11px; }
 .gitem-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gitem button { padding: 0 7px; font-size: 12px; }
+.ghist { display: flex; flex-direction: column; gap: 3px; padding: 6px 0 2px; }
+.ghist + .ghist { border-top: 1px dashed var(--line); }
+.ghist-day { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }
 .gmemo {
   width: 100%;
   padding: 8px 10px;
@@ -1246,6 +1249,23 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .picker-item.sub { padding-left: 38px; }
 .picker-item:hover { background: #2b303a; }
 .picker-item.on { background: rgba(74, 158, 255, 0.16); color: var(--accent); }
+.picker-filter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 4px 10px 8px;
+  font-size: 12px;
+}
+.picker-read {
+  float: right;
+  margin-left: 8px;
+  font-size: 11px;
+  color: #57b26a;
+  white-space: nowrap;
+}
+.picker-item.read .picker-item-title { opacity: 0.62; }
+.picker-empty { padding: 10px 12px; font-size: 13px; }
 
 /* 微观交互 & 响应式 */
 .sent { transition: background 0.12s var(--ease); }
