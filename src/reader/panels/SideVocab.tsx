@@ -84,6 +84,8 @@ export interface SideVocabProps {
   markedWordCount?: number
   /** 从正文标记重建词条 */
   onRebuildFromMarks?: () => void
+  /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补释义 */
+  onRecoverAll?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -151,6 +153,7 @@ export default function SideVocab({
   onRescueLocal,
   markedWordCount,
   onRebuildFromMarks,
+  onRecoverAll,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -318,6 +321,16 @@ export default function SideVocab({
           <button onClick={onRebuildFromMarks} style={{ marginLeft: 8 }}>
             从正文标记重建词库
           </button>
+        </div>
+      )}
+      {onRecoverAll && looksWiped && (
+        <div className="side-warn">
+          <b>一键找回</b>：正文标记 {markedWordCount ?? 0} 个词 · 待选清单 · 错题本 —— 全部本地完成，不用 AI。
+          <div style={{ marginTop: 6 }}>
+            <button className="primary" onClick={onRecoverAll}>
+              一键全部重建词库
+            </button>
+          </div>
         </div>
       )}
       {looksWiped && (

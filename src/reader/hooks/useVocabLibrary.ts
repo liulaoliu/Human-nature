@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { VocabLibrary } from '../../types/document'
 import type { VocabRepoPort } from '../../core/ports'
 import { createLibrary, dedupeLibrary, normalizeGrammarMarks } from '../../core/vocab'
-import { rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
+import { recoverLibrary, rescueLibrary, type RescueRecords } from '../../core/libraryRescue'
 import { rebuildFromArticleMarks, type ArticleWithMarks } from '../../core/libraryFromArticles'
 import { readJson } from '../storage'
 import { repairLanguageKinds } from '../../core/langPoints'
@@ -44,6 +44,8 @@ export interface UseVocabLibraryResult {
   rescueFromLocalRecords: () => void
   /** 从**正文标记**（Sentence.vocab）重建词条 —— 丢词后最准的一条路（可选带一步本地补释义） */
   rebuildFromArticles: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
+  /** **一次全捞**：正文标记 + 待选清单 + 错题本，再本地补音标/释义（丢词后的总入口） */
+  recoverAll: (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => void
 }
 
 /** 本机还留着词的几处记录（救援素材）。 */
@@ -150,5 +152,28 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     [libraryLoad, flash, persist],
   )
 
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles }
+  const recoverAll = useCallback(
+    (articles: ArticleWithMarks[], enrich?: (lib: VocabLibrary) => VocabLibrary) => {
+      if (libraryLoad === 'failed') {
+        flash('词库没读出来：先刷新或「恢复上一版词库」，再试找回')
+        return
+      }
+      const records = readRescueRecords()
+      const out = recoverLibrary(libraryRef.current, { articles, records })
+      if (!out.added) {
+        flash(
+          out.fromMarks || out.fromRecords
+            ? `能认出的词都已在词库里（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}）`
+            : '本机没有可找回的记录（正文没标记、待选清单与错题本也是空的）',
+        )
+        return
+      }
+      const next = enrich ? enrich(out.library) : out.library
+      persist(next)
+      flash(`已找回 ${out.added} 个词条（正文标记 ${out.fromMarks} · 待选/错题本 ${out.fromRecords}），音标/释义已用离线词典补上`)
+    },
+    [libraryLoad, flash, persist],
+  )
+
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev, rescueFromLocalRecords, rebuildFromArticles, recoverAll }
 }

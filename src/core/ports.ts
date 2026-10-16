@@ -185,10 +185,22 @@ export interface CalibrationRepoPort {
  * 整库当一个记录存（词条数量是百级，不是海量），读写简单、天然事务。
  * 用独立的库（`shadowing-vocab`），不和录音那个库混版本号。
  */
+/** 一版词库快照的元信息（正文不在这里，取的时候再读） */
+export interface VocabSnapshot {
+  /** 落盘时刻（ISO），也当主键 */
+  at: string
+  /** 这一版有多少条 */
+  count: number
+}
+
 export interface VocabRepoPort {
   load(): Promise<VocabLibrary>
   save(library: VocabLibrary): Promise<void>
   clear(): Promise<void>
   /** 取「覆盖前那一版」快照（有的实现没有 → null）。用来从误清/读失败里救回词库。 */
   loadPrev?(): Promise<VocabLibrary | null>
+  /** 历史快照（新的在前）：每次覆盖都会留一份，误操作可回退多步 */
+  listSnapshots?(): Promise<VocabSnapshot[]>
+  /** 按时刻取回某一版快照 */
+  loadSnapshot?(at: string): Promise<VocabLibrary | null>
 }

@@ -6,6 +6,7 @@ import type { ArticleRepoPort, SavedArticle } from '../../adapters/articleRepo'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import type { DayActivity } from '../../core/activity'
 import { dayKeyLocal } from '../../core/activity'
+import { writeJson } from '../storage'
 import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
@@ -188,7 +189,11 @@ export function useExport({
           await articles.current?.save(a)
         }
       }
-      if (parsed.library) persist(parsed.library)
+      if (parsed.library) {
+        persist(parsed.library)
+        // 整库被替换了：清掉「语言点已收」记账，让文章里的语言点重新收一遍（不然会以为收过而不再补）
+        writeJson('reader:langCollected', {})
+      }
       if (parsed.sessions) setSessions(parsed.sessions)
       if (parsed.studyDays) setStudyDays(parsed.studyDays)
       if (parsed.activity) setActivity(parsed.activity)

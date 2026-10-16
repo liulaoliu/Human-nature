@@ -193,7 +193,10 @@ export default function ReaderApp() {
   }, [])
 
   // 词库：读回 / 去重修数据 / 唯一写入口 / 上一版恢复 / 找回词条 —— 全在 hooks/useVocabLibrary
-  const { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles } = useVocabLibrary({ flash })
+  const {
+    library, libraryRef, libraryLoad, libraryLoaded, persist,
+    restorePrev: restorePrevLibrary, rescueFromLocalRecords, rebuildFromArticles, recoverAll,
+  } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [saved, setSaved] = useState<SavedArticle[]>([])
   /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
@@ -3057,6 +3060,7 @@ export default function ReaderApp() {
           onRescueLocal={() => rescueFromLocalRecords()}
           markedWordCount={marks.markedWordCount}
           onRebuildFromMarks={marks.rebuildFromMarks}
+          onRecoverAll={() => recoverAll(marks.articles, enrichLibrary)}
           onImportBackup={(f) => void onImportBackup(f)}
           onMergeBackup={(f) => void onMergeBackup(f)}
           statsOpen={statsOpen}

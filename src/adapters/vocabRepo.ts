@@ -1,4 +1,4 @@
-import type { VocabRepoPort } from '../core/ports'
+import type { VocabRepoPort, VocabSnapshot } from '../core/ports'
 import type { VocabLibrary } from '../types/document'
 import { createLibrary } from '../core/vocab'
 
@@ -8,6 +8,10 @@ const STORE = 'library'
 const KEY = 'library'
 /** 覆盖前把旧值留一份（防「读失败 → 写空库」这类事故；换机器/误删时能救回） */
 const PREV_KEY = 'library:prev'
+/** 历史快照库（同一 IndexedDB 里另开一个 store：记录单条几 MB 也能接受） */
+const SNAP_STORE = 'snapshots'
+/** 保留最近多少版（外加「历史最大的一版」永远不淘汰） */
+const SNAP_KEEP = 8
 
 /**
  * 词库持久化（IndexedDB）。
@@ -50,6 +54,80 @@ export class IdbVocabRepo implements VocabRepoPort {
     return value ?? createLibrary()
   }
 
+  /** 往快照库追加一版，并按策略瘦身（留最近 N 版 + 历史最大的一版）。 */
+  private async snapshot(library: VocabLibrary, at: string): Promise<void> {
+    const db = await this.open()
+    await new Promise<void>((resolve, reject) => {
+      const t = db.transaction(SNAP_STORE, 'readwrite')
+      const s = t.objectStore(SNAP_STORE)
+      s.put(library, at)
+      t.oncomplete = () => resolve()
+      t.onerror = () => reject(t.error)
+    })
+    // 瘦身：取全部元信息（不读正文）
+    const keys = await new Promise<string[]>((resolve) => {
+      const t = db.transaction(SNAP_STORE, 'readonly')
+      const req = t.objectStore(SNAP_STORE).getAllKeys()
+      req.onsuccess = () => resolve((req.result as string[]) ?? [])
+      req.onerror = () => resolve([])
+    })
+    const sorted = [...keys].sort() // 老的在前
+    if (sorted.length <= SNAP_KEEP + 1) return
+    // 找出「历史最大的一版」所在的 key，永不淘汰
+    let largestKey: string | null = null
+    let largest = -1
+    for (const k of sorted) {
+      const v = await new Promise<{ items?: unknown[] } | undefined>((resolve) => {
+        const t = db.transaction(SNAP_STORE, 'readonly')
+        const req = t.objectStore(SNAP_STORE).get(k)
+        req.onsuccess = () => resolve(req.result as { items?: unknown[] } | undefined)
+        req.onerror = () => resolve(undefined)
+      })
+      const n = Array.isArray(v?.items) ? v.items.length : 0
+      if (n > largest) {
+        largest = n
+        largestKey = k
+      }
+    }
+    const keep = new Set(sorted.slice(-SNAP_KEEP))
+    if (largestKey) keep.add(largestKey)
+    for (const k of sorted) {
+      if (keep.has(k)) continue
+      await new Promise<void>((resolve) => {
+        const t = db.transaction(SNAP_STORE, 'readwrite')
+        t.objectStore(SNAP_STORE).delete(k)
+        t.oncomplete = () => resolve()
+        t.onerror = () => resolve()
+      })
+    }
+  }
+
+  async listSnapshots(): Promise<VocabSnapshot[]> {
+    const db = await this.open()
+    const rows = await new Promise<{ at: string; count: number }[]>((resolve) => {
+      const t = db.transaction(SNAP_STORE, 'readonly')
+      const req = t.objectStore(SNAP_STORE).openCursor()
+      const out: { at: string; count: number }[] = []
+      req.onsuccess = () => {
+        const c = req.result
+        if (!c) return resolve(out)
+        const lib = c.value as { items?: unknown[] }
+        out.push({ at: String(c.key), count: Array.isArray(lib?.items) ? lib.items.length : 0 })
+        c.continue()
+      }
+      req.onerror = () => resolve(out)
+    })
+    return rows.sort((a, b) => b.at.localeCompare(a.at))
+  }
+
+  async loadSnapshot(at: string): Promise<VocabLibrary | null> {
+    try {
+      return (await this.run<VocabLibrary | undefined>('readonly', (s) => s.get(at))) ?? null
+    } catch {
+      return null
+    }
+  }
+
   async save(library: VocabLibrary): Promise<void> {
     // 先读了旧值放 backup，再写新的：任何一次覆盖之后都还有「上一版」可退
     try {
@@ -63,6 +141,12 @@ export class IdbVocabRepo implements VocabRepoPort {
       // 备份失败不挡主流程
     }
     await this.run('readwrite', (s) => s.put(library, KEY))
+    // 再落一版历史快照（多步可退；失败不影响主流程）
+    try {
+      await this.snapshot(library, new Date().toISOString())
+    } catch {
+      // 快照失败不挡主流程
+    }
   }
 
   /** 取「上一版」快照（没有就 null）。 */
@@ -83,6 +167,7 @@ export class IdbVocabRepo implements VocabRepoPort {
 export class MemoryVocabRepo implements VocabRepoPort {
   private library: VocabLibrary = createLibrary()
   private prev: VocabLibrary | null = null
+  private snaps = new Map<string, VocabLibrary>()
   async load(): Promise<VocabLibrary> {
     return this.library
   }
@@ -90,9 +175,18 @@ export class MemoryVocabRepo implements VocabRepoPort {
     // 同 IDB 实现：备份只变大不缩小（缩水时保住事故前那一版）
     if (this.library.items.length > 0 && this.library.items.length >= (this.prev?.items.length ?? 0)) this.prev = this.library
     this.library = library
+    this.snaps.set(new Date().toISOString() + ':' + this.snaps.size, library)
   }
   async loadPrev(): Promise<VocabLibrary | null> {
     return this.prev
+  }
+  async listSnapshots(): Promise<VocabSnapshot[]> {
+    return [...this.snaps.entries()]
+      .map(([at, lib]) => ({ at, count: lib.items.length }))
+      .sort((a, b) => b.at.localeCompare(a.at))
+  }
+  async loadSnapshot(at: string): Promise<VocabLibrary | null> {
+    return this.snaps.get(at) ?? null
   }
   async clear(): Promise<void> {
     this.prev = this.library

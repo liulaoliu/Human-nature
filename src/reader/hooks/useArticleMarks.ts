@@ -29,6 +29,8 @@ export interface UseArticleMarksParams {
 }
 
 export interface UseArticleMarksResult {
+  /** 汇总好的文章（含 Sentence.vocab），给「一次全捞」用 */
+  articles: ArticleWithMarks[]
   /** 正文标记里能认出多少个词（>0 就值得重建） */
   markedWordCount: number
   /** 一键重建（把汇总好的文章交给重建函数） */
@@ -75,5 +77,5 @@ export function useArticleMarks({
     rebuildFromMarks()
   }, [libraryLoad, library.items, markedWordCount, rebuildFromMarks, flash])
 
-  return { markedWordCount, rebuildFromMarks }
+  return { articles, markedWordCount, rebuildFromMarks }
 }

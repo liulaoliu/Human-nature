@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rescueLibrary } from './libraryRescue'
+import { recoverLibrary, rescueLibrary } from './libraryRescue'
 import { createLibrary, markWord } from './vocab'
 import { TEST_NOW } from './testFixtures'
 
@@ -65,6 +65,37 @@ describe('rescueLibrary', () => {
       TEST_NOW,
     )
     expect(out.found).toBe(0)
+    expect(out.library.items).toHaveLength(0)
+  })
+})
+
+describe('recoverLibrary（一次全捞）', () => {
+  it('正文标记 + 本机记录一起收，报清各来源认出多少', () => {
+    const out = recoverLibrary(
+      createLibrary(),
+      {
+        articles: [{ id: 'A 篇', sentences: [{ id: 's1', text: 'He is ensconced.', vocab: ['ensconced', 'job'] }] }],
+        records: { batch: { 'B 篇': [{ word: 'purges', sentence: 'The purges began.' }] }, mistakeWords: ['vocab:havoc'] },
+      },
+      TEST_NOW,
+    )
+    expect(out.fromMarks).toBe(2)
+    expect(out.fromRecords).toBe(2)
+    expect(out.added).toBe(4)
+    expect(out.library.items.map((it) => it.word).sort()).toEqual(['ensconced', 'havoc', 'job', 'purges'])
+  })
+
+  it('幂等：再来一次 added=0、同一个引用', () => {
+    const sources = { articles: [{ id: 'A', sentences: [{ id: 's1', text: 'x', vocab: ['run'] }] }] }
+    const first = recoverLibrary(createLibrary(), sources, TEST_NOW)
+    const second = recoverLibrary(first.library, sources, TEST_NOW)
+    expect(second.added).toBe(0)
+    expect(second.library).toBe(first.library)
+  })
+
+  it('没有素材：什么都不做', () => {
+    const out = recoverLibrary(createLibrary(), {}, TEST_NOW)
+    expect(out.added).toBe(0)
     expect(out.library.items).toHaveLength(0)
   })
 })

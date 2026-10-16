@@ -10,6 +10,7 @@
  */
 import type { VocabLibrary } from '../types/document'
 import { markWord } from './vocab'
+import { rebuildFromArticleMarks, type ArticleWithMarks } from './libraryFromArticles'
 
 /** 从本机读出来的救援素材。 */
 export interface RescueRecords {
@@ -87,4 +88,42 @@ function lemmaFromIdOrWord(raw: string): string {
   if (!s) return ''
   const fromId = lemmaFromItemId(s)
   return fromId || s
+}
+
+/** 「一次全捞」的素材：正文标记（文章里的 Sentence.vocab）+ 本机其它记录（待选/错题本）。 */
+export interface RecoverSources {
+  articles?: ArticleWithMarks[]
+  records?: RescueRecords
+}
+
+export interface RecoverResult {
+  library: VocabLibrary
+  added: number
+  /** 各来源各认出多少（给提示用） */
+  fromMarks: number
+  fromRecords: number
+}
+
+/**
+ * 一次把能捞的都捞回来（**只加不删、幂等**）。
+ * 顺序无所谓（各自的键不同），但先收正文标记：那是最忠实的一份（当年真正标过的词 + 原句）。
+ */
+export function recoverLibrary(library: VocabLibrary, sources: RecoverSources, now: Date = new Date()): RecoverResult {
+  let lib = library
+  let added = 0
+  let fromMarks = 0
+  let fromRecords = 0
+  if (sources.articles?.length) {
+    const r = rebuildFromArticleMarks(lib, sources.articles, now)
+    lib = r.library
+    added += r.added
+    fromMarks = r.found
+  }
+  if (sources.records) {
+    const r = rescueLibrary(lib, sources.records, now)
+    lib = r.library
+    added += r.added
+    fromRecords = r.found
+  }
+  return { library: lib, added, fromMarks, fromRecords }
 }
