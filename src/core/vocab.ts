@@ -5,6 +5,7 @@ import type {
   VocabExample,
   VocabExampleOrigin,
   VocabItem,
+  VocabKind,
   VocabLibrary,
   VocabSource,
   VocabStatus,
@@ -92,6 +93,51 @@ export function lemmaOf(raw: string): string {
 /** 空词库。 */
 export function createLibrary(): VocabLibrary {
   return { schemaVersion: SCHEMA_VERSION, items: [] }
+}
+
+/** 词条类型（老数据没有 `kind` → 普通单词）。 */
+export function kindOf(item: { kind?: VocabKind } | null | undefined): VocabKind {
+  return item?.kind ?? 'word'
+}
+
+/** 词条类型的中文名（打印、列表标签用）。 */
+export const VOCAB_KIND_LABEL: Record<VocabKind, string> = {
+  word: '单词',
+  phrase: '词组',
+  idiom: '习语',
+  usage: '用法',
+}
+
+export const VOCAB_KINDS: VocabKind[] = ['word', 'phrase', 'idiom', 'usage']
+
+/** 是不是「单词」（词组/习语/用法笔记不是：AI 的词级任务不该去分析它们）。 */
+export function isWordEntry(item: { kind?: VocabKind } | null | undefined): boolean {
+  return kindOf(item) === 'word'
+}
+
+/** 能不能拿来背 / 考（用法笔记是中文说明，只用来收藏与打印）。 */
+export function isStudyable(item: { kind?: VocabKind } | null | undefined): boolean {
+  return kindOf(item) !== 'usage'
+}
+
+/** 按类型筛（空数组/不传 = 全部）。 */
+export function filterByKind(items: VocabItem[], kinds?: VocabKind[] | null): VocabItem[] {
+  if (!kinds?.length) return items
+  const set = new Set(kinds)
+  return items.filter((it) => set.has(kindOf(it)))
+}
+
+/**
+ * 「任意文本」的去重键：保留中文（中文用法笔记用得上），
+ * 统一大小写、撇号与空白。英文词请用 `lemmaOf`。
+ */
+export function textKey(raw: string): string {
+  return raw
+    .normalize('NFKC')
+    .replace(/[\u2018\u2019\u02bc\u2032]/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase()
 }
 
 /** 词性全称 → 缩写（离线词典/AI 有时给 "noun" 全称）。 */
@@ -506,6 +552,8 @@ export interface MarkInput {
   sentenceText?: string
   /** 已知的释义（如「词组 — 中文」里的中文），标词时直接写上 */
   meaning?: string
+  /** 词条类型（词组 / 习语 / 用法笔记；不传 = 普通单词） */
+  kind?: VocabKind
 }
 
 export interface MarkResult {
@@ -544,9 +592,12 @@ export function markWord(
 
   const existing = library.items.find((it) => it.lemma === lemma)
   const given = input.meaning?.trim() || null
+  // 「单词」不写 kind（老数据也没有），保持数据干净；词组/习语/用法才标
+  const kind = input.kind && input.kind !== 'word' ? input.kind : undefined
   if (existing) {
     const merged: VocabItem = {
       ...existing,
+      kind: existing.kind ?? kind,
       examples: mergeExamples(existing.examples, [example]),
       source: betterSource(existing.source, source),
       contexts: upsertContext(existing.contexts, contextFromSource(source, iso, given ?? undefined)),
@@ -560,13 +611,15 @@ export function markWord(
     id: `vocab:${lemma}`,
     word: input.word.trim(),
     lemma,
+    kind,
     phonetic: null,
     partOfSpeech: null,
     meaning: given,
     usage: [],
     examples: [example],
     source,
-    status: given ? 'queried' : 'unqueried',
+    // 词组/习语/用法笔记是语言点里直接带释义收过来的，没有「待查」这一步
+    status: given || kind ? 'queried' : 'unqueried',
     note: '',
     tags: [],
     contexts: [contextFromSource(source, iso, given ?? undefined)],
@@ -575,6 +628,104 @@ export function markWord(
     updatedAt: iso,
   }
   return { library: { ...library, items: [...library.items, item] }, item, created: true }
+}
+
+/** 语言点里抽出来、准备收进词库的一条（词组 / 习语 / 用法笔记）。 */
+export interface LanguagePoint {
+  kind: VocabKind
+  /** 词条正文（习语/词组是英文原文；用法笔记是中文说明） */
+  word: string
+  /** 中文释义（词组 / 习语有；用法笔记没有） */
+  gloss?: string
+  /** 出自哪篇文章的哪一句 */
+  source: VocabSource
+}
+
+/**
+ * 把语言点批量收进词库（**自动收藏**，幂等）：
+ * 按 `lemmaOf(word)`（中文笔记退化为 `textKey`）去重；已有的只补语境与释义。
+ * 一次建索引、单趟处理，重复调用（每次词库变动都会跑）不会反复写库。
+ */
+export function upsertLanguagePoints(
+  library: VocabLibrary,
+  points: LanguagePoint[],
+  now: Date = new Date(),
+): VocabLibrary {
+  if (!points.length) return library
+  const iso = now.toISOString()
+  const index = new Map<string, number>()
+  library.items.forEach((it, i) => {
+    if (!index.has(it.lemma)) index.set(it.lemma, i)
+  })
+  const items = [...library.items]
+  let changed = false
+
+  for (const p of points) {
+    const word = p.word.trim()
+    if (!word) continue
+    const lemma = lemmaOf(word) || textKey(word)
+    if (!lemma) continue
+    const source = p.source
+    const gloss = p.gloss?.trim() || null
+    const example: VocabExample = {
+      text: source.sentenceText?.trim() || word,
+      articleId: source.articleId,
+      fileName: source.fileName ?? undefined,
+      sentenceId: source.sentenceId ?? undefined,
+      origin: 'article',
+    }
+    const at = index.get(lemma)
+    if (at === undefined) {
+      items.push({
+        id: `vocab:${lemma}`,
+        word,
+        lemma,
+        kind: p.kind,
+        phonetic: null,
+        partOfSpeech: null,
+        meaning: gloss,
+        usage: [],
+        examples: [example],
+        source,
+        status: 'queried',
+        note: '',
+        tags: [],
+        contexts: [contextFromSource(source, iso, gloss ?? undefined)],
+        reviewState: defaultReviewState(),
+        createdAt: iso,
+        updatedAt: iso,
+      })
+      index.set(lemma, items.length - 1)
+      changed = true
+      continue
+    }
+    const cur = items[at]
+    const contexts = upsertContext(cur.contexts, contextFromSource(source, iso, gloss ?? undefined))
+    const meaning = cur.meaning ?? gloss
+    const kind = cur.kind ?? p.kind
+    const merged = mergeExamples(cur.examples, [example])
+    const examples = merged.length === cur.examples.length ? cur.examples : merged
+    if (
+      contexts === cur.contexts &&
+      meaning === cur.meaning &&
+      kind === cur.kind &&
+      examples === cur.examples &&
+      sourceHasText(cur.source)
+    )
+      continue
+    items[at] = {
+      ...cur,
+      kind,
+      meaning,
+      contexts,
+      examples,
+      source: betterSource(cur.source, source),
+      updatedAt: iso,
+    }
+    changed = true
+  }
+
+  return changed ? { ...library, items } : library
 }
 
 /** 把「英文 — 中文」拆成 `{ word, gloss }`（也认 – / - 破折号）。用于把语言点里的词组/习语加进生词本。 */

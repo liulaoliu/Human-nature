@@ -12,7 +12,7 @@ import {
   type QuizQuestion,
 } from '../../core/quiz'
 import { buildArticleQuestions } from '../../core/articleQuiz'
-import { isDue, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
+import { isDue, isStudyable, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 
 const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'phraseBlank']
@@ -182,26 +182,28 @@ export function useQuizSession(params: UseQuizSessionParams) {
   }, [queue, index, input, checked, result, results, autoRun])
 
   // ---- 候选池与题量 ----
+  /** 可考的：用法笔记（中文说明）不出题 */
+  const studyable = useMemo(() => library.items.filter(isStudyable), [library.items])
   /** 按范围取候选词（考试 / 拷打共用）。 */
   const poolFor = useCallback(
     (s: QuizScope): VocabItem[] => {
-      if (s === 'all') return library.items
-      if (s === 'due') return library.items.filter((it) => isDue(it))
-      if (s === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (s === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
-      return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
+      if (s === 'all') return studyable
+      if (s === 'due') return studyable.filter((it) => isDue(it))
+      if (s === 'lapses') return studyable.filter((it) => (it.reviewState.lapses ?? 0) > 0)
+      if (s === 'unmastered') return studyable.filter((it) => it.status !== 'mastered')
+      return studyable.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
     },
-    [library.items, articleIdentity, docLemmas],
+    [studyable, articleIdentity, docLemmas],
   )
   const pool = useMemo(() => poolFor(scope), [poolFor, scope])
   const poolSizes = useMemo(() => {
     const count = (items: VocabItem[]) => countQuestions(items, kinds)
     return {
-      all: count(library.items),
-      due: count(library.items.filter((it) => isDue(it))),
-      unmastered: count(library.items.filter((it) => it.status !== 'mastered')),
+      all: count(studyable),
+      due: count(studyable.filter((it) => isDue(it))),
+      unmastered: count(studyable.filter((it) => it.status !== 'mastered')),
     }
-  }, [library.items, kinds])
+  }, [studyable, kinds])
   const availableCount = useMemo(() => countQuestions(pool, kinds), [pool, kinds])
 
   /** 出题：默认每个单词只考一次、题型随机；可关掉以允许同一词多题型。 */

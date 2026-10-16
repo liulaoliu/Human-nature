@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import { dictConfusables, dictLemmaOf, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, lemmaOf, normalizePos, normalizeWord } from '../../core/vocab'
+import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, isWordEntry, lemmaOf, normalizePos, normalizeWord } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 
@@ -110,7 +110,7 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
     }
     const results: { word: string; confusables: { word: string; meaning?: string }[] }[] = []
     for (const it of library.items) {
-      if (it.confusables?.length || !it.meaning) continue
+      if (!isWordEntry(it) || it.confusables?.length || !it.meaning) continue
       const conf = dictConfusables(dict, it.word)
       if (conf.length >= 3) results.push({ word: it.word, confusables: conf })
     }

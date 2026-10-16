@@ -182,6 +182,12 @@ export interface VocabConfusable {
 }
 
 /**
+ * 词条类型：普通单词，或从**句子语言点**里自动收藏的 词组 / 习语 / 用法笔记。
+ * 老数据的词条没有 `kind`，一律当 `word`。
+ */
+export type VocabKind = 'word' | 'phrase' | 'idiom' | 'usage'
+
+/**
  * 生词词条，学习层的一等公民。
  *
  * v1 里生词只是 `Sentence.vocab: string[]`（只有词形），无法承载
@@ -193,6 +199,8 @@ export interface VocabItem {
   word: string
   /** 归一化形式，去重用（running / ran → run） */
   lemma: string
+  /** 词条类型（缺省 = 普通单词） */
+  kind?: VocabKind
   /** 音标 */
   phonetic: string | null
   /** 词性 */

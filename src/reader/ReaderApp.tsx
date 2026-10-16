@@ -11,6 +11,7 @@ import {
   editItem,
   hasOwnExamples,
   isDue,
+  isWordEntry,
   lemmaOf,
   markWord,
   normalizeWord,
@@ -20,6 +21,7 @@ import {
   reviewItem,
   sortItems,
   splitGloss,
+  upsertLanguagePoints,
   type ReviewGrade,
   type VocabSortBy,
 } from '../core/vocab'
@@ -34,7 +36,7 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
-import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
+import { buildLanguagePrompt, hasSentenceLanguage, languagePointsOf } from '../core/language'
 import {
   addPracticeRecord,
   practiceForArticle,
@@ -1176,7 +1178,7 @@ export default function ReaderApp() {
         if (r.created) created++
       }
       persist(lib)
-      flash(created ? `已加入 ${created} 个词组 / 习语${created < items.length ? '（其余已在生词本）' : ''}` : '这些词组 / 习语都已在生词本里')
+      flash(created ? `已加入 ${created} 个词组 / 习语${created < items.length ? '（其余已在生词本）' : ''}` : '这些词组 / 习语都已在生词本里（语言点会自动收藏）')
     },
     [library, articleTitle, articleKey, articleIdentity, persist, flash],
   )
@@ -1364,7 +1366,7 @@ export default function ReaderApp() {
 
   /** 还缺 AI 混淆项、且有释义的词（生成干扰项用）。 */
   const confusableTodo = useMemo(
-    () => library.items.filter((it) => it.meaning && !it.confusables?.length),
+    () => library.items.filter((it) => isWordEntry(it) && it.meaning && !it.confusables?.length),
     [library.items],
   )
   /** 一次生成多少（可自选；0=全部）；应用后再点，处理下一批。 */
@@ -1375,7 +1377,7 @@ export default function ReaderApp() {
 
   /** 疑似「非原型」的词（word 与 lemma 不一致）——供 AI 校正原形。 */
   const lemmaCandidates = useMemo(
-    () => library.items.filter((it) => normalizeWord(it.word) !== it.lemma).slice(0, 100),
+    () => library.items.filter((it) => isWordEntry(it) && normalizeWord(it.word) !== it.lemma).slice(0, 100),
     [library.items],
   )
 
@@ -1383,7 +1385,7 @@ export default function ReaderApp() {
   const posCandidates = useMemo(() => {
     const hasIngEd = (s: string) => s.split(/\s+/).some((t) => /(ing|ed)$/i.test(t))
     return library.items
-      .filter((it) => hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma)
+      .filter((it) => isWordEntry(it) && (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma))
       .slice(0, 60)
   }, [library.items])
 
@@ -2153,6 +2155,24 @@ export default function ReaderApp() {
     (articleId: string) => setReadDone((prev) => removeReadDone(prev, articleId)),
     [setReadDone],
   )
+
+  /**
+   * 语言点自动收藏：AI 在速读里总结的 **词组 / 习语 / 用法** 收进词库（幂等、静默），
+   * 之后就能跟生词一样筛选、分组、打印（整套打印/导出选项直接复用）。
+   */
+  const languagePoints = useMemo(() => {
+    const others = saved.filter((a) => a.id !== articleIdentity)
+    const out = others.flatMap((a) => languagePointsOf(a.sentences, { articleId: a.id, fileName: a.id }))
+    // 当前这篇放最后：同样的句子，当前的原文更新
+    if (articleIdentity && doc) out.push(...languagePointsOf(doc.sentences, { articleId: articleIdentity, fileName: articleIdentity }))
+    return out
+  }, [saved, doc, articleIdentity])
+
+  useEffect(() => {
+    if (!languagePoints.length) return
+    const next = upsertLanguagePoints(library, languagePoints)
+    if (next !== library) persist(next)
+  }, [languagePoints, library, persist])
 
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(

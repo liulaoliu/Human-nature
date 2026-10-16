@@ -1042,6 +1042,19 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .gitem-time { flex: 0 0 auto; font-size: 11px; }
 .gitem-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gitem button { padding: 0 7px; font-size: 12px; }
+.kind-badge {
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  vertical-align: 1px;
+  background: rgba(74, 158, 255, 0.18);
+  color: var(--accent);
+  white-space: nowrap;
+}
+.kind-badge.k-idiom { background: rgba(232, 168, 56, 0.2); color: #e8a838; }
+.kind-badge.k-usage { background: rgba(120, 200, 140, 0.18); color: #57b26a; }
 .ghist { display: flex; flex-direction: column; gap: 3px; padding: 6px 0 2px; }
 .ghist + .ghist { border-top: 1px dashed var(--line); }
 .ghist-day { display: flex; align-items: baseline; gap: 8px; font-size: 12.5px; }

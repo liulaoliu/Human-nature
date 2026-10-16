@@ -45,6 +45,14 @@ describe('toAnkiCSV', () => {
     expect(lines[1]).toContain('run a business')
     expect(lines[1]).toContain('I run.')
   })
+  it('词组 / 习语 / 用法 在标签里标出类型', () => {
+    const csv = toAnkiCSV([
+      vocab({ id: 'vocab:x', word: 'fall back on', lemma: 'fall back on', kind: 'phrase', tags: [] }),
+      vocab({ id: 'vocab:y', word: '注意 subject to 是形容词', lemma: '注意 subject to 是形容词', kind: 'usage', tags: [] }),
+    ])
+    expect(csv).toContain('词组')
+    expect(csv).toContain('用法')
+  })
   it('含逗号/引号的字段被正确转义', () => {
     const csv = toAnkiCSV([vocab({ meaning: '跑，快跑', word: 'say "hi"' })], { header: false })
     expect(csv).toContain('""hi""')
@@ -93,6 +101,27 @@ describe('renderPrintHTML', () => {
     const evil = renderPrintHTML({ title: 'x', groups: [{ key: 'A', items: [vocab({ meaning: '<script>alert(1)</script>' })] }] })
     expect(evil).not.toContain('<script>')
     expect(evil).toContain('&lt;script&gt;')
+  })
+  it('词组 / 习语 / 用法 带类型小标签；单词不带', () => {
+    const html2 = renderPrintHTML({
+      title: '语言点',
+      groups: [
+        {
+          key: '',
+          items: [
+            vocab(),
+            vocab({ id: 'vocab:fall back on', word: 'fall back on', lemma: 'fall back on', kind: 'phrase', meaning: '转而依靠' }),
+            vocab({ id: 'vocab:take', word: 'take its toll', lemma: 'take its toll', kind: 'idiom', meaning: '造成损害' }),
+            vocab({ id: 'vocab:usage-1', word: '注意 subject to 是形容词', lemma: '注意 subject to 是形容词', kind: 'usage' }),
+          ],
+        },
+      ],
+    })
+    expect(html2).toContain('词组')
+    expect(html2).toContain('习语')
+    expect(html2).toContain('用法')
+    expect(html2).toContain('fall back on')
+    expect(html2).toContain('注意 subject to 是形容词')
   })
   it('带标题 / 副标题 / 序号，空分组不渲染标题', () => {
     const numbered = renderPrintHTML({

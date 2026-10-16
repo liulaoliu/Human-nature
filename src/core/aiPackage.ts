@@ -18,6 +18,7 @@ import {
   buildTranslateAllPrompt,
   type VocabLevel,
 } from './analyzer'
+import { isWordEntry } from './vocab'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
 import { isMarkablePos, needsAiExamples, normalizeWord } from './vocab'
@@ -314,7 +315,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
   }
   // 生词本缺音标/释义 → 批量查词（只看「从未查过」的词：查过一次就不再自动重排，
   // 免得「模型只补了释义没给音标」这种半成品被无限重试；剩下的可离线「补齐生词本」）
-  const base = input.scope === 'article' ? input.articleWords : input.items
+  // 词组/习语/用法笔记不参与词级任务（它们从语言点直接收来，已带释义）
+  const base = (input.scope === 'article' ? input.articleWords : input.items).filter(isWordEntry)
   const needInfo = base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning))
   for (const part of chunk(needInfo, LOOKUP_CHUNK)) {
     push(
@@ -543,7 +545,7 @@ export function missingJobIds(jobs: AiJob[], results: { id: string }[]): string[
 
 /** 待办任务数（只数，不生成提示词，便宜）。 */
 export function countAiJobs(input: AiJobsInput): number {
-  const base = input.scope === 'article' ? input.articleWords : input.items
+  const base = (input.scope === 'article' ? input.articleWords : input.items).filter(isWordEntry)
   let n = 0
   if (input.batch.length) n++
   n += chunk(

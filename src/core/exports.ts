@@ -1,6 +1,6 @@
 import type { EconomistDocument, VocabItem, VocabLibrary } from '../types/document'
 import { SCHEMA_VERSION } from '../types/document'
-import type { VocabGroup } from './vocab'
+import { VOCAB_KIND_LABEL, kindOf, type VocabGroup } from './vocab'
 
 /**
  * 导出层：A4 打印 / Anki CSV / 标准 JSON。
@@ -57,7 +57,14 @@ export function toAnkiCSV(items: VocabItem[], opts?: { header?: boolean }): stri
     for (const ex of it.examples) {
       back.push([ex.text, ex.translation].filter(Boolean).join('<br>'))
     }
-    const tags = [...it.tags, it.source?.articleId ?? ''].filter(Boolean).map(ankiTag).join(' ')
+    const tags = [
+      ...it.tags,
+      kindOf(it) === 'word' ? '' : VOCAB_KIND_LABEL[kindOf(it)],
+      it.source?.articleId ?? '',
+    ]
+      .filter(Boolean)
+      .map(ankiTag)
+      .join(' ')
     rows.push([front, back.join('<br>'), tags].map(csvField).join(','))
   }
   return rows.join('\n')
@@ -119,6 +126,8 @@ export function renderPrintHTML(input: {
         .map((it) => {
           const n = input.numberOf ? input.numberOf(it) : null
           const no = n != null ? `<span class="no">${n}</span>` : ''
+          const kind = kindOf(it)
+          const kindTag = kind === 'word' ? '' : ` <span class="kind">${VOCAB_KIND_LABEL[kind]}</span>`
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
           const marks = it.grammarMarks?.length
@@ -134,7 +143,7 @@ export function renderPrintHTML(input: {
           const idioms = it.idioms?.length
             ? ` <span class="usage">习语：${it.idioms.map(escapeHtml).join('；')}</span>`
             : ''
-          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${phonetic}${pos}${marks}${meaning}${usage}${phrases}${idioms}</div>`
+          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${kindTag}${phonetic}${pos}${marks}${meaning}${usage}${phrases}${idioms}</div>`
         })
         .join('')
       return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
@@ -176,6 +185,7 @@ export function renderPrintHTML(input: {
   .word { font-weight: 700; }
   .phon { color: #555; }
   .pos { color: #777; font-style: italic; }
+  .kind { color: #fff; background: #999; border-radius: 2px; padding: 0 1mm; font-size: 7pt; }
   .usage { color: #555; }
   .marks { color: #555; font-size: 12px; }
   @media print { .items { columns: 3; } }

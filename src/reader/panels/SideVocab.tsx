@@ -1,9 +1,13 @@
 
+import { useMemo, useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
-import type { VocabItem } from '../../types/document'
-import type { ReviewGrade, VocabSortBy } from '../../core/vocab'
+import type { VocabItem, VocabKind } from '../../types/document'
+import { VOCAB_KIND_LABEL, kindOf, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
 import { fmtDur } from '../format'
 import { calendarDayKey } from '../../core/activity'
+
+/** 侧栏列表的类型过滤：全部，或只看某一类词条。 */
+type KindFilter = 'all' | VocabKind
 
 export interface SideVocabStats {
   totals: { picked: number; seconds: number }
@@ -153,10 +157,17 @@ export default function SideVocab({
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
   const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
+  /** 词条类型过滤：速读里自动收藏的词组/习语/用法可单看 */
+  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
+  const shown = useMemo(
+    () => (kindFilter === 'all' ? articleWords : articleWords.filter((it) => kindOf(it) === kindFilter)),
+    [articleWords, kindFilter],
+  )
+  const shownPrintTitle = `${printTitle}${kindFilter === 'all' ? '' : `·${VOCAB_KIND_LABEL[kindFilter]}`}`
   return (
     <div className="side-sec" data-sec="vocab">
       <div className="section-title">
-        生词本 · 本篇（{articleWords.length}）
+        生词本 · 本篇（{shown.length}）
         <span className="view-toggle">
           <button className={view === 'card' ? 'primary' : ''} onClick={() => onViewChange('card')}>
             卡片
@@ -169,6 +180,17 @@ export default function SideVocab({
             表格
           </button>
         </span>
+        <select
+          value={kindFilter}
+          onChange={(e) => setKindFilter(e.target.value as KindFilter)}
+          title="词条类型：速读里 AI 总结的词组/习语/用法会**自动收藏**进来，可在这里单看"
+        >
+          <option value="all">全部类型</option>
+          <option value="word">只看单词</option>
+          <option value="phrase">只看词组</option>
+          <option value="idiom">只看习语</option>
+          <option value="usage">只看用法</option>
+        </select>
         <select value={sortBy} onChange={(e) => onSortChange(e.target.value as VocabSortBy)} title="排序方式">
           <option value="updatedAt">最近改动</option>
           <option value="createdAt">加入时间</option>
@@ -278,16 +300,16 @@ export default function SideVocab({
         <button onClick={onBrowseAll} disabled={!hasItems} title="查看全部生词（跨文章）">
           全部生词
         </button>
-        <button onClick={() => onExportAnki(articleWords)} disabled={!articleWords.length} title="导出本篇生词为 Anki CSV">
+        <button onClick={() => onExportAnki(shown)} disabled={!shown.length} title="导出本篇（按当前类型过滤）为 Anki CSV">
           Anki（本篇）
         </button>
         <button
-          onClick={() => onPrint(articleWords, printTitle, (it) => articleNums.get(it.lemma) ?? null)}
-          disabled={!articleWords.length}
+          onClick={() => onPrint(shown, shownPrintTitle, (it) => articleNums.get(it.lemma) ?? null)}
+          disabled={!shown.length}
           title={
             articleAllPrinted
               ? `本篇已于 ${printedDate} 打印过；再点会重新打印（并刷新打印时间）`
-              : '打印本篇生词（A4）'
+              : '打印本篇生词（A4；按当前类型过滤）'
           }
         >
           {articleAllPrinted ? 'A4（本篇）✓' : 'A4（本篇）'}
@@ -436,7 +458,7 @@ export default function SideVocab({
 
       {articleList.length ? (
         <VocabList
-          items={articleList}
+          items={kindFilter === 'all' ? articleList : articleList.filter((it) => kindOf(it) === kindFilter)}
           view={view}
           focusLemma={focusLemma}
           confirmDel={confirmDel}

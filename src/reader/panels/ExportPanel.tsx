@@ -1,9 +1,28 @@
 import { useMemo, useState } from 'react'
-import type { VocabItem } from '../../types/document'
+import type { VocabItem, VocabKind } from '../../types/document'
 import { buildHeatmap } from '../../core/activity'
 import { dayKeyLocal } from '../../core/activity'
+import { filterByKind } from '../../core/vocab'
 
 export type PrintGroup = 'alphabet' | 'article' | 'date' | 'status'
+
+/** 打印/导出的「内容」：只要单词、只要词组习语、只要用法笔记，或全部。 */
+export type PrintContent = 'all' | 'word' | 'phrases' | 'usage'
+
+const CONTENT_LABEL: Record<PrintContent, string> = {
+  all: '全部',
+  word: '单词',
+  phrases: '词组 / 习语',
+  usage: '用法笔记',
+}
+
+/** 「内容」→ 要保留的词条类型（null = 不过滤）。 */
+function contentKinds(c: PrintContent): VocabKind[] | null {
+  if (c === 'word') return ['word']
+  if (c === 'phrases') return ['phrase', 'idiom']
+  if (c === 'usage') return ['usage']
+  return null
+}
 
 export interface ExportArticleRef {
   id: string
@@ -14,7 +33,7 @@ export interface ExportArticleRef {
 
 export interface ExportPanelProps {
   onClose: () => void
-  /** 整个词库 */
+  /** 整个词库（含语言点自动收藏的 词组/习语/用法） */
   libraryItems: VocabItem[]
   /** 当前打开的文章 */
   articleTitle: string
@@ -30,7 +49,7 @@ export interface ExportPanelProps {
     opts?: { groupBy?: PrintGroup },
   ) => void
   onExportAnki: (items: VocabItem[], name?: string) => void
-  onExportWordList: (items: VocabItem[], name?: string) => void
+  onExportWordList: (items: VocabItem[], name?: string, opts?: { includePhrases?: boolean }) => void
 }
 
 const day = (it: VocabItem) => dayKeyLocal(new Date(it.createdAt))
@@ -52,20 +71,28 @@ export default function ExportPanel({
   onExportAnki,
   onExportWordList,
 }: ExportPanelProps) {
-  const [scope, setScope] = useState<Scope>(articleWords.length ? 'article' : 'all')
+  const [scopeState, setScope] = useState<Scope>(articleWords.length ? 'article' : 'all')
+  const [content, setContent] = useState<PrintContent>('all')
   const [pickedArticles, setPickedArticles] = useState<Set<string>>(() => new Set(articles.map((a) => a.id)))
   const [pickedDates, setPickedDates] = useState<Set<string>>(() => new Set([todayKey]))
   const [group, setGroup] = useState<PrintGroup>('alphabet')
 
-  /** 词库里出现过的日期（倒序，带当天词数）。 */
+  /** 按「内容」筛过的工作集：后面所有范围/分组/导出都基于它（打印选项因此完全复用）。 */
+  const kinds = contentKinds(content)
+  const pool = useMemo(() => filterByKind(libraryItems, kinds), [libraryItems, kinds])
+  const articlePool = useMemo(() => filterByKind(articleWords, kinds), [articleWords, kinds])
+  // 换「内容」后本篇可能一条都没有：那时自动回落到「全部」，别卡在一个空范围上
+  const scope: Scope = scopeState === 'article' && !articlePool.length ? 'all' : scopeState
+
+  /** 词库里出现过的日期（倒序，带当天条数）。 */
   const dates = useMemo(() => {
     const m = new Map<string, number>()
-    for (const it of libraryItems) {
+    for (const it of pool) {
       const d = day(it)
       if (d) m.set(d, (m.get(d) ?? 0) + 1)
     }
     return [...m.entries()].sort((a, b) => b[0].localeCompare(a[0]))
-  }, [libraryItems])
+  }, [pool])
   /** 日期 → 当天新增词数（热力图 + 回显用）。 */
   const dateCount = useMemo(() => new Map(dates), [dates])
   const hasWordsOn = (d: string) => (dateCount.get(d) ?? 0) > 0
@@ -77,20 +104,20 @@ export default function ExportPanel({
   }, [dates])
 
   const articleCount = useMemo(
-    () => new Map(articles.map((a) => [a.id, libraryItems.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma)).length])),
-    [articles, libraryItems],
+    () => new Map(articles.map((a) => [a.id, pool.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma)).length])),
+    [articles, pool],
   )
 
-  const unprinted = useMemo(() => libraryItems.filter((it) => !it.lastPrintedAt), [libraryItems])
+  const unprinted = useMemo(() => pool.filter((it) => !it.lastPrintedAt), [pool])
 
   const items = useMemo(() => {
-    if (scope === 'article') return articleWords
+    if (scope === 'article') return articlePool
     if (scope === 'byArticle') {
       const picked = articles.filter((a) => pickedArticles.has(a.id))
       const out: VocabItem[] = []
       const seen = new Set<string>()
       for (const a of picked) {
-        for (const it of libraryItems) {
+        for (const it of pool) {
           if (seen.has(it.id)) continue
           if (it.source?.fileName === a.id || a.lemmas.has(it.lemma)) {
             seen.add(it.id)
@@ -100,24 +127,25 @@ export default function ExportPanel({
       }
       return out
     }
-    if (scope === 'date') return libraryItems.filter((it) => pickedDates.has(day(it)))
+    if (scope === 'date') return pool.filter((it) => pickedDates.has(day(it)))
     if (scope === 'unprinted') return unprinted
-    return libraryItems
-  }, [scope, articleWords, articles, pickedArticles, pickedDates, libraryItems, unprinted])
+    return pool
+  }, [scope, articlePool, articles, pickedArticles, pickedDates, pool, unprinted])
 
   const title = useMemo(() => {
-    if (scope === 'article') return articleTitle || '本篇生词'
+    const name = content === 'phrases' ? '词组习语表' : content === 'usage' ? '用法笔记' : '词表'
+    if (scope === 'article') return content === 'all' ? articleTitle || '本篇生词' : `${articleTitle || '本篇'}·${name}`
     if (scope === 'byArticle') {
       const names = articles.filter((a) => pickedArticles.has(a.id)).map((a) => a.title)
-      return names.length === 1 ? `词表-${names[0]}` : `词表-${names.length}篇`
+      return names.length === 1 ? `${name}-${names[0]}` : `${name}-${names.length}篇`
     }
     if (scope === 'date') {
       const ds = [...pickedDates].sort()
-      return ds.length === 1 ? `词表-新增-${ds[0]}` : `词表-新增-${ds.length}天`
+      return ds.length === 1 ? `${name}-新增-${ds[0]}` : `${name}-新增-${ds.length}天`
     }
-    if (scope === 'unprinted') return '全部生词（未打印）'
-    return '全部生词'
-  }, [scope, articleTitle, articles, pickedArticles, pickedDates])
+    if (scope === 'unprinted') return `全部${content === 'all' ? '生词' : CONTENT_LABEL[content]}（未打印）`
+    return `全部${content === 'all' ? '生词' : CONTENT_LABEL[content]}`
+  }, [scope, content, articleTitle, articles, pickedArticles, pickedDates])
 
   const toggleIn = (set: Set<string>, v: string) => {
     const next = new Set(set)
@@ -133,17 +161,30 @@ export default function ExportPanel({
     <div className="plan-overlay" onClick={onClose}>
       <div className="plan-panel export-panel" onClick={(e) => e.stopPropagation()}>
         <div className="bar plan-head">
-          <b>🖨 打印 / 导出生词</b>
-          <span className="muted">将处理 {items.length} 个词</span>
+          <b>🖨 打印 / 导出</b>
+          <span className="muted">将处理 {items.length} 条</span>
           <button onClick={onClose}>关闭</button>
+        </div>
+
+        <div className="exsec">
+          <b>内容</b>
+          <div className="exrow">
+            {(['all', 'word', 'phrases', 'usage'] as PrintContent[]).map((c) => (
+              <label className="check-inline" key={c} title={c === 'phrases' ? '语言点里收藏的词组与习语' : c === 'usage' ? '语言点里收藏的用法笔记（中文）' : undefined}>
+                <input type="radio" checked={content === c} onChange={() => setContent(c)} />
+                {CONTENT_LABEL[c]}
+              </label>
+            ))}
+            <span className="muted">共 {pool.length} 条</span>
+          </div>
         </div>
 
         <div className="exsec">
           <b>范围</b>
           <div className="exrow">
             <label className="check-inline">
-              <input type="radio" checked={scope === 'article'} onChange={() => setScope('article')} disabled={!articleWords.length} />
-              本篇（{articleWords.length}）
+              <input type="radio" checked={scope === 'article'} onChange={() => setScope('article')} disabled={!articlePool.length} />
+              本篇（{articlePool.length}）
             </label>
             <label className="check-inline">
               <input type="radio" checked={scope === 'byArticle'} onChange={() => setScope('byArticle')} disabled={!articles.length} />
@@ -159,7 +200,7 @@ export default function ExportPanel({
             </label>
             <label className="check-inline">
               <input type="radio" checked={scope === 'all'} onChange={() => setScope('all')} />
-              全部（{libraryItems.length}）
+              全部（{pool.length}）
             </label>
           </div>
 
@@ -308,12 +349,23 @@ export default function ExportPanel({
             <button disabled={!canAct} onClick={() => onExportAnki(items, title)} title="导出 Anki 可导入的 CSV">
               📦 Anki CSV
             </button>
-            <button disabled={!canAct} onClick={() => onExportWordList(items, title)} title="导出纯单词表 TXT（每行一个）">
+            <button
+              disabled={!canAct || content === 'usage'}
+              onClick={() =>
+                onExportWordList(items, title, { includePhrases: content === 'phrases' })
+              }
+              title={
+                content === 'usage'
+                  ? '用法笔记是中文说明，导不出「每行一个单词」的词表'
+                  : '导出纯单词表 TXT（每行一个；选「词组 / 习语」时会连词组一起导）'
+              }
+            >
               📄 单词表 TXT
             </button>
           </div>
           <div className="muted extip">
-            按文章/日期可**勾选多个**（同一词只算一次）。打印后会记「已打印」，选「未打印」可只打新词。
+            按文章/日期可**勾选多个**（同一条只算一次）。打印后会记「已打印」，选「未打印」可只打新的。
+            词组/习语/用法是语言点里**自动收藏**进来的，跟生词一起进词库。
           </div>
         </div>
       </div>

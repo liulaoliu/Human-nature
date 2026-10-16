@@ -25,6 +25,10 @@ import {
   isMarkablePos,
   isPrinted,
   isPriority,
+  isStudyable,
+  isWordEntry,
+  kindOf,
+  filterByKind,
   lemmaOf,
   markPrinted,
   markWord,
@@ -48,6 +52,7 @@ import {
   splitGloss,
   unprintedItems,
   upsertContext,
+  upsertLanguagePoints,
   vocabCardBlocks,
 } from './vocab'
 
@@ -677,6 +682,80 @@ describe('markWord 词组 / 带释义 / -ed 还原', () => {
     expect(r.created).toBe(true)
     expect(r.item.word).toBe('ensconced') // 原词形原样留着
     expect(r.item.lemma).toBe('ensconc') // 启发式还原（离线词典就绪后会被自动纠正为 ensconce）
+  })
+})
+
+describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () => {
+  const src = (articleId: string, sentenceId: string, sentenceText = 'Sentence.') => ({
+    articleId,
+    fileName: articleId,
+    sentenceId,
+    sentenceText,
+  })
+
+  it('词组 / 习语 / 用法各建一条，带类型与释义；重复调用返回同一个库（幂等）', () => {
+    const pts = [
+      { kind: 'phrase' as const, word: 'fall back on', gloss: '转而依靠', source: src('A', 's1') },
+      { kind: 'idiom' as const, word: 'take its toll', gloss: '造成损害', source: src('A', 's2') },
+      { kind: 'usage' as const, word: '注意 subject to 是形容词', source: src('A', 's3') },
+    ]
+    const lib = upsertLanguagePoints(createLibrary(), pts, NOW)
+    expect(lib.items).toHaveLength(3)
+    const phrase = lib.items.find((it) => it.lemma === 'fall back on')!
+    expect(phrase.kind).toBe('phrase')
+    expect(phrase.meaning).toBe('转而依靠')
+    expect(phrase.status).toBe('queried') // 语言点直接带释义收进来，没有「待查」
+    expect(phrase.contexts).toHaveLength(1)
+    const usage = lib.items.find((it) => it.kind === 'usage')!
+    expect(usage.word).toBe('注意 subject to 是形容词')
+    expect(usage.meaning).toBeNull()
+    // 幂等：再跑一次不该改动
+    expect(upsertLanguagePoints(lib, pts, NOW)).toBe(lib)
+  })
+
+  it('同一词组在不同文章出现 → 累积语境，不重复建条', () => {
+    const first = upsertLanguagePoints(
+      createLibrary(),
+      [{ kind: 'phrase', word: 'run out', gloss: '用完', source: src('A', 's1') }],
+      NOW,
+    )
+    const second = upsertLanguagePoints(
+      first,
+      [{ kind: 'phrase', word: 'Run out', gloss: '用完', source: src('B', 's9', 'We ran out of time.') }],
+      NOW,
+    )
+    expect(second.items).toHaveLength(1)
+    expect(second.items[0].contexts).toHaveLength(2)
+  })
+
+  it('已经手动加进生词本的词组：补上类型与释义，不新建重复条', () => {
+    const lib = markWord(createLibrary(), { word: 'fall back on', articleId: 'A', fileName: 'A' }, NOW).library
+    const next = upsertLanguagePoints(
+      lib,
+      [{ kind: 'phrase', word: 'fall back on', gloss: '转而依靠', source: src('A', 's1') }],
+      NOW,
+    )
+    expect(next.items).toHaveLength(1)
+    expect(next.items[0].kind).toBe('phrase')
+    expect(next.items[0].meaning).toBe('转而依靠')
+  })
+
+  it('类型过滤：filterByKind；词组可背、用法笔记不背', () => {
+    const lib = upsertLanguagePoints(
+      createLibrary(),
+      [
+        { kind: 'phrase', word: 'run out', gloss: '用完', source: src('A', 's1') },
+        { kind: 'idiom', word: 'take its toll', gloss: '造成损害', source: src('A', 's2') },
+        { kind: 'usage', word: '注意 subject to 是形容词', source: src('A', 's3') },
+      ],
+      NOW,
+    )
+    expect(filterByKind(lib.items, ['phrase', 'idiom']).map((it) => it.word)).toEqual(['run out', 'take its toll'])
+    expect(filterByKind(lib.items)).toBe(lib.items)
+    expect(lib.items.filter(isStudyable).map((it) => it.word)).toEqual(['run out', 'take its toll'])
+    expect(lib.items.filter(isWordEntry)).toHaveLength(0)
+    expect(kindOf(lib.items[0])).toBe('phrase')
+    expect(kindOf({})).toBe('word') // 老数据没有 kind
   })
 })
 

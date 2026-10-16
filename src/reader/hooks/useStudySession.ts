@@ -4,6 +4,7 @@ import {
   buildReviewQueue,
   editItem,
   isDue,
+  isStudyable,
   removeItem,
   reviewItem,
   sortItems,
@@ -115,15 +116,17 @@ export function useStudySession(params: UseStudySessionParams) {
   const [drillCleared, setDrillCleared] = useState(false)
 
   // ---- 候选池 ----
+  /** 可背的：用法笔记（中文说明）不进卡片 */
+  const studyable = useMemo(() => library.items.filter(isStudyable), [library.items])
   const poolFor = useCallback(
     (s: StudyScope) => {
-      if (s === 'all') return library.items
-      if (s === 'lapses') return library.items.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (s === 'unmastered') return library.items.filter((it) => it.status !== 'mastered')
+      if (s === 'all') return studyable
+      if (s === 'lapses') return studyable.filter((it) => (it.reviewState.lapses ?? 0) > 0)
+      if (s === 'unmastered') return studyable.filter((it) => it.status !== 'mastered')
       // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
-      return library.items.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
+      return studyable.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
     },
-    [library.items, articleIdentity, docLemmas],
+    [studyable, articleIdentity, docLemmas],
   )
   const pool = useMemo(() => poolFor(scope), [poolFor, scope])
   const dueCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length, [pool])

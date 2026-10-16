@@ -139,9 +139,13 @@ export function useExport({
 
   const exportJson = () => download('vocab.json', exportLibraryJSON(library), 'application/json')
 
-  /** 导出纯单词表 TXT（每行一个单词；跳过词组），给外部词书 App 导入。 */
-  const exportWordList = (items: VocabItem[], name?: string) =>
-    download(`${name ? name + '-' : ''}wordlist.txt`, toWordListTXT(items), 'text/plain;charset=utf-8')
+  /** 导出纯单词表 TXT（每行一个；默认跳过词组），给外部词书 App 导入。 */
+  const exportWordList = (items: VocabItem[], name?: string, opts?: { includePhrases?: boolean }) =>
+    download(
+      `${name ? name + '-' : ''}wordlist.txt`,
+      toWordListTXT(items, opts),
+      'text/plain;charset=utf-8',
+    )
 
   const exportBatch = () =>
     download(
