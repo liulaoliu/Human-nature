@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { isStudyable } from '../../core/entryKind'
 import {
   buildLearnQueue,
   buildReviewQueue,
   editItem,
   isDue,
-  isStudyable,
   removeItem,
   reviewItem,
   sortItems,

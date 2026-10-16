@@ -18,7 +18,7 @@ import {
   buildTranslateAllPrompt,
   type VocabLevel,
 } from './analyzer'
-import { isWordEntry } from './vocab'
+import { isWordEntry } from './entryKind'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
 import { isMarkablePos, needsAiExamples, normalizeWord } from './vocab'

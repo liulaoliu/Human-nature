@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { dictLemmaOf, dictLemmaPairs, isAboveLevel, isDictWord, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
-import { applyLemmaMap, createLibrary, dedupeLibrary, upsertLanguagePoints } from './vocab'
+import { applyLemmaMap, createLibrary, dedupeLibrary } from './vocab'
+import { upsertLanguagePoints } from './langPoints'
 
 // 构造与构建脚本一致的 TSV（\t 分隔；\n 表示换行由脚本转义为 \\n）
 const wordsTsv = [

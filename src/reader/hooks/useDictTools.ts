@@ -1,6 +1,7 @@
 import { useCallback } from 'react'
 import { dictConfusables, dictLemmaPairs, firstLine, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, isWordEntry, lemmaOf, normalizePos } from '../../core/vocab'
+import { applyConfusables, applyLemmaMap, cleanGloss, dedupeLibrary, lemmaOf, normalizePos } from '../../core/vocab'
+import { isWordEntry } from '../../core/entryKind'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../dictionary'
 

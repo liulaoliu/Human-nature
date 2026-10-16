@@ -1,6 +1,7 @@
 import type { EconomistDocument, VocabItem, VocabLibrary } from '../types/document'
 import { SCHEMA_VERSION } from '../types/document'
-import { VOCAB_KIND_LABEL, kindOf, type VocabGroup } from './vocab'
+import { KIND_LABEL, kindOf } from './entryKind'
+import type { VocabGroup } from './vocab'
 
 /**
  * 导出层：A4 打印 / Anki CSV / 标准 JSON。
@@ -59,7 +60,7 @@ export function toAnkiCSV(items: VocabItem[], opts?: { header?: boolean }): stri
     }
     const tags = [
       ...it.tags,
-      kindOf(it) === 'word' ? '' : VOCAB_KIND_LABEL[kindOf(it)],
+      kindOf(it) === 'word' ? '' : KIND_LABEL[kindOf(it)],
       it.source?.articleId ?? '',
     ]
       .filter(Boolean)
@@ -127,7 +128,7 @@ export function renderPrintHTML(input: {
           const n = input.numberOf ? input.numberOf(it) : null
           const no = n != null ? `<span class="no">${n}</span>` : ''
           const kind = kindOf(it)
-          const kindTag = kind === 'word' ? '' : ` <span class="kind">${VOCAB_KIND_LABEL[kind]}</span>`
+          const kindTag = kind === 'word' ? '' : ` <span class="kind">${KIND_LABEL[kind]}</span>`
           const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
           const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
           const marks = it.grammarMarks?.length

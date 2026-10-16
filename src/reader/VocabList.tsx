@@ -1,7 +1,8 @@
 import { Fragment, useState } from 'react'
 import type { VocabItem } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
-import { VOCAB_KIND_LABEL, displayMeaning, kindOf, normalizePos, vocabCardBlocks } from '../core/vocab'
+import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
+import { KIND_LABEL, kindOf } from '../core/entryKind'
 import { dayKeyLocal } from '../core/activity'
 import VocabBlocks from './panels/VocabBlocks'
 
@@ -201,7 +202,7 @@ export default function VocabList({
                 >
                   {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                   {it.word}
-                  {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{VOCAB_KIND_LABEL[kindOf(it)]}</span>}
+                  {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                   {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
                 </td>
                 <td className="cell-meaning">
@@ -280,7 +281,7 @@ export default function VocabList({
               >
                 {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
                 {it.word}{' '}
-                {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{VOCAB_KIND_LABEL[kindOf(it)]}</span>}
+                {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                 {it.phonetic && <span className="ph">{it.phonetic}</span>}
               </div>
               {normalizePos(it.partOfSpeech) && <div className="mu">{normalizePos(it.partOfSpeech)}</div>}

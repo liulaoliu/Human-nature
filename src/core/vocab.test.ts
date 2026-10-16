@@ -25,10 +25,6 @@ import {
   isMarkablePos,
   isPrinted,
   isPriority,
-  isStudyable,
-  isWordEntry,
-  kindOf,
-  filterByKind,
   lemmaOf,
   markPrinted,
   markWord,
@@ -45,18 +41,15 @@ import {
   relemmaLibrary,
   removeByLemma,
   removeItem,
-  repairLanguageKinds,
   review,
   reviewItem,
   setStatus,
   sortItems,
-  splitGloss,
-  textKey,
   unprintedItems,
   upsertContext,
-  upsertLanguagePoints,
   vocabCardBlocks,
 } from './vocab'
+import { vocabItem } from './testFixtures'
 
 describe('释义/词性清洗', () => {
   it('cleanGloss 去掉行尾反斜杠与多余空白', () => {
@@ -168,7 +161,6 @@ describe('applyExamples', () => {
     expect(needsAiExamples(lib.items[0])).toBe(false)
   })
 })
-import type { VocabItem } from '../types/document'
 
 describe('applyPhrases', () => {
   it('按 lemma 并入词组/习语，并去重', () => {
@@ -282,26 +274,7 @@ describe('vocabCardBlocks', () => {
 
 const NOW = new Date('2026-10-02T00:00:00.000Z')
 
-function item(over: Partial<VocabItem> = {}): VocabItem {
-  return {
-    id: 'vocab:test',
-    word: 'test',
-    lemma: 'test',
-    phonetic: null,
-    partOfSpeech: null,
-    meaning: null,
-    usage: [],
-    examples: [],
-    source: null,
-    status: 'unqueried',
-    note: '',
-    tags: [],
-    reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 },
-    createdAt: NOW.toISOString(),
-    updatedAt: NOW.toISOString(),
-    ...over,
-  }
-}
+const item = vocabItem
 
 describe('normalizeWord', () => {
   it('统一撇号、去标点、转小写', () => {
@@ -674,150 +647,11 @@ describe('markWord 词组 / 带释义 / -ed 还原', () => {
     expect(r.item.status).toBe('queried')
     expect(r.item.lemma).toBe('fall back on') // 短语不做词形还原
   })
-  it('splitGloss：拆「英文 — 中文」（也认 – / -）', () => {
-    expect(splitGloss('run out — 用完')).toEqual({ word: 'run out', gloss: '用完' })
-    expect(splitGloss('take its toll – 造成损害')).toEqual({ word: 'take its toll', gloss: '造成损害' })
-    expect(splitGloss('ensconced')).toEqual({ word: 'ensconced' })
-  })
   it('ensconced：启发式 lemma 不完美（ensconc），但原词形保留 + 词典可纠正', () => {
     const r = markWord(createLibrary(), { word: 'ensconced', articleId: 'a1', sentenceText: 'He is ensconced in the job.' }, NOW)
     expect(r.created).toBe(true)
     expect(r.item.word).toBe('ensconced') // 原词形原样留着
     expect(r.item.lemma).toBe('ensconc') // 启发式还原（离线词典就绪后会被自动纠正为 ensconce）
-  })
-})
-
-describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () => {
-  const src = (articleId: string, sentenceId: string, sentenceText = 'Sentence.') => ({
-    articleId,
-    fileName: articleId,
-    sentenceId,
-    sentenceText,
-  })
-
-  it('词组 / 习语 / 用法各建一条，带类型与释义；重复调用返回同一个库（幂等）', () => {
-    const pts = [
-      { kind: 'phrase' as const, word: 'fall back on', gloss: '转而依靠', source: src('A', 's1') },
-      { kind: 'idiom' as const, word: 'take its toll', gloss: '造成损害', source: src('A', 's2') },
-      { kind: 'usage' as const, word: '注意 subject to 是形容词', source: src('A', 's3') },
-    ]
-    const lib = upsertLanguagePoints(createLibrary(), pts, NOW)
-    expect(lib.items).toHaveLength(3)
-    const phrase = lib.items.find((it) => it.lemma === 'fall back on')!
-    expect(phrase.kind).toBe('phrase')
-    expect(phrase.meaning).toBe('转而依靠')
-    expect(phrase.status).toBe('queried') // 语言点直接带释义收进来，没有「待查」
-    expect(phrase.contexts).toHaveLength(1)
-    const usage = lib.items.find((it) => it.kind === 'usage')!
-    expect(usage.word).toBe('注意 subject to 是形容词')
-    expect(usage.meaning).toBeNull()
-    // 幂等：再跑一次不该改动
-    expect(upsertLanguagePoints(lib, pts, NOW)).toBe(lib)
-  })
-
-  it('同一词组在不同文章出现 → 累积语境，不重复建条', () => {
-    const first = upsertLanguagePoints(
-      createLibrary(),
-      [{ kind: 'phrase', word: 'run out', gloss: '用完', source: src('A', 's1') }],
-      NOW,
-    )
-    const second = upsertLanguagePoints(
-      first,
-      [{ kind: 'phrase', word: 'Run out', gloss: '用完', source: src('B', 's9', 'We ran out of time.') }],
-      NOW,
-    )
-    expect(second.items).toHaveLength(1)
-    expect(second.items[0].contexts).toHaveLength(2)
-  })
-
-  it('已经手动加进生词本的词组：补上类型与释义，不新建重复条', () => {
-    const lib = markWord(createLibrary(), { word: 'fall back on', articleId: 'A', fileName: 'A' }, NOW).library
-    const next = upsertLanguagePoints(
-      lib,
-      [{ kind: 'phrase', word: 'fall back on', gloss: '转而依靠', source: src('A', 's1') }],
-      NOW,
-    )
-    expect(next.items).toHaveLength(1)
-    expect(next.items[0].kind).toBe('phrase')
-    expect(next.items[0].meaning).toBe('转而依靠')
-  })
-
-  it('中文用法笔记不跟单词撞车：另建一条，也不会把已有单词改成「用法」', () => {
-    const lib0 = markWord(createLibrary(), { word: 'purge', articleId: 'A', fileName: 'A' }, NOW).library
-    const lib = upsertLanguagePoints(
-      lib0,
-      [{ kind: 'usage', word: '注意 purges 在这里是名词复数', source: src('A', 's1') }],
-      NOW,
-    )
-    expect(lib.items).toHaveLength(2)
-    const word = lib.items.find((it) => it.lemma === 'purge')!
-    expect(kindOf(word)).toBe('word') // 原本的单词还是单词（能背、能出题）
-    const note = lib.items.find((it) => kindOf(it) === 'usage')!
-    expect(note.word).toBe('注意 purges 在这里是名词复数')
-    expect(note.lemma).toBe(textKey('注意 purges 在这里是名词复数')) // 按整条文本做键
-  })
-
-  it('单个英文单词写进「词组」栏：当普通单词收（不标类型），多词的才标 词组', () => {
-    const lib = upsertLanguagePoints(
-      createLibrary(),
-      [
-        { kind: 'phrase', word: 'purges', gloss: '清洗', source: src('A', 's1') },
-        { kind: 'phrase', word: 'fall back on', gloss: '转而依靠', source: src('A', 's2') },
-      ],
-      NOW,
-    )
-    expect(lib.items.find((it) => it.lemma === 'purge')!.kind).toBeUndefined()
-    expect(lib.items.find((it) => it.lemma === 'fall back on')!.kind).toBe('phrase')
-  })
-
-  it('语言点标记（langPointId）：词形被改写后也不会重复收同一条', () => {
-    const src = { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'We fall back on it.' }
-    const points = [{ kind: 'phrase' as const, word: 'fall back on', gloss: '转而依靠', source: src }]
-    const lib = upsertLanguagePoints(createLibrary(), points, NOW)
-    expect(lib.items[0].langPointId).toContain('fall back on')
-    // 模拟词典把它改名成别的词形：再收一次不该新建
-    const renamed = { ...lib, items: [{ ...lib.items[0], word: 'fallback', lemma: 'fallback' }] }
-    const again = upsertLanguagePoints(renamed, points, NOW)
-    expect(again.items).toHaveLength(1)
-  })
-
-  it('repairLanguageKinds：修早先版本误标（单词被标成用法/词组），真笔记不动', () => {
-    const mk = (over: Partial<VocabItem>) => item(over)
-    const lib = dedupeLibrary({
-      schemaVersion: 1,
-      items: [
-        mk({ id: 'a', word: 'purge', lemma: 'purge', kind: 'usage' }), // 单词被误标成用法 → 改回
-        mk({ id: 'b', word: 'alga', lemma: 'alga', kind: 'phrase' }), // 单词被误标成词组 → 改回
-        mk({ id: 'c', word: '注意 purges 是名词', lemma: '注意 purges 是名词', kind: 'usage' }), // 真笔记 → 不动
-        mk({ id: 'd', word: 'fall back on', lemma: 'fall back on', kind: 'phrase' }), // 真词组 → 不动
-        mk({ id: 'e', word: '注意 purges 在这里是名词复数', lemma: '注意 purges 在这里是名词复数', kind: 'usage', langPointId: 'usage|A|s1|注意 purges 在这里是名词复数' }), // 新代码写的 → 不动
-      ],
-    })
-    const out = repairLanguageKinds(lib)
-    const byId = new Map(out.items.map((it) => [it.id, it]))
-    expect(byId.get('a')!.kind).toBeUndefined()
-    expect(byId.get('b')!.kind).toBeUndefined()
-    expect(byId.get('c')!.kind).toBe('usage')
-    expect(byId.get('d')!.kind).toBe('phrase')
-    expect(byId.get('e')!.kind).toBe('usage')
-    expect(repairLanguageKinds(out)).toBe(out) // 幂等
-  })
-
-  it('类型过滤：filterByKind；词组可背、用法笔记不背', () => {    const lib = upsertLanguagePoints(
-      createLibrary(),
-      [
-        { kind: 'phrase', word: 'run out', gloss: '用完', source: src('A', 's1') },
-        { kind: 'idiom', word: 'take its toll', gloss: '造成损害', source: src('A', 's2') },
-        { kind: 'usage', word: '注意 subject to 是形容词', source: src('A', 's3') },
-      ],
-      NOW,
-    )
-    expect(filterByKind(lib.items, ['phrase', 'idiom']).map((it) => it.word)).toEqual(['run out', 'take its toll'])
-    expect(filterByKind(lib.items)).toBe(lib.items)
-    expect(lib.items.filter(isStudyable).map((it) => it.word)).toEqual(['run out', 'take its toll'])
-    expect(lib.items.filter(isWordEntry)).toHaveLength(0)
-    expect(kindOf(lib.items[0])).toBe('phrase')
-    expect(kindOf({})).toBe('word') // 老数据没有 kind
   })
 })
 

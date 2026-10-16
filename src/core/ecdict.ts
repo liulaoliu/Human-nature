@@ -4,7 +4,8 @@
  * 纯逻辑：解析紧凑 TSV、查词、词形→原形、判断"是否超出某词汇水平"。
  * 网络加载放在 reader/dictionary.ts（这里不碰浏览器 API，便于单测）。
  */
-import { kindOf, normalizeWord } from './vocab'
+import { kindOf } from './entryKind'
+import { normalizeWord } from './vocab'
 import type { VocabKind } from '../types/document'
 
 export interface EcdictEntry {

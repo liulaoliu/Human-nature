@@ -11,18 +11,13 @@ import {
   editItem,
   hasOwnExamples,
   isDue,
-  isWordEntry,
   lemmaOf,
   markWord,
   normalizeWord,
   normalizeGrammarMarks,
-  pickOfflineExamples,
   removeItem,
-  repairLanguageKinds,
   reviewItem,
   sortItems,
-  splitGloss,
-  upsertLanguagePoints,
   type ReviewGrade,
   type VocabSortBy,
 } from '../core/vocab'
@@ -37,7 +32,10 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
-import { buildLanguagePrompt, hasSentenceLanguage, languagePointsOf } from '../core/language'
+import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
+import { isWordEntry } from '../core/entryKind'
+import { languagePointsOf, repairLanguageKinds, splitGlossText } from '../core/langPoints'
+import { autoFillLibrary, collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
   practiceForArticle,
@@ -1171,7 +1169,7 @@ export default function ReaderApp() {
       let lib = library
       let created = 0
       for (const raw of items) {
-        const { word, gloss } = splitGloss(raw)
+        const { word, gloss } = splitGlossText(raw)
         if (!word) continue
         const r = markWord(lib, {
           word,
@@ -2081,16 +2079,9 @@ export default function ReaderApp() {
       flash('本篇生词都已经有例句了（只有「来源句」的会算缺）')
       return
     }
-    const rows: { word: string; examples: { text: string; translation?: string }[] }[] = []
     let missing = 0
-    for (const it of targets) {
-      const ex = tatoebaExamples(it.word, it.lemma)
-      if (!ex.length) {
-        missing++
-        continue
-      }
-      rows.push({ word: it.word, examples: ex.map((e) => ({ text: e.en, translation: e.zh })) })
-    }
+    for (const it of targets) if (!tatoebaExamples(it.word, it.lemma).length) missing++
+    const rows = collectOfflineExampleRows(targets, lookupTatoeba)
     if (!rows.length) {
       flash(`离线例句库里有 ${missing} 个都查不到（可让 AI 补例句）`)
       return
@@ -2111,23 +2102,12 @@ export default function ReaderApp() {
     }
   }, [])
 
-  /**
-   * **每个词都补离线例句**：不管有没有 AI 例句，离线例句都补齐到目标条数（幂等、无网络）。
-   * 只填「还差几条 / 卡片还有空位」的部分。
-   */
-  useEffect(() => {
-    if (!tatoebaReady) return
-    const rows: { word: string; examples: { text: string; translation?: string }[] }[] = []
-    for (const it of library.items) {
-      if (!it.meaning) continue
-      const found = tatoebaExamples(it.word, it.lemma).map((e) => ({ text: e.en, translation: e.zh }))
-      const add = pickOfflineExamples(it, found)
-      if (add.length) rows.push({ word: it.word, examples: add })
-    }
-    if (!rows.length) return
-    const next = applyExamples(library, rows, new Date(), 'tatoeba')
-    if (next !== library) persist(next)
-  }, [tatoebaReady, library, persist])
+  /** 离线例句查询（Tatoeba）：手动按钮与自动补全共用同一份。 */
+  const lookupTatoeba = useCallback(
+    (it: { word: string; lemma: string }) =>
+      tatoebaExamples(it.word, it.lemma).map((e) => ({ text: e.en, translation: e.zh })),
+    [],
+  )
 
   /**
    * 记「读完这篇」。速读推到结尾会自动调，也可在目标面板手动标记。
@@ -2164,13 +2144,10 @@ export default function ReaderApp() {
   )
 
   /**
-   * 语言点自动收藏：AI 在速读里总结的 **词组 / 习语 / 用法** 收进词库（幂等、静默），
+   * 语言点自动收藏的**素材**：AI 在速读里总结的 **词组 / 习语 / 用法** 收进词库，
    * 之后就能跟生词一样筛选、分组、打印（整套打印/导出选项直接复用）。
-   *
-   * ⚠️ 两处刻意设计（都是防「词库数量来回跳」）：
-   *   1. 依赖里**不放 `library`**：否则会和别的「读词库 → 写词库」的 effect 互相覆盖；
-   *   2. 按**每篇的语言点签名**记账（`reader:langCollected`）：一篇收过就不再折腾，
-   *      用户手动删掉的条目也不会又冒出来；语言点变了（重新跑 AI）才会再收。
+   * 真正「收」的动作在下面那个唯一的自动补全 effect 里（按每篇内容签名只收一遍：
+   * 收过就不再折腾，用户手动删掉的条目不会被自动加回来）。
    */
   const languagePoints = useMemo(() => {
     const others = saved.filter((a) => a.id !== articleIdentity)
@@ -2180,29 +2157,23 @@ export default function ReaderApp() {
     return out
   }, [saved, doc, articleIdentity])
 
-  /** 每篇文章的语言点签名（内容变了才会再收一次）。 */
-  const langSig = useMemo(() => {
-    const byArticle = new Map<string, string[]>()
-    for (const p of languagePoints) {
-      const id = p.source.fileName ?? p.source.articleId
-      const line = `${p.kind}|${p.word}|${p.source.sentenceId ?? ''}|${p.gloss ?? ''}`
-      const list = byArticle.get(id)
-      if (list) list.push(line)
-      else byArticle.set(id, [line])
-    }
-    return Object.fromEntries([...byArticle.entries()].map(([id, list]) => [id, list.sort().join('\u0001')]))
-  }, [languagePoints])
-
+  /**
+   * 词库自动补全的**唯一写入口**：语言点收藏 + 离线例句补全（纯计划见 core/libraryAutoFill.ts）。
+   *
+   * ⚠️ 两条硬约定（违反就会回到「两个 effect 互相覆盖、词库数量来回跳」的坑，见 docs/TESTING.md 踩坑 #1）：
+   *   1. 依赖里**不放 `library`**：要读当前词库就读 `libraryRef.current`；
+   *   2. 新的「自动补全」一律加进 `autoFillLibrary`，**不要再写第二个 effect 去读/写词库**。
+   */
   useEffect(() => {
     if (!libraryLoaded) return
-    const todo = Object.entries(langSig).filter(([id, sig]) => langCollected[id] !== sig)
-    if (!todo.length) return
-    const ids = new Set(todo.map(([id]) => id))
-    const pts = languagePoints.filter((p) => ids.has(p.source.fileName ?? p.source.articleId))
-    const next = upsertLanguagePoints(libraryRef.current, pts)
-    if (next !== libraryRef.current) persist(next)
-    setLangCollected((prev) => ({ ...prev, ...Object.fromEntries(todo) }))
-  }, [libraryLoaded, langSig, languagePoints, langCollected, setLangCollected, persist])
+    const out = autoFillLibrary(libraryRef.current, {
+      langPoints: languagePoints,
+      collected: langCollected,
+      offline: tatoebaReady ? { lookup: lookupTatoeba } : undefined,
+    })
+    if (!out.libraryUntouched) persist(out.library)
+    if (!out.collectedUntouched) setLangCollected(out.collected)
+  }, [libraryLoaded, languagePoints, langCollected, tatoebaReady, lookupTatoeba, persist, setLangCollected])
 
   /** 学习日志：按天回顾。 */
   const journalInput = useMemo(
@@ -2340,7 +2311,6 @@ export default function ReaderApp() {
     flash,
   })
 
-  const articleList = sortItems(articleWords, vocabSort)
   const allList = sortItems(library.items, vocabSort)
   const handleReview = useCallback(
     (id: string, grade: ReviewGrade) => persist(reviewItem(library, id, grade)),
@@ -3210,7 +3180,6 @@ export default function ReaderApp() {
             byArticle,
           }}
           onDailyGoalChange={setDailyGoal}
-          articleList={articleList}
           articleNums={articleNums}
           articleAllPrinted={articleAllPrinted}
           articlePrintedAt={articlePrintedAt}

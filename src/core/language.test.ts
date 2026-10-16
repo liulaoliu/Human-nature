@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { applyLanguage, buildLanguagePrompt, languagePointsOf, parseLanguage } from './language'
-import type { Sentence, SentenceLanguage } from '../types/document'
+import { applyLanguage, buildLanguagePrompt, parseLanguage } from './language'
+import type { Sentence } from '../types/document'
 
 function sentence(id: string, text = 'Hello.'): Sentence {
   return {
@@ -79,49 +79,5 @@ describe('applyLanguage', () => {
     const now = new Date('2026-10-15T03:00:00.000Z')
     const out = applyLanguage([sentence('s001')], [{ id: 's001', grammar: 'x' }], now)
     expect(out[0].languages?.[0].at).toBe('2026-10-15T03:00:00.000Z')
-  })
-})
-
-describe('languagePointsOf（语言点自动收藏：词组 / 习语 / 用法）', () => {
-  const withLang = (id: string, text: string, L: SentenceLanguage): Sentence => ({ ...sentence(id, text), languages: [L] })
-
-  it('抽取三类条目，词组/习语把「英文 — 中文」拆成 词条 + 释义，并带来源句', () => {
-    const sents = [
-      withLang('s1', 'It takes its toll and we fall back on it.', {
-        phrases: ['fall back on — 转而依靠'],
-        idioms: ['take its toll — 造成损害'],
-        usage: ['注意 subject to 这里是形容词，表示「易受…影响」'],
-        source: 'ai',
-      }),
-    ]
-    const pts = languagePointsOf(sents, { articleId: 'A', fileName: 'A' })
-    expect(pts).toEqual([
-      {
-        kind: 'phrase',
-        word: 'fall back on',
-        gloss: '转而依靠',
-        source: { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'It takes its toll and we fall back on it.' },
-      },
-      {
-        kind: 'idiom',
-        word: 'take its toll',
-        gloss: '造成损害',
-        source: { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'It takes its toll and we fall back on it.' },
-      },
-      {
-        kind: 'usage',
-        // 用法是中文说明：不拆「英文 — 中文」，整句留着
-        word: '注意 subject to 这里是形容词，表示「易受…影响」',
-        gloss: undefined,
-        source: { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'It takes its toll and we fall back on it.' },
-      },
-    ])
-  })
-
-  it('没有语言点 / 空句数组 → 空；兼容旧的单条 language 字段', () => {
-    expect(languagePointsOf([], { articleId: 'A' })).toEqual([])
-    expect(languagePointsOf([sentence('s1')], { articleId: 'A' })).toEqual([])
-    const legacy: Sentence = { ...sentence('s2', 'Old.'), language: { phrases: ['run out'] } }
-    expect(languagePointsOf([legacy], { articleId: 'A' }).map((p) => p.word)).toEqual(['run out'])
   })
 })

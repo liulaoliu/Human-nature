@@ -12,7 +12,8 @@ import {
   type QuizQuestion,
 } from '../../core/quiz'
 import { buildArticleQuestions } from '../../core/articleQuiz'
-import { isDue, isStudyable, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
+import { isDue, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
+import { isStudyable } from '../../core/entryKind'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 
 const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'phraseBlank']

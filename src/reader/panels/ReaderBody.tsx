@@ -2,6 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
 import { getSentenceLanguages } from '../../core/language'
+import { KIND_LABEL } from '../../core/entryKind'
 import LangPhrases from './LangPhrases'
 import type { Paragraph, Sentence } from '../../types/document'
 
@@ -195,8 +196,8 @@ export default function ReaderBody({
                       {L.source === 'manual' && <div className="lang-src">手动</div>}
                       {L.structure && <div>结构：{L.structure}</div>}
                       {L.grammar && <div>语法：{L.grammar}</div>}
-                      <LangPhrases label="习语" items={L.idioms ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
-                      <LangPhrases label="词组" items={L.phrases ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
+                      <LangPhrases label={KIND_LABEL.idiom} items={L.idioms ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
+                      <LangPhrases label={KIND_LABEL.phrase} items={L.phrases ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
                       {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
                     </span>
                   ))}

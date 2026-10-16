@@ -1,13 +1,12 @@
 
 import { useMemo, useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
-import type { VocabItem, VocabKind } from '../../types/document'
-import { VOCAB_KIND_LABEL, kindOf, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
+import type { VocabItem } from '../../types/document'
+import { sortItems, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
+import { langEntries, wordEntries } from '../../core/entryKind'
+import LangPointList from './LangPointList'
 import { fmtDur } from '../format'
 import { calendarDayKey } from '../../core/activity'
-
-/** 侧栏列表的类型过滤：全部，或只看某一类词条。 */
-type KindFilter = 'all' | VocabKind
 
 export interface SideVocabStats {
   totals: { picked: number; seconds: number }
@@ -84,7 +83,6 @@ export interface SideVocabProps {
   onDailyGoalChange: (n: number) => void
 
   // 生词列表
-  articleList: VocabItem[]
   articleNums: Map<string, number>
   /** 本篇是否已全部打印（用于「已打印」标记，避免重复打印）。 */
   articleAllPrinted: boolean
@@ -143,7 +141,6 @@ export default function SideVocab({
   statsOpen,
   stats,
   onDailyGoalChange,
-  articleList,
   articleNums,
   articleAllPrinted,
   articlePrintedAt,
@@ -157,17 +154,29 @@ export default function SideVocab({
 }: SideVocabProps) {
   const { totals, dayStats, last7, dueForecast, byArticle } = stats
   const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
-  /** 词条类型过滤：速读里自动收藏的词组/习语/用法可单看 */
-  const [kindFilter, setKindFilter] = useState<KindFilter>('all')
-  const shown = useMemo(
-    () => (kindFilter === 'all' ? articleWords : articleWords.filter((it) => kindOf(it) === kindFilter)),
-    [articleWords, kindFilter],
-  )
-  const shownPrintTitle = `${printTitle}${kindFilter === 'all' ? '' : `·${VOCAB_KIND_LABEL[kindFilter]}`}`
+  /** 生词 / 语言点 两个页签：两类数据形状不同（单词 vs 词组·习语·用法说明），混在一列很难读 */
+  const [tab, setTab] = useState<'word' | 'lang'>('word')
+  const words = useMemo(() => wordEntries(articleWords), [articleWords])
+  const langs = useMemo(() => langEntries(articleWords), [articleWords])
+  /** 当前页签下要展示 / 打印的条目 */
+  const shown = tab === 'word' ? words : langs
+  const shownPrintTitle = tab === 'word' ? printTitle : printTitle + '·语言点'
   return (
     <div className="side-sec" data-sec="vocab">
       <div className="section-title">
-        生词本 · 本篇（{shown.length}）
+        生词本 · 本篇（{articleWords.length}）
+        <span className="view-toggle">
+          <button className={tab === 'word' ? 'primary' : ''} onClick={() => setTab('word')} title="普通单词">
+            生词 {words.length}
+          </button>
+          <button
+            className={tab === 'lang' ? 'primary' : ''}
+            onClick={() => setTab('lang')}
+            title="速读里 AI 总结的词组 / 习语 / 用法（自动收藏，可打印）"
+          >
+            语言点 {langs.length}
+          </button>
+        </span>
         <span className="view-toggle">
           <button className={view === 'card' ? 'primary' : ''} onClick={() => onViewChange('card')}>
             卡片
@@ -180,17 +189,6 @@ export default function SideVocab({
             表格
           </button>
         </span>
-        <select
-          value={kindFilter}
-          onChange={(e) => setKindFilter(e.target.value as KindFilter)}
-          title="词条类型：速读里 AI 总结的词组/习语/用法会**自动收藏**进来，可在这里单看"
-        >
-          <option value="all">全部类型</option>
-          <option value="word">只看单词</option>
-          <option value="phrase">只看词组</option>
-          <option value="idiom">只看习语</option>
-          <option value="usage">只看用法</option>
-        </select>
         <select value={sortBy} onChange={(e) => onSortChange(e.target.value as VocabSortBy)} title="排序方式">
           <option value="updatedAt">最近改动</option>
           <option value="createdAt">加入时间</option>
@@ -456,9 +454,17 @@ export default function SideVocab({
         </div>
       )}
 
-      {articleList.length ? (
+      {tab === 'lang' ? (
+        <LangPointList
+          items={sortItems(langs, sortBy)}
+          onSpeak={onSpeak}
+          onDelete={onDelete}
+          onEdit={(it) => onEdit(it.id, {})}
+          confirmDel={confirmDel}
+        />
+      ) : words.length ? (
         <VocabList
-          items={kindFilter === 'all' ? articleList : articleList.filter((it) => kindOf(it) === kindFilter)}
+          items={sortItems(words, sortBy)}
           view={view}
           focusLemma={focusLemma}
           confirmDel={confirmDel}

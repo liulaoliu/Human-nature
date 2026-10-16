@@ -1,5 +1,4 @@
 import type { Sentence, SentenceLanguage } from '../types/document'
-import { splitGloss, type LanguagePoint } from './vocab'
 
 /**
  * 逐句语言点分析：AI 结构化输出「结构 / 语法 / idiom / 词组 / 用法」，写回句子。
@@ -34,52 +33,6 @@ export function getSentenceLanguages(s: {
 /** 该句是否有语言点（AI 或手动）。 */
 export function hasSentenceLanguage(s: { language?: SentenceLanguage; languages?: SentenceLanguage[] } | null | undefined): boolean {
   return getSentenceLanguages(s).length > 0
-}
-
-/**
- * 从一批句子的语言点里抽出可**收藏**的条目（词组 / 习语 / 用法笔记），带出来源句。
- *
- * 这些条目进词库后就能跟着生词本一起筛选、分组、打印（复用整套打印/导出选项）。
- * 词组/习语的写法是「英文 — 简短中文」，这里顺手拆成 词条 + 释义。
- */
-export function languagePointsOf(
-  sentences: Pick<Sentence, 'id' | 'text' | 'language' | 'languages'>[] | null | undefined,
-  article: { articleId: string; fileName?: string | null },
-): LanguagePoint[] {
-  if (!sentences?.length) return []
-  const out: LanguagePoint[] = []
-  const fileName = article.fileName ?? null
-  const push = (
-    kind: LanguagePoint['kind'],
-    raw: string,
-    split: boolean,
-    source: Pick<Sentence, 'id' | 'text'>,
-  ) => {
-    const text = raw.trim()
-    if (!text) return
-    const { word, gloss } = split ? splitGloss(text) : { word: text, gloss: undefined }
-    if (!word.trim()) return
-    out.push({
-      kind,
-      word: word.trim(),
-      gloss: gloss?.trim() || undefined,
-      source: {
-        articleId: article.articleId,
-        fileName,
-        sentenceId: source.id,
-        sentenceText: source.text,
-      },
-    })
-  }
-  for (const s of sentences) {
-    for (const L of getSentenceLanguages(s)) {
-      for (const p of L.phrases ?? []) push('phrase', p, true, s)
-      for (const i of L.idioms ?? []) push('idiom', i, true, s)
-      // 用法是中文说明，不拆「英文 — 中文」（否则会把中文当成词条）
-      for (const u of L.usage ?? []) push('usage', u, false, s)
-    }
-  }
-  return out
 }
 
 /** 出题提示词：按句 id 逐句分析，严格 JSON。 */
