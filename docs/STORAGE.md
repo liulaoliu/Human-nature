@@ -28,6 +28,30 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 统计 / 目标 / 错题等 | localStorage | 无 | 已随「导出全部」备份 |
 | TTS 音频缓存 | `public/tts/` | 浏览器语音 | 可再生，不算用户资产 |
 
+### 2.1 不是所有 localStorage 都该进 SQLite
+
+按数据性质分，而不是按“能不能塞”分。Android 上也不会把 `SharedPreferences` 全搬进 Room。
+
+| 类别 | 典型键 / 数据 | 放哪 | 理由 |
+|---|---|---|---|
+| 偏好 / 会话状态 | `reader:theme`、字号、语速、题型、面板开关、`reader:last`、`reader:quizSession`、`reader:writingDraft` | localStorage（大对象可放 IndexedDB） | 高频改、只影响本机 UI，丢了重设即可 |
+| 可重建的缓存 / 派生统计 | `reader:kindStats`、`reader:newToday`、`reader:langCollected`、`reader:batch` | localStorage / IndexedDB | 能从词库、文章、事件重算；不要当事实来源 |
+| **用户学习记录** | 背词事件、练习成绩、读完 / 精读进度、错题、写作历史、复述记录 | **SQLite 规范化表** | 换浏览器/清缓存不能丢；要按天、按篇、按词查询 |
+| 结构化资产 | 词库、文章、翻译、语言点、词在文章里的位置 | **SQLite**（已落地） | 同上，且需要 JOIN / 统计 |
+| 大二进制 | 跟读录音、音频缓存 | 文件 / IndexedDB + SQLite 元数据 | 不适合塞进词库 JSON 或 localStorage |
+
+结论：
+
+- **偏好留在 localStorage**；不要把全部 `reader:*` 镜像成一张 `reader_state(key, value)` 万能 KV 表。
+  那只是“换了个地方存 localStorage”：没有 schema、没法约束、每次写全量、还会和 localStorage 争谁是真身。
+- **学习日志不是一张日志表**：它是按天聚合出来的视图。真正该落库的是
+  `study_event`（哪天、哪个词、结果）、`practice_attempt`（成绩）、`reading_progress`（读完/略读）、
+  `mistake`、`writing_record` 这类**事件 / 记录**；日志和统计从这些表算。
+- **聚合值不要双写**：`reader:activity`、`reader:kindStats` 这类能由事件算出来的，最多做物化缓存；
+  不要既写事件又手写一份聚合，最后两边对不上。
+- **同一份数据只能有一个写入方**：迁移后 localStorage 只留“界面状态”，学习记录由 `LearningRepo`
+  写 SQLite；否则刷新时谁覆盖谁说不清。
+
 ## 三、运行时怎么选
 
 前端仓储（`src/adapters/vocabRepo.ts`、`articleRepo.ts`）是 **HybridRepo**：
@@ -186,6 +210,9 @@ server/sqliteStore.js（SQLite 实现）
 
 ## 八、下一阶段（还没做）
 
+0. **学习记录迁 SQLite**：先落 `practice_attempt`、`reading_progress`、`study_event`、
+   `mistake`、`writing_record` 五类；localStorage 只留偏好和会话。迁移入口仍用
+   “服务端空库才从 localStorage 灌一次”，页面读走 `LearningRepo`（SQLite 优先、localStorage 兜底）。
 1. **录音迁到服务端**：`data/takes/<id>.bin` + SQLite 元数据（`file_name` 索引），
    前端 `HybridTakeRepo`；第一次打开某篇时把该篇旧录音补传。
 2. **校准 / 改文本**：接口是同步的，迁 SQLite 要改成异步；数据很小，优先级低。

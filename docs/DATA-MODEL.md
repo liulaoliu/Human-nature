@@ -8,13 +8,16 @@
 
 | 存什么 | 存哪 | 谁写 | 备注 |
 |---|---|---|---|
-| **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | IndexedDB `shadowing-vocab` → store `library`（单条记录） | 只由 `hooks/useVocabLibrary.persist` 写 | 覆盖前自动留 `library:prev` 与历史快照 `snapshots`（最近 8 版 + 最大的一版永久保留） |
-| **文章**（正文、句子、语言点、每句 `vocab`） | IndexedDB `shadowing-reader` → store `articles`（keyPath `id`） | `adapters/articleRepo` | 文章是语言点与「标过的词」的第二份副本；坏了可用「导出全部」再导入 |
+| **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | SQLite `data/xueba.db`；IndexedDB `shadowing-vocab` 兜底 | `adapters/vocabRepo`（Hybrid） | 覆盖前留上一版 + 历史快照；见 `docs/STORAGE.md` |
+| **文章**（正文、句子、翻译、语言点、每句 `vocab`） | SQLite `data/xueba.db`；IndexedDB `shadowing-reader` 兜底 | `adapters/articleRepo`（Hybrid） | 派生表可 JOIN；坏库可用「导出全部」再导入 |
 | 待选清单（自动标词的结果，按篇） | localStorage `reader:batch` | `ReaderApp` / 各会话 hook | `{ [articleId]: {word, sentence, sentenceId}[] }` —— **找回词库最准的一手数据** |
-| 错题本 | localStorage `reader:mistakes` | 各练习 hook | `itemId` 形如 `vocab:run` |
-| 读完记录 / 目标 / 备忘 | localStorage `reader:readDone` / `readGoal` / `goalMemo` | `hooks/useReadDone` | 按逻辑日（04:00 结算） |
-| 学习活动 / 日志 / 练习 / 打卡 | localStorage `reader:activity` / `reader:practice` / `reader:studiedToday` … | 各 hook | 纯统计，丢了不影响学习数据 |
-| 语言点「已收过」记账 | localStorage `reader:langCollected` | `hooks/useLibraryAutoFill` | 清空 = 从文章重收一遍 |
+| 错题本 | localStorage `reader:mistakes` | 各练习 hook | `itemId` 形如 `vocab:run`；属于学习记录，计划迁 SQLite |
+| 读完记录 / 目标 / 备忘 | localStorage `reader:readDone` / `readGoal` / `goalMemo` | `hooks/useReadDone` | 按逻辑日（04:00 结算）；`readDone` 计划迁 SQLite，目标/备忘是偏好 |
+| 学习活动 / 日志 / 练习 / 打卡 | localStorage `reader:activity` / `reader:practice` / `reader:studiedToday` … | 各 hook | **日志是 `core/journal` 算出来的视图**，不是独立表；事件/成绩计划迁 SQLite |
+| 语言点「已收过」记账 | localStorage `reader:langCollected` | `hooks/useLibraryAutoFill` | 可重建缓存；清空 = 从文章重收一遍 |
+
+> 分类原则见 `docs/STORAGE.md` §2.1：偏好/会话留 localStorage；学习记录进 SQLite；
+> 不要把所有 `reader:*` 镜像成万能 KV 表。
 
 ## 二、核心结构（`src/types/document.ts`）
 
