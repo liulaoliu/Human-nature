@@ -17,6 +17,7 @@ import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
 import type { WritingRecord } from './writing'
 import type { PracticeRecord } from './practice'
 import type { MistakeEntry } from './mistakes'
+import type { KindStats, RetellRecord, StudiedDay } from './learning'
 
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
@@ -134,4 +135,66 @@ export function mergeMistakes(
     byId.set(m.id, { ...newer, count: (prev.count ?? 0) + (m.count ?? 0) })
   }
   return [...byId.values()].sort((a, b) => b.at.localeCompare(a.at)).slice(0, Math.max(0, cap))
+}
+
+const RETELL_CAP = 200
+
+/** 合并复述：按「时间 + 文章 + 正文」去重，按时间倒序，保留最近 cap 条。 */
+export function mergeRetells(
+  current: RetellRecord[],
+  incoming: RetellRecord[],
+  cap = RETELL_CAP,
+): RetellRecord[] {
+  const key = (r: RetellRecord) => `${r.at}|${r.articleId}|${r.text}`
+  const seen = new Set(current.map(key))
+  const out = [...current]
+  for (const r of incoming) {
+    const k = key(r)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(r)
+  }
+  out.sort((a, b) => b.at.localeCompare(a.at))
+  return out.slice(0, Math.max(0, cap))
+}
+
+/** 合并「每天背过哪些词」：同一天取 id 并集，不重复计数。 */
+export function mergeStudiedDays(current: StudiedDay[], incoming: StudiedDay[]): StudiedDay[] {
+  const byDay = new Map<string, Set<string>>()
+  for (const d of [...current, ...incoming]) {
+    const ids = byDay.get(d.day) ?? new Set<string>()
+    for (const id of d.ids) ids.add(id)
+    byDay.set(d.day, ids)
+  }
+  return [...byDay.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([day, ids]) => ({ day, ids: [...ids] }))
+}
+
+/** 合并精读「略读」标记：按文章 id 取并集。 */
+export function mergeSkimmed(current: string[], incoming: string[]): string[] {
+  return [...new Set([...current, ...incoming])]
+}
+
+/**
+ * 合并按篇/题型正确率。
+ *
+ * 这份数据只有 total/correct，没有时间戳或事件 id，无法判断两份是不是同一批答题；
+ * 因此取「题数更多的那个口径」，保证同一份备份重复导入不会把正确率翻倍。
+ */
+export function mergeKindStats(current: KindStats, incoming: KindStats): KindStats {
+  const out: KindStats = {}
+  for (const [articleId, kinds] of Object.entries(current)) {
+    out[articleId] = { ...kinds }
+  }
+  for (const [articleId, kinds] of Object.entries(incoming)) {
+    const target = (out[articleId] ??= {})
+    for (const [kind, stat] of Object.entries(kinds)) {
+      const prev = target[kind]
+      if (!prev || stat.total > prev.total || (stat.total === prev.total && stat.correct > prev.correct)) {
+        target[kind] = { ...stat }
+      }
+    }
+  }
+  return out
 }

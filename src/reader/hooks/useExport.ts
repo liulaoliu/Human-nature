@@ -11,12 +11,17 @@ import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
 import { mergeReadDone, type ReadDone } from '../../core/goals'
+import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
 import {
   mergeActivity,
+  mergeKindStats,
   mergeLibraries,
   mergeMistakes,
   mergePractice,
+  mergeRetells,
   mergeSessions,
+  mergeSkimmed,
+  mergeStudiedDays,
   mergeStudyDays,
   mergeWritingHistory,
 } from '../../core/mergeBackup'
@@ -31,6 +36,10 @@ interface ParsedBackup {
   writingHistory?: WritingRecord[]
   practice?: PracticeRecord[]
   mistakes?: MistakeEntry[]
+  retells?: RetellRecord[]
+  studiedDays?: StudiedDay[]
+  skimmed?: string[]
+  kindStats?: KindStats
   /** 目标 / 备忘 / 读完历史 */
   readDone?: ReadDone[]
   readGoal?: number
@@ -62,6 +71,12 @@ function parseBackupPayload(data: unknown): ParsedBackup {
     if (Array.isArray(obj.writingHistory)) out.writingHistory = obj.writingHistory as WritingRecord[]
     if (Array.isArray(obj.practice)) out.practice = obj.practice as PracticeRecord[]
     if (Array.isArray(obj.mistakes)) out.mistakes = obj.mistakes as MistakeEntry[]
+    if (Array.isArray(obj.retells)) out.retells = obj.retells as RetellRecord[]
+    if (Array.isArray(obj.studiedDays)) out.studiedDays = obj.studiedDays as StudiedDay[]
+    if (Array.isArray(obj.skimmed)) out.skimmed = obj.skimmed.filter((id): id is string => typeof id === 'string')
+    if (obj.kindStats && typeof obj.kindStats === 'object' && !Array.isArray(obj.kindStats)) {
+      out.kindStats = obj.kindStats as KindStats
+    }
     if (Array.isArray(obj.readDone)) out.readDone = obj.readDone as ReadDone[]
     if (typeof obj.readGoal === 'number') out.readGoal = obj.readGoal
     if (typeof obj.goalMemo === 'string') out.goalMemo = obj.goalMemo
@@ -80,6 +95,10 @@ export interface UseExportParams {
   writingHistory: WritingRecord[]
   practice: PracticeRecord[]
   mistakes: MistakeEntry[]
+  retells: RetellRecord[]
+  studiedDays: StudiedDay[]
+  skimmed: string[]
+  kindStats: KindStats
   readDone: ReadDone[]
   readGoal: number
   goalMemo: string
@@ -93,6 +112,10 @@ export interface UseExportParams {
   setWritingHistory: (v: WritingRecord[]) => void
   setPractice: (v: PracticeRecord[]) => void
   setMistakes: (v: MistakeEntry[]) => void
+  setRetells: (v: RetellRecord[]) => void
+  setStudiedDays: (v: StudiedDay[]) => void
+  setSkimmed: (v: string[]) => void
+  setKindStats: (v: KindStats) => void
   setReadDone: (v: ReadDone[]) => void
   setReadGoal: (v: number) => void
   setGoalMemo: (v: string) => void
@@ -109,6 +132,10 @@ export function useExport({
   writingHistory,
   practice,
   mistakes,
+  retells,
+  studiedDays,
+  skimmed,
+  kindStats,
   readDone,
   readGoal,
   goalMemo,
@@ -122,6 +149,10 @@ export function useExport({
   setWritingHistory,
   setPractice,
   setMistakes,
+  setRetells,
+  setStudiedDays,
+  setSkimmed,
+  setKindStats,
   setReadDone,
   setReadGoal,
   setGoalMemo,
@@ -171,6 +202,10 @@ export function useExport({
       writingHistory,
       practice,
       mistakes,
+      retells,
+      studiedDays,
+      skimmed,
+      kindStats,
       readDone,
       readGoal,
       goalMemo,
@@ -200,6 +235,10 @@ export function useExport({
       if (parsed.writingHistory) setWritingHistory(parsed.writingHistory)
       if (parsed.practice) setPractice(parsed.practice)
       if (parsed.mistakes) setMistakes(parsed.mistakes)
+      if (parsed.retells) setRetells(parsed.retells)
+      if (parsed.studiedDays) setStudiedDays(parsed.studiedDays)
+      if (parsed.skimmed) setSkimmed(parsed.skimmed)
+      if (parsed.kindStats) setKindStats(parsed.kindStats)
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
@@ -230,6 +269,10 @@ export function useExport({
       if (parsed.writingHistory) setWritingHistory(mergeWritingHistory(writingHistory, parsed.writingHistory))
       if (parsed.practice) setPractice(mergePractice(practice, parsed.practice))
       if (parsed.mistakes) setMistakes(mergeMistakes(mistakes, parsed.mistakes))
+      if (parsed.retells) setRetells(mergeRetells(retells, parsed.retells))
+      if (parsed.studiedDays) setStudiedDays(mergeStudiedDays(studiedDays, parsed.studiedDays))
+      if (parsed.skimmed) setSkimmed(mergeSkimmed(skimmed, parsed.skimmed))
+      if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
       flash(`合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}`)

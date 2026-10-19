@@ -1,10 +1,14 @@
 import { describe, it, expect } from 'vitest'
 import {
   mergeActivity,
+  mergeKindStats,
   mergeLibraries,
   mergeMistakes,
   mergePractice,
+  mergeRetells,
   mergeSessions,
+  mergeSkimmed,
+  mergeStudiedDays,
   mergeStudyDays,
   mergeWritingHistory,
 } from './mergeBackup'
@@ -135,5 +139,50 @@ describe('mergeMistakes', () => {
     const m = { id: 'vocab:w', kind: 'vocab' as const, at: '2026-10-01T00:00:00Z', count: 3, label: 'w' }
     const out = mergeMistakes([m], [{ ...m }])
     expect(out[0].count).toBe(3)
+  })
+})
+
+describe('mergeRetells', () => {
+  it('按时间倒序去重，同一份备份再导不重复', () => {
+    const r = (at: string, text = 't') => ({ at, articleId: 'a', text, words: 1 })
+    const out = mergeRetells([r('2026-10-01T00:00:00Z')], [r('2026-10-01T00:00:00Z'), r('2026-10-02T00:00:00Z')])
+    expect(out.map((x) => x.at)).toEqual(['2026-10-02T00:00:00Z', '2026-10-01T00:00:00Z'])
+  })
+})
+
+describe('mergeStudiedDays', () => {
+  it('同一天取并集，不同天各自保留', () => {
+    expect(
+      mergeStudiedDays(
+        [{ day: '2026-10-01', ids: ['a', 'b'] }],
+        [{ day: '2026-10-01', ids: ['b', 'c'] }, { day: '2026-10-02', ids: ['d'] }],
+      ),
+    ).toEqual([
+      { day: '2026-10-01', ids: ['a', 'b', 'c'] },
+      { day: '2026-10-02', ids: ['d'] },
+    ])
+  })
+})
+
+describe('mergeSkimmed', () => {
+  it('按文章 id 取并集', () => {
+    expect(mergeSkimmed(['a', 'b'], ['b', 'c'])).toEqual(['a', 'b', 'c'])
+  })
+})
+
+describe('mergeKindStats', () => {
+  it('同一题型取题数更多的口径，重复导入不翻倍', () => {
+    const current = { a: { cloze: { total: 5, correct: 3 } } }
+    const incoming = { a: { cloze: { total: 5, correct: 3 }, spell: { total: 2, correct: 2 } } }
+    const out = mergeKindStats(current, incoming)
+    expect(out.a.cloze).toEqual({ total: 5, correct: 3 })
+    expect(out.a.spell).toEqual({ total: 2, correct: 2 })
+  })
+
+  it('题数更多时采用新口径；不修改入参', () => {
+    const current = { a: { cloze: { total: 3, correct: 1 } } }
+    const incoming = { a: { cloze: { total: 5, correct: 3 } } }
+    expect(mergeKindStats(current, incoming).a.cloze).toEqual({ total: 5, correct: 3 })
+    expect(current.a.cloze).toEqual({ total: 3, correct: 1 })
   })
 })
