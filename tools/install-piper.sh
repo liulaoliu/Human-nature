@@ -9,7 +9,7 @@
 #   PIPER_RELEASE=2023.11.14-2
 #
 # 装完重启服务（./停止服务.sh && ./启动服务.sh 或 systemctl --user restart shadowing-reader.service），
-# 顶栏音色下拉会出现「离线 · 本地语音」里的 Piper 音色。espeak-ng 仍保留为最后一道应急兜底。
+# 顶栏音色下拉会出现「离线 · 本地语音」里的 Piper 音色；Piper 不可用时才退回浏览器语音。
 set -euo pipefail
 
 PIPER_RELEASE="${PIPER_RELEASE:-2023.11.14-2}"

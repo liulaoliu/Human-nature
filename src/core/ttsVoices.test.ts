@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { TTS_ACCENTS, buildTtsAccents, engineVoiceAccent, isOfflineTtsVoice } from './ttsVoices'
 
 describe('isOfflineTtsVoice', () => {
-  it('识别 SAPI / espeak-ng，不误伤 Edge', () => {
+  it('识别 SAPI / Piper，不误伤 Edge', () => {
     expect(isOfflineTtsVoice('sapi:Microsoft Zira Desktop')).toBe(true)
-    expect(isOfflineTtsVoice('local:en-us')).toBe(true)
+    expect(isOfflineTtsVoice('local:piper-us-lessac')).toBe(true)
     expect(isOfflineTtsVoice('en-US-AriaNeural')).toBe(false)
     expect(isOfflineTtsVoice('')).toBe(false)
   })
@@ -35,7 +35,7 @@ describe('engineVoiceAccent', () => {
     expect(
       engineVoiceAccent('x', {
         available: false,
-        voices: [{ id: 'local:en-us', name: 'Espeak 美音 · 男' }],
+        voices: [{ id: 'local:piper-us-lessac', name: 'Piper 美音 Lessac' }],
       }),
     ).toBeNull()
     expect(engineVoiceAccent('x', null)).toBeNull()
@@ -45,12 +45,12 @@ describe('engineVoiceAccent', () => {
     const accent = engineVoiceAccent('本地', {
       available: true,
       voices: [
-        { id: 'local:en-us+f3', name: 'Espeak 美音 · 女', gender: 'Female', lang: 'en-US' },
+        { id: 'local:piper-us-lessac', name: 'Piper 美音 Lessac', gender: 'Female', lang: 'en-US' },
       ],
     })
     expect(accent?.voices[0]).toEqual({
-      id: 'local:en-us+f3',
-      name: 'Espeak 美音 · 女（en-US）',
+      id: 'local:piper-us-lessac',
+      name: 'Piper 美音 Lessac（en-US）',
       gender: '女',
     })
   })
@@ -66,7 +66,7 @@ describe('buildTtsAccents', () => {
     const out = buildTtsAccents({
       local: {
         available: true,
-        voices: [{ id: 'local:en-us', name: 'Espeak 美音 · 男', gender: 'Male', lang: 'en-US' }],
+        voices: [{ id: 'local:piper-us-lessac', name: 'Piper 美音 Lessac', gender: 'Male', lang: 'en-US' }],
       },
       sapi: {
         available: true,
@@ -82,7 +82,7 @@ describe('buildTtsAccents', () => {
     })
     expect(out).toHaveLength(TTS_ACCENTS.length + 2)
     expect(out.at(-2)?.label).toContain('本地语音')
-    expect(out.at(-2)?.voices[0].id).toBe('local:en-us')
+    expect(out.at(-2)?.voices[0].id).toBe('local:piper-us-lessac')
     expect(out.at(-1)?.label).toContain('系统语音')
     expect(out.at(-1)?.voices[0].name).toBe('Zira（en-US）')
   })

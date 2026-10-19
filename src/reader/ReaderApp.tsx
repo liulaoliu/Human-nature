@@ -246,7 +246,7 @@ export default function ReaderApp() {
   const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
   /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
   const [ttsVoice, setTtsVoice] = useLocalStorageState('reader:ttsVoice', DEFAULT_TTS_VOICE, persistentString)
-  // 引擎探测：发现本机离线引擎（SAPI / espeak-ng）后，并入音色下拉
+  // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
   const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
   /** 自动标词的词汇标准 */
@@ -288,9 +288,9 @@ export default function ReaderApp() {
     voice: ttsVoice,
     onFallback: (reason) => {
       if (reason === 'server') {
-        flash('服务端语音连不上，已改用浏览器语音；可在音色里选「离线 · 本地语音」（需安装 espeak-ng）')
+        flash('服务端语音连不上，已改用浏览器语音；可在音色里选「离线 · 本地语音」（需安装 Piper）')
       } else if (reason === 'local') {
-        flash('本地离线语音失败，已改用浏览器语音；请检查 espeak-ng 是否可用')
+        flash('本地离线语音失败，已改用浏览器语音；请检查 Piper 是否可用')
       } else {
         flash('浏览器拦了自动播放，已改用浏览器语音（点一下页面再试）')
       }

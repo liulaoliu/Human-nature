@@ -18,16 +18,17 @@ describe('parseTarget', () => {
     })
   })
 
-  it('本机离线音色只认白名单（Piper / espeak-ng）', () => {
+  it('本机离线音色只认 Piper 白名单', () => {
     expect(parseTarget('local:piper-us-lessac')).toEqual({
       engine: 'local',
       voice: 'local:piper-us-lessac',
       ext: 'wav',
     })
+    // 已删除的旧本地音色 id 必须回落到 Edge，不能再悄悄拿去跑命令行。
     expect(parseTarget('local:en-gb-x-rp+f3')).toEqual({
-      engine: 'local',
-      voice: 'local:en-gb-x-rp+f3',
-      ext: 'wav',
+      engine: 'edge',
+      voice: 'en-US-AriaNeural',
+      ext: 'mp3',
     })
   })
 

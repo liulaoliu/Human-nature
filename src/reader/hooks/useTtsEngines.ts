@@ -6,7 +6,7 @@ export interface TtsEngines extends TtsEngineInfo {
 }
 
 /**
- * 探测服务端可用的 TTS 引擎（离线系统语音 SAPI / Linux espeak-ng）。
+ * 探测服务端可用的 TTS 引擎（离线系统语音 SAPI / Linux Piper）。
  * 服务端没起 / 探测失败时返回 null，此时只用 Edge 在线音色。
  */
 export function useTtsEngines(): TtsEngines | null {

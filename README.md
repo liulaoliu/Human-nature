@@ -1,4 +1,4 @@
-# 学吧老哥（精读 / 跟读）
+# 学吧老哥（精读跟读）
 
 一个**本地优先**的英语工具：把**任意一篇英文文章**变成"能逐句读、划词查、随口朗读、出题考"的材料——
 **先快速吃透一篇，再靠重复把它记住**。数据全在本机（SQLite 主存 + IndexedDB 兜底），核心功能不需要账号或 API key。
@@ -8,7 +8,7 @@
 - 📖 **精读（主线）**：粘贴 / 导入（txt / md / pdf / epub）→ 自动切句 → 划词标生词（按 lemma 去重）→
   逐句翻译 / 语言点 → **AI 工作包**批量处理
 - 🗣 **朗读**：**任意文章都能读**（服务端 Edge TTS 神经音色，可换口音，磁盘缓存；Edge 抽风自动切
-  **Piper 离线神经音色**，再不行用 espeak-ng / 浏览器语音兜底；彻底绕开浏览器语音"假死"）——
+  **Piper 离线神经音色**；本机也没有时用浏览器语音兜底；彻底绕开浏览器语音"假死"）——
   **不依赖随附音频**，所以任何一篇英文都能自洽地练起来
 - 📚 **离线词典**：内置 **ECDICT** + **M-W 学习者词典**（真 IPA + 英文释义）——不联网就能查词、校正原形、
   按词汇量挑超纲词、生成形近混淆项
@@ -215,7 +215,6 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 ```
 点朗读 → GET /api/tts?voice=…&text=…  →（首次）合成 → 缓存 → <audio> 播放
                               ├ Edge 连不上 → 自动改用本机 Piper 离线神经音色（20 秒后回头重试 Edge）
-                              ├ Piper 未装 / 也失败 → espeak-ng 应急
                               └ 本机都没有 / 服务端不可用 → 自动退回浏览器语音
 ```
 
@@ -224,19 +223,19 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 | 引擎 | voice 形如 | 联网 | 说明 |
 |---|---|---|---|
 | **edge**（默认） | `en-US-AriaNeural` | 是 | 微软 Edge 朗读的神经音色，免费但**非官方**（个人自用 OK，商用别用） |
-| **local**（离线） | `local:piper-us-lessac` / `local:en-us` | 否 | Linux 优先 **Piper 神经音色**（Lessac / Ryan / Cori / Northern），Piper 不可用时用 **espeak-ng** 应急；装完即用、不联网 |
+| **local**（离线） | `local:piper-us-lessac` | 否 | Linux **Piper 神经音色**（Lessac / Ryan / Cori / Northern），Piper 不可用时退回浏览器语音；装完即用、不联网 |
 | **sapi**（离线） | `sapi:Microsoft Zira Desktop` | 否 | **系统自带语音**（Windows SAPI），**免下载、不联网、不白嫖**；音色少、音质一般 |
 
 > Linux 推荐这样装离线引擎：
 > `./tools/install-piper.sh`（Piper + 4 个英语音色，默认 `~/.local/opt/piper`，约 350MB）
-> `sudo apt install espeak-ng speech-dispatcher`（espeak-ng 只做最后一道应急；speech-dispatcher 让 Chromium 浏览器语音也有声）。
+> `sudo apt install speech-dispatcher`（让 Chromium 浏览器语音也有声；Piper 不可用时的最后兜底）。
 > 服务端 Edge 会显式读取 `HTTPS_PROXY` / `HTTP_PROXY`（Node 默认不走系统代理），代理可用时优先在线音色，
-> 仍然失败才降级到 Piper → espeak-ng。
+> 仍然失败才降级到 Piper。
 
 - **为什么不用浏览器自带 `speechSynthesis`**：它会**假死**（`speaking` 卡在 true 却不出声），只能刷新救。
   改用 `<audio>` 播服务端音频后，这类问题从根上消失。
 - **口音可换**：顶栏音色下拉（**美式 / 英式 / 澳式 / 加式 / 爱尔兰 / 印度 / 新西兰 / 南非 / 新加坡…** +
-  本机可用的**离线引擎**：Linux Piper / espeak-ng、Windows SAPI），改了下一个朗读即时生效；
+  本机可用的**离线引擎**：Linux Piper、Windows SAPI），改了下一个朗读即时生效；
   在线音色表在 `src/core/ttsVoices.ts`。
   > Edge 只提供 **locale 级**口音，**没有**「伦敦东区（Cockney）」「加州（West Coast）」这种次区域口音；
   > 想更细只能上声音克隆（XTTS-v2 / ElevenLabs）。
@@ -249,12 +248,12 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   （在原音频里 seek，不重新合成、不改语气，零延迟）。
 - **逐词时间戳**：Edge / SAPI 产出逐词 `{part, start, end}`（毫秒），与音频同目录同名（`<hash>.mp3.json` / `<hash>.wav.json`），
   也可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转
-  （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。**Piper / espeak-ng 不提供时间戳**，该路返回 `[]`，
+  （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。**Piper 不提供时间戳**，该路返回 `[]`，
   逐词高亮会自动跳过，音频照常播放。
 - **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.js`；
   引擎与缓存逻辑共用 `tools/tts-core.mjs`。在线那路用 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
   加固：并发上限 2、硬超时 20s、失败重试 1 次、`.part` 清理。
-- **合法替代**：内置 Piper 已经比 espeak-ng 自然很多；想更接近真人可再换 XTTS-v2 / Kokoro / Azure 语音（未内置，留作扩展点）。
+- **合法替代**：内置 Piper 已经比系统机器人音自然很多；想更接近真人可再换 XTTS-v2 / Kokoro / Azure 语音（未内置，留作扩展点）。
 
 ### 离线词典（ECDICT + M-W）
 
@@ -508,7 +507,7 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
   vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
   vite-tts-endpoint.mjs    dev-only：/api/tts → Edge TTS（浏览器语音会假死的替代）
   vite-store-endpoint.mjs  dev-only：/api/store → SQLite（词库 / 文章 / 导出）
-  tts-core.mjs             TTS 引擎（edge / Piper / espeak-ng / sapi）+ 自动兜底 + 磁盘缓存 + 逐词时间戳（dev / static 共用）
+  tts-core.mjs             TTS 引擎（edge / Piper / sapi）+ 自动兜底 + 磁盘缓存 + 逐词时间戳（dev / static 共用）
   install-piper.sh         下载 Piper 二进制 + 4 个离线英语音色（Linux aarch64 / x86_64）
   build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
   build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）

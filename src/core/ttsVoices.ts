@@ -110,9 +110,9 @@ export const TTS_ACCENTS: TtsAccent[] = [
 /** 扁平化的合法音色 id 集合。 */
 export const TTS_VOICE_IDS: Set<string> = new Set(TTS_ACCENTS.flatMap((a) => a.voices.map((v) => v.id)))
 
-/** 服务端探测到的离线引擎音色（SAPI / Linux espeak-ng）。 */
+/** 服务端探测到的离线引擎音色（SAPI / Linux Piper）。 */
 export interface TtsEngineVoice {
-  /** 形如 sapi:Microsoft Zira Desktop / local:en-us */
+  /** 形如 sapi:Microsoft Zira Desktop / local:piper-us-lessac */
   id: string
   name: string
   gender?: string

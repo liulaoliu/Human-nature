@@ -67,10 +67,10 @@
    剩下正文（含 `grid-column:1/2` 的来源句）只能去第 2 列/下一行。
    规矩：左右两栏的列表用 `display:flex`（`.lp-body` 撑满 + `.lp-act` 贴右），别用「只给一侧定位」的 grid；
    组件测试断言 `.lp-body` / `.lp-act` 的从属与先后，防止再漂。
-10. **TTS 兜底不能只押浏览器 `speechSynthesis`**。Linux Chromium 默认没装 `speech-dispatcher` / `espeak-ng`，
+10. **TTS 兜底不能只押浏览器 `speechSynthesis`**。Linux Chromium 默认没装 `speech-dispatcher`，
     `getVoices()` 是空数组、`speak()` 静默失败；服务端 Edge 也可能因 IPv6 / 代理报 `ENETUNREACH`
     （Node 默认不走系统代理，`tools/tts-core.mjs` 显式读 `HTTPS_PROXY` / `HTTP_PROXY`）。
-    规矩：**服务端本地引擎（Piper 优先，espeak-ng 应急）先兜底，浏览器语音只作最后一道**；
+    规矩：**服务端本地引擎（Piper）先兜底，浏览器语音只作最后一道**；
     离线音色必须能在顶栏手动选；离线引擎没有逐词时间戳时**不要缓存空数组**，否则 Edge 恢复后也拿不回高亮。
 11. **IndexedDB 不能是唯一资产库**。它按来源隔离、会被浏览器回收、多标签没有统一事务；
     数据层已改为 **SQLite 主存（`data/xueba.db`）+ IndexedDB 兜底/镜像**。
@@ -87,9 +87,9 @@
 | 速读悬浮释义 | 速读里悬浮已收录的词 | 显示释义；未开「选词模式」时点词有提示（不是静默） |
 | 语言点自动收藏 | 跑一次「语言点」AI 任务并粘回 → 刷新 | 侧栏「语言点」页签出现词组/习语/用法；删掉一条后刷新**不会**自己回来 |
 | IndexedDB 持久化 | 加几个生词 → 刷新 → 换文章再回来 | 词库在；来源文章/句子正确 |
-| 离线 TTS（Piper） | 跑 `./tools/install-piper.sh` 后重启服务 → 刷新 → 音色选「离线 · 本地语音」里的 Piper → 读本句 | 有声、不联网、明显比 espeak 自然；无逐词高亮可接受；切回 Edge 后恢复 |
-| Piper 失败 → espeak 应急 | 临时把模型目录改空（`PIPER_VOICES_DIR=/tmp/empty` 重启）→ 手动选 Piper 音色 → 读本句 | 仍出声（自动落到 Espeak 应急音色），不报 502 |
-| TTS 自动兜底 | 让 Edge 不可用（断网 / 代理坏）→ 读本句 | 仍出声（先 Piper，再 espeak-ng）；约 20 秒后自动回头重试 Edge |
+| 离线 TTS（Piper） | 跑 `./tools/install-piper.sh` 后重启服务 → 刷新 → 音色选「离线 · 本地语音」里的 Piper → 读本句 | 有声、不联网、明显比系统机器人音自然；无逐词高亮可接受；切回 Edge 后恢复 |
+| Piper 失败 → 浏览器语音 | 临时把模型目录改空（`PIPER_VOICES_DIR=/tmp/empty` 重启）→ 手动选 Piper 音色 → 读本句 | 退回浏览器语音，不报 502 |
+| TTS 自动兜底 | 让 Edge 不可用（断网 / 代理坏）→ 读本句 | 仍出声（先 Piper，再浏览器语音）；约 20 秒后自动回头重试 Edge |
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
 | SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points` |
