@@ -39,21 +39,20 @@ export default function LangPointList({
           </div>
           {g.items.map((it) => (
             <div className="lp-item" key={it.id}>
-              <div className="lp-main">
-                <span
-                  className={'lp-word' + (onSpeak && g.kind !== 'usage' ? ' speakable' : '')}
-                  onClick={onSpeak && g.kind !== 'usage' ? () => onSpeak(it.word) : undefined}
-                  title={onSpeak && g.kind !== 'usage' ? '点读发音' : undefined}
-                >
-                  {it.word}
-                </span>
-                {it.meaning && <span className="lp-gloss">{it.meaning}</span>}
-              </div>
-              {it.source?.sentenceText && (
-                <div className="lp-src" title={it.source.sentenceText}>
-                  {it.source.sentenceText}
+              {/* 左栏：原文 + 翻译 + 来源句；右栏：改 / 删（见 reader.css 的 .lp-item 布局） */}
+              <div className="lp-body">
+                <div className="lp-main">
+                  <span
+                    className={'lp-word' + (onSpeak && g.kind !== 'usage' ? ' speakable' : '')}
+                    onClick={onSpeak && g.kind !== 'usage' ? () => onSpeak(it.word) : undefined}
+                    title={onSpeak && g.kind !== 'usage' ? '点读发音' : undefined}
+                  >
+                    {it.word}
+                  </span>
+                  {it.meaning && <span className="lp-gloss">{it.meaning}</span>}
                 </div>
-              )}
+                {it.source?.sentenceText && <div className="lp-src">{it.source.sentenceText}</div>}
+              </div>
               {(onEdit || onDelete) && (
                 <div className="lp-act">
                   {onEdit && (

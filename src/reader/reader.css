@@ -1071,27 +1071,42 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   padding-bottom: 3px;
 }
 .lp-item {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 2px 8px;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
   padding: 5px 6px;
   border-radius: 7px;
   background: var(--panel-2);
+  text-align: left;
 }
-.lp-main { min-width: 0; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+/* 左栏：原文 + 翻译 + 来源句，统一左对齐、整句不省略（长句换行） */
+.lp-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+.lp-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: flex-start;
+  gap: 8px;
+}
 .lp-word { font-weight: 600; }
 .lp-word.speakable { cursor: pointer; }
 .lp-word.speakable:hover { color: var(--accent); }
 .lp-gloss { color: var(--fg); opacity: 0.92; font-size: 13px; }
 .lp-src {
-  grid-column: 1 / 2;
   font-size: 12px;
   color: var(--dim);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
-.lp-act { grid-row: 1 / 3; align-self: start; display: flex; gap: 4px; }
+/* 右栏：改 / 删，每行最右 */
+.lp-act { flex: 0 0 auto; display: flex; gap: 4px; align-self: flex-start; }
 .lp-act button { padding: 0 6px; font-size: 12px; }
 
 /* 库读取失败等警示（侧栏） */

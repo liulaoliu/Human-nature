@@ -51,6 +51,27 @@ describe('LangPointList', () => {
     expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
   })
 
+  it('布局：原文+翻译+来源句在左栏，改 / 删在每行右侧', () => {
+    const { container } = render(
+      <LangPointList items={items} onEdit={vi.fn()} onDelete={vi.fn()} onSpeak={vi.fn()} />,
+    )
+    const item = container.querySelector('.lp-item') as HTMLElement
+    expect(item).toBeTruthy()
+
+    // 左栏（.lp-body）：原文、翻译、来源句都在里面，且是同一栏
+    const body = item.querySelector('.lp-body') as HTMLElement
+    expect(body).toBeTruthy()
+    expect(body.querySelector('.lp-word')?.textContent).toBe('fall back on')
+    expect(body.querySelector('.lp-gloss')?.textContent).toBe('转而依靠')
+    expect(body.querySelector('.lp-src')?.textContent).toBe('He falls back on his savings.')
+
+    // 右栏（.lp-act）：改 / 删，且在 DOM 顺序上排在内容之后（= 视觉上的右侧）
+    const act = item.querySelector('.lp-act') as HTMLElement
+    expect(act).toBeTruthy()
+    expect([...act.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['改', '×'])
+    expect(body.compareDocumentPosition(act) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('空列表给提示', () => {
     render(<LangPointList items={[]} />)
     expect(screen.getByText(/还没有语言点/)).toBeTruthy()
