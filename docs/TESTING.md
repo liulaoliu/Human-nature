@@ -92,6 +92,9 @@
     「当前是不是我」判断，新增模式很容易一次按键触发两个动作。规矩：一律用
     `src/reader/useHotkeys.ts` + `hotkeys.ts`，按优先级只让最高层响应；同优先级才并行
     （如 ReaderApp 的 Ctrl 跟踪 + 正文快捷键）。
+16. **空 `catch` 要分类**。用户资产（词库 / 学习记录 / 备份 / 待选）写失败必须
+    `reportStorageFailure()`（log + 广播 `reader:storage-error`）或 `flash` 可见提示；
+    可选能力（TTS、剪贴板、持久存储申请）可以保留空 catch，但要写明「失败可降级」的理由。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

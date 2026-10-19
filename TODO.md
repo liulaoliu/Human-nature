@@ -21,7 +21,9 @@
       （共 36 条：`useExport` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；
       定时器类 hook 用 `clearTimeout` 断言卸载清理，纯回调 hook 无卸载副作用）
 - [ ] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
-- [ ] **`catch {}` 分类**：用户资产 IO 一律 `console.warn` + 可见提示；可选能力保留空 catch 并写明理由
+- [x] **`catch {}` 分类**：用户资产 IO 一律 `console.warn` + 可见提示；可选能力保留空 catch 并写明理由
+      （新增 `reportStorageFailure`；词库读失败/学习记录写失败/待选写失败/文章列表读失败都已可见；
+      TTS、剪贴板、`navigator.storage.persist()` 等保留空 catch 并注明可降级）
 - [ ] **无障碍**：给划词/悬浮气泡/纯图标按钮补 `aria-label`，键盘可走到主要操作
       （纯图标按钮已补：改名/编辑/删除/朗读/前一天/后一天等；划词气泡与句子键盘导航待做）
 - [x] **词库增量 upsert**：按 `id + 内容` 只重建变化的词条，替代每次全量 clear + rebuild

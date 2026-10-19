@@ -118,8 +118,6 @@ const TASKS: { task: AnalysisTask; label: string }[] = [
 ]
 
 export default function ReaderApp() {
-  // 启动加载：已保存文章列表 + 内置文章目录（IO 收口在 useArticleBootstrap）
-  const { book, bookError, saved, setSaved, savedLoaded, articles } = useArticleBootstrap()
   const [articleKey, setArticleKey] = useState<string | null>(null)
   const [manual, setManual] = useState('')
   const [doc, setDoc] = useState<Doc | null>(null)
@@ -180,6 +178,9 @@ export default function ReaderApp() {
 
   /** 逻辑「今天」的日期键（04:00 结算），多处统计共用一份。 */
   const todayKey = dayKeyLocal(new Date())
+
+  // 启动加载：已保存文章列表 + 内置文章目录（IO 收口在 useArticleBootstrap）
+  const { book, bookError, saved, setSaved, savedLoaded, articles } = useArticleBootstrap(flash)
 
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })

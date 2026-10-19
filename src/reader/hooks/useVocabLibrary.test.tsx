@@ -77,6 +77,7 @@ describe('useVocabLibrary：读失败（事故现场）', () => {
     const { result, flash } = setup(() => repo)
     await waitFor(() => expect(result.current.libraryLoad).toBe('failed'))
     expect(result.current.libraryLoaded).toBe(false)
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('词库读取失败'))
 
     act(() => result.current.persist(lib(5)))
     expect(saved).toHaveLength(0) // 关键：空库/半截库绝不落盘

@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { STORAGE_ERROR_EVENT, reportStorageFailure } from '../storage'
+
+export { STORAGE_ERROR_EVENT }
 
 /**
  * 同步 localStorage 的 useState：首帧从 localStorage 取值，之后每次变更写回。
@@ -15,9 +18,6 @@ export interface PersistentOptions<T> {
   parse?: (raw: string) => T
   serialize?: (value: T) => string
 }
-
-/** 写 localStorage 失败（配额满 / 隐私模式）时广播；界面负责提示，不能静默吞掉。 */
-export const STORAGE_ERROR_EVENT = 'reader:storage-error'
 
 export function useLocalStorageState<T>(
   key: string,
@@ -53,12 +53,7 @@ export function useLocalStorageState<T>(
       window.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key } }))
     } catch (e) {
       // 配额满 / 隐私模式：状态还在内存里，但刷新就丢。必须让用户知道。
-      console.warn(`[存储] 写入 ${key} 失败`, e)
-      try {
-        window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { key } }))
-      } catch {
-        // 广播失败也不能再抛
-      }
+      reportStorageFailure(key, e)
     }
   }, [key, state])
 

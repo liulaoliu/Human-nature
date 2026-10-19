@@ -10,7 +10,7 @@ import { createArticleRepo } from '../../adapters/articleRepo'
  * `bookError` 让界面提示「要 http://localhost 打开」。仓储实例通过 ref 暴露，
  * 供后续 `useReaderDoc` / 导入导出复用。
  */
-export function useArticleBootstrap() {
+export function useArticleBootstrap(onError?: (message: string) => void) {
   const [book, setBook] = useState<ArticleBook | null>(null)
   const [bookError, setBookError] = useState(false)
   const [saved, setSaved] = useState<SavedArticle[]>([])
@@ -31,6 +31,7 @@ export function useArticleBootstrap() {
         setSaved(await ar.list())
       } catch (e) {
         console.warn('[文章] 已保存列表加载失败', e)
+        onError?.('已保存文章读取失败：列表可能不完整；请先导出备份，再刷新重试')
       } finally {
         setSavedLoaded(true)
       }
@@ -42,7 +43,7 @@ export function useArticleBootstrap() {
         console.warn('[文章] 内置目录加载失败', e)
         setBookError(true)
       })
-  }, [])
+  }, [onError])
 
   return { book, bookError, saved, setSaved, savedLoaded, articles }
 }

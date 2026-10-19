@@ -11,6 +11,24 @@
  * 词库、文章这类正经数据的持久化在 `adapters/`（IndexedDB），不要往这里塞。
  */
 
+/** 写 localStorage 失败（配额满 / 隐私模式）时广播；界面负责提示，不能静默吞掉。 */
+export const STORAGE_ERROR_EVENT = 'reader:storage-error'
+
+/**
+ * 统一报告本机存储写失败：log + 广播给界面。
+ * 用户资产（词库/学习记录/待选）写不进去时必须走这里，别留空 catch。
+ */
+export function reportStorageFailure(key: string, error: unknown): void {
+  console.warn(`[存储] 写入 ${key} 失败`, error)
+  try {
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { key } }))
+    }
+  } catch {
+    // 广播失败也不能再抛
+  }
+}
+
 /** 拿得到 localStorage 就用，拿不到（无 DOM / 隐私模式 / 沙箱 iframe）返回 null。 */
 function store(): Storage | null {
   try {

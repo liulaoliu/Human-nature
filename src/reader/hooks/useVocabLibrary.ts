@@ -72,9 +72,11 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
           })
         }
       })
-      .catch(() => {
-        // 读失败：**不要**把空库写回去，也别让自动补全动它
+      .catch((e) => {
+        // 读失败：**不要**把空库写回去，也别让自动补全动它；必须让用户看见（否则像「生词全没了」）
+        console.warn('[词库] 读取失败', e)
         setLibraryLoad('failed')
+        flash('词库读取失败：为避免覆盖，本次不会写入；可点「恢复上一版词库」或先导出备份')
       })
     // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
     try {

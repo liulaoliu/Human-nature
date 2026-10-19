@@ -1,6 +1,7 @@
 import { hasLearningData, normalizeLearning, type LearningData, type LearningSection } from '../core/learning'
 import type { LearningRepoPort } from '../core/ports'
 import { learningRepo } from '../adapters/learningRepo'
+import { reportStorageFailure } from './storage'
 
 /**
  * 学习记录在 localStorage 里的同步缓存。
@@ -70,8 +71,9 @@ export function hasPendingLearningChanges(): boolean {
 export function markLearningDirty(): void {
   try {
     storage()?.setItem(LEARNING_DIRTY_KEY, `${Date.now()}:${++dirtySeq}`)
-  } catch {
-    // 隐私模式 / 配额满：内存里的 serverChecked 仍能防止空库误覆盖
+  } catch (e) {
+    // 隐私模式 / 配额满：内存里的 serverChecked 仍能防止空库误覆盖，但要让用户知道本机没记住
+    reportStorageFailure(LEARNING_DIRTY_KEY, e)
   }
 }
 
@@ -146,8 +148,9 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
     try {
       if (onlyMissing && s.getItem(key) !== null) continue
       s.setItem(key, JSON.stringify(value))
-    } catch {
-      // 配额满 / 隐私模式：保持原样，不能因为恢复缓存把页面搞崩
+    } catch (e) {
+      // 配额满 / 隐私模式：保持原样，不能因为恢复缓存把页面搞崩；但要提示本机没存下
+      reportStorageFailure(key, e)
     }
   }
 }

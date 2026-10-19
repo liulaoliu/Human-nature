@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { learningRepo } from '../adapters/learningRepo'
 import { emptyLearning } from '../core/learning'
 import { installFakeStorage } from './testStorage'
+import { STORAGE_ERROR_EVENT } from './storage'
 import {
   hasPendingLearningChanges,
   hydrateLearningFromServer,
@@ -38,6 +39,24 @@ describe('学习记录 localStorage 同步缓存', () => {
 
     writeLearningToLocalStorage(data)
     expect(JSON.parse(localStorage.getItem('reader:practice')!)).toHaveLength(1)
+  })
+
+  it('本机写失败时广播 storage-error，不静默丢学习记录', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onError = vi.fn()
+    window.addEventListener(STORAGE_ERROR_EVENT, onError)
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('quota', 'QuotaExceededError')
+    })
+
+    markLearningDirty()
+    writeLearningToLocalStorage(emptyLearning())
+
+    expect(onError).toHaveBeenCalledWith(
+      expect.objectContaining({ detail: { key: 'reader:learningDirty' } }),
+    )
+    expect(onError).toHaveBeenCalledWith(expect.objectContaining({ detail: { key: 'reader:practice' } }))
+    window.removeEventListener(STORAGE_ERROR_EVENT, onError)
   })
 
   it('没有待同步修改时，启动以服务端为准，覆盖过期缓存', async () => {

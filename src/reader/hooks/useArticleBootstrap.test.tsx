@@ -59,13 +59,15 @@ describe('useArticleBootstrap', () => {
 
   it('列表失败不静默，标记 loaded 并保留空表', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const onError = vi.fn()
     mocks.list.mockRejectedValue(new Error('indexeddb blocked'))
     mockBookFetch()
 
-    const { result } = renderHook(() => useArticleBootstrap())
+    const { result } = renderHook(() => useArticleBootstrap(onError))
     await waitFor(() => expect(result.current.savedLoaded).toBe(true))
 
     expect(warn).toHaveBeenCalledWith('[文章] 已保存列表加载失败', expect.any(Error))
+    expect(onError).toHaveBeenCalledWith(expect.stringContaining('已保存文章读取失败'))
     expect(result.current.saved).toEqual([])
   })
 
