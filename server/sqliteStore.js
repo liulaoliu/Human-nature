@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_VERSION } from './sqliteSchema.js'
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_VERSION } from './sqliteSchema.js'
 
 /**
  * 服务端 SQLite 存储（Node 22.5+ 自带的 `node:sqlite`，不引原生 npm 包）。
@@ -15,6 +15,9 @@ import { SCHEMA_V1, SCHEMA_V2, SCHEMA_VERSION } from './sqliteSchema.js'
  *  1. `vocab` / `articles` 的 JSON payload 是**事实来源**（整库快照、回滚、导出都用它）；
  *  2. `words` / `article_sentences` / `lang_points` 等是**同一次事务里重建的派生表**，
  *     方便 SQL 查询、统计、以后做 FTS；不直接写，避免两份事实打架。
+ *
+ * 学习记录（v3）不同：`practice_records` / `reading_progress` / `study_word_days` 等
+ * 是规范化的事实表，直接读写；偏好/会话状态不在这里，仍留在 localStorage。
  *
  * 版本迭代：用 `PRAGMA user_version` 做 schema 迁移；迁移只增不删，旧库能直接打开。
  * 安全：数据库默认 0600、目录 0700；服务只监听 127.0.0.1；写接口校验同源 Origin。
@@ -394,7 +397,329 @@ function ensureSchema(db) {
     db.exec('PRAGMA user_version = 2')
     version = 2
   }
+  if (version < 3) {
+    tx(db, () => {
+      db.exec(SCHEMA_V3)
+    })
+    db.exec('PRAGMA user_version = 3')
+    version = 3
+  }
   return version
+}
+
+const LEARNING_TABLES = [
+  'practice_records',
+  'mistake_records',
+  'reading_progress',
+  'writing_records',
+  'retell_records',
+  'activity_days',
+  'study_days',
+  'pick_sessions',
+  'study_word_days',
+  'skimmed_articles',
+  'kind_stats',
+]
+
+function emptyLearning() {
+  return {
+    practice: [],
+    mistakes: [],
+    readDone: [],
+    writingHistory: [],
+    retells: [],
+    activity: [],
+    studyDays: [],
+    sessions: [],
+    studiedDays: [],
+    skimmed: [],
+    kindStats: {},
+  }
+}
+
+function jsonText(v) {
+  if (v === undefined || v === null) return null
+  try {
+    return JSON.stringify(v)
+  } catch {
+    return null
+  }
+}
+
+function parseJson(v) {
+  if (v === undefined || v === null || v === '') return undefined
+  try {
+    return JSON.parse(String(v))
+  } catch {
+    return undefined
+  }
+}
+
+function assertLearning(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('学习记录格式不对：需要对象')
+  }
+  for (const key of [
+    'practice',
+    'mistakes',
+    'readDone',
+    'writingHistory',
+    'retells',
+    'activity',
+    'studyDays',
+    'sessions',
+    'studiedDays',
+    'skimmed',
+  ]) {
+    if (data[key] !== undefined && !Array.isArray(data[key])) throw new Error(`学习记录 ${key} 必须是数组`)
+  }
+  if (data.kindStats !== undefined && (!data.kindStats || typeof data.kindStats !== 'object' || Array.isArray(data.kindStats))) {
+    throw new Error('学习记录 kindStats 必须是对象')
+  }
+}
+
+function hasLearningRows(db) {
+  for (const table of LEARNING_TABLES) {
+    const row = db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get()
+    if (Number(row?.n ?? 0) > 0) return true
+  }
+  return false
+}
+
+function clearLearning(db) {
+  for (const table of LEARNING_TABLES) db.prepare(`DELETE FROM ${table}`).run()
+}
+
+/** 学习记录 → 独立表。整份替换，写事务内完成；不保留“万能 KV”。 */
+function writeLearning(db, data) {
+  assertLearning(data)
+  clearLearning(db)
+
+  const insertPractice = db.prepare(
+    'INSERT INTO practice_records (at, kind, total, correct, seconds, article_id) VALUES (?, ?, ?, ?, ?, ?)',
+  )
+  for (const r of list(data.practice)) {
+    if (!r || typeof r !== 'object') continue
+    insertPractice.run(
+      text(r.at) ?? nowIso(),
+      text(r.kind) ?? 'quiz',
+      num(r.total),
+      num(r.correct),
+      Number.isFinite(Number(r.seconds)) ? Number(r.seconds) : null,
+      text(r.articleId),
+    )
+  }
+
+  const insertMistake = db.prepare(`
+    INSERT OR REPLACE INTO mistake_records
+      (id, kind, at, count, label, item_id, question_json, article_id, text)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list(data.mistakes)) {
+    if (!r || typeof r !== 'object' || typeof r.id !== 'string') continue
+    insertMistake.run(
+      r.id,
+      text(r.kind) ?? 'vocab',
+      text(r.at) ?? nowIso(),
+      Math.max(1, num(r.count, 1)),
+      text(r.label) ?? '',
+      text(r.itemId),
+      jsonText(r.question),
+      text(r.articleId),
+      text(r.text),
+    )
+  }
+
+  const insertRead = db.prepare(
+    'INSERT OR REPLACE INTO reading_progress (article_id, day, title, at) VALUES (?, ?, ?, ?)',
+  )
+  for (const r of list(data.readDone)) {
+    if (!r || typeof r !== 'object' || typeof r.articleId !== 'string' || !r.articleId) continue
+    insertRead.run(r.articleId, text(r.day) ?? '', text(r.title) ?? '', text(r.at) ?? nowIso())
+  }
+
+  const insertWriting = db.prepare(`
+    INSERT INTO writing_records (at, article_id, article_title, model, text, feedback_json, task_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list(data.writingHistory)) {
+    if (!r || typeof r !== 'object') continue
+    insertWriting.run(
+      text(r.at) ?? nowIso(),
+      text(r.articleId) ?? '',
+      text(r.articleTitle),
+      text(r.model) ?? '',
+      text(r.text) ?? '',
+      jsonText(r.feedback) ?? '{}',
+      jsonText(r.task),
+    )
+  }
+
+  const insertRetell = db.prepare(
+    'INSERT INTO retell_records (at, article_id, text, words) VALUES (?, ?, ?, ?)',
+  )
+  for (const r of list(data.retells)) {
+    if (!r || typeof r !== 'object' || typeof r.articleId !== 'string') continue
+    insertRetell.run(text(r.at) ?? nowIso(), r.articleId, text(r.text) ?? '', num(r.words))
+  }
+
+  const insertActivity = db.prepare(
+    'INSERT OR REPLACE INTO activity_days (day, cat, count) VALUES (?, ?, ?)',
+  )
+  for (const day of list(data.activity)) {
+    if (!day || typeof day !== 'object' || typeof day.day !== 'string') continue
+    for (const [cat, count] of Object.entries(day.counts && typeof day.counts === 'object' ? day.counts : {})) {
+      insertActivity.run(day.day, cat, num(count))
+    }
+  }
+
+  const insertStudyDay = db.prepare(
+    'INSERT OR REPLACE INTO study_days (day, seconds, cards) VALUES (?, ?, ?)',
+  )
+  for (const r of list(data.studyDays)) {
+    if (!r || typeof r !== 'object' || typeof r.day !== 'string') continue
+    insertStudyDay.run(r.day, num(r.seconds), num(r.cards))
+  }
+
+  const insertSession = db.prepare(
+    'INSERT INTO pick_sessions (at, seconds, picked) VALUES (?, ?, ?)',
+  )
+  for (const r of list(data.sessions)) {
+    if (!r || typeof r !== 'object') continue
+    insertSession.run(text(r.at) ?? nowIso(), num(r.seconds), num(r.picked))
+  }
+
+  const insertStudied = db.prepare(
+    'INSERT OR IGNORE INTO study_word_days (day, word_id, ordinal) VALUES (?, ?, ?)',
+  )
+  for (const r of list(data.studiedDays)) {
+    if (!r || typeof r !== 'object' || typeof r.day !== 'string') continue
+    list(r.ids).forEach((id, ordinal) => {
+      if (typeof id === 'string' && id) insertStudied.run(r.day, id, ordinal)
+    })
+  }
+
+  const insertSkimmed = db.prepare('INSERT OR IGNORE INTO skimmed_articles (article_id) VALUES (?)')
+  for (const id of list(data.skimmed)) {
+    if (typeof id === 'string' && id) insertSkimmed.run(id)
+  }
+
+  const insertKindStat = db.prepare(
+    'INSERT OR REPLACE INTO kind_stats (article_id, kind, total, correct) VALUES (?, ?, ?, ?)',
+  )
+  if (data.kindStats && typeof data.kindStats === 'object') {
+    for (const [articleId, byKind] of Object.entries(data.kindStats)) {
+      if (!byKind || typeof byKind !== 'object') continue
+      for (const [kind, stat] of Object.entries(byKind)) {
+        if (!stat || typeof stat !== 'object') continue
+        insertKindStat.run(articleId, kind, num(stat.total), num(stat.correct))
+      }
+    }
+  }
+}
+
+function loadLearning(db) {
+  const out = emptyLearning()
+
+  out.practice = db
+    .prepare('SELECT at, kind, total, correct, seconds, article_id FROM practice_records ORDER BY at ASC, id ASC')
+    .all()
+    .map((r) => {
+      const rec = {
+        at: String(r.at),
+        kind: String(r.kind),
+        total: Number(r.total),
+        correct: Number(r.correct),
+      }
+      if (r.seconds !== null && r.seconds !== undefined) rec.seconds = Number(r.seconds)
+      if (r.article_id !== null && r.article_id !== undefined) rec.articleId = String(r.article_id)
+      return rec
+    })
+
+  out.mistakes = db
+    .prepare('SELECT id, kind, at, count, label, item_id, question_json, article_id, text FROM mistake_records ORDER BY at DESC')
+    .all()
+    .map((r) => {
+      const rec = {
+        id: String(r.id),
+        kind: String(r.kind),
+        at: String(r.at),
+        count: Number(r.count),
+        label: String(r.label ?? ''),
+      }
+      if (r.item_id !== null) rec.itemId = String(r.item_id)
+      const question = parseJson(r.question_json)
+      if (question !== undefined) rec.question = question
+      if (r.article_id !== null) rec.articleId = String(r.article_id)
+      if (r.text !== null) rec.text = String(r.text)
+      return rec
+    })
+
+  out.readDone = db
+    .prepare('SELECT article_id, day, title, at FROM reading_progress ORDER BY at ASC')
+    .all()
+    .map((r) => ({ articleId: String(r.article_id), day: String(r.day), title: String(r.title), at: String(r.at) }))
+
+  out.writingHistory = db
+    .prepare('SELECT at, article_id, article_title, model, text, feedback_json, task_json FROM writing_records ORDER BY at DESC, id DESC')
+    .all()
+    .map((r) => {
+      const rec = {
+        at: String(r.at),
+        articleId: String(r.article_id ?? ''),
+        model: String(r.model ?? ''),
+        text: String(r.text ?? ''),
+        feedback: parseJson(r.feedback_json) ?? {},
+      }
+      if (r.article_title !== null) rec.articleTitle = String(r.article_title)
+      const task = parseJson(r.task_json)
+      if (task !== undefined) rec.task = task
+      return rec
+    })
+
+  out.retells = db
+    .prepare('SELECT at, article_id, text, words FROM retell_records ORDER BY at DESC, id DESC')
+    .all()
+    .map((r) => ({ at: String(r.at), articleId: String(r.article_id), text: String(r.text ?? ''), words: Number(r.words) }))
+
+  const activity = new Map()
+  for (const r of db.prepare('SELECT day, cat, count FROM activity_days ORDER BY day ASC, cat ASC').all()) {
+    const day = String(r.day)
+    if (!activity.has(day)) activity.set(day, { day, counts: {} })
+    activity.get(day).counts[String(r.cat)] = Number(r.count)
+  }
+  out.activity = [...activity.values()]
+
+  out.studyDays = db
+    .prepare('SELECT day, seconds, cards FROM study_days ORDER BY day ASC')
+    .all()
+    .map((r) => ({ day: String(r.day), seconds: Number(r.seconds), cards: Number(r.cards) }))
+
+  out.sessions = db
+    .prepare('SELECT at, seconds, picked FROM pick_sessions ORDER BY at ASC, id ASC')
+    .all()
+    .map((r) => ({ at: String(r.at), seconds: Number(r.seconds), picked: Number(r.picked) }))
+
+  const studied = new Map()
+  for (const r of db.prepare('SELECT day, word_id FROM study_word_days ORDER BY day ASC, ordinal ASC').all()) {
+    const day = String(r.day)
+    if (!studied.has(day)) studied.set(day, { day, ids: [] })
+    studied.get(day).ids.push(String(r.word_id))
+  }
+  out.studiedDays = [...studied.values()]
+
+  out.skimmed = db
+    .prepare('SELECT article_id FROM skimmed_articles ORDER BY article_id ASC')
+    .all()
+    .map((r) => String(r.article_id))
+
+  for (const r of db.prepare('SELECT article_id, kind, total, correct FROM kind_stats ORDER BY article_id ASC, kind ASC').all()) {
+    const articleId = String(r.article_id)
+    if (!out.kindStats[articleId]) out.kindStats[articleId] = {}
+    out.kindStats[articleId][String(r.kind)] = { total: Number(r.total), correct: Number(r.correct) }
+  }
+
+  return out
 }
 
 function pruneSnapshots(db) {
@@ -532,6 +857,23 @@ export function openStore(dbPath) {
           rebuildVocabProjection(db, null)
         })
       },
+      loadLearning() {
+        return loadLearning(db)
+      },
+      saveLearning(data) {
+        tx(db, () => writeLearning(db, data))
+      },
+      /**
+       * 首次从 localStorage 迁上来时用：只有服务端还没有任何学习记录才写入。
+       * 放在一个写事务里检查，两个标签页同时迁移也不会互相覆盖。
+       */
+      migrateLearning(data) {
+        return tx(db, () => {
+          if (hasLearningRows(db)) return { migrated: false, value: loadLearning(db) }
+          writeLearning(db, data)
+          return { migrated: true, value: loadLearning(db) }
+        })
+      },
       listArticles() {
         return db
           .prepare('SELECT payload FROM articles ORDER BY updated_at DESC')
@@ -581,6 +923,7 @@ export function openStore(dbPath) {
             .all()
             .map((r) => ({ at: String(r.at), count: Number(r.item_count), library: parsePayload(String(r.payload)) })),
           articles: this.listArticles(),
+          learning: this.loadLearning(),
         }
       },
       checkpoint() {

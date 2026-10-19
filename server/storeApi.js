@@ -172,6 +172,22 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       }
     }
 
+    if (path === '/learning' && method === 'GET') {
+      sendJson(res, 200, { ok: true, value: store.loadLearning() })
+      return
+    }
+
+    if (path === '/learning' && method === 'PUT') {
+      store.saveLearning(await readJson(req))
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
+    if (path === '/learning/if-empty' && method === 'PUT') {
+      sendJson(res, 200, { ok: true, ...store.migrateLearning(await readJson(req)) })
+      return
+    }
+
     if (path === '/export' && method === 'GET') {
       const download = url.searchParams.get('download') === '1'
       sendJson(

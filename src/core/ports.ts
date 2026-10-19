@@ -1,5 +1,6 @@
 /** Model 层的边界。框架无关，测试时全部注入假实现。 */
 
+import type { LearningData } from './learning'
 import type { SavedArticle, VocabLibrary } from '../types/document'
 
 export type { SavedArticle } from '../types/document'
@@ -201,6 +202,17 @@ export interface ArticleRepoPort {
   get(id: string): Promise<SavedArticle | null>
   save(article: SavedArticle): Promise<void>
   remove(id: string): Promise<void>
+}
+
+/**
+ * 学习记录仓储（练习、错题、读完/精读、写作、复述、活动统计…）。
+ *
+ * 不是“偏好”：这些数据丢了，学习日志和统计就不可信，所以主存 SQLite；
+ * localStorage 只作为同步缓存 / 无服务时的兜底。
+ */
+export interface LearningRepoPort {
+  load(): Promise<LearningData | null>
+  save(data: LearningData): Promise<void>
 }
 
 export interface VocabRepoPort {

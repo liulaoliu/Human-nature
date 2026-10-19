@@ -118,9 +118,41 @@ describe('httpApp 请求处理', () => {
       expect(putArticle.status).toBe(200)
       expect((await fetch(`${base}/api/store/articles`).then((r) => r.json())).articles[0].id).toBe('a1')
 
+      const learning = {
+        practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8 }],
+        mistakes: [{ id: 'vocab:w1', kind: 'vocab', at: '2026-01-01T00:00:00.000Z', count: 1, label: 'w1' }],
+        readDone: [],
+        writingHistory: [],
+        retells: [],
+        activity: [{ day: '2026-01-01', counts: { vocab: 3 } }],
+        studyDays: [],
+        sessions: [],
+        studiedDays: [{ day: '2026-01-01', ids: ['w1'] }],
+        skimmed: [],
+        kindStats: {},
+      }
+      const putLearning = await fetch(`${base}/api/store/learning`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify(learning),
+      })
+      expect(putLearning.status).toBe(200)
+      const learningGet = await fetch(`${base}/api/store/learning`).then((r) => r.json())
+      expect(learningGet.value.practice).toHaveLength(1)
+      expect(learningGet.value.activity[0].counts.vocab).toBe(3)
+
+      const migrateEmpty = await fetch(`${base}/api/store/learning/if-empty`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify({ ...learning, practice: [] }),
+      }).then((r) => r.json())
+      expect(migrateEmpty.migrated).toBe(false)
+      expect(migrateEmpty.value.practice).toHaveLength(1)
+
       const dump = await fetch(`${base}/api/store/export`).then((r) => r.json())
       expect(dump.vocab.items).toHaveLength(1)
       expect(dump.articles[0].id).toBe('a1')
+      expect(dump.learning.practice).toHaveLength(1)
 
       const dbFile = await fetch(`${base}/api/store/db`)
       expect(dbFile.status).toBe(200)
@@ -132,7 +164,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(2)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(3)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

@@ -11,9 +11,9 @@
 | **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | SQLite `data/xueba.db`；IndexedDB `shadowing-vocab` 兜底 | `adapters/vocabRepo`（Hybrid） | 覆盖前留上一版 + 历史快照；见 `docs/STORAGE.md` |
 | **文章**（正文、句子、翻译、语言点、每句 `vocab`） | SQLite `data/xueba.db`；IndexedDB `shadowing-reader` 兜底 | `adapters/articleRepo`（Hybrid） | 派生表可 JOIN；坏库可用「导出全部」再导入 |
 | 待选清单（自动标词的结果，按篇） | localStorage `reader:batch` | `ReaderApp` / 各会话 hook | `{ [articleId]: {word, sentence, sentenceId}[] }` —— **找回词库最准的一手数据** |
-| 错题本 | localStorage `reader:mistakes` | 各练习 hook | `itemId` 形如 `vocab:run`；属于学习记录，计划迁 SQLite |
-| 读完记录 / 目标 / 备忘 | localStorage `reader:readDone` / `readGoal` / `goalMemo` | `hooks/useReadDone` | 按逻辑日（04:00 结算）；`readDone` 计划迁 SQLite，目标/备忘是偏好 |
-| 学习活动 / 日志 / 练习 / 打卡 | localStorage `reader:activity` / `reader:practice` / `reader:studiedToday` … | 各 hook | **日志是 `core/journal` 算出来的视图**，不是独立表；事件/成绩计划迁 SQLite |
+| 错题本 | SQLite `mistake_records`；localStorage `reader:mistakes` 缓存 | 各练习 hook + `useLearningSync` | `itemId` 形如 `vocab:run` |
+| 读完 / 精读进度 | SQLite `reading_progress` / `skimmed_articles`；localStorage 缓存 | `hooks/useReadDone` + `useLearningSync` | 按逻辑日（04:00 结算） |
+| 学习活动 / 日志 / 练习 / 打卡 | SQLite `activity_days` / `practice_records` / `study_word_days` 等；localStorage 缓存 | 各 hook + `useLearningSync` | **日志是 `core/journal` 算出来的视图**，不是独立表 |
 | 语言点「已收过」记账 | localStorage `reader:langCollected` | `hooks/useLibraryAutoFill` | 可重建缓存；清空 = 从文章重收一遍 |
 
 > 分类原则见 `docs/STORAGE.md` §2.1：偏好/会话留 localStorage；学习记录进 SQLite；

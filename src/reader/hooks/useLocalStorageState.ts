@@ -46,6 +46,8 @@ export function useLocalStorageState<T>(
     }
     try {
       localStorage.setItem(key, serializeRef.current(state))
+      // 学习记录同步用：只在真正写入后通知，偏好/会话键由监听方过滤。
+      window.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key } }))
     } catch {
       // 忽略（隐私模式 / 配额满）
     }

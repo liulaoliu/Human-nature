@@ -80,7 +80,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(2)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(3)
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {
@@ -225,7 +225,94 @@ describe('sqliteStore：文章', () => {
   })
 })
 
-describe('sqliteStore：v1 → v2 迁移', () => {
+describe('sqliteStore：学习记录', () => {
+  const learning = {
+    practice: [
+      { at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8, seconds: 60, articleId: 'a1' },
+      { at: '2026-01-02T00:00:00.000Z', kind: 'dictation', total: 5, correct: 4 },
+    ],
+    mistakes: [
+      {
+        id: 'vocab:w1',
+        kind: 'vocab',
+        at: '2026-01-01T00:00:00.000Z',
+        count: 2,
+        label: 'run',
+        itemId: 'w1',
+        question: { id: 'q1', stem: 'run' },
+        articleId: 'a1',
+        text: 'run',
+      },
+    ],
+    readDone: [{ day: '2026-01-01', articleId: 'a1', title: 'A', at: '2026-01-01T00:00:00.000Z' }],
+    writingHistory: [
+      {
+        at: '2026-01-03T00:00:00.000Z',
+        articleId: 'a1',
+        articleTitle: 'A',
+        model: 'I run.',
+        text: 'I run every day.',
+        feedback: { total: 8, max: 10, scores: [], issues: [] },
+        task: { task: 'write', model: 'I run.', mustUse: [], rubric: [] },
+      },
+    ],
+    retells: [{ at: '2026-01-04T00:00:00.000Z', articleId: 'a1', text: '复述', words: 12 }],
+    activity: [
+      { day: '2026-01-01', counts: { read: 2, vocab: 5 } },
+      { day: '2026-01-02', counts: { listen: 3 } },
+    ],
+    studyDays: [{ day: '2026-01-01', seconds: 120, cards: 10 }],
+    sessions: [{ at: '2026-01-01T00:00:00.000Z', seconds: 30, picked: 4 }],
+    studiedDays: [{ day: '2026-01-01', ids: ['w1', 'w2'] }],
+    skimmed: ['a1'],
+    kindStats: { a1: { quiz: { total: 10, correct: 8 } } },
+  }
+
+  it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', () => {
+    const store = openStore(tempDb())
+    expect(store.loadLearning().practice).toEqual([])
+    store.saveLearning(learning)
+
+    const got = store.loadLearning()
+    expect(got.practice).toHaveLength(2)
+    expect(got.practice[0]).toMatchObject({ kind: 'quiz', total: 10, correct: 8, articleId: 'a1' })
+    expect(got.mistakes[0]).toMatchObject({ id: 'vocab:w1', count: 2, itemId: 'w1' })
+    expect(got.mistakes[0].question).toEqual({ id: 'q1', stem: 'run' })
+    expect(got.activity).toEqual([
+      { day: '2026-01-01', counts: { read: 2, vocab: 5 } },
+      { day: '2026-01-02', counts: { listen: 3 } },
+    ])
+    expect(got.studiedDays).toEqual([{ day: '2026-01-01', ids: ['w1', 'w2'] }])
+    expect(got.kindStats).toEqual({ a1: { quiz: { total: 10, correct: 8 } } })
+
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM practice_records').get().n).toBe(2)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM study_word_days').get().n).toBe(2)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM reading_progress').get().n).toBe(1)
+
+    store.saveLearning({ ...learning, practice: [] })
+    expect(store.loadLearning().practice).toEqual([])
+    expect(store.loadLearning().mistakes).toHaveLength(1)
+  })
+
+  it('if-empty 只在服务端没有任何学习记录时迁移', () => {
+    const store = openStore(tempDb())
+    const first = store.migrateLearning(learning)
+    expect(first.migrated).toBe(true)
+    expect(first.value.practice).toHaveLength(2)
+
+    const second = store.migrateLearning({ ...learning, practice: [] })
+    expect(second.migrated).toBe(false)
+    expect(second.value.practice).toHaveLength(2)
+  })
+
+  it('导出包含学习记录', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+    expect(store.exportAll().learning.practice).toHaveLength(2)
+  })
+})
+
+describe('sqliteStore：v1 → v3 迁移', () => {
   it('旧库的 JSON 会自动回填派生表，原数据不动', () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
@@ -279,7 +366,7 @@ describe('sqliteStore：v1 → v2 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(2)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(3)
     expect(store.loadVocab().items).toHaveLength(1)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM word_usage').get().n).toBe(1)

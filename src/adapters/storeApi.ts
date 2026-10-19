@@ -15,11 +15,19 @@ function resolveFetch(fetchImpl?: FetchLike): FetchLike | null {
 }
 
 /** 服务端 SQLite 是否可用；不可用（静态部署 / Node 太老 / 服务挂了）返回 false。 */
-export async function storeHealth(fetchImpl?: FetchLike): Promise<boolean> {
+export async function storeHealth(fetchImpl?: FetchLike, timeoutMs = 1500): Promise<boolean> {
   const f = resolveFetch(fetchImpl)
   if (!f) return false
+  let signal: AbortSignal | undefined
   try {
-    const res = await f('/api/store/health', { cache: 'no-store' })
+    if (timeoutMs > 0 && typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+      signal = AbortSignal.timeout(timeoutMs)
+    }
+  } catch {
+    // 老浏览器没有 AbortSignal.timeout：不设超时
+  }
+  try {
+    const res = await f('/api/store/health', { cache: 'no-store', signal })
     if (!res.ok) return false
     const data = (await res.json()) as { ok?: boolean }
     return data?.ok === true

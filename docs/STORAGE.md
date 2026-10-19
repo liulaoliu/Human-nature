@@ -25,7 +25,8 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 已保存文章（正文 / 句子 / 翻译） | `data/xueba.db` 的 `articles` | IndexedDB `shadowing-reader` | 文本，第二优先 |
 | 跟读录音 | IndexedDB `shadowing` | 无 | 音频 blob，体积大；下一阶段改成 `data/takes/` 文件 + SQLite 元数据 |
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
-| 统计 / 目标 / 错题等 | localStorage | 无 | 已随「导出全部」备份 |
+| **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
+| 目标 / 备忘等偏好 | localStorage | 无 | `readGoal` / `goalMemo` 是设置，不是学习记录 |
 | TTS 音频缓存 | `public/tts/` | 浏览器语音 | 可再生，不算用户资产 |
 
 ### 2.1 不是所有 localStorage 都该进 SQLite
@@ -74,7 +75,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 2`。
+schema 版本：`PRAGMA user_version = 3`。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -145,7 +146,35 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 手动/AI 语言点 | `lang_points` + `lang_point_terms`（词组/习语/用法） |
 | 历史版本 | `vocab_snapshots`（整库 JSON） |
 
-### 4.3 性能与边界
+### 4.3 学习记录（v3）
+
+学习记录不是偏好，不能只靠 localStorage。表是规范化的事件/记录表，不做“万能 KV”：
+
+```sql
+practice_records(at, kind, total, correct, seconds, article_id)          -- 考试/听写/听力成绩
+mistake_records(id, kind, at, count, label, item_id, question_json,
+                article_id, text)                                         -- 错题本
+reading_progress(article_id PK, day, title, at)                           -- 读完记录
+writing_records(at, article_id, article_title, model, text,
+                feedback_json, task_json)                                 -- 仿写历史
+retell_records(at, article_id, text, words)                               -- 复述
+activity_days(day, cat, count)                                            -- 每日活动量
+study_days(day, seconds, cards)                                           -- 背单词时长/卡数
+pick_sessions(at, seconds, picked)                                        -- 选词会话
+study_word_days(day, word_id, ordinal)                                    -- 每天背过哪些词（日志用）
+skimmed_articles(article_id)                                              -- 精读「略读」进度
+kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
+```
+
+- 事实来源就是这些表；`/api/store/learning` 整份读/写，写在一个事务里。
+- 前端 `localStorage` 仍是**同步缓存**：启动时先补本地缺失的键，之后变更由
+  `useLearningSync` 防抖写回 SQLite；静态部署/服务不可用时继续只用 localStorage。
+- 偏好/会话（主题、字号、面板、上次文章、草稿、会话快照、待选清单、`langCollected`）
+  **不进这些表**。
+- `reader:activity` / `reader:kindStats` 目前是聚合值；历史数据只能先按聚合保存。
+  以后新增答题事件时，应改成“事件表 → 聚合视图”，不要同时手写事件和聚合。
+
+### 4.4 性能与边界
 
 - 当前单用户、词库千级：整库 JSON 约 1–2MB，保存时重建 1k 多行派生表约百毫秒；
   读取仍走 JSON，页面不需要逐表 JOIN。
@@ -168,8 +197,8 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 方式 | 怎么做 | 内容 |
 |---|---|---|
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
-| 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 |
-| 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + localStorage 统计，换机器用这个最全 |
+| 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 + 学习记录 |
+| 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 统计；学习记录同时已进 SQLite，换机器最稳的是带 `data/xueba.db` 或 `/api/store/db` |
 | 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 8 版 + 历史最大一版 |
 
 ## 六、安全
@@ -186,11 +215,11 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 
 ```
 React 视图 / hooks
-      ↓ 只依赖 core/ports.ts（VocabRepoPort / ArticleRepoPort / TakeRepoPort…）
-HybridRepo（adapters：SQLite 优先，IndexedDB 兜底）
+      ↓ 只依赖 core/ports.ts（VocabRepoPort / ArticleRepoPort / LearningRepoPort / TakeRepoPort…）
+HybridRepo / LearningRepo（adapters：SQLite 优先，IndexedDB/localStorage 兜底）
       ↓ HTTP /api/store/*
 server/storeApi.js（路由，不认识具体 DB）
-      ↓ 同一组方法：loadVocab / saveVocab / listArticles / saveArticle…
+      ↓ 同一组方法：loadVocab / saveVocab / listArticles / saveArticle / loadLearning / saveLearning…
 server/sqliteStore.js（SQLite 实现）
 ```
 
@@ -210,9 +239,9 @@ server/sqliteStore.js（SQLite 实现）
 
 ## 八、下一阶段（还没做）
 
-0. **学习记录迁 SQLite**：先落 `practice_attempt`、`reading_progress`、`study_event`、
-   `mistake`、`writing_record` 五类；localStorage 只留偏好和会话。迁移入口仍用
-   “服务端空库才从 localStorage 灌一次”，页面读走 `LearningRepo`（SQLite 优先、localStorage 兜底）。
+0. **学习记录已迁 SQLite（v3）**：练习、错题、读完/精读、写作、复述、活动、背词/选词记录
+   已落表；localStorage 作为同步缓存。下一步把“答题明细”从聚合值改成事件表，
+   让 `activity` / `kindStats` 可重算，而不是只保存结果。
 1. **录音迁到服务端**：`data/takes/<id>.bin` + SQLite 元数据（`file_name` 索引），
    前端 `HybridTakeRepo`；第一次打开某篇时把该篇旧录音补传。
 2. **校准 / 改文本**：接口是同步的，迁 SQLite 要改成异步；数据很小，优先级低。
