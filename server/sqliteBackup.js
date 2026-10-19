@@ -1,6 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { SCHEMA_VERSION } from './sqliteSchema.js'
+import { localDayKey } from './localDate.js'
 
 /** schema 迁移前的整库备份，留最近 5 份。 */
 const DB_BACKUP_KEEP = 5
@@ -80,7 +81,7 @@ export function backupBeforeMigration(db, dbPath, version, DatabaseSync) {
 export function backupDaily(db, dbPath, version, DatabaseSync) {
   if (version <= 0) return null
   const dir = backupsDir(dbPath)
-  const day = new Date().toISOString().slice(0, 10)
+  const day = localDayKey()
   const file = join(dir, `xueba-daily-${day}.db`)
   if (existsSync(file)) {
     try {

@@ -4,6 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION } from './sqliteStore.js'
 import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.js'
+import { localDayKey } from './localDate.js'
 
 const MAX_BODY = 64 * 1024 * 1024
 
@@ -92,7 +93,6 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
         ok: true,
         engine: 'sqlite',
         version: SCHEMA_VERSION,
-        path: store.path,
       })
       return
     }
@@ -248,7 +248,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
         200,
         store.exportAll(),
         download
-          ? { 'Content-Disposition': `attachment; filename="xueba-export-${new Date().toISOString().slice(0, 10)}.json"` }
+          ? { 'Content-Disposition': `attachment; filename="xueba-export-${localDayKey()}.json"` }
           : {},
       )
       return
@@ -271,7 +271,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
         res.setHeader('Cache-Control', 'no-store')
         res.setHeader(
           'Content-Disposition',
-          `attachment; filename="xueba-${new Date().toISOString().slice(0, 10)}.db"`,
+          `attachment; filename="xueba-${localDayKey()}.db"`,
         )
         const stream = createReadStream(file)
         const cleanup = () => rmSync(file, { force: true })

@@ -11,6 +11,7 @@ import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
 import { allowLocalRequest } from './sameOrigin.js'
+import { localDayKey } from './localDate.js'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')
@@ -26,6 +27,13 @@ describe('util', () => {
     expect(safeJoin(root, '/a/b.txt')).toBe(resolve(root, 'a/b.txt'))
     expect(safeJoin(root, '/../secret')).toBeNull()
     expect(safeJoin(root, '/a/../../secret')).toBeNull()
+  })
+})
+
+describe('localDayKey', () => {
+  it('用本地日历日（不受 UTC 偏移影响）', () => {
+    expect(localDayKey(new Date(2026, 0, 1, 0, 30))).toBe('2026-01-01')
+    expect(localDayKey(new Date(2026, 11, 31, 23, 59))).toBe('2026-12-31')
   })
 })
 
@@ -120,6 +128,8 @@ describe('httpApp 请求处理', () => {
     try {
       const health = await fetch(`${base}/api/store/health`).then((r) => r.json())
       expect(health).toMatchObject({ ok: true, engine: 'sqlite' })
+      // 不向页面泄露数据库绝对路径（截图/日志分享时）
+      expect(health.path).toBeUndefined()
 
       const library = { items: [{ id: 'w1', word: 'test' }], stats: {} }
       const putVocab = await fetch(`${base}/api/store/vocab`, {
