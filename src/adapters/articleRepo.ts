@@ -173,7 +173,7 @@ export class HybridArticleRepo implements ArticleRepoPort {
           method: 'PUT',
           body: JSON.stringify(article),
         })
-        void this.local.save(article).catch(() => {})
+        void this.local.save(article).catch((e) => console.warn('[文章] 镜像到 IndexedDB 失败', e))
         return
       } catch {
         this.mode = 'local'

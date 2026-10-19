@@ -256,7 +256,7 @@ export class HybridVocabRepo implements VocabRepoPort {
       try {
         await storeRequest('/vocab', { method: 'PUT', body: JSON.stringify(library) })
         // 镜像到 IndexedDB：SQLite 文件损坏/服务起不来时还有本机一份。
-        void this.local.save(library).catch(() => {})
+        void this.local.save(library).catch((e) => console.warn('[词库] 镜像到 IndexedDB 失败', e))
         return
       } catch {
         this.mode = 'local'

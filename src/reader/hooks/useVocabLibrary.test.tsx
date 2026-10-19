@@ -53,6 +53,24 @@ describe('useVocabLibrary：读成功', () => {
   })
 })
 
+describe('useVocabLibrary：写失败必须可见', () => {
+  it('保存 reject → 提示用户，不静默吞掉', async () => {
+    const base = fakeRepo({ load: async () => lib(1) }).repo
+    const repo: VocabRepoPort = {
+      ...base,
+      save: async () => {
+        throw new Error('quota exceeded')
+      },
+    }
+    const { result, flash } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => result.current.persist(lib(2)))
+    await waitFor(() => expect(flash).toHaveBeenCalledWith(expect.stringContaining('保存失败')))
+    expect(result.current.library.items).toHaveLength(2)
+  })
+})
+
 describe('useVocabLibrary：读失败（事故现场）', () => {
   it('读失败 → failed；persist **一次都不写**，只提示', async () => {
     const { repo, saved } = fakeRepo({ load: async () => { throw new Error('IDB blocked') } })

@@ -183,13 +183,18 @@ export function useReaderDoc({
       sentences: doc.sentences,
       updatedAt: new Date().toISOString(),
     }
-    await articles.current?.save(article)
-    setSaved((await articles.current?.list()) ?? [])
-    setSavedId(id)
-    setArticleTitle(article.title)
-    setArticleBook(article.book ?? '')
-    remember(articleKey, id)
-    flash('已保存到本机')
+    try {
+      await articles.current?.save(article)
+      setSaved((await articles.current?.list()) ?? [])
+      setSavedId(id)
+      setArticleTitle(article.title)
+      setArticleBook(article.book ?? '')
+      remember(articleKey, id)
+      flash('已保存到本机')
+    } catch (e) {
+      console.warn('[文章] 保存失败', e)
+      flash('保存文章失败：请稍后重试，或先导出全文')
+    }
   }, [doc, savedId, articleKey, articleTitle, articleBook, sourceText, articles, setSaved, setSavedId, setArticleTitle, setArticleBook, remember, flash])
 
   const deleteSaved = useCallback(async () => {

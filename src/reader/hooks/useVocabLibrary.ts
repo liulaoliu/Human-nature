@@ -64,7 +64,13 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         setLibrary(fixed)
         setLibraryLoad('ok')
         const dirty = fixed.items.length !== raw.items.length || fixed.items.some((it, i) => it !== raw.items[i])
-        if (dirty) r.save(fixed).catch(() => {})
+        if (dirty) {
+          r.save(fixed).catch((e) => {
+            // 迁移结果没写回去不影响本次使用，但要让用户知道下次打开可能还要再修一遍
+            console.warn('[词库] 迁移结果写回失败', e)
+            flash('词库已修正，但写回失败；改动可能不会保留到下次打开')
+          })
+        }
       })
       .catch(() => {
         // 读失败：**不要**把空库写回去，也别让自动补全动它
@@ -76,7 +82,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     } catch {
       // 老浏览器忽略
     }
-  }, [createRepo])
+  }, [createRepo, flash])
 
   const persist = useCallback(
     (lib: VocabLibrary) => {
@@ -85,9 +91,16 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         flash('词库读取出错：为避免覆盖，本次不写入（可点「恢复上一版词库」试试）')
         return
       }
+      if (!repo.current) {
+        flash('词库还没准备好，请稍后再试')
+        return
+      }
       libraryRef.current = lib
       setLibrary(lib)
-      repo.current?.save(lib).catch(() => {})
+      repo.current.save(lib).catch((e) => {
+        console.warn('[词库] 保存失败', e)
+        flash('词库保存失败：界面已更新，但可能没落盘；请稍后重试或导出备份')
+      })
     },
     [libraryLoad, flash],
   )
@@ -100,7 +113,12 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     }
     libraryRef.current = prev
     setLibrary(prev)
-    repo.current?.save(prev).catch(() => {})
+    try {
+      await repo.current?.save(prev)
+    } catch (e) {
+      console.warn('[词库] 恢复上一版后写回失败', e)
+      flash('已恢复上一版词库，但写回失败；请先导出备份再刷新')
+    }
     setLibraryLoad('ok')
     flash(`已恢复上一版词库：${prev.items.length} 条`)
   }, [flash])
