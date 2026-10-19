@@ -31,7 +31,6 @@ import {
   addPracticeRecord,
   practiceForArticle,
   type PracticeKind,
-  type PracticeRecord,
 } from '../core/practice'
 import { buildArticleMastery, isStable } from '../core/mastery'
 import { buildArticleQuestions } from '../core/articleQuiz'
@@ -44,7 +43,7 @@ import {
 import { buildReadiness } from '../core/readiness'
 import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
-import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat, type DayActivity } from '../core/activity'
+import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
 import { createArticleRepo } from '../adapters/articleRepo'
@@ -75,9 +74,9 @@ import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
 import { useStudySession } from './hooks/useStudySession'
+import { useLearningData } from './hooks/useLearningData'
 import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
-import { useReadDone } from './hooks/useReadDone'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { articleNumbering } from '../core/articleNums'
@@ -197,6 +196,9 @@ export default function ReaderApp() {
     window.addEventListener(STORAGE_ERROR_EVENT, onError)
     return () => window.removeEventListener(STORAGE_ERROR_EVENT, onError)
   }, [flash])
+
+  /** 逻辑「今天」的日期键（04:00 结算），多处统计共用一份。 */
+  const todayKey = dayKeyLocal(new Date())
 
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
@@ -397,35 +399,9 @@ export default function ReaderApp() {
     }
     return { sid: s.id, activeIndex }
   }, [nowPlaying, doc])
-  /** 背单词时长统计：按天累计（落盘，供统计用） */
-  const [studyDays, setStudyDays] = useLocalStorageState<{ day: string; seconds: number; cards: number }[]>(
-    'reader:studyStats',
-    [],
-  )
-
   /**
-   * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）。
-   * 兼容旧格式（单个 `{ day, ids }` 对象 → 收成一条）。
+   * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）由 useLearningData 统一管理。
    */
-  const [studiedDays, setStudiedDays] = useLocalStorageState<{ day: string; ids: string[] }[]>(
-    'reader:studiedToday',
-    [],
-    {
-      parse: (raw) => {
-        try {
-          const v = JSON.parse(raw) as unknown
-          const ok = (x: unknown): x is { day: string; ids: string[] } =>
-            !!x && typeof x === 'object' && typeof (x as { day?: unknown }).day === 'string' &&
-            Array.isArray((x as { ids?: unknown }).ids)
-          if (Array.isArray(v)) return v.filter(ok).map((x) => ({ day: x.day, ids: x.ids.filter((i): i is string => typeof i === 'string') }))
-          if (ok(v)) return [{ day: v.day, ids: v.ids.filter((i): i is string => typeof i === 'string') }]
-        } catch {
-          // 忽略
-        }
-        return []
-      },
-    },
-  )
   /** 每日目标（个不同单词，0=不设目标） */
   const [dailyGoal, setDailyGoal] = useLocalStorageState('reader:dailyGoal', 20, persistentNumber)
   /** 听写会话 API 的引用：供定义在 useDictation 之前的少数回调（打开听力/仿写、错题重练）使用。 */
@@ -438,21 +414,6 @@ export default function ReaderApp() {
   const listenApiRef = useRef<ReturnType<typeof useListening> | null>(null)
   /** 是否在正文里显示语言点 */
   const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
-  /** 学习活动统计（按天，落 localStorage） */
-  const [activity, setActivity] = useLocalStorageState<DayActivity[]>('reader:activity', [])
-  /** 练习成绩记录（考试 / 听写 / 听力理解） */
-  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>('reader:practice', [])
-  /** 统一错题本（考试错词 / 听力错题 / 听写漏词） */
-  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>('reader:mistakes', [])
-  /** 按「文章 → 题型」统计的练习正确率（词块/搭配量化用）。 */
-  const [kindStats, setKindStats] = useLocalStorageState<Record<string, Record<string, { total: number; correct: number }>>>(
-    'reader:kindStats',
-    {},
-  )
-  /** 复述打卡：用自己的话复述的留档（按篇）。 */
-  const [retells, setRetells] = useLocalStorageState<
-    { at: string; articleId: string; text: string; words: number }[]
-  >('reader:retells', [])
   /** 每次生成混淆项的批量大小（0=全部） */
   const [confusableBatchSize, setConfusableBatchSize] = useLocalStorageState(
     'reader:confusableBatch',
@@ -483,17 +444,46 @@ export default function ReaderApp() {
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
-  /** 选词模式计时（秒）与历史统计 */
+  /** 选词模式计时（秒） */
   const [vocabSeconds, setVocabSeconds] = useState(0)
-  const [sessions, setSessions] = useLocalStorageState<{ at: string; seconds: number; picked: number }[]>(
-    'reader:vocabStats',
-    [],
-  )
   /** 选词模式：点/划直接选生词，攒一批后一键导出 */
   const [vocabMode, setVocabMode] = useState(false)
   const [batch, setBatch] = useState<BatchItem[]>([])
   /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
   const articleIdentity = articleKey ?? savedId ?? articleTitle
+
+  // 学习记录（练习/错题/活动/背词日/会话/复述/略读/读完/目标）：声明与落盘全在 useLearningData
+  const {
+    studyDays,
+    setStudyDays,
+    studiedDays,
+    setStudiedDays,
+    activity,
+    setActivity,
+    practice,
+    setPractice,
+    mistakes,
+    setMistakes,
+    kindStats,
+    setKindStats,
+    retells,
+    setRetells,
+    sessions,
+    setSessions,
+    skimmedArticles,
+    setSkimmedArticles,
+    readGoal,
+    setReadGoal,
+    goalMemo,
+    setGoalMemo,
+    readDone,
+    setReadDone,
+    todayReadDone,
+    articleReadDay,
+    readDays,
+    markReadDone,
+    undoReadDone,
+  } = useLearningData({ articleIdentity, articleTitle, articleKey, todayKey, flash })
   /** 一轮考完 → 按题型累加到本篇（每次练习都算，产出看板据此算正确率）。 */
   const mergeKindStats = useCallback(
     (rows: { kind: string; total: number; correct: number }[]) => {
@@ -937,18 +927,14 @@ export default function ReaderApp() {
   const [journalDay, setJournalDay] = useState(() => dayKeyLocal(new Date()))
   /** 打印 / 导出面板。 */
   const [exportOpen, setExportOpen] = useState(false)
-  /** 目标备忘面板 + 今日读文目标 + 自由备忘。 */
+  /** 目标备忘面板 + 今日读文目标 + 自由备忘（状态在 useLearningData）。 */
   const [goalOpen, setGoalOpen] = useState(false)
-  const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, persistentNumber)
-  const [goalMemo, setGoalMemo] = useLocalStorageState('reader:goalMemo', '', persistentString)
   /** 生词本排序方式。 */
   const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
     'reader:vocabSort',
     'updatedAt',
     persistentEnum(['word', 'createdAt', 'updatedAt', 'due'] as const, 'updatedAt'),
   )
-  /** 已「通读」的文章标识（勾选，本地持久化）。 */
-  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>('reader:intensiveSkimmed', [])
   const openSpeedRead = useCallback(() => {
     if (!doc?.sentences.length) {
       flash('先打开一篇文章')
@@ -1278,7 +1264,6 @@ export default function ReaderApp() {
   const studyStats = useMemo(() => studyTotals(studyDays), [studyDays])
 
   /** 今日计划用：今天背了几张、写了几条。 */
-  const todayKey = dayKeyLocal(new Date())
   const todayCards = useMemo(() => studyDays.find((d) => d.day === todayKey)?.cards ?? 0, [studyDays, todayKey])
   const todayWrites = useMemo(() => {
     let n = 0
@@ -1736,15 +1721,6 @@ export default function ReaderApp() {
   }, [pasteMissing, library.items, flash])
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
-  /** 「读完一篇」的记账（localStorage + 派生值 + 动作）——接线在 hooks/useReadDone，规则在 core/goals。 */
-  const { readDone, todayReadDone, articleReadDay, readDays, markReadDone, undoReadDone, setReadDone } = useReadDone({
-    articleIdentity,
-    articleTitle,
-    articleKey,
-    todayKey,
-    flash,
-  })
-
   const {
     download,
     doExportAnki,
