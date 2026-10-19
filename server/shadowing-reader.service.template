@@ -1,0 +1,24 @@
+# systemd 用户服务模板（Linux）。
+# 由 安装开机自启.sh 读取，替换里面的项目路径与 node 绝对路径后写入
+# ~/.config/systemd/user/shadowing-reader.service。
+# 角色对应 Windows 的「注册表 Run 键 + silent-start.vbs」：登录后后台拉起本地服务。
+#
+# 崩溃重启沿用仓库自带的 Node watchdog（server/watchdog-cli.js）：
+#   systemd 守护 watchdog，watchdog 守护 Vite/appServer。分层和 Windows 一致。
+[Unit]
+Description=Shadowing Reader (学吧老哥) local service
+Documentation=file://__ROOT__/README.md
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=__ROOT__
+Environment=PATH=__NODE_DIR__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+ExecStart=__NODE__ __ROOT__/server/watchdog-cli.js
+Restart=always
+RestartSec=2
+# 停服务时把整个 cgroup（watchdog + 子进程 Vite/appServer）一起收掉
+KillMode=control-group
+
+[Install]
+WantedBy=default.target

@@ -95,6 +95,38 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
 
 > 开发调试想看日志时，直接 `npm run dev` 前台跑即可（先 `停止服务.cmd` 让出 5173）。
 
+### Linux（systemd 用户服务）
+
+Windows 那套 `.cmd` / VBS / 注册表在这里不适用；**同一套后台服务与自启逻辑**用 `.sh` + systemd 用户服务实现，
+watchdog、PID 文件、`status.js` / `stop.js` 全部复用，不重复造轮子：
+
+```
+./安装开机自启.sh     # 注册 systemd 用户服务并立即启动（对应 安装开机自启.cmd）
+./卸载开机自启.sh     # 取消开机自启并删除服务（对应 卸载开机自启.cmd）
+./启动服务.sh         # 后台启动 / 查看状态 / 打开浏览器（对应 启动服务.cmd）
+./停止服务.sh         # 停止服务（对应 停止服务.cmd）
+./构建.sh             # static 模式构建（对应 构建.cmd）
+./dev.sh              # 前台开发服务器（对应 dev.cmd）
+```
+
+- 服务单元：`~/.config/systemd/user/shadowing-reader.service`，由 `server/shadowing-reader.service.template`
+  生成（写入时替换项目路径与 node 绝对路径）。
+- **分层和 Windows 完全一致**：`systemd` 守护 `server/watchdog-cli.js`，watchdog 再守护 Vite/appServer；
+  `node server/status.js` 照常能看状态。
+- `安装开机自启.sh` 会顺带 `loginctl enable-linger $USER`：除了登录，**开机（未登录）也会启动**。
+  不想要就 `loginctl disable-linger $USER`。
+- 状态与日志：
+
+```
+node server/status.js                        # 或 ./启动服务.sh
+systemctl --user status shadowing-reader.service
+journalctl --user -u shadowing-reader.service -f   # 实时日志
+```
+
+- 首次使用、或 node 版本升级（nvm 路径变了）后，重新跑一次 `./安装开机自启.sh` 刷新路径即可。
+- 脚本写法与 Windows 一致：`.sh` 用 LF 行尾，名称对应同一角色；没装 systemd 时 `启动服务.sh` / `停止服务.sh`
+  会自动退回仓库自带的 Node 分离进程（`server/silent-start.js`）。
+
 
 ## 学吧老哥 · 生词本 / 精读（`reader.html`）
 
