@@ -1487,7 +1487,11 @@ button.danger {
 :root[data-theme='green'] .filebtn:hover { background: #edf5ea; }
 :root[data-theme='green'] textarea,
 :root[data-theme='green'] .title-input,
-:root[data-theme='green'] .study-input { background: #ffffff; }
+:root[data-theme='green'] .study-input,
+:root[data-theme='green'] .lang-editor input,
+:root[data-theme='green'] .lang-form input { background: #ffffff; color: var(--fg); }
+:root[data-theme='green'] .lang-editor input::placeholder,
+:root[data-theme='green'] .lang-form input::placeholder { color: #8a9a8b; }
 :root[data-theme='green'] code { background: #e2eee0; }
 :root[data-theme='green'] .navlink.accent {
   background: linear-gradient(180deg, #3fb877, #2f8f5b);
@@ -1831,7 +1835,17 @@ button.danger {
 .lang-editor-bar { display: flex; gap: 8px; align-items: baseline; }
 .lang-editor-bar .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lang-editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
-.lang-editor input { padding: 6px 10px; }
+/* 深色主题下 input 默认是浏览器白底，而全局文字色是浅色 —— 输入时几乎看不见。
+   这里显式给语言点输入框深底浅字；护眼主题再覆盖成白底深字。 */
+.lang-editor input {
+  padding: 6px 10px;
+  background: #0f1115;
+  color: var(--fg);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  caret-color: var(--fg);
+}
+.lang-editor input::placeholder { color: #6b7280; }
 .lang-editor-actions { justify-content: flex-end; }
 .lang-editor-warn { font-size: 12px; color: #b7791f; margin: -2px 0 0; }
 .lang-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow: auto; }
@@ -1844,6 +1858,7 @@ button.danger {
 .lang-form { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
 .lang-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
 .lang-form input { padding: 6px 10px; }
+.lang-form input::placeholder { color: #6b7280; }
 .lang-src { font-size: 11px; color: var(--dim); }
 .goal-bar > div { height: 100%; background: var(--accent); }
 
