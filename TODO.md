@@ -9,7 +9,8 @@
 > 来源：[`docs/reviews/2026-10-19-full-review.md`](docs/reviews/2026-10-19-full-review.md) 里仍标 🟡 的项。
 > 规矩：一次只做一个主题，做完单独 commit，提交前 `npm run gates`。
 
-- [ ] **ReaderApp 拆分 ①**：把工具栏 + 正文 + 侧栏抽成 `ReaderShell`，先只搬渲染，不改行为
+- [x] **ReaderApp 拆分 ①**：把工具栏 + 正文 + 侧栏抽成 `ReaderShell`，先只搬渲染，不改行为
+      （`ReaderShell` 布局 + slot、`ReaderArticle` 正文、`panels/ReaderSidebar` 侧栏；新增 7 条组件测试）
 - [ ] **ReaderApp 拆分 ②**：各练习面板路由抽成 `SessionHost`（背词/考试/听写/听力/速读/仿写）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
 - [ ] **面板瘦身**：`SpeedReadPanel`（778）/ `StudyPanel`（744）拆「渲染块」与「会话状态机」，目标 <600 行

@@ -13,6 +13,9 @@ src/adapters/    实现 core 端口（ports）的 IO 层：SQLite(HTTP) / Indexe
 src/reader/      React 视图层
   hooks/         有状态编排（会话状态机、与 IO 的接线），不含排版
   panels/        展示组件（尽量薄：收 props、渲染）
+  ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
+  ReaderArticle.tsx 正文区（标题 + 编辑态 + ReaderBody）
+  panels/ReaderSidebar.tsx 右侧栏（页签 + 五个面板的接线）
   ReaderApp.tsx  组装：状态总线 + 把 hooks/panels 接起来
 src/ui/          跟读练习（旧模块，独立于精读词库）
 ```
@@ -103,8 +106,9 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 偏大（3021 行）**：已登记在 `tool/check_god_file.mjs` 的基线里，
-  **只准变小**。它现在是「状态总线 + 接线」，领域逻辑要一律往 core/hooks 外面搬。
+- **`ReaderApp.tsx` 偏大（2888 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
+  **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
+  后续继续把练习面板路由（`SessionHost`）和散落 IO 搬出去，目标是 ≤1200 行。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
   不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。

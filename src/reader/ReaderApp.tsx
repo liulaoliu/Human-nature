@@ -49,7 +49,6 @@ import { buildSiege } from '../core/siege'
 import { createArticleRepo } from '../adapters/articleRepo'
 import type { ArticleRepoPort, SavedArticle } from '../core/ports'
 import VocabList, { type VocabEditPatch } from './VocabList'
-import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import SpeedReadPanel from './panels/SpeedReadPanel'
@@ -60,13 +59,12 @@ import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import QuickPanel from './panels/QuickPanel'
-import SideOverview from './panels/SideOverview'
-import SideMastery from './panels/SideMastery'
-import SidePick, { type BatchItem } from './panels/SidePick'
-import SideVocab from './panels/SideVocab'
-import ReaderBody from './panels/ReaderBody'
+import { type BatchItem } from './panels/SidePick'
 import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
+import ReaderShell from './ReaderShell'
+import ReaderArticle from './ReaderArticle'
+import ReaderSidebar from './panels/ReaderSidebar'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
@@ -93,7 +91,6 @@ import { dictionary } from '../adapters/dictionary'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
-import FishLayer from '../ui/FishLayer'
 import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
 import JournalPanel from './panels/JournalPanel'
 import ExportPanel from './panels/ExportPanel'
@@ -110,7 +107,6 @@ import {
   STORAGE_ERROR_EVENT,
 } from './hooks/useLocalStorageState'
 import type { Paragraph, Sentence, SentenceLanguage, } from '../types/document'
-import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
 interface Doc {
   paragraphs: Paragraph[]
@@ -2163,15 +2159,20 @@ export default function ReaderApp() {
   const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
 
   return (
-    <div className={`reader size-${fontSize}${bold ? ' weight-bold' : ''}${serif ? ' font-serif' : ''}${examActive ? ' exam' : ''}${studyQueue ? ' studying' : ''}`}>
-      <FishLayer pageKey="reader" />
-      <main
-        className="reader-main"
-        onMouseDown={onMouseDown}
-        onMouseUp={onMouseUp}
-        onContextMenu={onContextMenu}
-      >
-        {readingView && (
+    <ReaderShell
+      fontSize={fontSize}
+      bold={bold}
+      serif={serif}
+      examActive={examActive}
+      studying={!!studyQueue}
+      sideTab={sideTab}
+      sideRef={sideRef}
+      onMouseDown={onMouseDown}
+      onMouseUp={onMouseUp}
+      onContextMenu={onContextMenu}
+      toast={toast}
+      toolbar={
+        readingView && (
           <ReaderToolbar
             book={book}
             editions={editions}
@@ -2245,9 +2246,204 @@ export default function ReaderApp() {
             confirmDelSave={confirmDelSave}
             onDeleteSave={askDeleteSave}
           />
-        )}
-
-        {bookError && !book && (
+        )
+      }
+      sidebar={
+        <ReaderSidebar
+          sideTab={sideTab}
+          onSideTabChange={setSideTab}
+          overview={{
+            mistakes,
+            readyRows,
+            boardAction,
+            onRetryVocab: retryMistakeVocab,
+            onSiege: startSiege,
+            onRetryListen: retryMistakeListen,
+            onRetryDict: retryMistakeDict,
+            onClearMistakes: () => setMistakes([]),
+          }}
+          mastery={{
+            mastery: articleMastery,
+            onStartArticle: startArticleQuiz,
+            onStartVocab: () => {
+              setQuizQueue(null)
+              setQuizSetupOpen(false)
+              startStudy()
+            },
+          }}
+          stats={{ activity, practice }}
+          pick={{
+            tasks: TASKS,
+            onPrompt: (t) => void copyPrompt(t),
+            lastTask,
+            target,
+            useExact,
+            vocabMode,
+            canMark: !!exact,
+            visibleBatch,
+            batchCount: batch.length,
+            onRemoveWord: (b) => addToBatch([b.word], b.sentence, b.sentenceId),
+            onCommitBatch: commitBatch,
+            onCopyBatchPrompt: () => void copyBatchPrompt(),
+            onExportBatch: exportBatch,
+            onClearBatch: () => setBatch([]),
+            onAddSelectionToBatch: addSelectionToBatch,
+            onMark: mark,
+            onOpenLang: () => openLangFor(sentence),
+            pasted,
+            onPastedChange: (v) => {
+              setPasted(v)
+              if (pasteReport.length) setPasteReport([])
+              if (pasteMissing) setPasteMissing(null)
+            },
+            pasteReport,
+            pasteMissingCount: pasteMissing?.words.length ?? 0,
+            onApplyPaste: applyAnyPaste,
+            onCopyMissingAgain: () => void copyMissingAgain(),
+            aiJobCount,
+            aiScope: aiPackScope,
+            onAiScopeChange: setAiPackScope,
+            autoVocabDirect,
+            onAutoVocabDirectChange: setAutoVocabDirect,
+            autoVocabDoneHere: aiAutoVocabDoneHere,
+            onRerunAutoVocab: rerunAutoVocab,
+            onExportAiJobs: exportAiJobs,
+            dictReady,
+            onPickFromDict: pickFromDict,
+            onEnrichFromDict: enrichFromDict,
+            onEnrichExamples: () => void enrichExamplesFromTatoeba(),
+            examplesReady: tatoebaReady,
+            onFixLemmasFromDict: fixLemmasFromDict,
+            onConfuseFromDict: confuseFromDict,
+            aiFileRef,
+            onAiFile,
+            localConfigured: aiLocalConfigured,
+            localRunning: aiLocalRunning,
+            localDone: aiLocalDone,
+            localTotal: aiLocalTotal,
+            localRound: aiLocalRound,
+            localPhase: aiLocalPhase,
+            localError: aiLocalError,
+            onRunLocal: () => void runAiLocal(),
+            checklist: aiChecklist,
+            checklistDone: aiChecklistDone,
+            checklistTotal: aiChecklistTotal,
+            nextHint: aiNextHint,
+            onSkipPending: aiSkipPending,
+            aiWebBatchSize,
+            onAiWebBatchSizeChange: setAiWebBatchSize,
+            onCopyWebPrompt: () => void copyAiWebPrompt(),
+            onCopyWebMissing: () => void copyAiWebMissing(),
+            onRefreshWeb: resetAiWebProgress,
+            webTotal: aiWebTotal,
+            webDone: aiWebDone,
+            webPending: aiWebPending,
+            webMissing: aiWebMissing,
+            webPendingLabels: aiWebPendingLabels,
+            webBreakdown: aiWebBreakdown,
+            confusableBatchCount: confusableBatch.length,
+            confusableTodoCount: confusableTodo.length,
+            onCopyConfusable: () => void copyConfusablePrompt(),
+            confusableBatchSize,
+            onConfusableBatchSizeChange: setConfusableBatchSize,
+            lemmaCount: lemmaCandidates.length,
+            onCopyLemma: () => void copyLemmaPrompt(),
+            posCount: posCandidates.length,
+            onCopyPos: () => void copyPosPrompt(),
+            hasItems: !!library.items.length,
+            onDedupe: dedupeNow,
+          }}
+          vocab={{
+            articleWords,
+            libraryItems: library.items,
+            view: vocabView,
+            onViewChange: setVocabView,
+            sortBy: vocabSort,
+            onSortChange: setVocabSort,
+            hasDoc: !!doc,
+            hasItems: !!library.items.length,
+            hasLapses: library.items.some((w) => (w.reviewState.lapses ?? 0) > 0),
+            onStartStudy: () => {
+              setQuizQueue(null)
+              setQuizSetupOpen(false)
+              startStudy()
+            },
+            onStartArticleAll: () => {
+              setQuizQueue(null)
+              setQuizSetupOpen(false)
+              startArticleAll()
+            },
+            onStartExam: () => {
+              closeStudy()
+              setQuizResults([])
+              setQuizSetupOpen(true)
+            },
+            onStartQuick: () => {
+              setQuickQueue(null)
+              closeStudy()
+              setQuizSetupOpen(false)
+              startQuick()
+            },
+            onStartDictation: () => startDictation(),
+            onOpenListening: () => openListeningMode(false),
+            onOpenReading: () => openListeningMode(true),
+            onOpenSpeedRead: openSpeedRead,
+            listenCount,
+            onListenCountChange: setListenCount,
+            onLanguagePrompt: () => void copyLanguagePrompt(),
+            showLanguage,
+            onShowLanguageChange: setShowLanguage,
+            languageCount: languageSentCount,
+            onOpenPlan: () => setPlanOpen(true),
+            onOpenWriting: openWriting,
+            onWrongPractice: () => {
+              setQuizScope('lapses')
+              setQuizResults([])
+              setQuizSetupOpen(true)
+            },
+            onBrowseAll: () => setBrowseAll(true),
+            onExportAnki: doExportAnki,
+            onPrint: doPrint,
+            onOpenExport: () => setExportOpen(true),
+            printTitle: articleTitle || articleKey || '本篇生词',
+            onExportJson: exportJson,
+            onExportWordList: exportWordList,
+            onCopyMissingPhonetic: (only) => void copyMissingPhonetic(only),
+            onToggleStats: () => setStatsOpen((v) => !v),
+            onExportWrong: doExportWrong,
+            onExportAll: exportAll,
+            onRestorePrev: () => void restorePrevLibrary(),
+            onImportBackup: (f) => void onImportBackup(f),
+            onMergeBackup: (f) => void onMergeBackup(f),
+            statsOpen,
+            stats: {
+              totals,
+              dayStats,
+              studyTodaySeconds,
+              studyTotalSeconds,
+              studyTotalCards,
+              studiedCount: studiedTodayIds.length,
+              dailyGoal,
+              last7,
+              dueForecast: dueForecastRows,
+              byArticle,
+            },
+            onDailyGoalChange: setDailyGoal,
+            articleNums,
+            articleAllPrinted,
+            articlePrintedAt,
+            focusLemma,
+            confirmDel,
+            onJumpSource: jumpToSource,
+            onSpeak: speak,
+            onDelete: askDelete,
+            onReview: handleReview,
+            onEdit: handleEdit,
+          }}
+        />
+      }
+    >
+      {bookError && !book && (
           <p className="muted">没取到 articles.json（要 http://localhost 打开且文件存在）。可直接把正文粘在下面。</p>
         )}
 
@@ -2657,274 +2853,36 @@ export default function ReaderApp() {
         )}
 
         {!studyQueue && !browseAll && !examActive && !writingOpen && doc && !composing && (
-          <>
-            <h1>
-              {articleTitle || (articleKey ? articleKey : '手动粘贴')}
-              <button className="title-edit" onClick={() => void renameArticle()} title="修改文章标题">
-                ✎
-              </button>
-            </h1>
-            {editing ? (
-              <>
-                <div className="meta">编辑正文：改完点「完成」重新切句；已粘回的翻译/语法按句文保留。</div>
-                <textarea
-                  className="manual"
-                  value={draft}
-                  onChange={(e) => setDraft(e.target.value)}
-                  autoFocus
-                />
-              </>
-            ) : (
-              <>
-                <div className="meta">点句子=整句；拖动选词组（按整词吸附）；Ctrl 点单词。</div>
-                <ReaderBody
-                  paragraphs={doc.paragraphs}
-                  sentences={doc.sentences}
-                  translateView={translateView}
-                  selectedId={selectedId}
-                  peekSid={peekSid}
-                  vocabSidSet={vocabSidSet}
-                  selSid={selSid}
-                  selIndices={selIndices}
-                  libraryLemmas={libraryLemmas}
-                  articleNums={articleNums}
-                  articleFirst={articleFirst}
-                  showLanguage={showLanguage}
-                  vocabMode={vocabMode}
-                  lastPicked={lastPicked}
-                  bubblePos={bubblePos}
-                  articleRef={articleRef}
-                  onSelectSentence={selectSentenceAndRead}
-                  onFocusEntry={revealVocabWord}
-                  onAltCopyText={altCopyText}
-                  karaoke={karaoke}
-                  onWordSeek={(sid, i) => {
-                    const s = doc?.sentences.find((x) => x.id === sid)
-                    if (s) speakFromWord(s.text, i)
-                  }}
-                  onAddPhrase={addPhrasesToVocab}
-                />
-              </>
-            )}
-          </>
+          <ReaderArticle
+            doc={doc}
+            articleTitle={articleTitle}
+            articleKey={articleKey}
+            onRename={() => void renameArticle()}
+            editing={editing}
+            draft={draft}
+            onDraftChange={setDraft}
+            translateView={translateView}
+            selectedId={selectedId}
+            peekSid={peekSid}
+            vocabSidSet={vocabSidSet}
+            selSid={selSid}
+            selIndices={selIndices}
+            libraryLemmas={libraryLemmas}
+            articleNums={articleNums}
+            articleFirst={articleFirst}
+            showLanguage={showLanguage}
+            vocabMode={vocabMode}
+            lastPicked={lastPicked}
+            bubblePos={bubblePos}
+            articleRef={articleRef}
+            onSelectSentence={selectSentenceAndRead}
+            onFocusEntry={revealVocabWord}
+            onAltCopyText={altCopyText}
+            karaoke={karaoke}
+            onSpeakFromWord={speakFromWord}
+            onAddPhrase={addPhrasesToVocab}
+          />
         )}
-      </main>
-
-      <aside className={'reader-side tab-' + sideTab} ref={sideRef}>
-        <div className="side-brand">
-          <img src={mascotAI} alt="" title="精读" />
-        </div>
-        <div className="side-tabs">
-          <button className={sideTab === 'overview' ? 'primary' : ''} onClick={() => setSideTab('overview')}>
-            总览
-          </button>
-          <button className={sideTab === 'pick' ? 'primary' : ''} onClick={() => setSideTab('pick')}>
-            选词 / 分析
-          </button>
-          <button className={sideTab === 'vocab' ? 'primary' : ''} onClick={() => setSideTab('vocab')}>
-            生词本
-          </button>
-          <button className={sideTab === 'stats' ? 'primary' : ''} onClick={() => setSideTab('stats')}>
-            统计
-          </button>
-          <button className={sideTab === 'mastery' ? 'primary' : ''} onClick={() => setSideTab('mastery')}>
-            掌握度
-          </button>
-        </div>
-        <SideOverview
-          mistakes={mistakes}
-          readyRows={readyRows}
-          boardAction={boardAction}
-          onRetryVocab={retryMistakeVocab}
-          onSiege={startSiege}
-          onRetryListen={retryMistakeListen}
-          onRetryDict={retryMistakeDict}
-          onClearMistakes={() => setMistakes([])}
-        />
-        <SideMastery
-          mastery={articleMastery}
-          onStartArticle={startArticleQuiz}
-          onStartVocab={() => {
-            setQuizQueue(null)
-            setQuizSetupOpen(false)
-            startStudy()
-          }}
-        />
-        <div className="side-sec" data-sec="stats">
-          <StatsPanel activity={activity} practice={practice} />
-        </div>
-        <SidePick
-          tasks={TASKS}
-          onPrompt={(t) => void copyPrompt(t)}
-          lastTask={lastTask}
-          target={target}
-          useExact={useExact}
-          vocabMode={vocabMode}
-          canMark={!!exact}
-          visibleBatch={visibleBatch}
-          batchCount={batch.length}
-          onRemoveWord={(b) => addToBatch([b.word], b.sentence, b.sentenceId)}
-          onCommitBatch={commitBatch}
-          onCopyBatchPrompt={() => void copyBatchPrompt()}
-          onExportBatch={exportBatch}
-          onClearBatch={() => setBatch([])}
-          onAddSelectionToBatch={addSelectionToBatch}
-          onMark={mark}
-          onOpenLang={() => openLangFor(sentence)}
-          pasted={pasted}
-          onPastedChange={(v) => {
-            setPasted(v)
-            if (pasteReport.length) setPasteReport([])
-            if (pasteMissing) setPasteMissing(null)
-          }}
-          pasteReport={pasteReport}
-          pasteMissingCount={pasteMissing?.words.length ?? 0}
-          onApplyPaste={applyAnyPaste}
-          onCopyMissingAgain={() => void copyMissingAgain()}
-          aiJobCount={aiJobCount}
-          aiScope={aiPackScope}
-          onAiScopeChange={setAiPackScope}
-          autoVocabDirect={autoVocabDirect}
-          onAutoVocabDirectChange={setAutoVocabDirect}
-          autoVocabDoneHere={aiAutoVocabDoneHere}
-          onRerunAutoVocab={rerunAutoVocab}
-          onExportAiJobs={exportAiJobs}
-          dictReady={dictReady}
-          onPickFromDict={pickFromDict}
-          onEnrichFromDict={enrichFromDict}
-          onEnrichExamples={() => void enrichExamplesFromTatoeba()}
-          examplesReady={tatoebaReady}
-          onFixLemmasFromDict={fixLemmasFromDict}
-          onConfuseFromDict={confuseFromDict}
-          aiFileRef={aiFileRef}
-          onAiFile={onAiFile}
-          localConfigured={aiLocalConfigured}
-          localRunning={aiLocalRunning}
-          localDone={aiLocalDone}
-          localTotal={aiLocalTotal}
-          localRound={aiLocalRound}
-          localPhase={aiLocalPhase}
-          localError={aiLocalError}
-          onRunLocal={() => void runAiLocal()}
-          checklist={aiChecklist}
-          checklistDone={aiChecklistDone}
-          checklistTotal={aiChecklistTotal}
-          nextHint={aiNextHint}
-          onSkipPending={aiSkipPending}
-          aiWebBatchSize={aiWebBatchSize}
-          onAiWebBatchSizeChange={setAiWebBatchSize}
-          onCopyWebPrompt={() => void copyAiWebPrompt()}
-          onCopyWebMissing={() => void copyAiWebMissing()}
-          onRefreshWeb={resetAiWebProgress}
-          webTotal={aiWebTotal}
-          webDone={aiWebDone}
-          webPending={aiWebPending}
-          webMissing={aiWebMissing}
-          webPendingLabels={aiWebPendingLabels}
-          webBreakdown={aiWebBreakdown}
-          confusableBatchCount={confusableBatch.length}
-          confusableTodoCount={confusableTodo.length}
-          onCopyConfusable={() => void copyConfusablePrompt()}
-          confusableBatchSize={confusableBatchSize}
-          onConfusableBatchSizeChange={setConfusableBatchSize}
-          lemmaCount={lemmaCandidates.length}
-          onCopyLemma={() => void copyLemmaPrompt()}
-          posCount={posCandidates.length}
-          onCopyPos={() => void copyPosPrompt()}
-          hasItems={!!library.items.length}
-          onDedupe={dedupeNow}
-        />
-
-        <SideVocab
-          articleWords={articleWords}
-          libraryItems={library.items}
-          view={vocabView}
-          onViewChange={setVocabView}
-          sortBy={vocabSort}
-          onSortChange={setVocabSort}
-          hasDoc={!!doc}
-          hasItems={!!library.items.length}
-          hasLapses={library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
-          onStartStudy={() => {
-            setQuizQueue(null)
-            setQuizSetupOpen(false)
-            startStudy()
-          }}
-          onStartArticleAll={() => {
-            setQuizQueue(null)
-            setQuizSetupOpen(false)
-            startArticleAll()
-          }}
-          onStartExam={() => {
-            closeStudy()
-            setQuizResults([])
-            setQuizSetupOpen(true)
-          }}
-          onStartQuick={() => {
-            setQuickQueue(null)
-            closeStudy()
-            setQuizSetupOpen(false)
-            startQuick()
-          }}
-          onStartDictation={() => startDictation()}
-          onOpenListening={() => openListeningMode(false)}
-          onOpenReading={() => openListeningMode(true)}
-          onOpenSpeedRead={openSpeedRead}
-          listenCount={listenCount}
-          onListenCountChange={setListenCount}
-          onLanguagePrompt={() => void copyLanguagePrompt()}
-          showLanguage={showLanguage}
-          onShowLanguageChange={setShowLanguage}
-          languageCount={languageSentCount}
-          onOpenPlan={() => setPlanOpen(true)}
-          onOpenWriting={openWriting}
-          onWrongPractice={() => {
-            setQuizScope('lapses')
-            setQuizResults([])
-            setQuizSetupOpen(true)
-          }}
-          onBrowseAll={() => setBrowseAll(true)}
-          onExportAnki={doExportAnki}
-          onPrint={doPrint}
-          onOpenExport={() => setExportOpen(true)}
-          printTitle={articleTitle || articleKey || '本篇生词'}
-          onExportJson={exportJson}
-          onExportWordList={exportWordList}
-          onCopyMissingPhonetic={(only) => void copyMissingPhonetic(only)}
-          onToggleStats={() => setStatsOpen((v) => !v)}
-          onExportWrong={doExportWrong}
-          onExportAll={exportAll}
-          onRestorePrev={() => void restorePrevLibrary()}
-          onImportBackup={(f) => void onImportBackup(f)}
-          onMergeBackup={(f) => void onMergeBackup(f)}
-          statsOpen={statsOpen}
-          stats={{
-            totals,
-            dayStats,
-            studyTodaySeconds,
-            studyTotalSeconds,
-            studyTotalCards,
-            studiedCount: studiedTodayIds.length,
-            dailyGoal,
-            last7,
-            dueForecast: dueForecastRows,
-            byArticle,
-          }}
-          onDailyGoalChange={setDailyGoal}
-          articleNums={articleNums}
-          articleAllPrinted={articleAllPrinted}
-          articlePrintedAt={articlePrintedAt}
-          focusLemma={focusLemma}
-          confirmDel={confirmDel}
-          onJumpSource={jumpToSource}
-          onSpeak={speak}
-          onDelete={askDelete}
-          onReview={handleReview}
-          onEdit={handleEdit}
-        />
-      </aside>
-
-      {toast && <div className="toast">{toast}</div>}
-    </div>
+    </ReaderShell>
   )
 }
