@@ -31,6 +31,15 @@ export function isLearningKey(key: string | null | undefined): boolean {
   return !!key && LEARNING_KEY_SET.has(key)
 }
 
+/**
+ * 本次启动是否已经成功问过服务端。
+ *
+ * 用来区分两种情况：
+ * - 本地真的把记录清空了 → 应该同步空记录，服务端也要清；
+ * - 服务端还没连上 → 不能拿空记录覆盖服务端，等连上再说。
+ */
+let serverChecked = false
+
 function storage(): Storage | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage
@@ -104,17 +113,26 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
 export async function hydrateLearningFromServer(): Promise<void> {
   try {
     const data = await learningRepo.load()
-    if (!data || !hasLearningData(data)) return
+    if (!data) return // 服务不可用：不知道服务端有没有数据，后面不能用空记录覆盖
+    serverChecked = true
+    if (!hasLearningData(data)) return
     writeLearningToLocalStorage(data, true)
   } catch {
     // 静态部署 / 服务没起：继续用 localStorage
   }
 }
 
+/** 测试用：重置“是否已问过服务端”。生产代码不要调用。 */
+export function resetLearningSyncStateForTest(): void {
+  serverChecked = false
+}
+
 /** 把当前 localStorage 里的学习记录写回 SQLite；失败返回 false，不阻塞 UI。 */
 export async function syncLearningToServer(): Promise<boolean> {
   const data = readLearningFromLocalStorage()
-  if (!hasLearningData(data)) return false
+  // 还没成功问过服务端时，空记录可能只是“本地没数据”，不能拿去清服务端。
+  // 问过之后如果还是空，就是用户真的清空了，应该让服务端也清空。
+  if (!hasLearningData(data) && !serverChecked) return false
   try {
     await learningRepo.save(data)
     return true

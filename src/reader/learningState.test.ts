@@ -4,12 +4,14 @@ import { learningRepo } from '../adapters/learningRepo'
 import {
   hydrateLearningFromServer,
   readLearningFromLocalStorage,
+  resetLearningSyncStateForTest,
   syncLearningToServer,
   writeLearningToLocalStorage,
 } from './learningState'
 
 afterEach(() => {
   localStorage.clear()
+  resetLearningSyncStateForTest()
   vi.restoreAllMocks()
 })
 
@@ -51,9 +53,29 @@ describe('学习记录 localStorage 同步缓存', () => {
     expect(localStorage.getItem('reader:mistakes')).toContain('vocab:w1')
   })
 
-  it('没有学习记录时不拿空数据覆盖服务端', async () => {
+  it('还没问过服务端时，不拿空数据覆盖服务端', async () => {
     const save = vi.spyOn(learningRepo, 'save').mockResolvedValue()
     await expect(syncLearningToServer()).resolves.toBe(false)
     expect(save).not.toHaveBeenCalled()
+  })
+
+  it('问过服务端后，用户清空记录会同步空记录', async () => {
+    vi.spyOn(learningRepo, 'load').mockResolvedValue({
+      practice: [],
+      mistakes: [],
+      readDone: [],
+      writingHistory: [],
+      retells: [],
+      activity: [],
+      studyDays: [],
+      sessions: [],
+      studiedDays: [],
+      skimmed: [],
+      kindStats: {},
+    })
+    await hydrateLearningFromServer()
+    const save = vi.spyOn(learningRepo, 'save').mockResolvedValue()
+    await expect(syncLearningToServer()).resolves.toBe(true)
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ practice: [] }))
   })
 })
