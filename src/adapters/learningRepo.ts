@@ -34,28 +34,30 @@ export class SqliteLearningRepo implements LearningRepoPort {
   /** 服务不可用时返回 null；空库返回空记录（调用方自己判断有没有数据）。 */
   async load(): Promise<LearningData | null> {
     if (!(await this.canUse())) return null
-    const res = await storeRequest<LearningResponse>('/learning')
+    const res = await storeRequest<LearningResponse>('/learning', {}, undefined, 2000)
     return normalizeLearning(res.value)
   }
 
   async save(data: LearningData): Promise<void> {
     if (!(await this.canUse())) throw new Error('学习记录服务不可用')
-    await storeRequest('/learning', { method: 'PUT', body: JSON.stringify(data) })
+    await storeRequest('/learning', { method: 'PUT', body: JSON.stringify(data) }, undefined, 3000)
   }
 
   /** 只提交变化的 section；服务端只删/插对应表。 */
   async savePartial(data: Partial<LearningData>): Promise<void> {
     if (!(await this.canUse())) throw new Error('学习记录服务不可用')
-    await storeRequest('/learning/partial', { method: 'PUT', body: JSON.stringify(data) })
+    await storeRequest('/learning/partial', { method: 'PUT', body: JSON.stringify(data) }, undefined, 3000)
   }
 
   /** 首次迁移：只往空库写，避免两个标签页/两台机器互相覆盖。 */
   async migrate(data: LearningData): Promise<{ migrated: boolean; value: LearningData } | null> {
     if (!(await this.canUse())) return null
-    const res = await storeRequest<MigrateResponse>('/learning/if-empty', {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    })
+    const res = await storeRequest<MigrateResponse>(
+      '/learning/if-empty',
+      { method: 'PUT', body: JSON.stringify(data) },
+      undefined,
+      3000,
+    )
     return { migrated: res.migrated === true, value: normalizeLearning(res.value) }
   }
 }

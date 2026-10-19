@@ -14,18 +14,22 @@ function resolveFetch(fetchImpl?: FetchLike): FetchLike | null {
   return typeof fetch === 'function' ? fetch : null
 }
 
-/** 服务端 SQLite 是否可用；不可用（静态部署 / Node 太老 / 服务挂了）返回 false。 */
-export async function storeHealth(fetchImpl?: FetchLike, timeoutMs = 1500): Promise<boolean> {
-  const f = resolveFetch(fetchImpl)
-  if (!f) return false
-  let signal: AbortSignal | undefined
+function timeoutSignal(ms: number): AbortSignal | undefined {
   try {
-    if (timeoutMs > 0 && typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
-      signal = AbortSignal.timeout(timeoutMs)
+    if (ms > 0 && typeof AbortSignal !== 'undefined' && 'timeout' in AbortSignal) {
+      return AbortSignal.timeout(ms)
     }
   } catch {
     // 老浏览器没有 AbortSignal.timeout：不设超时
   }
+  return undefined
+}
+
+/** 服务端 SQLite 是否可用；不可用（静态部署 / Node 太老 / 服务挂了）返回 false。 */
+export async function storeHealth(fetchImpl?: FetchLike, timeoutMs = 600): Promise<boolean> {
+  const f = resolveFetch(fetchImpl)
+  if (!f) return false
+  const signal = timeoutSignal(timeoutMs)
   try {
     const res = await f('/api/store/health', { cache: 'no-store', signal })
     if (!res.ok) return false
@@ -41,9 +45,11 @@ export async function storeRequest<T>(
   path: string,
   init: RequestInit = {},
   fetchImpl?: FetchLike,
+  timeoutMs = 0,
 ): Promise<T> {
   const f = resolveFetch(fetchImpl)
   if (!f) throw new StoreUnavailableError('当前环境没有 fetch')
+  const signal = init.signal ?? timeoutSignal(timeoutMs)
   let res: Response
   try {
     res = await f(`/api/store${path}`, {
@@ -53,6 +59,7 @@ export async function storeRequest<T>(
         ...(init.headers ?? {}),
       },
       cache: 'no-store',
+      signal,
     })
   } catch (e) {
     throw new StoreUnavailableError(e instanceof Error ? e.message : '存储服务不可用')
