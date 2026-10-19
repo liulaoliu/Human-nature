@@ -31,12 +31,19 @@ export default function ArticlePicker({
   const [open, setOpen] = useState(false)
   const [closed, setClosed] = useState<Set<string>>(new Set())
   const [hideRead, setHideRead] = useState(false)
+  /** 标题搜索：只在本组件内存里，不落 localStorage（关掉下拉即清空）。 */
+  const [query, setQuery] = useState('')
   const rootRef = useRef<HTMLDivElement | null>(null)
+
+  const close = () => {
+    setOpen(false)
+    setQuery('')
+  }
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) close()
     }
     document.addEventListener('mousedown', onDown)
     return () => document.removeEventListener('mousedown', onDown)
@@ -45,7 +52,7 @@ export default function ArticlePicker({
   // Esc 关下拉：走全局键盘分发，最高优先级（弹层打开时先关它）
   useHotkeys(
     (e) => {
-      if (e.key === 'Escape') setOpen(false)
+      if (e.key === 'Escape') close()
     },
     open,
     100,
@@ -71,14 +78,19 @@ export default function ArticlePicker({
 
   const choose = (value: string) => {
     onPick(value)
-    setOpen(false)
+    close()
   }
 
   /** 已读完（会带上「第一次读完」的日期）。 */
   const readOf = (id: string) => readDays[id]
-  const shownBuiltin = hideRead ? builtinKeys.filter((k) => !readOf(k)) : builtinKeys
+  const q = query.trim().toLowerCase()
+  const matchTitle = (title: string) => !q || title.toLowerCase().includes(q)
+  const shownBuiltin = builtinKeys.filter((k) => matchTitle(k) && (!hideRead || !readOf(k)))
   const shownGroups: [string, SavedArticle[]][] = savedGroups
-    .map(([name, list]): [string, SavedArticle[]] => [name, hideRead ? list.filter((a) => !readOf(a.id)) : list])
+    .map(([name, list]): [string, SavedArticle[]] => [
+      name,
+      list.filter((a) => matchTitle(a.title) && (!hideRead || !readOf(a.id))),
+    ])
     .filter(([, list]) => list.length > 0)
 
   const readBadge = (id: string) =>
@@ -90,13 +102,29 @@ export default function ArticlePicker({
 
   return (
     <div className="picker" ref={rootRef}>
-      <button className={'picker-btn' + (open ? ' open' : '')} onClick={() => setOpen((v) => !v)} title="选择文章">
+      <button
+        className={'picker-btn' + (open ? ' open' : '')}
+        onClick={() => (open ? close() : setOpen(true))}
+        title="选择文章"
+        aria-expanded={open}
+      >
         <span className="picker-label">{label}</span>
         <span className={'caret' + (open ? ' up' : '')}>▾</span>
       </button>
 
       {open && (
         <div className="picker-pop" role="listbox">
+          <div className="picker-search">
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="搜索文章标题…"
+              aria-label="搜索文章标题"
+              autoFocus
+            />
+          </div>
+
           <div className="picker-filter">
             <label className="check-inline" title="把已经读完的文章藏起来（同一篇不会重复计入）">
               <input type="checkbox" checked={hideRead} onChange={(e) => setHideRead(e.target.checked)} />
@@ -111,10 +139,10 @@ export default function ArticlePicker({
           {book && shownBuiltin.length > 0 && (
             <div className="picker-section">
               <button className="picker-head" onClick={() => toggle('builtin')}>
-                <span className={'caret' + (expanded('builtin') ? '' : ' closed')}>▾</span>
+                <span className={'caret' + (expanded('builtin') || q ? '' : ' closed')}>▾</span>
                 内置（{shownBuiltin.length}）
               </button>
-              {expanded('builtin') &&
+              {(expanded('builtin') || q) &&
                 shownBuiltin.map((k) => (
                   <button
                     key={k}
@@ -132,14 +160,14 @@ export default function ArticlePicker({
           {shownGroups.length > 0 && (
             <div className="picker-section">
               <button className="picker-head" onClick={() => toggle('saved')}>
-                <span className={'caret' + (expanded('saved') ? '' : ' closed')}>▾</span>
+                <span className={'caret' + (expanded('saved') || q ? '' : ' closed')}>▾</span>
                 已保存（{shownGroups.reduce((n, [, l]) => n + l.length, 0)}）
               </button>
-              {expanded('saved') &&
+              {(expanded('saved') || q) &&
                 shownGroups.map(([bookName, list]) => {
                   const gkey = `book:${bookName}`
                   const single = bookName === '单篇'
-                  const isOpenGroup = expanded(gkey)
+                  const isOpenGroup = expanded(gkey) || !!q
                   return (
                     <div key={gkey}>
                       <button
@@ -181,7 +209,9 @@ export default function ArticlePicker({
             </div>
           )}
 
-          {shownBuiltin.length === 0 && shownGroups.length === 0 && <div className="muted picker-empty">都读完了 🎉</div>}
+          {shownBuiltin.length === 0 && shownGroups.length === 0 && (
+            <div className="muted picker-empty">{q ? '没搜到匹配的文章' : '都读完了 🎉'}</div>
+          )}
         </div>
       )}
     </div>
