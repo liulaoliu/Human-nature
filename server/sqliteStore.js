@@ -412,8 +412,10 @@ function ensureSchema(db) {
     throw new Error(`数据库版本 ${version} 高于当前程序支持的 ${SCHEMA_VERSION}`)
   }
   if (version < 1) {
-    db.exec(SCHEMA_V1)
-    db.exec('PRAGMA user_version = 1')
+    tx(db, () => {
+      db.exec(SCHEMA_V1)
+      db.exec('PRAGMA user_version = 1')
+    })
     version = 1
   }
   if (version < 2) {
@@ -422,34 +424,36 @@ function ensureSchema(db) {
       addArticleColumns(db)
       backfillArticleColumns(db)
       rebuildAllProjections(db)
+      db.exec('PRAGMA user_version = 2')
     })
-    db.exec('PRAGMA user_version = 2')
     version = 2
   }
   if (version < 3) {
     tx(db, () => {
       db.exec(SCHEMA_V3)
+      db.exec('PRAGMA user_version = 3')
     })
-    db.exec('PRAGMA user_version = 3')
     version = 3
   }
   if (version < 4) {
-    tx(db, () => normalizeLegacySourceIds(db))
-    db.exec('PRAGMA user_version = 4')
+    tx(db, () => {
+      normalizeLegacySourceIds(db)
+      db.exec('PRAGMA user_version = 4')
+    })
     version = 4
   }
   if (version < 5) {
     tx(db, () => {
       db.exec(SCHEMA_V5)
+      db.exec('PRAGMA user_version = 5')
     })
-    db.exec('PRAGMA user_version = 5')
     version = 5
   }
   if (version < 6) {
     tx(db, () => {
       db.exec(SCHEMA_V6)
+      db.exec('PRAGMA user_version = 6')
     })
-    db.exec('PRAGMA user_version = 6')
     version = 6
   }
   return version
