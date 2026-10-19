@@ -4,6 +4,21 @@
 > 见 [`docs/HANDOFF.md`](docs/HANDOFF.md)。本文件下面很多是较早的录音/抽取待办，
 > 仍然有效，但别把旧状态当成最新状态。
 
+## Review 重构待办（2026-10-19，一个一个改）
+
+> 来源：[`docs/reviews/2026-10-19-full-review.md`](docs/reviews/2026-10-19-full-review.md) 里仍标 🟡 的项。
+> 规矩：一次只做一个主题，做完单独 commit，提交前 `npm run gates`。
+
+- [ ] **ReaderApp 拆分 ①**：把工具栏 + 正文 + 侧栏抽成 `ReaderShell`，先只搬渲染，不改行为
+- [ ] **ReaderApp 拆分 ②**：各练习面板路由抽成 `SessionHost`（背词/考试/听写/听力/速读/仿写）
+- [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
+- [ ] **面板瘦身**：`SpeedReadPanel`（778）/ `StudyPanel`（744）拆「渲染块」与「会话状态机」，目标 <600 行
+- [ ] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
+- [ ] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
+- [ ] **`catch {}` 分类**：用户资产 IO 一律 `console.warn` + 可见提示；可选能力保留空 catch 并写明理由
+- [ ] **无障碍**：给划词/悬浮气泡/纯图标按钮补 `aria-label`，键盘可走到主要操作
+- [ ] **词库增量 upsert**：按 `updatedAt` 只重建变化的词条，替代每次全量 clear + rebuild
+
 ## 听说读写扩展（本轮）
 
 **状态：听、写各模块 MVP 已做，真机待验**
