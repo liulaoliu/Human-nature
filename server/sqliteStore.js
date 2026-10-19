@@ -1,7 +1,7 @@
 import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V5, SCHEMA_VERSION } from './sqliteSchema.js'
+import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V5, SCHEMA_V6, SCHEMA_VERSION } from './sqliteSchema.js'
 import { backupBeforeMigration, backupDaily } from './sqliteBackup.js'
 import {
   hasLearningRows,
@@ -445,6 +445,13 @@ function ensureSchema(db) {
     db.exec('PRAGMA user_version = 5')
     version = 5
   }
+  if (version < 6) {
+    tx(db, () => {
+      db.exec(SCHEMA_V6)
+    })
+    db.exec('PRAGMA user_version = 6')
+    version = 6
+  }
   return version
 }
 
@@ -469,6 +476,17 @@ function assertDatabaseHealthy(db) {
   if (String(result).toLowerCase() !== 'ok') {
     throw new Error(`SQLite 完整性检查未通过：${String(result)}`)
   }
+}
+
+/** 覆盖/删除文章前，把当前版本留到 article_prev（一篇文章只留一版）。 */
+function rememberArticlePrev(db, id, nextPayload) {
+  const row = db.prepare('SELECT payload, title, updated_at FROM articles WHERE id = ?').get(String(id))
+  if (!row) return false
+  if (nextPayload !== undefined && String(row.payload) === String(nextPayload)) return false
+  db.prepare(
+    'INSERT OR REPLACE INTO article_prev (article_id, payload, title, updated_at) VALUES (?, ?, ?, ?)',
+  ).run(String(id), String(row.payload), String(row.title ?? ''), String(row.updated_at))
+  return true
 }
 
 const cache = new Map()
@@ -672,17 +690,35 @@ export function openStore(dbPath) {
         const sentences = list(article.sentences)
         const words = new Set()
         for (const s of sentences) for (const w of list(s?.vocab)) words.add(String(w))
+        const payload = JSON.stringify(article)
         tx(db, () => {
+          rememberArticlePrev(db, article.id, payload)
           db.prepare(`
             INSERT OR REPLACE INTO articles (
               id, payload, title, book, source_key, created_at, updated_at, sentence_count, word_count
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(article.id, JSON.stringify(article), title, book, sourceKey, createdAt, updatedAt, sentences.length, words.size)
+          `).run(article.id, payload, title, book, sourceKey, createdAt, updatedAt, sentences.length, words.size)
           rebuildArticleProjection(db, article)
         })
       },
+      loadArticlePrev(id) {
+        const row = db.prepare('SELECT payload, updated_at FROM article_prev WHERE article_id = ?').get(String(id))
+        return row
+          ? { updatedAt: String(row.updated_at), value: parsePayload(String(row.payload)) }
+          : null
+      },
+      restoreArticlePrev(id) {
+        const row = db.prepare('SELECT payload FROM article_prev WHERE article_id = ?').get(String(id))
+        if (!row) return null
+        const value = parsePayload(String(row.payload))
+        if (!value) return null
+        // saveArticle 会先把当前版本存进 article_prev，恢复错了还能再切回来。
+        this.saveArticle(value)
+        return this.getArticle(String(id))
+      },
       removeArticle(id) {
         tx(db, () => {
+          rememberArticlePrev(db, String(id))
           deleteArticleProjection(db, String(id))
           db.prepare('DELETE FROM articles WHERE id = ?').run(String(id))
         })
@@ -699,6 +735,14 @@ export function openStore(dbPath) {
             .all()
             .map((r) => ({ at: String(r.at), count: Number(r.item_count), library: parsePayload(String(r.payload)) })),
           articles: this.listArticles(),
+          articlePrev: db
+            .prepare('SELECT article_id, updated_at, payload FROM article_prev ORDER BY article_id ASC')
+            .all()
+            .map((r) => ({
+              articleId: String(r.article_id),
+              updatedAt: String(r.updated_at),
+              value: parsePayload(String(r.payload)),
+            })),
           learning: this.loadLearning(),
           learningSnapshots: db
             .prepare('SELECT id, at, reason, record_count, payload FROM learning_snapshots ORDER BY id ASC')

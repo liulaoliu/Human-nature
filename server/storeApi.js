@@ -144,6 +144,30 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       return
     }
 
+    const articlePrev = path.match(/^\/articles\/(.+)\/prev$/)
+    if (articlePrev && method === 'GET') {
+      const id = decodePart(articlePrev[1])
+      const value = id ? store.loadArticlePrev(id) : null
+      if (!value) {
+        fail(res, 404, '文章没有上一版')
+        return
+      }
+      sendJson(res, 200, { ok: true, value })
+      return
+    }
+
+    const articleRestore = path.match(/^\/articles\/(.+)\/restore-prev$/)
+    if (articleRestore && method === 'POST') {
+      const id = decodePart(articleRestore[1])
+      const value = id ? store.restoreArticlePrev(id) : null
+      if (!value) {
+        fail(res, 404, '文章没有上一版')
+        return
+      }
+      sendJson(res, 200, { ok: true, value })
+      return
+    }
+
     const article = path.match(/^\/articles\/(.+)$/)
     if (article) {
       const id = decodePart(article[1])

@@ -118,6 +118,21 @@ describe('httpApp 请求处理', () => {
       expect(putArticle.status).toBe(200)
       expect((await fetch(`${base}/api/store/articles`).then((r) => r.json())).articles[0].id).toBe('a1')
 
+      const putArticle2 = await fetch(`${base}/api/store/articles/a1`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify({ ...article, title: 'A2', updatedAt: '2026-01-02T00:00:00.000Z' }),
+      })
+      expect(putArticle2.status).toBe(200)
+      const articlePrev = await fetch(`${base}/api/store/articles/a1/prev`).then((r) => r.json())
+      expect(articlePrev.value.value.title).toBe('A')
+      const restoreArticle = await fetch(`${base}/api/store/articles/a1/restore-prev`, {
+        method: 'POST',
+        headers: json(),
+      }).then((r) => r.json())
+      expect(restoreArticle.value.title).toBe('A')
+      expect((await fetch(`${base}/api/store/articles/a1`).then((r) => r.json())).value.title).toBe('A')
+
       const learning = {
         practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8 }],
         mistakes: [{ id: 'vocab:w1', kind: 'vocab', at: '2026-01-01T00:00:00.000Z', count: 1, label: 'w1' }],
@@ -188,7 +203,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(5)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(6)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

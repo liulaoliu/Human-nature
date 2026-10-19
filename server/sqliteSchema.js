@@ -3,10 +3,10 @@
  *
  * 事实来源仍然是 JSON payload；这里只放表结构，避免 store 的读写逻辑被 DDL 淹没。
  * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
- * v4 旧词条文章 id，v5 学习记录快照。
+ * v4 旧词条文章 id，v5 学习记录快照，v6 文章上一版。
  */
 
-export const SCHEMA_VERSION = 5
+export const SCHEMA_VERSION = 6
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -330,4 +330,19 @@ CREATE TABLE IF NOT EXISTS learning_snapshots (
   payload TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_learning_snapshots_at ON learning_snapshots(at DESC);
+`
+
+/**
+ * v6：文章上一版。
+ *
+ * 文章正文/翻译/句子切分是用户资产，但原来 `saveArticle` 直接覆盖，误编辑没有退路。
+ * 每次覆盖或删除前把当前 payload 留一份；一篇文章只留最近一版，恢复时可反悔。
+ */
+export const SCHEMA_V6 = `
+CREATE TABLE IF NOT EXISTS article_prev (
+  article_id TEXT PRIMARY KEY,
+  payload TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
 `

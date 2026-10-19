@@ -80,7 +80,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(5)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(6)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -164,6 +164,24 @@ describe('sqliteStore：文章', () => {
     expect(store.getArticle('a').title).toBe('a')
     store.removeArticle('a')
     expect(store.getArticle('a')).toBeNull()
+  })
+
+  it('覆盖/删除前留上一版，恢复后还能反悔', () => {
+    const store = openStore(tempDb())
+    store.saveArticle(article('a', '2026-01-01T00:00:00.000Z', 'v1'))
+    expect(store.loadArticlePrev('a')).toBeNull()
+
+    store.saveArticle(article('a', '2026-02-01T00:00:00.000Z', 'v2'))
+    expect(store.loadArticlePrev('a').value.title).toBe('v1')
+    expect(store.restoreArticlePrev('a').title).toBe('v1')
+    expect(store.getArticle('a').title).toBe('v1')
+    // 恢复前那一版（v2）进了 prev，恢复错了还能切回去。
+    expect(store.loadArticlePrev('a').value.title).toBe('v2')
+
+    store.removeArticle('a')
+    expect(store.getArticle('a')).toBeNull()
+    expect(store.loadArticlePrev('a').value.title).toBe('v1')
+    expect(store.restoreArticlePrev('a').title).toBe('v1')
   })
 
   it('导出包含词库、快照和文章', () => {
@@ -379,7 +397,7 @@ describe('sqliteStore：学习记录', () => {
   })
 })
 
-describe('sqliteStore：v1 → v5 迁移', () => {
+describe('sqliteStore：v1 → v6 迁移', () => {
   it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
@@ -443,7 +461,7 @@ describe('sqliteStore：v1 → v5 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(5)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(6)
     // 迁移前整库备份，出事能回到 v1。
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))

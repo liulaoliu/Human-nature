@@ -94,6 +94,7 @@
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
 | SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
 | 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
+| 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |
 | schema 迁移备份 | 用旧版本创建的 `data/xueba.db` 启动新版 | 启动日志有「迁移前备份」；`data/backups/xueba-v<旧版本>-*.db` 存在，保留最近 5 份；同次启动还会生成当天 `xueba-daily-*.db`（保留 7 天） |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
 

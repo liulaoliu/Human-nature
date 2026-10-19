@@ -75,7 +75,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 5`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照）。
+schema 版本：`PRAGMA user_version = 6`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -85,12 +85,16 @@ vocab_prev(id=1, payload JSON, item_count, updated_at)      -- 覆盖前那一�
 vocab_snapshots(at, payload JSON, item_count)               -- 最近 8 版 + 历史最大一版
 articles(id, payload JSON, title, book, source_key,
          created_at, updated_at, sentence_count, word_count)
+article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前那一版
 ```
 
 - `payload` 保存完整的 `VocabLibrary` / `SavedArticle`，**事实来源**是它；
   整库回滚、导出、旧版本兼容、换 DB 时的 JSON 导入都靠它。
 - 词库备份语义与 IndexedDB 实现一致：覆盖前留「上一版」，且**只留更大的那一份**；
   缩水事故（读失败/误清）时，备份里是事故前那一版。
+- 文章每次覆盖/删除前把当前版本留到 `article_prev`；`GET /api/store/articles/:id/prev`
+  查看，`POST /api/store/articles/:id/restore-prev` 恢复。恢复会把“当前版”再写进 prev，
+  所以恢复错了还能切回来。
 
 ### 4.2 派生表（给 SQL / 统计 / 以后 FTS 用）
 
@@ -214,6 +218,7 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 + 学习记录 |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 统计；学习记录同时已进 SQLite，换机器最稳的是带 `data/xueba.db` 或 `/api/store/db` |
 | 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 8 版 + 历史最大一版 |
+| 文章上一版 | `GET /api/store/articles/:id/prev` / `POST /api/store/articles/:id/restore-prev` | 覆盖/删除前那一版；恢复后可反悔 |
 
 ## 六、安全
 
