@@ -58,9 +58,9 @@
 
 | # | 维度 | 位置 | 问题 |
 |---|---|---|---|
-| 19 | A | `SpeedReadPanel.tsx` 778、`StudyPanel.tsx` 744、`useSpeaking.ts` 592、`useQuizSession.ts` 537、`useStudySession.ts` 543 | 已接近 800 行门禁；下次加功能很容易超限。建议先把「渲染块」和「会话状态机」分开，别等门禁失败再拆。 |
+| 19 | A | `SpeedReadPanel.tsx` 778、`StudyPanel.tsx` 744、`useSpeaking.ts` 592、`useQuizSession.ts` 537、`useStudySession.ts` 543 | 已接近 800 行门禁；下次加功能很容易超限。✅ 面板已拆：`SpeedReadPanel` 597 / `StudyPanel` 512（`SpeedReadSentence`、`SpeedReadBasket`、`StudyDrill`）。三个会话 hook 仍 >500，继续观察。 |
 | 20 | A | `src/ui/App.tsx` 1191、`src/state/session.ts` 1185 | 旧跟读模块，已登记豁免。除非要继续开发跟读，否则别动；要动先补测试。 |
-| 21 🟡 | F | `src/reader` 281 个 `onClick` vs 3 个 `aria-*`/`role` | 键盘可达性主要靠全局快捷键；纯鼠标交互（划词、悬浮气泡）没有无障碍标签。不是当前重构重点，改面板时顺手补 `aria-label`。 |
+| 21 ✅ | F | `src/reader` 281 个 `onClick` vs 3 个 `aria-*`/`role` | 键盘可达性主要靠全局快捷键；纯鼠标交互（划词、悬浮气泡）没有无障碍标签。已补：纯图标按钮 `aria-label`；正文句子 `role=button`+`tabIndex`+Enter/Space；选词气泡 `role=status`+`aria-live`。 |
 | 22 ✅ | G | `server/storeApi.js:94-101` | `/health` 回传数据库绝对路径；本机服务问题不大，但日志/截图分享时会泄露目录结构。建议只回 `engine/version`。 |
 
 ## 四、修复记录（2026-10-19 收尾）
@@ -69,7 +69,7 @@
 - 会话层：`useLearningData` 收口 12 类学习记录；`useExport` 参数 30 → 11；AI 结果应用改任务注册表并补 13 条表驱动测试。
 - IO/键盘：词典与例句加载器搬到 `adapters/`；混合仓储支持重探 SQLite、文章读接口去掉写副作用；全局键盘按优先级集中分发。
 - 服务端：迁移版本号与 DDL 同事务、导出日期改本地日、健康接口去掉绝对路径、重复词库保存与增量快照降 IO。
-- 仍未完成：`ReaderApp` 2930 行（目标 ≤1200，渲染层尚未拆）、hook/panel 测试覆盖仍不足、面板接近 800 行、个别 `catch {}` 未逐条分类、aria 只做了键盘入口。
+- 仍未完成：`ReaderApp` 2424 行（目标 ≤1200；①`ReaderShell`/②`SessionHost` 已拆，③散落 IO 已收口到 `useBatchQueue`/`usePregenerate`/`useArticleBootstrap`，剩余大块是侧栏/工具栏 props 接线与派生统计）、三个会话 hook >500 行、aria 只做了键盘入口（划词气泡与句子导航已补）。
 
 ## 五、重构路线（每步可单独提交）
 
