@@ -78,6 +78,7 @@ import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
+import { useBatchQueue } from './hooks/useBatchQueue'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
@@ -121,17 +122,6 @@ const TASKS: { task: AnalysisTask; label: string }[] = [
   { task: 'extract_vocab', label: '提取生词' },
   { task: 'summarize', label: '概述' },
 ]
-
-/** 「待选」清单按文章持久化：切页/关浏览器回来还在。 */
-function loadBatchMap(): Record<string, BatchItem[]> {
-  try {
-    const raw = localStorage.getItem('reader:batch')
-    const v = raw ? (JSON.parse(raw) as Record<string, BatchItem[]>) : {}
-    return v && typeof v === 'object' ? v : {}
-  } catch {
-    return {}
-  }
-}
 
 export default function ReaderApp() {
   const [book, setBook] = useState<ArticleBook | null>(null)
@@ -445,9 +435,18 @@ export default function ReaderApp() {
   const [vocabSeconds, setVocabSeconds] = useState(0)
   /** 选词模式：点/划直接选生词，攒一批后一键导出 */
   const [vocabMode, setVocabMode] = useState(false)
-  const [batch, setBatch] = useState<BatchItem[]>([])
   /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
   const articleIdentity = articleKey ?? savedId ?? articleTitle
+  // 「待选」清单：状态 + 按文章持久化 + 去重（IO 收口在 useBatchQueue）
+  const {
+    batch,
+    setBatch,
+    batchMapRef,
+    addToBatch,
+    mergeBatch,
+    batchItemsFromWords,
+    batchSentenceIds,
+  } = useBatchQueue({ articleIdentity, sentences: doc?.sentences ?? null })
 
   // 学习记录（练习/错题/活动/背词日/会话/复述/略读/读完/目标）：声明与落盘全在 useLearningData
   const {
@@ -499,11 +498,6 @@ export default function ReaderApp() {
   )
 
   /** 正文里哪些词算生词（每句 lemma / 全文 lemma / 未掌握词 / 有生词的句子）—— 见 hooks/useDocVocabSets */
-  const batchSentenceIds = useMemo(() => {
-    const set = new Set<string>()
-    for (const b of batch) if (b.sentenceId) set.add(b.sentenceId)
-    return set
-  }, [batch])
   const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
     sentences: doc?.sentences ?? null,
     items: library.items,
@@ -552,7 +546,6 @@ export default function ReaderApp() {
   const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
   const applyingDom = useRef(false)
   const articles = useRef<ArticleRepoPort | null>(null)
-  const batchMapRef = useRef<Record<string, BatchItem[]>>(loadBatchMap())
   const vocabStartRef = useRef<number | null>(null)
   const vocabAccumRef = useRef(0)
   const sessionPickedRef = useRef(0)
@@ -617,16 +610,6 @@ export default function ReaderApp() {
   useEffect(() => {
     document.documentElement.dataset.theme = eye ? 'green' : 'dark'
   }, [eye])
-
-  // 待选清单按文章持久化
-  useEffect(() => {
-    batchMapRef.current[articleIdentity] = batch
-    try {
-      localStorage.setItem('reader:batch', JSON.stringify(batchMapRef.current))
-    } catch {
-      // 忽略
-    }
-  }, [batch, articleIdentity])
 
   /** 按住 Alt 点句子：把文本复制到剪贴板（方便拿去翻译）。 */
   const altCopyText = useCallback(
@@ -1012,47 +995,6 @@ export default function ReaderApp() {
     start: startQuick,
     grade: gradeQuick,
   } = quickApi
-
-  /** 选词模式：把词加入 / 移出待选清单（同词按 lemma 去重）。 */
-  const addToBatch = useCallback((words: string[], sentence: string, sentenceId: string | null) => {
-    setBatch((prev) => {
-      const next = [...prev]
-      for (const w of words) {
-        const key = lemmaOf(w)
-        const i = next.findIndex((x) => lemmaOf(x.word) === key)
-        if (i >= 0) next.splice(i, 1)
-        else next.push({ word: w, sentence, sentenceId })
-      }
-      return next
-    })
-  }, [])
-
-  /** 批量并入选区/待选（按 lemma 去重）。用于自动标词导入。 */
-  const mergeBatch = useCallback((items: BatchItem[]) => {
-    setBatch((prev) => {
-      const next = [...prev]
-      for (const it of items) {
-        const key = lemmaOf(it.word)
-        if (!next.some((x) => lemmaOf(x.word) === key)) next.push(it)
-      }
-      return next
-    })
-  }, [])
-
-  /** 把一串词映射成待选项，并尽量在正文里找到它所在的句子（回填来源）。 */
-  const batchItemsFromWords = useCallback(
-    (words: string[]): BatchItem[] =>
-      words.map((w) => {
-        const key = lemmaOf(w)
-        const s = doc?.sentences.find((x) =>
-          wordSpans(x.text).some(
-            (t) => t.text.toLowerCase() === w.toLowerCase() || lemmaOf(t.text) === key,
-          ),
-        )
-        return { word: w, sentence: s?.text ?? '', sentenceId: s?.id ?? null }
-      }),
-    [doc],
-  )
 
   /** 把词条**直接**加进生词本（跳过「待选」）。用于「自动标词」直入模式。 */
   const commitBatchItems = useCallback(
