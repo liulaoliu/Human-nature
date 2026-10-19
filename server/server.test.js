@@ -140,6 +140,16 @@ describe('httpApp 请求处理', () => {
       expect(putVocab.status).toBe(200)
       expect((await fetch(`${base}/api/store/vocab`).then((r) => r.json())).value.items).toHaveLength(1)
 
+      // 相同内容重复 PUT：不再写快照 / 重建派生表
+      const snapsBefore = (await fetch(`${base}/api/store/vocab/snapshots`).then((r) => r.json())).snapshots.length
+      await fetch(`${base}/api/store/vocab`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify(library),
+      })
+      const snapsAfter = (await fetch(`${base}/api/store/vocab/snapshots`).then((r) => r.json())).snapshots.length
+      expect(snapsAfter).toBe(snapsBefore)
+
       const article = {
         id: 'a1',
         title: 'A',

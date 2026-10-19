@@ -576,6 +576,8 @@ export function openStore(dbPath) {
         const count = lib.items.length
         tx(db, () => {
           const prev = db.prepare('SELECT payload, item_count, updated_at FROM vocab WHERE id = 1').get()
+          // 内容没变就别再全量重建派生表/写快照（自动补全 effect 重跑时很常见）。
+          if (prev && String(prev.payload) === payload) return
           const backup = db.prepare('SELECT item_count FROM vocab_prev WHERE id = 1').get()
           // 和前端一致：备份只留「更大的那一份」，缩水事故时保住事故前那一版。
           if (prev && Number(prev.item_count) > 0 && Number(prev.item_count) >= Number(backup?.item_count ?? 0)) {

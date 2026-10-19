@@ -328,6 +328,16 @@ export function loadLearningSnapshot(db, id) {
   }
 }
 
+const PARTIAL_SNAPSHOT_MS = 5 * 60_000
+
+/** 增量写是否该留快照：没有上一份或已超过 5 分钟。 */
+function shouldSnapshotPartial(db) {
+  const last = db.prepare('SELECT at FROM learning_snapshots ORDER BY id DESC LIMIT 1').get()
+  if (!last) return true
+  const at = Date.parse(String(last.at))
+  return !Number.isFinite(at) || Date.now() - at >= PARTIAL_SNAPSHOT_MS
+}
+
 /** 恢复前会先把“当前状态”再存一份快照，恢复错了还能回来。 */
 export function restoreLearningSnapshot(db, id) {
   const snap = loadLearningSnapshot(db, id)
@@ -344,7 +354,9 @@ export function restoreLearningSnapshot(db, id) {
 export function writeLearning(db, data, only) {
   assertLearning(data)
   const sections = only ? [...new Set(only)] : LEARNING_SECTIONS
-  snapshotLearning(db, only ? 'before-partial' : 'before-write')
+  // 增量写（答题后防抖同步）非常频繁；每次都整份快照会放大 IO。
+  // 整份替换必留快照；增量最多每 5 分钟留一份，足够回退又不拖慢输入。
+  if (!only || shouldSnapshotPartial(db)) snapshotLearning(db, only ? 'before-partial' : 'before-write')
   clearLearningSections(db, sections)
   for (const section of sections) WRITERS[section](db, data)
 }
