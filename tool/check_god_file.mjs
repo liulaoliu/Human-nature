@@ -37,7 +37,7 @@ function walk(dir, out = []) {
     const p = join(dir, e.name)
     if (e.isDirectory()) {
       if (!SKIP_DIRS.has(e.name)) walk(p, out)
-    } else if (/\.(ts|tsx|mjs)$/.test(e.name)) {
+    } else if (/\.(ts|tsx|mjs|js)$/.test(e.name)) {
       out.push(p)
     }
   }
@@ -45,10 +45,10 @@ function walk(dir, out = []) {
 }
 
 const violations = []
-for (const file of [...walk('src'), ...walk('tools')]) {
+for (const file of [...walk('src'), ...walk('tools'), ...walk('server')]) {
   const rel = relative(process.cwd(), file).replace(/\\/g, '/')
   const lines = readFileSync(file, 'utf8').split('\n').length
-  const limit = /\.test\.tsx?$/.test(rel) ? MAX_TEST_LINES : MAX_LINES
+  const limit = /\.test\.(?:tsx?|js)$/.test(rel) ? MAX_TEST_LINES : MAX_LINES
   const baseline = BASELINE[rel]
   if (baseline !== undefined) {
     if (lines > baseline) {

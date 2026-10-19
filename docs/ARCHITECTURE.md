@@ -94,14 +94,15 @@ types ← core ← adapters ← reader
   `words` / `article_sentences` / `lang_points` 等是**同一事务里重建的派生表**；
   不要绕过 `saveVocab` / `saveArticle` 直接写派生表；
 - schema 变更走 `PRAGMA user_version` 迁移；新表/新列要留旧库升级测试；
-- 用户资产写入必须同时考虑 IndexedDB 兜底和「导出全部」。
+- 用户资产写入必须同时考虑 IndexedDB 兜底和「导出全部」；
+- 上帝文件门禁扫描 `src/`、`tools/`、`server/`：新文件 >800 行直接失败，拆出去再写。
 
 ## 四、有意为之的例外（别当违规修）
 
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 偏大（3200 行）**：已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 偏大（3021 行）**：已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。它现在是「状态总线 + 接线」，领域逻辑要一律往 core/hooks 外面搬。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；

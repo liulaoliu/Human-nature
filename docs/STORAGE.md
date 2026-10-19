@@ -222,7 +222,9 @@ HybridRepo / LearningRepo（adapters：SQLite 优先，IndexedDB/localStorage �
       ↓ HTTP /api/store/*
 server/storeApi.js（路由，不认识具体 DB）
       ↓ 同一组方法：loadVocab / saveVocab / listArticles / saveArticle / loadLearning / saveLearning…
-server/sqliteStore.js（SQLite 实现）
+server/sqliteStore.js（词库/文章/快照/导出）
+server/sqliteLearning.js（学习记录 section 读写）
+server/sqliteUtil.js（事务与字段转换）
 ```
 
 所以：
