@@ -24,37 +24,22 @@ import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
 import type { PracticeKind } from '../../core/practice'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
+import {
+  parseQuizSessionSnapshot,
+  type QuizResultRow,
+  type QuizSessionSnapshot,
+} from '../../core/sessionSnapshots'
+
+export type { QuizResultRow } from '../../core/sessionSnapshots'
 
 /** 考试范围。 */
 export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
-
-export interface QuizResultRow {
-  id: string
-  itemId: string
-  correct: boolean
-}
-
-/** 考试会话快照（落 localStorage，刷新后接着考）。 */
-interface QuizSessionSnapshot {
-  v: 1
-  queue: QuizQuestion[]
-  index: number
-  input: string
-  checked: boolean
-  result: boolean | null
-  results: QuizResultRow[]
-  autoRun: boolean
-}
 
 const QUIZ_SESSION_KEY = 'reader:quizSession'
 
 function loadQuizSession(): QuizSessionSnapshot | null {
   try {
-    const raw = localStorage.getItem(QUIZ_SESSION_KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw) as QuizSessionSnapshot
-    if (!s || s.v !== 1 || !Array.isArray(s.queue) || !s.queue.length) return null
-    return s
+    return parseQuizSessionSnapshot(localStorage.getItem(QUIZ_SESSION_KEY))
   } catch {
     return null
   }

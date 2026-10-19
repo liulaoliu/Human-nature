@@ -17,6 +17,11 @@ import type { PracticeKind } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
 import { dictMistake } from '../../core/mistakes'
 import { useLocalStorageState, persistentEnum, persistentNumber } from './useLocalStorageState'
+import {
+  parseDictSessionSnapshot,
+  type DictItemData,
+  type DictSessionSnapshot,
+} from '../../core/sessionSnapshots'
 
 /** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
@@ -50,40 +55,13 @@ function writeCursor(k: string, v: number): void {
 }
 
 /** 听写面板的一题：句子 id + 原文；填空题额外带上「固定挖哪些空」。 */
-export interface DictItem {
-  id: string
-  text: string
-  targets?: string[]
-  /** 整句模式：源句全文 + 本块在该句里的词区间（复用整句音频 seek 播放，零额外合成）。 */
-  src?: string
-  sw?: number
-  ew?: number
-}
-
-/** 听写会话快照（落 localStorage，刷新后接着听写）。 */
-interface DictSessionSnapshot {
-  v: 1
-  queue: DictItem[]
-  index: number
-  mode: 'full' | 'cloze'
-  input: string
-  checked: boolean
-  diff: DiffToken[] | null
-  blanks: string[]
-  results: boolean[]
-  wrongItems: DictItem[]
-  round: { offset: number; grand: number }
-}
+export type DictItem = DictItemData
 
 const DICT_SESSION_KEY = 'reader:dictSession'
 
 function loadDictSession(): DictSessionSnapshot | null {
   try {
-    const raw = localStorage.getItem(DICT_SESSION_KEY)
-    if (!raw) return null
-    const s = JSON.parse(raw) as DictSessionSnapshot
-    if (!s || s.v !== 1 || !Array.isArray(s.queue) || !s.queue.length) return null
-    return s
+    return parseDictSessionSnapshot(localStorage.getItem(DICT_SESSION_KEY))
   } catch {
     return null
   }
