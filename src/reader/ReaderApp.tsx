@@ -1406,7 +1406,6 @@ export default function ReaderApp() {
     [batch, libraryLemmas],
   )
 
-
   // 考试听力题出现时自动朗读（句子 / 单词）
   useEffect(() => {
     if (!quizQueue) return
