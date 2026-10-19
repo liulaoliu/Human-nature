@@ -43,6 +43,12 @@ export class SqliteLearningRepo implements LearningRepoPort {
     await storeRequest('/learning', { method: 'PUT', body: JSON.stringify(data) })
   }
 
+  /** 只提交变化的 section；服务端只删/插对应表。 */
+  async savePartial(data: Partial<LearningData>): Promise<void> {
+    if (!(await this.canUse())) throw new Error('学习记录服务不可用')
+    await storeRequest('/learning/partial', { method: 'PUT', body: JSON.stringify(data) })
+  }
+
   /** 首次迁移：只往空库写，避免两个标签页/两台机器互相覆盖。 */
   async migrate(data: LearningData): Promise<{ migrated: boolean; value: LearningData } | null> {
     if (!(await this.canUse())) return null

@@ -141,18 +141,29 @@ describe('httpApp 请求处理', () => {
       expect(learningGet.value.practice).toHaveLength(1)
       expect(learningGet.value.activity[0].counts.vocab).toBe(3)
 
+      const partial = await fetch(`${base}/api/store/learning/partial`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify({ practice: [] }),
+      })
+      expect(partial.status).toBe(200)
+      const afterPartial = await fetch(`${base}/api/store/learning`).then((r) => r.json())
+      expect(afterPartial.value.practice).toEqual([])
+      expect(afterPartial.value.mistakes).toHaveLength(1)
+      expect(afterPartial.value.studiedDays[0].ids).toEqual(['w1'])
+
       const migrateEmpty = await fetch(`${base}/api/store/learning/if-empty`, {
         method: 'PUT',
         headers: json(),
         body: JSON.stringify({ ...learning, practice: [] }),
       }).then((r) => r.json())
       expect(migrateEmpty.migrated).toBe(false)
-      expect(migrateEmpty.value.practice).toHaveLength(1)
+      expect(migrateEmpty.value.practice).toEqual([])
 
       const dump = await fetch(`${base}/api/store/export`).then((r) => r.json())
       expect(dump.vocab.items).toHaveLength(1)
       expect(dump.articles[0].id).toBe('a1')
-      expect(dump.learning.practice).toHaveLength(1)
+      expect(dump.learning.practice).toEqual([])
 
       const dbFile = await fetch(`${base}/api/store/db`)
       expect(dbFile.status).toBe(200)

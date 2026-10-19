@@ -1,4 +1,4 @@
-import { hasLearningData, normalizeLearning, type LearningData } from '../core/learning'
+import { hasLearningData, normalizeLearning, type LearningData, type LearningSection } from '../core/learning'
 import { learningRepo } from '../adapters/learningRepo'
 
 /**
@@ -29,6 +29,15 @@ export const LEARNING_KEY_SET: ReadonlySet<string> = new Set(Object.values(LEARN
 
 export function isLearningKey(key: string | null | undefined): boolean {
   return !!key && LEARNING_KEY_SET.has(key)
+}
+
+/** localStorage 键 → 可增量同步的 section（如 `reader:practice` → `practice`）。 */
+export function learningSectionForKey(key: string | null | undefined): LearningSection | null {
+  if (!key) return null
+  for (const [section, value] of Object.entries(LEARNING_KEYS)) {
+    if (value === key) return section as LearningSection
+  }
+  return null
 }
 
 /**
@@ -127,14 +136,24 @@ export function resetLearningSyncStateForTest(): void {
   serverChecked = false
 }
 
-/** 把当前 localStorage 里的学习记录写回 SQLite；失败返回 false，不阻塞 UI。 */
-export async function syncLearningToServer(): Promise<boolean> {
+/**
+ * 把 localStorage 里的学习记录写回 SQLite；失败返回 false，不阻塞 UI。
+ *
+ * 不传 `sections` = 整份写（启动补库用）；传了 = 只写这几块，
+ * 例如答题只改 `practice` / `kindStats` / `activity`，不必重写写作历史。
+ */
+export async function syncLearningToServer(sections?: LearningSection[]): Promise<boolean> {
   const data = readLearningFromLocalStorage()
   // 还没成功问过服务端时，空记录可能只是“本地没数据”，不能拿去清服务端。
   // 问过之后如果还是空，就是用户真的清空了，应该让服务端也清空。
   if (!hasLearningData(data) && !serverChecked) return false
   try {
-    await learningRepo.save(data)
+    if (sections && sections.length) {
+      const payload = Object.fromEntries(sections.map((section) => [section, data[section]])) as Partial<LearningData>
+      await learningRepo.savePartial(payload)
+    } else {
+      await learningRepo.save(data)
+    }
     return true
   } catch {
     return false

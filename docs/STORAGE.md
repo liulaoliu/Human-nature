@@ -166,9 +166,11 @@ skimmed_articles(article_id)                                              -- 精
 kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
 ```
 
-- 事实来源就是这些表；`/api/store/learning` 整份读/写，写在一个事务里。
+- 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
+  `PUT /api/store/learning/partial` 只替换变化的 section（如 `{ practice, kindStats }`），都在一个事务里。
 - 前端 `localStorage` 仍是**同步缓存**：启动时先补本地缺失的键，之后变更由
-  `useLearningSync` 防抖写回 SQLite；静态部署/服务不可用时继续只用 localStorage。
+  `useLearningSync` 按 section 防抖写回 SQLite，不重写写作历史/背词日记录等无关表；
+  静态部署/服务不可用时继续只用 localStorage。
 - 偏好/会话（主题、字号、面板、上次文章、草稿、会话快照、待选清单、`langCollected`）
   **不进这些表**。
 - `reader:activity` / `reader:kindStats` 目前是聚合值；历史数据只能先按聚合保存。

@@ -1,8 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { learningRepo } from '../adapters/learningRepo'
+import { emptyLearning } from '../core/learning'
 import {
   hydrateLearningFromServer,
+  learningSectionForKey,
   readLearningFromLocalStorage,
   resetLearningSyncStateForTest,
   syncLearningToServer,
@@ -60,22 +62,34 @@ describe('学习记录 localStorage 同步缓存', () => {
   })
 
   it('问过服务端后，用户清空记录会同步空记录', async () => {
-    vi.spyOn(learningRepo, 'load').mockResolvedValue({
-      practice: [],
-      mistakes: [],
-      readDone: [],
-      writingHistory: [],
-      retells: [],
-      activity: [],
-      studyDays: [],
-      sessions: [],
-      studiedDays: [],
-      skimmed: [],
-      kindStats: {},
-    })
+    vi.spyOn(learningRepo, 'load').mockResolvedValue(emptyLearning())
     await hydrateLearningFromServer()
     const save = vi.spyOn(learningRepo, 'save').mockResolvedValue()
     await expect(syncLearningToServer()).resolves.toBe(true)
     expect(save).toHaveBeenCalledWith(expect.objectContaining({ practice: [] }))
+  })
+
+  it('按 section 增量同步：只提交变化的表，不整份重写', async () => {
+    vi.spyOn(learningRepo, 'load').mockResolvedValue(emptyLearning())
+    await hydrateLearningFromServer()
+    localStorage.setItem(
+      'reader:practice',
+      JSON.stringify([{ at: '2026-03-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 9 }]),
+    )
+    const save = vi.spyOn(learningRepo, 'save').mockResolvedValue()
+    const partial = vi.spyOn(learningRepo, 'savePartial').mockResolvedValue()
+
+    await expect(syncLearningToServer(['practice'])).resolves.toBe(true)
+
+    expect(save).not.toHaveBeenCalled()
+    expect(partial).toHaveBeenCalledWith(expect.objectContaining({ practice: [
+      expect.objectContaining({ kind: 'quiz', correct: 9 }),
+    ] }))
+  })
+
+  it('localStorage 键能映射到 section', () => {
+    expect(learningSectionForKey('reader:practice')).toBe('practice')
+    expect(learningSectionForKey('reader:intensiveSkimmed')).toBe('skimmed')
+    expect(learningSectionForKey('reader:theme')).toBeNull()
   })
 })

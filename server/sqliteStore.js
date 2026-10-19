@@ -407,19 +407,21 @@ function ensureSchema(db) {
   return version
 }
 
-const LEARNING_TABLES = [
-  'practice_records',
-  'mistake_records',
-  'reading_progress',
-  'writing_records',
-  'retell_records',
-  'activity_days',
-  'study_days',
-  'pick_sessions',
-  'study_word_days',
-  'skimmed_articles',
-  'kind_stats',
-]
+const LEARNING_SECTION_TABLES = {
+  practice: ['practice_records'],
+  mistakes: ['mistake_records'],
+  readDone: ['reading_progress'],
+  writingHistory: ['writing_records'],
+  retells: ['retell_records'],
+  activity: ['activity_days'],
+  studyDays: ['study_days'],
+  sessions: ['pick_sessions'],
+  studiedDays: ['study_word_days'],
+  skimmed: ['skimmed_articles'],
+  kindStats: ['kind_stats'],
+}
+const LEARNING_SECTIONS = Object.keys(LEARNING_SECTION_TABLES)
+const LEARNING_TABLES = [...new Set(Object.values(LEARNING_SECTION_TABLES).flat())]
 
 function emptyLearning() {
   return {
@@ -486,15 +488,27 @@ function hasLearningRows(db) {
   return false
 }
 
-function clearLearning(db) {
-  for (const table of LEARNING_TABLES) db.prepare(`DELETE FROM ${table}`).run()
+function clearLearningSections(db, sections) {
+  const tables = new Set()
+  for (const section of sections) for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
+  for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()
 }
 
-/** 学习记录 → 独立表。整份替换，写事务内完成；不保留“万能 KV”。 */
-function writeLearning(db, data) {
-  assertLearning(data)
-  clearLearning(db)
+function clearLearning(db) {
+  clearLearningSections(db, LEARNING_SECTIONS)
+}
 
+/**
+ * 学习记录 → 独立表。默认整份替换；传 `only` 时只替换指定 section，
+ * 这样改一条练习不会把写作历史、背词日记录也删掉重插。
+ */
+function writeLearning(db, data, only) {
+  assertLearning(data)
+  const sections = only ? [...new Set(only)] : LEARNING_SECTIONS
+  const want = new Set(sections)
+  clearLearningSections(db, sections)
+
+  if (want.has('practice')) {
   const insertPractice = db.prepare(
     'INSERT INTO practice_records (at, kind, total, correct, seconds, article_id) VALUES (?, ?, ?, ?, ?, ?)',
   )
@@ -509,7 +523,9 @@ function writeLearning(db, data) {
       text(r.articleId),
     )
   }
+  }
 
+  if (want.has('mistakes')) {
   const insertMistake = db.prepare(`
     INSERT OR REPLACE INTO mistake_records
       (id, kind, at, count, label, item_id, question_json, article_id, text)
@@ -529,7 +545,9 @@ function writeLearning(db, data) {
       text(r.text),
     )
   }
+  }
 
+  if (want.has('readDone')) {
   const insertRead = db.prepare(
     'INSERT OR REPLACE INTO reading_progress (article_id, day, title, at) VALUES (?, ?, ?, ?)',
   )
@@ -537,7 +555,9 @@ function writeLearning(db, data) {
     if (!r || typeof r !== 'object' || typeof r.articleId !== 'string' || !r.articleId) continue
     insertRead.run(r.articleId, text(r.day) ?? '', text(r.title) ?? '', text(r.at) ?? nowIso())
   }
+  }
 
+  if (want.has('writingHistory')) {
   const insertWriting = db.prepare(`
     INSERT INTO writing_records (at, article_id, article_title, model, text, feedback_json, task_json)
     VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -554,7 +574,9 @@ function writeLearning(db, data) {
       jsonText(r.task),
     )
   }
+  }
 
+  if (want.has('retells')) {
   const insertRetell = db.prepare(
     'INSERT INTO retell_records (at, article_id, text, words) VALUES (?, ?, ?, ?)',
   )
@@ -562,7 +584,9 @@ function writeLearning(db, data) {
     if (!r || typeof r !== 'object' || typeof r.articleId !== 'string') continue
     insertRetell.run(text(r.at) ?? nowIso(), r.articleId, text(r.text) ?? '', num(r.words))
   }
+  }
 
+  if (want.has('activity')) {
   const insertActivity = db.prepare(
     'INSERT OR REPLACE INTO activity_days (day, cat, count) VALUES (?, ?, ?)',
   )
@@ -572,7 +596,9 @@ function writeLearning(db, data) {
       insertActivity.run(day.day, cat, num(count))
     }
   }
+  }
 
+  if (want.has('studyDays')) {
   const insertStudyDay = db.prepare(
     'INSERT OR REPLACE INTO study_days (day, seconds, cards) VALUES (?, ?, ?)',
   )
@@ -580,7 +606,9 @@ function writeLearning(db, data) {
     if (!r || typeof r !== 'object' || typeof r.day !== 'string') continue
     insertStudyDay.run(r.day, num(r.seconds), num(r.cards))
   }
+  }
 
+  if (want.has('sessions')) {
   const insertSession = db.prepare(
     'INSERT INTO pick_sessions (at, seconds, picked) VALUES (?, ?, ?)',
   )
@@ -588,7 +616,9 @@ function writeLearning(db, data) {
     if (!r || typeof r !== 'object') continue
     insertSession.run(text(r.at) ?? nowIso(), num(r.seconds), num(r.picked))
   }
+  }
 
+  if (want.has('studiedDays')) {
   const insertStudied = db.prepare(
     'INSERT OR IGNORE INTO study_word_days (day, word_id, ordinal) VALUES (?, ?, ?)',
   )
@@ -598,12 +628,16 @@ function writeLearning(db, data) {
       if (typeof id === 'string' && id) insertStudied.run(r.day, id, ordinal)
     })
   }
+  }
 
+  if (want.has('skimmed')) {
   const insertSkimmed = db.prepare('INSERT OR IGNORE INTO skimmed_articles (article_id) VALUES (?)')
   for (const id of list(data.skimmed)) {
     if (typeof id === 'string' && id) insertSkimmed.run(id)
   }
+  }
 
+  if (want.has('kindStats')) {
   const insertKindStat = db.prepare(
     'INSERT OR REPLACE INTO kind_stats (article_id, kind, total, correct) VALUES (?, ?, ?, ?)',
   )
@@ -615,6 +649,7 @@ function writeLearning(db, data) {
         insertKindStat.run(articleId, kind, num(stat.total), num(stat.correct))
       }
     }
+  }
   }
 }
 
@@ -862,6 +897,22 @@ export function openStore(dbPath) {
       },
       saveLearning(data) {
         tx(db, () => writeLearning(db, data))
+      },
+      /**
+       * 只替换变化的 section。
+       * 前端一次答题可能同时改 practice / kindStats / activity，但不会碰写作历史，
+       * 所以不要为了三条练习把整份学习记录删掉重插。
+       */
+      saveLearningPartial(data) {
+        if (!data || typeof data !== 'object' || Array.isArray(data)) {
+          throw new Error('学习记录格式不对：需要对象')
+        }
+        const sections = Object.keys(data)
+        for (const section of sections) {
+          if (!LEARNING_SECTIONS.includes(section)) throw new Error(`未知学习记录 section: ${section}`)
+        }
+        if (!sections.length) return
+        tx(db, () => writeLearning(db, data, sections))
       },
       /**
        * 首次从 localStorage 迁上来时用：只有服务端还没有任何学习记录才写入。

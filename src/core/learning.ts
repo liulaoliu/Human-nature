@@ -53,6 +53,23 @@ export interface LearningData {
   kindStats: KindStats
 }
 
+/** 学习记录里可以单独增量同步的部分。 */
+export type LearningSection = keyof LearningData
+
+export const LEARNING_SECTIONS: LearningSection[] = [
+  'practice',
+  'mistakes',
+  'readDone',
+  'writingHistory',
+  'retells',
+  'activity',
+  'studyDays',
+  'sessions',
+  'studiedDays',
+  'skimmed',
+  'kindStats',
+]
+
 /** 空记录。每次都返回新数组/新对象，避免调用方改到共享常量。 */
 export function emptyLearning(): LearningData {
   return {

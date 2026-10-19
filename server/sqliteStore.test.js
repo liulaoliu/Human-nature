@@ -294,6 +294,31 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().mistakes).toHaveLength(1)
   })
 
+  it('partial 只替换变化的 section，不碰写作/背词等其它表', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+
+    store.saveLearningPartial({
+      practice: [{ at: '2026-02-01T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 }],
+      activity: [{ day: '2026-02-01', counts: { vocab: 1 } }],
+    })
+
+    const got = store.loadLearning()
+    expect(got.practice).toHaveLength(1)
+    expect(got.practice[0].at).toBe('2026-02-01T00:00:00.000Z')
+    expect(got.activity).toEqual([{ day: '2026-02-01', counts: { vocab: 1 } }])
+    // 没提交的 section 原样保留
+    expect(got.mistakes).toHaveLength(1)
+    expect(got.writingHistory).toHaveLength(1)
+    expect(got.studiedDays[0].ids).toEqual(['w1', 'w2'])
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_records').get().n).toBe(1)
+  })
+
+  it('partial 拒绝未知 section，避免拼错字段静默丢数据', () => {
+    const store = openStore(tempDb())
+    expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
+  })
+
   it('if-empty 只在服务端没有任何学习记录时迁移', () => {
     const store = openStore(tempDb())
     const first = store.migrateLearning(learning)

@@ -183,6 +183,12 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       return
     }
 
+    if (path === '/learning/partial' && method === 'PUT') {
+      store.saveLearningPartial(await readJson(req))
+      sendJson(res, 200, { ok: true })
+      return
+    }
+
     if (path === '/learning/if-empty' && method === 'PUT') {
       sendJson(res, 200, { ok: true, ...store.migrateLearning(await readJson(req)) })
       return
