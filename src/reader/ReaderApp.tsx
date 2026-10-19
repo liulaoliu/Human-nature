@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { ArticleBook } from '../core/matchArticle'
 import { wordSpans } from '../core/wordSelect'
 import {
   applyExamples,
@@ -46,8 +45,7 @@ import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
-import { createArticleRepo } from '../adapters/articleRepo'
-import type { ArticleRepoPort, SavedArticle } from '../core/ports'
+import type { SavedArticle } from '../core/ports'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
@@ -80,6 +78,7 @@ import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { usePregenerate } from './hooks/usePregenerate'
+import { useArticleBootstrap } from './hooks/useArticleBootstrap'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
@@ -125,8 +124,8 @@ const TASKS: { task: AnalysisTask; label: string }[] = [
 ]
 
 export default function ReaderApp() {
-  const [book, setBook] = useState<ArticleBook | null>(null)
-  const [bookError, setBookError] = useState(false)
+  // 启动加载：已保存文章列表 + 内置文章目录（IO 收口在 useArticleBootstrap）
+  const { book, bookError, saved, setSaved, savedLoaded, articles } = useArticleBootstrap()
   const [articleKey, setArticleKey] = useState<string | null>(null)
   const [manual, setManual] = useState('')
   const [doc, setDoc] = useState<Doc | null>(null)
@@ -191,9 +190,6 @@ export default function ReaderApp() {
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
-  const [saved, setSaved] = useState<SavedArticle[]>([])
-  /** 「已保存文章」列表是否已从 IndexedDB 取回（未取回前别做自动恢复，否则会漏掉已存的分析）。 */
-  const [savedLoaded, setSavedLoaded] = useState(false)
   const [savedId, setSavedId] = useState<string | null>(null)
   /** 有内容改动、需要（首次则建立记录）自动保存 */
   const [pendingSave, setPendingSave] = useState(false)
@@ -474,7 +470,6 @@ export default function ReaderApp() {
   }, [articleWords])
   const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
   const applyingDom = useRef(false)
-  const articles = useRef<ArticleRepoPort | null>(null)
   const vocabStartRef = useRef<number | null>(null)
   const vocabAccumRef = useRef(0)
   const sessionPickedRef = useRef(0)
@@ -483,27 +478,6 @@ export default function ReaderApp() {
   const confirmTimerRef = useRef<number | null>(null)
   /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
   const rightDownRef = useRef(false)
-
-  useEffect(() => {
-    const ar = createArticleRepo()
-    articles.current = ar
-    const load = async () => {
-      // 先把本地兜底补进 SQLite（失败不阻塞列表：list 会合并本地较新的版本）
-      try {
-        await ar.reconcile?.()
-      } catch (e) {
-        console.warn('[文章] 启动迁移失败', e)
-      }
-      const list = await ar.list()
-      setSaved(list)
-      setSavedLoaded(true)
-    }
-    void load().catch(() => setSavedLoaded(true))
-    fetch(`${import.meta.env.BASE_URL}articles.json`)
-      .then((x) => (x.ok ? x.json() : Promise.reject(new Error(String(x.status)))))
-      .then((b: ArticleBook) => setBook(b))
-      .catch(() => setBookError(true))
-  }, [])
 
   // 跟踪 Ctrl / ⌘ 按住状态（选择逻辑靠它切换「整句 / 按词吸附」）
   useHotkeys(
