@@ -2,7 +2,7 @@
 
 > 这份文档是**可执行规范**：门禁在 `npm run gates`，踩坑清单是「别再犯」的记录。
 > 借鉴 patrol_helper 的做法：TDD 是**方法**，分层是**选层**，门禁是**验收**。
-> 本仓库目前还没做组件/集成测试（没装 jsdom + testing-library，见 §5 待办）。
+> 组件/钩子测试环境已就绪（jsdom + Testing Library，见 §5）；浏览器能力走 §4 人工用例。
 
 ## 一、测试分层与选层判定矩阵
 
@@ -120,7 +120,11 @@
 
 **已就绪**：纯逻辑单测（`src/core/*.test.ts`）+ **钩子接线测试**（`src/reader/hooks/*.test.tsx`）
 + **组件测试**（`src/reader/panels/*.test.tsx`：`ExportPanel`（内容×范围×动作交给打印的条目与标题）、
-`SideVocab`（生词/语言点两个页签、打印只交当前页签）、`LangPointList`（分组/来源句/两步删除））。
+`SideVocab`（生词/语言点两个页签、打印只交当前页签）、`LangPointList`（分组/来源句/两步删除）；
+`ReaderShell`/`ReaderArticle` 钉三个 slot 的顺序与编辑态）。
+**会话 hook 已有**：`useQuizSession`（出题/判分/错题/卸载定时器）、`useDictation`（整句/判分/错题/卸载）、
+`useSpeaking`（服务端起播/回退/停声）、`useAiPack`（status 探测/空待办/导出/坏结果）、
+`useExport`（导入覆盖/坏文件/合并幂等/打印拦截）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
