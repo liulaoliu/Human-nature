@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { existsSync, mkdtempSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -16,7 +16,10 @@ function tempDb() {
   return join(mkdtempSync(join(tmpdir(), 'xueba-sqlite-')), 'xueba.db')
 }
 
-afterEach(() => closeAllStores())
+afterEach(() => {
+  closeAllStores()
+  vi.useRealTimers()
+})
 
 describe('sqliteStore：词库', () => {
   it('保存 / 读取 / 上一版只留更大的那一份', () => {
@@ -103,6 +106,26 @@ describe('sqliteStore：词库', () => {
     const recheck = new DatabaseSync(join(dirname(path), 'backups', repaired[0]), { readOnly: true })
     expect(Object.values(recheck.prepare('PRAGMA quick_check').get())[0]).toBe('ok')
     recheck.close()
+  })
+
+  it('长开进程跨天后会自动补当天备份（不用重启）', async () => {
+    vi.useFakeTimers()
+    const path = tempDb()
+    const first = openStore(path)
+    first.saveVocab(lib(1))
+    first.close()
+    const store = openStore(path)
+    const dir = join(dirname(path), 'backups')
+    const daily = readdirSync(dir).find((name) => /^xueba-daily-.*\.db$/.test(name))
+    expect(daily).toBeTruthy()
+    unlinkSync(join(dir, daily))
+
+    await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    const recreated = readdirSync(dir).find((name) => /^xueba-daily-.*\.db$/.test(name))
+    expect(recreated).toBeTruthy()
+    expect(existsSync(join(dir, recreated))).toBe(true)
+    store.close()
+    vi.useRealTimers()
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {

@@ -96,3 +96,21 @@ export function backupDaily(db, dbPath, version, DatabaseSync) {
   pruneBackups(dir, /^xueba-daily-.*\.db$/, DAILY_BACKUP_KEEP)
   return file
 }
+
+/**
+ * 长开进程也要每天有备份：启动时做一次，之后每 30 分钟检查日期。
+ * 跨过午夜且当天还没备份时自动补一份；`unref` 不阻止进程退出。
+ */
+export function startDailyBackup(db, dbPath, DatabaseSync) {
+  const tick = () => {
+    try {
+      const file = backupDaily(db, dbPath, SCHEMA_VERSION, DatabaseSync)
+      if (file) console.info(`[sqlite] 每日备份：${file}`)
+    } catch (e) {
+      console.warn('[sqlite] 每日备份失败：', e instanceof Error ? e.message : e)
+    }
+  }
+  const timer = setInterval(tick, 30 * 60 * 1000)
+  timer.unref?.()
+  return () => clearInterval(timer)
+}

@@ -2,7 +2,7 @@ import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V5, SCHEMA_V6, SCHEMA_VERSION } from './sqliteSchema.js'
-import { backupBeforeMigration, backupDaily } from './sqliteBackup.js'
+import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.js'
 import {
   hasLearningRows,
   LEARNING_SECTIONS,
@@ -534,11 +534,13 @@ export function openStore(dbPath) {
     } catch {
       // Windows 忽略权限位
     }
+    const stopDailyBackup = startDailyBackup(db, dbPath, DatabaseSync)
 
     const store = {
       path: dbPath,
       db,
       close() {
+        stopDailyBackup()
         try {
           db.close()
         } finally {

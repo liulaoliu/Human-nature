@@ -190,8 +190,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   恢复动作本身也先快照当前状态，恢复错了还能回去。
 - 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
   `data/backups/`（迁移备份保留 5 份）；每天第一次打开已有库再留一份 `xueba-daily-YYYY-MM-DD.db`
-  （保留 7 天）。备份写完立刻用只读连接 `quick_check`，坏文件删掉重做；当天已有备份在下次打开时
-  也会验，发现损坏同样重建，避免“文件名在、内容坏了”。WAL 下用 `synchronous = FULL`，
+  （保留 7 天）。服务长开时每 30 分钟检查一次日期，跨过午夜会自动补当天备份，不用重启。
+  备份写完立刻用只读连接 `quick_check`，坏文件删掉重做；当天已有备份在下次检查时也会验，
+  发现损坏同样重建，避免“文件名在、内容坏了”。WAL 下用 `synchronous = FULL`，
   断电时宁可慢一点，也不丢最后一笔提交。
 - 打开失败（磁盘临时只读、锁冲突、备份失败）不缓存 null，下一次请求会重试，不会一个进程内永久瘫掉。
 
