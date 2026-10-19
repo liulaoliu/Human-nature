@@ -79,6 +79,7 @@ import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
+import { usePregenerate } from './hooks/usePregenerate'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
@@ -292,83 +293,11 @@ export default function ReaderApp() {
     },
   })
 
-  /** 预生成整篇朗读：先查缓存、只补缺的句子（增量），带进度、可取消。 */
-  const [pregen, setPregen] = useState<{ done: number; total: number; running: boolean; allCached: boolean }>({
-    done: 0,
-    total: 0,
-    running: false,
-    allCached: false,
+  // 整篇朗读预生成（查缓存 / 增量合成 / 取消）收口在 usePregenerate
+  const { pregen, pregenerateAll, cancelPregenerate } = usePregenerate({
+    sentences: doc?.sentences ?? null,
+    voice: ttsVoice,
   })
-  const pregenAbortRef = useRef(false)
-  // 换音色 / 换文章后，「已全部缓存」不再成立
-  useEffect(() => {
-    setPregen((p) => (p.allCached ? { ...p, allCached: false } : p))
-  }, [ttsVoice, doc])
-  const pregenerateAll = useCallback(async () => {
-    const list = doc?.sentences.map((s) => s.text.trim()).filter(Boolean) ?? []
-    if (!list.length) return
-    const voice = ttsVoice
-    pregenAbortRef.current = false
-    setPregen({ done: 0, total: list.length, running: true, allCached: false })
-
-    // 1) 查缓存（不合成）——找出缺哪几句
-    let ci = 0
-    const missing: string[] = []
-    await Promise.all(
-      Array.from({ length: Math.min(8, list.length) }, async () => {
-        for (;;) {
-          if (pregenAbortRef.current) return
-          const i = ci++
-          if (i >= list.length) return
-          let cached = false
-          try {
-            const r = await fetch(
-              `/api/tts?check=1&voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(list[i])}`,
-            )
-            const j = r.ok ? await r.json() : null
-            cached = !!(j && j.cached)
-          } catch {
-            cached = false
-          }
-          if (!cached) missing.push(list[i])
-          setPregen((p) => ({ ...p, done: Math.min(i + 1, list.length) }))
-        }
-      }),
-    )
-    if (pregenAbortRef.current) {
-      setPregen((p) => ({ ...p, running: false }))
-      return
-    }
-    if (!missing.length) {
-      setPregen({ done: list.length, total: list.length, running: false, allCached: true })
-      return
-    }
-
-    // 2) 只合成缺的（并发 3）
-    setPregen({ done: 0, total: missing.length, running: true, allCached: false })
-    let next = 0
-    let done = 0
-    await Promise.all(
-      Array.from({ length: Math.min(3, missing.length) }, async () => {
-        for (;;) {
-          if (pregenAbortRef.current) return
-          const idx = next++
-          if (idx >= missing.length) return
-          try {
-            await fetch(`/api/tts?voice=${encodeURIComponent(voice)}&text=${encodeURIComponent(missing[idx])}`)
-          } catch {
-            // 单句失败不打断整篇
-          }
-          done++
-          setPregen((p) => ({ ...p, done }))
-        }
-      }),
-    )
-    setPregen((p) => ({ ...p, running: false }))
-  }, [doc, ttsVoice])
-  const cancelPregenerate = useCallback(() => {
-    pregenAbortRef.current = true
-  }, [])
 
   /** 逐词高亮：当前朗读句 + 正读到的词下标。 */
   const karaoke = useMemo(() => {
