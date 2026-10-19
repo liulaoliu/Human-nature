@@ -101,7 +101,7 @@
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
 | SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
-| 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次：练习/错题/写作/复述按记录去重不翻倍，学习时长/活动按天累加（会翻倍，属已知口径） |
+| 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次：第二次按文件指纹直接跳过并提示（不同备份仍按天累加学习时长/活动） |
 | 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
 | 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |

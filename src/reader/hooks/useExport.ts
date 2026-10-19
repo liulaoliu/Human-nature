@@ -6,7 +6,8 @@ import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import type { DayActivity } from '../../core/activity'
 import { dayKeyLocal } from '../../core/activity'
-import { writeJson } from '../storage'
+import { writeJson, readRaw, writeRaw } from '../storage'
+import { backupFingerprint, hasImported, parseImportLedger, rememberImport } from '../../core/importLedger'
 import type { WritingRecord } from '../../core/writing'
 import type { PracticeRecord } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
@@ -199,7 +200,14 @@ export function useExport({
   const onMergeBackup = async (file: File | null | undefined) => {
     if (!file) return
     try {
-      const parsed = parseBackupPayload(JSON.parse(await file.text()))
+      const text = await file.text()
+      const fingerprint = backupFingerprint(text)
+      const ledger = parseImportLedger(readRaw('reader:importedBackups'))
+      if (hasImported(ledger, fingerprint)) {
+        flash('这份备份已经合并导入过，已跳过（避免学习时长/活动重复累加）')
+        return
+      }
+      const parsed = parseBackupPayload(JSON.parse(text))
       let added = 0
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
@@ -221,6 +229,7 @@ export function useExport({
       if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
+      writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))
       flash(
         `合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}` +
           (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
