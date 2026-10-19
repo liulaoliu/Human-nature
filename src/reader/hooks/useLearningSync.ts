@@ -1,8 +1,16 @@
 import { useEffect } from 'react'
-import type { LearningSection } from '../../core/learning'
-import { learningSectionForKey, markLearningDirty, syncLearningToServer } from '../learningState'
+import { hasLearningData, type LearningSection } from '../../core/learning'
+import {
+  hasPendingLearningChanges,
+  learningSectionForKey,
+  markLearningDirty,
+  readLearningFromLocalStorage,
+  syncLearningToServer,
+} from '../learningState'
 
 const DEBOUNCE_MS = 800
+const RETRY_MS = 5_000
+const RETRY_MAX_MS = 60_000
 
 /**
  * 学习记录写回 SQLite。
@@ -15,25 +23,56 @@ const DEBOUNCE_MS = 800
 export function useLearningSync(): void {
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
-    let initial = true
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let retryDelay = RETRY_MS
+    let needFull = true
+    let inFlight = false
+    let disposed = false
     const pending = new Set<LearningSection>()
 
-    const flush = () => {
-      timer = null
-      if (initial) {
-        // 首次启动整份补一次库：服务端为空时把本地历史数据灌进去。
-        initial = false
-        pending.clear()
-        void syncLearningToServer()
+    const hasSomethingToSync = () =>
+      hasLearningData(readLearningFromLocalStorage()) || hasPendingLearningChanges()
+
+    const scheduleRetry = () => {
+      if (retryTimer !== null || !hasSomethingToSync()) return
+      retryTimer = setTimeout(() => {
+        retryTimer = null
+        void flush()
+      }, retryDelay)
+      retryDelay = Math.min(retryDelay * 2, RETRY_MAX_MS)
+    }
+
+    const flush = async () => {
+      if (timer !== null) {
+        clearTimeout(timer)
+        timer = null
+      }
+      if (disposed || inFlight || (!needFull && !pending.size)) return
+      inFlight = true
+      const full = needFull
+      const sections = full ? undefined : [...pending]
+      if (full) needFull = false
+      pending.clear()
+      let ok = false
+      try {
+        ok = await syncLearningToServer(sections)
+      } finally {
+        inFlight = false
+      }
+      if (disposed) return
+      if (ok) {
+        retryDelay = RETRY_MS
+        if (pending.size) schedule()
         return
       }
-      const sections = [...pending]
-      pending.clear()
-      if (sections.length) void syncLearningToServer(sections)
+      // 失败就退回“整份重试”：离线期间可能只记下了后来改的那一块，
+      // 只重放 pending 会漏掉更早没写成功的 section。
+      needFull = true
+      scheduleRetry()
     }
     const schedule = () => {
       if (timer !== null) return
-      timer = setTimeout(flush, DEBOUNCE_MS)
+      timer = setTimeout(() => void flush(), DEBOUNCE_MS)
     }
     const note = (key: string | null | undefined) => {
       const section = learningSectionForKey(key)
@@ -48,18 +87,24 @@ export function useLearningSync(): void {
     const onStorage = (e: StorageEvent) => {
       note(e.key)
     }
+    const onOnline = () => schedule()
+    const onPageHide = () => void flush()
 
     window.addEventListener('reader:local-state', onLocal)
     window.addEventListener('storage', onStorage)
-    window.addEventListener('pagehide', flush)
+    window.addEventListener('online', onOnline)
+    window.addEventListener('pagehide', onPageHide)
     // 首次启动也同步一次：把本地已有数据补进新库（服务端为空时）。
     schedule()
 
     return () => {
+      disposed = true
       if (timer !== null) clearTimeout(timer)
+      if (retryTimer !== null) clearTimeout(retryTimer)
       window.removeEventListener('reader:local-state', onLocal)
       window.removeEventListener('storage', onStorage)
-      window.removeEventListener('pagehide', flush)
+      window.removeEventListener('online', onOnline)
+      window.removeEventListener('pagehide', onPageHide)
     }
   }, [])
 }
