@@ -3,16 +3,12 @@ import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordListTXT, toWordsCS
 import { groupItems, markPrinted, sortItems } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
-import type { PickSession, StudyDay } from '../../core/vocabStats'
-import type { DayActivity } from '../../core/activity'
 import { dayKeyLocal } from '../../core/activity'
 import { writeJson, readRaw, writeRaw } from '../storage'
 import { backupFingerprint, hasImported, parseImportLedger, rememberImport } from '../../core/importLedger'
 import type { WritingRecord } from '../../core/writing'
-import type { PracticeRecord } from '../../core/practice'
-import type { MistakeEntry } from '../../core/mistakes'
-import { mergeReadDone, type ReadDone } from '../../core/goals'
-import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
+import { mergeReadDone } from '../../core/goals'
+import type { LearningCollections, LearningSetters } from './useLearningData'
 import {
   mergeActivity,
   mergeKindStats,
@@ -33,36 +29,16 @@ export interface UseExportParams {
   articles: RefObject<ArticleRepoPort | null>
   library: VocabLibrary
   saved: SavedArticle[]
-  sessions: PickSession[]
-  studyDays: StudyDay[]
-  activity: DayActivity[]
+  /** 学习记录快照（useLearningData.data） */
+  learning: LearningCollections
+  /** 合并导入用的写动作（useLearningData.setters） */
+  setters: LearningSetters
   writingHistory: WritingRecord[]
-  practice: PracticeRecord[]
-  mistakes: MistakeEntry[]
-  retells: RetellRecord[]
-  studiedDays: StudiedDay[]
-  skimmed: string[]
-  kindStats: KindStats
-  readDone: ReadDone[]
-  readGoal: number
-  goalMemo: string
   visibleBatch: { word: string; sentence: string }[]
   persist: (library: VocabLibrary) => void
   flash: (message: string) => void
   setSaved: (list: SavedArticle[]) => void
-  setSessions: (v: PickSession[]) => void
-  setStudyDays: (v: StudyDay[]) => void
-  setActivity: (v: DayActivity[]) => void
   setWritingHistory: (v: WritingRecord[]) => void
-  setPractice: (v: PracticeRecord[]) => void
-  setMistakes: (v: MistakeEntry[]) => void
-  setRetells: (v: RetellRecord[]) => void
-  setStudiedDays: (v: StudiedDay[]) => void
-  setSkimmed: (v: string[]) => void
-  setKindStats: (v: KindStats) => void
-  setReadDone: (v: ReadDone[]) => void
-  setReadGoal: (v: number) => void
-  setGoalMemo: (v: string) => void
 }
 
 /** 导出（Anki/JSON/CSV/打印）与整库备份的导出/导入。 */
@@ -70,37 +46,32 @@ export function useExport({
   articles,
   library,
   saved,
-  sessions,
-  studyDays,
-  activity,
+  learning,
+  setters,
   writingHistory,
-  practice,
-  mistakes,
-  retells,
-  studiedDays,
-  skimmed,
-  kindStats,
-  readDone,
-  readGoal,
-  goalMemo,
   visibleBatch,
   persist,
   flash,
   setSaved,
-  setSessions,
-  setStudyDays,
-  setActivity,
   setWritingHistory,
-  setPractice,
-  setMistakes,
-  setRetells,
-  setStudiedDays,
-  setSkimmed,
-  setKindStats,
-  setReadDone,
-  setReadGoal,
-  setGoalMemo,
 }: UseExportParams) {
+  // 展开成旧名字：函数体不动，参数从 30 个降到 11 个
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, readDone, readGoal, goalMemo } =
+    learning
+  const {
+    setSessions,
+    setStudyDays,
+    setActivity,
+    setPractice,
+    setMistakes,
+    setRetells,
+    setStudiedDays,
+    setSkimmed,
+    setKindStats,
+    setReadDone,
+    setReadGoal,
+    setGoalMemo,
+  } = setters
   const download = (name: string, content: string, mime: string) => {
     const url = URL.createObjectURL(new Blob([content], { type: mime }))
     const a = document.createElement('a')

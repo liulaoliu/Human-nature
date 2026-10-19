@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
+import type { ReadDone } from '../../core/goals'
 import type { MistakeEntry } from '../../core/mistakes'
 import type { PracticeRecord } from '../../core/practice'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
@@ -24,6 +25,38 @@ export interface UseLearningDataParams {
   articleKey: string | null
   todayKey: string
   flash: (msg: string) => void
+}
+
+/** 导出/备份用的一份学习记录快照。 */
+export interface LearningCollections {
+  practice: PracticeRecord[]
+  mistakes: MistakeEntry[]
+  activity: DayActivity[]
+  studyDays: StudyDay[]
+  sessions: PickSession[]
+  studiedDays: StudiedDay[]
+  skimmed: string[]
+  kindStats: KindStats
+  retells: RetellRecord[]
+  readDone: ReadDone[]
+  readGoal: number
+  goalMemo: string
+}
+
+/** 合并导入用的一组写动作（与 LearningCollections 同名）。 */
+export interface LearningSetters {
+  setPractice: (v: PracticeRecord[]) => void
+  setMistakes: (v: MistakeEntry[]) => void
+  setActivity: (v: DayActivity[]) => void
+  setStudyDays: (v: StudyDay[]) => void
+  setSessions: (v: PickSession[]) => void
+  setStudiedDays: (v: StudiedDay[]) => void
+  setSkimmed: (v: string[]) => void
+  setKindStats: (v: KindStats) => void
+  setRetells: (v: RetellRecord[]) => void
+  setReadDone: (v: ReadDone[]) => void
+  setReadGoal: (v: number) => void
+  setGoalMemo: (v: string) => void
 }
 
 export function useLearningData(params: UseLearningDataParams) {
