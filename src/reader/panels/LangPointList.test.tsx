@@ -44,11 +44,11 @@ describe('LangPointList', () => {
   it('删除要两步确认：第一次点只是「确认」，再点才真删', () => {
     const onDelete = vi.fn()
     const view = render(<LangPointList items={items} onDelete={onDelete} confirmDel={null} />)
-    const del = screen.getAllByRole('button', { name: '×' })[0]
+    const del = screen.getAllByRole('button', { name: '删除语言点' })[0]
     fireEvent.click(del)
     expect(onDelete).toHaveBeenCalledWith('p1')
     view.rerender(<LangPointList items={items} onDelete={onDelete} confirmDel="p1" />)
-    expect(screen.getByRole('button', { name: '确认' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '确认删除语言点' })).toBeTruthy()
   })
 
   it('布局：原文+翻译+来源句在左栏，改 / 删在每行右侧', () => {

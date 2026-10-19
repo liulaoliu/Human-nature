@@ -235,6 +235,7 @@ export default function VocabList({
                       startEdit(it)
                     }}
                     title="改单词/音标/词性/释义/用法"
+                    aria-label="编辑词条"
                   >
                     ✎
                   </button>
@@ -245,6 +246,7 @@ export default function VocabList({
                       onDelete(it.id)
                     }}
                     title={confirmDel === it.id ? '再点一次确认删除' : '删除（需两步确认）'}
+                    aria-label={confirmDel === it.id ? '确认删除词条' : '删除词条'}
                   >
                     {confirmDel === it.id ? '确认' : '×'}
                   </button>

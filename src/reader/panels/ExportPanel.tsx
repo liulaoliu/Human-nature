@@ -242,7 +242,11 @@ export default function ExportPanel({
                       <span className="expick-chip" key={d}>
                         {d}
                         <span className="muted"> {dateCount.get(d) ?? 0} 条</span>
-                        <button onClick={() => setPickedDates((s) => toggleIn(s, d))} title="移出这一天">
+                        <button
+                          onClick={() => setPickedDates((s) => toggleIn(s, d))}
+                          title="移出这一天"
+                          aria-label={`移出 ${d}`}
+                        >
                           ×
                         </button>
                       </span>

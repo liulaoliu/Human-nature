@@ -299,7 +299,7 @@ export function DrillBoard({
         <div className="drill-body">
           <div className="study-word">
             {card.word}
-            <button className="speak" onClick={() => onSpeak(card.word)} title="朗读">
+            <button className="speak" onClick={() => onSpeak(card.word)} title="朗读" aria-label="朗读">
               🔊
             </button>
           </div>
@@ -522,6 +522,7 @@ export default function StudyPanel({
                       onSpeak(card.word)
                     }}
                     title="朗读"
+                    aria-label="朗读"
                   >
                     🔊
                   </button>

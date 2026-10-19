@@ -74,14 +74,20 @@ export default function ReaderArticle({
     <>
       <h1>
         {articleTitle || (articleKey ? articleKey : '手动粘贴')}
-        <button className="title-edit" onClick={onRename} title="修改文章标题">
+        <button className="title-edit" onClick={onRename} title="修改文章标题" aria-label="修改文章标题">
           ✎
         </button>
       </h1>
       {editing ? (
         <>
           <div className="meta">编辑正文：改完点「完成」重新切句；已粘回的翻译/语法按句文保留。</div>
-          <textarea className="manual" value={draft} onChange={(e) => onDraftChange(e.target.value)} autoFocus />
+          <textarea
+            className="manual"
+            value={draft}
+            onChange={(e) => onDraftChange(e.target.value)}
+            aria-label="编辑正文"
+            autoFocus
+          />
         </>
       ) : (
         <>

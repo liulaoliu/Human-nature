@@ -136,7 +136,7 @@ export default function QuizPanel({
             ) : question.kind === 'meaning' || question.kind === 'collocation' || question.kind === 'mark' ? (
               <div className="study-word quiz-word">
                 {question.word}
-                <button className="speak" onClick={() => onSpeak(question.word)} title="朗读">
+                <button className="speak" onClick={() => onSpeak(question.word)} title="朗读" aria-label="朗读">
                   🔊
                 </button>
               </div>

@@ -47,6 +47,7 @@ export default function QuickPanel({
                   onSpeak(current.word)
                 }}
                 title="朗读"
+                aria-label="朗读"
               >
                 🔊
               </button>

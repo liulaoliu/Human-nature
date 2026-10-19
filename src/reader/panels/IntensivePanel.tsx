@@ -234,7 +234,7 @@ export default function IntensivePanel({
             <div className="iretell-item" key={r.at}>
               <span className="muted">{r.at.slice(5, 16).replace('T', ' ')} · {r.words} 词</span>
               <span className="iretell-text">{r.text}</span>
-              <button onClick={() => onDeleteRetell(r.at)} title="删除这条复述">
+              <button onClick={() => onDeleteRetell(r.at)} title="删除这条复述" aria-label="删除这条复述">
                 ×
               </button>
             </div>

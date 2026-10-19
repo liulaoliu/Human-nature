@@ -44,11 +44,11 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, su
       <div className="plan-panel journal-panel" onClick={(e) => e.stopPropagation()}>
         <div className="bar plan-head">
           <b>📅 学习日志</b>
-          <button onClick={() => prev && onDayChange(prev)} disabled={!prev} title="前一天">
+          <button onClick={() => prev && onDayChange(prev)} disabled={!prev} title="前一天" aria-label="前一天">
             ◀
           </button>
           {picker}
-          <button onClick={() => next && onDayChange(next)} disabled={!next} title="后一天">
+          <button onClick={() => next && onDayChange(next)} disabled={!next} title="后一天" aria-label="后一天">
             ▶
           </button>
           <span className="muted">

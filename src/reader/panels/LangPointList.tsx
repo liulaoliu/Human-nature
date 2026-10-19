@@ -65,6 +65,7 @@ export default function LangPointList({
                       className={confirmDel === it.id ? 'danger' : ''}
                       onClick={() => onDelete(it.id)}
                       title={confirmDel === it.id ? '再点一次确认删除' : '删除（两步确认）'}
+                      aria-label={confirmDel === it.id ? '确认删除语言点' : '删除语言点'}
                     >
                       {confirmDel === it.id ? '确认' : '×'}
                     </button>

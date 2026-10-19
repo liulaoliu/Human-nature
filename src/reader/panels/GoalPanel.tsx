@@ -120,7 +120,7 @@ export default function GoalPanel({
                   <span className="gitem-title ellipsis" title={d.title}>
                     {d.title || d.articleId}
                   </span>
-                  <button onClick={() => onUndo(d.articleId)} title="撤销这篇的「读完」">
+                  <button onClick={() => onUndo(d.articleId)} title="撤销这篇的「读完」" aria-label="撤销这篇的读完">
                     ×
                   </button>
                 </div>
@@ -138,7 +138,7 @@ export default function GoalPanel({
               累计 {totals.articles} 篇 · {totals.days} 天
             </span>
             {pickedDay && (
-              <button onClick={() => setPickedDay(null)} title="看全部历史">
+              <button onClick={() => setPickedDay(null)} title="看全部历史" aria-label={`取消筛选 ${pickedDay}`}>
                 取消筛选 {pickedDay} ×
               </button>
             )}
@@ -194,7 +194,7 @@ export default function GoalPanel({
                         <span className="gitem-title ellipsis" title={d.title}>
                           {d.title || d.articleId}
                         </span>
-                        <button onClick={() => onUndo(d.articleId)} title="撤销这篇的「读完」">
+                        <button onClick={() => onUndo(d.articleId)} title="撤销这篇的「读完」" aria-label="撤销这篇的读完">
                           ×
                         </button>
                       </div>
