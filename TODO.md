@@ -15,6 +15,7 @@
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
 - [ ] **面板瘦身**：`SpeedReadPanel`（778）/ `StudyPanel`（744）拆「渲染块」与「会话状态机」，目标 <600 行
 - [ ] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
+      （`useExport` 已补 8 条：导入覆盖/坏文件、合并幂等跳过、打印拦截；其余待补）
 - [ ] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
 - [ ] **`catch {}` 分类**：用户资产 IO 一律 `console.warn` + 可见提示；可选能力保留空 catch 并写明理由
 - [ ] **无障碍**：给划词/悬浮气泡/纯图标按钮补 `aria-label`，键盘可走到主要操作
