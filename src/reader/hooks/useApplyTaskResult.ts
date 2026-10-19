@@ -28,7 +28,7 @@ import {
 import type { Sentence, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { dictLemmaOf, firstLine, levelVerdict, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
-import { dictionary, mwldLookupWord } from '../dictionary'
+import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 

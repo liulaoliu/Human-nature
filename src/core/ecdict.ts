@@ -2,7 +2,7 @@
  * 离线词典（数据来自 ECDICT，经 tools/build-ecdict.mjs 预处理）。
  *
  * 纯逻辑：解析紧凑 TSV、查词、词形→原形、判断"是否超出某词汇水平"。
- * 网络加载放在 reader/dictionary.ts（这里不碰浏览器 API，便于单测）。
+ * 网络加载放在 adapters/dictionary.ts（这里不碰浏览器 API，便于单测）。
  */
 import { kindOf } from './entryKind'
 import { normalizeWord } from './vocab'

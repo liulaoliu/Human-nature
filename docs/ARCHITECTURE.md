@@ -108,7 +108,8 @@ types ← core ← adapters ← reader
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
   不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。
   真要迁，先改端口为异步，再走服务端 SQLite。
-- **`core/dictionary.ts` 里有 fetch**：本质是加载器，欠一次搬家（已登记 TODO 到 `adapters/`）。
+- **离线词典/例句加载器已搬到 `adapters/`**：`adapters/dictionary.ts`、`adapters/tatoeba.ts`；
+  `core/dictionary.ts` 只保留纯断词判断（不碰 fetch）。
 
 ## 五、命令
 

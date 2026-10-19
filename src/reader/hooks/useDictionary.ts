@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { dictionaryReady, loadDictionary } from '../dictionary'
+import { dictionaryReady, loadDictionary } from '../../adapters/dictionary'
 
 /** 启动时加载离线词典；返回是否就绪（没有数据文件就一直 false，功能自动降级）。 */
 export function useDictionary(): boolean {

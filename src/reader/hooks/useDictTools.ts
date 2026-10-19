@@ -4,7 +4,7 @@ import { applyConfusables, applyLemmaMap, dedupeLibrary, lemmaOf } from '../../c
 import { enrichWithDict } from '../../core/dictEnrich'
 import { isWordEntry } from '../../core/entryKind'
 import type { VocabLibrary } from '../../types/document'
-import { dictionary, mwldLookupWord } from '../dictionary'
+import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
 
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 

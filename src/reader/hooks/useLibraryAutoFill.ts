@@ -3,7 +3,7 @@ import type { Sentence, VocabLibrary } from '../../types/document'
 import { autoFillLibrary } from '../../core/libraryAutoFill'
 import type { Ecdict } from '../../core/ecdict'
 import { languagePointsOf } from '../../core/langPoints'
-import { loadTatoeba, tatoebaExamples } from '../tatoeba'
+import { loadTatoeba, tatoebaExamples } from '../../adapters/tatoeba'
 import { useLocalStorageState } from './useLocalStorageState'
 
 /**

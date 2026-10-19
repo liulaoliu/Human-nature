@@ -1,7 +1,7 @@
 /**
  * 离线例句（数据来自 Tatoeba，经 tools/build-tatoeba.mjs 预处理）。
  *
- * 纯逻辑：解析紧凑 TSV（`word ⇥ en ⇥ zh`）、按词查例句。网络加载在 reader/tatoeba.ts。
+ * 纯逻辑：解析紧凑 TSV（`word ⇥ en ⇥ zh`）、按词查例句。网络加载在 adapters/tatoeba.ts。
  * 数据文件不存在时所有调用方自动降级（返回空），不影响其它功能。
  */
 
