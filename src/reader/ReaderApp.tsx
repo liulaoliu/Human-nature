@@ -47,22 +47,17 @@ import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
 import type { SavedArticle } from '../core/ports'
 import VocabList, { type VocabEditPatch } from './VocabList'
-import DictPanel from './panels/DictPanel'
-import ListeningPanel from './panels/ListeningPanel'
 import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
 import PlanPanel from './panels/PlanPanel'
-import WritingPanel from './panels/WritingPanel'
-import StudyPanel from './panels/StudyPanel'
-import QuizSetupPanel from './panels/QuizSetupPanel'
-import QuizPanel from './panels/QuizPanel'
-import QuickPanel from './panels/QuickPanel'
+import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
 import { type BatchItem } from './panels/SidePick'
 import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
 import ReaderShell from './ReaderShell'
 import ReaderArticle from './ReaderArticle'
 import ReaderSidebar from './panels/ReaderSidebar'
+import SessionHost from './SessionHost'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
@@ -92,7 +87,6 @@ import { dictionary } from '../adapters/dictionary'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
-import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
 import JournalPanel from './panels/JournalPanel'
 import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
@@ -637,50 +631,12 @@ export default function ReaderApp() {
     onBumpNewToday: bumpNewToday,
   })
   const {
-    scope: studyScope,
-    spelling: studySpelling,
-    setSpelling: setStudySpelling,
-    mode: studyMode, deck: studyDeck,
     queue: studyQueue,
-    index: studyIndex,
-    revealed: studyRevealed,
-    setRevealed: setStudyRevealed,
-    input: studyInput,
-    setInput: setStudyInput,
-    checked: studyChecked,
-    setChecked: setStudyChecked,
-    counts: studyCounts,
-    liveSeconds: studyLive,
-    cardSeconds,
-    gradeInfo,
-    editOpen: studyEditOpen,
-    setEditOpen: setStudyEditOpen,
     pool: studyPool,
-    draft: studyDraft,
-    setDraft: setStudyDraft,
-    delArmed: studyDelArmed,
-    forgotCount: studyForgotCount,
-    roundTotal: studyRoundTotal,
-    extraCount: studyExtraCount,
-    card: studyCard,
-    dueCount,
-    newCount,
-    drillOn: studyDrillOn,
-    drillAfter: studyDrillAfter,
-    setDrillAfter: setStudyDrillAfter,
-    clearDrill: studyClearDrill,
     unflushedSeconds: studyUnflushed,
     start: startStudy,
-    switchMode, switchDeck, switchScope,
     startArticleAll,
-    grade: gradeStudy,
-    back: studyBack, forward: studyNext,
-    markUnknown: studyMarkUnknown,
     close: closeStudy,
-    retryForgot,
-    openEdit: openStudyEdit,
-    saveEdit: saveStudyEdit,
-    removeCard: studyDelete,
   } = studyApi
 
   // ===== 考试会话（hooks/useQuizSession）=====
@@ -702,47 +658,19 @@ export default function ReaderApp() {
   })
   quizApiRef.current = quizApi
   const {
-    kinds: quizKinds,
-    setKinds: setQuizKinds,
-    scope: quizScope,
     setScope: setQuizScope,
-    limit: quizLimit,
-    setLimit: setQuizLimit,
-    auto: quizAuto,
-    setAuto: setQuizAuto,
-    unique: quizUnique,
-    setUnique: setQuizUnique,
-    speakAfter: quizSpeak,
-    setSpeakAfter: setQuizSpeak,
-    articleKinds: quizArticleKinds,
-    setArticleKinds: setQuizArticleKinds,
-    articleRun: quizArticleRun,
-    loopWrong: quizLoopWrong,
     setLoopWrong: setQuizLoopWrong,
-    drillRound: quizDrillRound,
     setupOpen: quizSetupOpen,
     setSetupOpen: setQuizSetupOpen,
     queue: quizQueue,
     setQueue: setQuizQueue,
     index: quizIndex,
-    input: quizInput,
-    setInput: setQuizInput,
-    checked: quizChecked,
-    result: quizResult,
-    results: quizResults,
+    articleKinds: quizArticleKinds,
     setResults: setQuizResults,
-    seconds: quizSeconds,
-    poolSizes: quizPoolSizes,
-    availableCount: quizAvailableCount,
-    start: startQuiz,
     startArticle: startArticleQuiz,
     startItems: startQuizItems,
     startDrill: startQuizDrill,
     startArticleDrill: startQuizArticleDrill,
-    check: checkQuiz,
-    next: nextQuiz,
-    close: closeQuiz,
-    retryWrong: retryQuizWrong,
   } = quizApi
 
   // ===== 听力理解会话（hooks/useListening）=====
@@ -771,20 +699,10 @@ export default function ReaderApp() {
     setQuiz: setListenQuiz,
     open: listenOpen,
     setOpen: setListenOpen,
-    questions: listenQuestions,
-    answers: listenAnswers,
-    setAnswers: setListenAnswers,
-    submitted: listenSubmitted,
-    result: listenResult,
-    wrongIds: listenWrongIds,
     count: listenCount,
     setCount: setListenCount,
-    copyPrompt: copyListeningPrompt,
     start: openListening,
     startQuestions: startListenQuestions,
-    submit: submitListening,
-    retryWrong: retryListenWrong,
-    showAll: showAllListen,
   } = listenApi
 
   /** 理解题面板：听力模式 / 阅读理解（文本）模式。 */
@@ -889,15 +807,7 @@ export default function ReaderApp() {
     },
   })
   quickApiRef.current = quickApi
-  const {
-    queue: quickQueue,
-    setQueue: setQuickQueue,
-    index: quickIndex,
-    revealed: quickRevealed,
-    setRevealed: setQuickRevealed,
-    start: startQuick,
-    grade: gradeQuick,
-  } = quickApi
+  const { queue: quickQueue, setQueue: setQuickQueue, start: startQuick } = quickApi
 
   /** 把词条**直接**加进生词本（跳过「待选」）。用于「自动标词」直入模式。 */
   const commitBatchItems = useCallback(
@@ -1005,24 +915,7 @@ export default function ReaderApp() {
   }, [doc, flash])
 
   /** 仿写训练（逻辑在 hooks/useWriting）。 */
-  const {
-    open: writingOpen,
-    setOpen: setWritingOpen,
-    model: writingModel,
-    setModel: setWritingModel,
-    task: writingTask,
-    setTask: setWritingTask,
-    text: writingText,
-    setText: setWritingText,
-    feedback: writingFeedback,
-    setFeedback: setWritingFeedback,
-    history: writingHistory,
-    setHistory: setWritingHistory,
-    start: openWriting,
-    copyImitationTask,
-    copyFeedback,
-    loadRecord: loadWritingRecord,
-  } = useWriting({
+  const writingApi = useWriting({
     doc,
     selectedId,
     flash,
@@ -1038,6 +931,18 @@ export default function ReaderApp() {
       setListenOpen(false)
     },
   })
+  const {
+    open: writingOpen,
+    setOpen: setWritingOpen,
+    model: writingModel,
+    task: writingTask,
+    setTask: setWritingTask,
+    text: writingText,
+    setFeedback: setWritingFeedback,
+    history: writingHistory,
+    setHistory: setWritingHistory,
+    start: openWriting,
+  } = writingApi
 
   // 听力理解题 / 仿写：Esc 退出
   useHotkeys(
@@ -1197,31 +1102,7 @@ export default function ReaderApp() {
   })
   // 供定义在 hook 之前的少数回调（打开听力/仿写、错题重练）通过 ref 调用
   dictApiRef.current = dictApi
-  const {
-    mode: dictMode,
-    words: dictWords,
-    blankCount: dictBlankCount,
-    clozeWords: dictClozeWords,
-    maxQuestions: dictMaxQuestions,
-    roundInfo: dictRoundInfo,
-    queue: dictQueue,
-    index: dictIndex,
-    input: dictInput,
-    checked: dictChecked,
-    diff: dictDiff,
-    blanks: dictBlanks,
-    results: dictResults,
-    wrongItems: dictWrongItems,
-    cloze: dictCloze,
-    setInput: setDictInput,
-    setBlank: setDictBlank,
-    start: startDictation,
-    check: checkDict,
-    next: nextDict,
-    retryWrong: retryDictWrong,
-    wrongNow: dictWrongNow,
-    close: closeDict,
-  } = dictApi
+  const { queue: dictQueue, index: dictIndex, start: startDictation } = dictApi
 
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useHotkeys(
@@ -2292,179 +2173,30 @@ export default function ReaderApp() {
           <p className="muted">没取到 articles.json（要 http://localhost 打开且文件存在）。可直接把正文粘在下面。</p>
         )}
 
-        {studyQueue && (
-          <StudyPanel
-            card={studyCard}
-            items={library.items}
-            queueLength={studyQueue.length}
-            roundTotal={studyRoundTotal}
-            extraCount={studyExtraCount}
-            index={studyIndex}
-            mode={studyMode} deck={studyDeck}
-            scope={studyScope}
-            spelling={studySpelling}
-            revealed={studyRevealed}
-            checked={studyChecked}
-            input={studyInput}
-            counts={studyCounts}
-            cardSeconds={cardSeconds}
-            liveSeconds={studyLive}
-            grandSeconds={studyGrandSeconds}
-            newCount={newCount}
-            dueCount={dueCount}
-            newLimit={newLimit}
-            newToday={newToday}
-            gradeInfo={gradeInfo}
-            editOpen={studyEditOpen}
-            draft={studyDraft}
-            delArmed={studyDelArmed}
-            forgotCount={studyForgotCount}
-            drillOn={studyDrillOn}
-            drillAfter={studyDrillAfter}
-            onClose={closeStudy}
-            onExam={() => {
-              closeStudy()
-              setQuizResults([])
-              setQuizSetupOpen(true)
-            }}
-            onSwitchMode={switchMode} onSwitchDeck={switchDeck}
-            onSwitchScope={switchScope}
-            onStartArticleAll={startArticleAll}
-            onNewLimitChange={setNewLimit}
-            onDrillAfterChange={setStudyDrillAfter}
-            onSpellingChange={(on) => {
-              setStudySpelling(on)
-              setStudyChecked(false)
-              setStudyInput('')
-            }}
-            onReveal={() => setStudyRevealed(true)}
-            onInputChange={setStudyInput}
-            onCheckSpelling={() => setStudyChecked(true)}
-            onSpeak={speak}
-            onOpenEdit={openStudyEdit}
-            onDelete={studyDelete}
-            onDraftChange={setStudyDraft}
-            onSaveEdit={saveStudyEdit}
-            onCancelEdit={() => {
-              setStudyEditOpen(false)
-              setStudyDraft(null)
-            }}
-            onGrade={gradeStudy}
-            onBack={studyBack} onNext={studyNext}
-            onMarkUnknown={studyMarkUnknown}
-            onDrillCleared={studyClearDrill}
-            onRetryForgot={retryForgot}
-            onRestart={() => startStudy()}
-          />
-        )}
-
-        {quizSetupOpen && !quizQueue && (
-          <QuizSetupPanel
-            kinds={quizKinds}
-            scope={quizScope}
-            limit={quizLimit}
-            auto={quizAuto}
-            unique={quizUnique}
-            speakAfter={quizSpeak}
-            availableCount={quizAvailableCount}
-            poolUnmastered={quizPoolSizes.unmastered}
-            articleKinds={quizArticleKinds}
-            articleAvailable={articleQuizCount}
-            onToggleKind={(k, on) => setQuizKinds((prev) => (on ? [...prev, k] : prev.filter((x) => x !== k)))}
-            onToggleArticleKind={(k, on) => setQuizArticleKinds((prev) => (on ? [...prev, k] : prev.filter((x) => x !== k)))}
-            onScopeChange={setQuizScope}
-            onLimitChange={setQuizLimit}
-            onAutoChange={setQuizAuto}
-            onUniqueChange={setQuizUnique}
-            onSpeakChange={setQuizSpeak}
-            loopWrong={quizLoopWrong}
-            onLoopWrongChange={setQuizLoopWrong}
-            onCancel={() => setQuizSetupOpen(false)}
-            onStart={startQuiz}
-            onStartArticle={startArticleQuiz}
-          />
-        )}
-
-        {quizQueue && (
-          <QuizPanel
-            question={quizIndex < quizQueue.length ? quizQueue[quizIndex] : null}
-            scope={quizScope}
-            articleRun={quizArticleRun}
-            queueLength={quizQueue.length}
-            index={quizIndex}
-            seconds={quizSeconds}
-            results={quizResults}
-            checked={quizChecked}
-            input={quizInput}
-            result={quizResult}
-            items={library.items}
-            drillRound={quizDrillRound}
-            onClose={closeQuiz}
-            onSpeak={speak}
-            onResetSpeech={resetSpeech}
-            ttsState={ttsState}
-            onSubmit={() => checkQuiz()}
-            onNext={nextQuiz}
-            onRetryWrong={retryQuizWrong}
-            onRestart={startQuiz}
-            onSelectOption={(opt) => {
-              setQuizInput(opt)
-              checkQuiz(opt)
-            }}
-            onInputChange={setQuizInput}
-          />
-        )}
-
-        {quickQueue && (
-          <QuickPanel
-            current={
-              quickIndex < quickQueue.length
-                ? (library.items.find((it) => it.id === quickQueue[quickIndex].id) ?? quickQueue[quickIndex])
-                : null
-            }
-            queueLength={quickQueue.length}
-            index={quickIndex}
-            revealed={quickRevealed}
-            onClose={() => setQuickQueue(null)}
-            onReveal={() => setQuickRevealed(true)}
-            onSpeak={speak}
-            onGrade={gradeQuick}
-            onRestart={startQuick}
-          />
-        )}
-
-        {dictQueue && (
-          <DictPanel
-            queue={dictQueue}
-            index={dictIndex}
-            mode={dictMode}
-            words={dictWords}
-            blankCount={dictBlankCount}
-            clozeWords={dictClozeWords}
-            maxQuestions={dictMaxQuestions}
-            grandTotal={dictRoundInfo.grand}
-            roundOffset={dictRoundInfo.offset}
-            checked={dictChecked}
-            diff={dictDiff}
-            cloze={dictCloze}
-            blanks={dictBlanks}
-            input={dictInput}
-            results={dictResults}
-            wrongItems={dictWrongItems}
-            onStart={startDictation}
-            onCheck={checkDict}
-            onNext={nextDict}
-            onWrongNow={dictWrongNow}
-            onRetryWrong={retryDictWrong}
-            onClose={closeDict}
-            onSpeak={speak}
-            onPlayItem={playDictItem}
-            onResetSpeech={resetSpeech}
-            ttsState={ttsState}
-            onInputChange={setDictInput}
-            onBlankChange={setDictBlank}
-          />
-        )}
+        <SessionHost
+          items={library.items}
+          speak={speak}
+          resetSpeech={resetSpeech}
+          ttsState={ttsState}
+          playDictItem={playDictItem}
+          study={{ api: studyApi, grandSeconds: studyGrandSeconds, newLimit, newToday, onNewLimitChange: setNewLimit }}
+          quiz={quizApi}
+          quizArticleAvailable={articleQuizCount}
+          quick={quickApi}
+          dict={dictApi}
+          listening={{
+            api: listenApi,
+            transcript: doc ? doc.sentences.map((s) => s.text).join(' ') : null,
+            readingAll,
+            readMode: listenReadMode,
+            onToggleRead: readingAll ? stopReadAll : startReadAll,
+            onClose: () => {
+              setListenOpen(false)
+              setListenReadMode(false)
+            },
+          }}
+          writing={writingApi}
+        />
 
         {speedReadOpen && doc && (
           <SpeedReadPanel
@@ -2585,48 +2317,6 @@ export default function ReaderApp() {
             summary={journalSummaryRows}
             heat={journalHeat}
             onSpeak={speak}
-          />
-        )}
-
-        {listenOpen && listenQuiz && (
-          <ListeningPanel
-            questions={listenQuestions}
-            answers={listenAnswers}
-            submitted={listenSubmitted}
-            result={listenResult}
-            onlyWrong={!!listenWrongIds}
-            readingAll={readingAll}
-            transcript={doc ? doc.sentences.map((s) => s.text).join(' ') : null}
-            readMode={listenReadMode}
-            onClose={() => {
-              setListenOpen(false)
-              setListenReadMode(false)
-            }}
-            onToggleRead={readingAll ? stopReadAll : startReadAll}
-            onResetSpeech={resetSpeech}
-            ttsState={ttsState}
-            onAnswer={(id, value) => setListenAnswers((a) => ({ ...a, [id]: value }))}
-            onSubmit={submitListening}
-            onRetryWrong={retryListenWrong}
-            onShowAll={showAllListen}
-            onRegenerate={() => void copyListeningPrompt()}
-          />
-        )}
-
-        {writingOpen && (
-          <WritingPanel
-            model={writingModel}
-            text={writingText}
-            task={writingTask}
-            feedback={writingFeedback}
-            history={writingHistory}
-            onClose={() => setWritingOpen(false)}
-            onGenerateTask={() => void copyImitationTask()}
-            onFeedback={() => void copyFeedback()}
-            onModelChange={setWritingModel}
-            onTextChange={setWritingText}
-            onClearHistory={() => setWritingHistory([])}
-            onLoadRecord={loadWritingRecord}
           />
         )}
 

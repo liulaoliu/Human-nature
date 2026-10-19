@@ -11,8 +11,11 @@
 
 - [x] **ReaderApp 拆分 ①**：把工具栏 + 正文 + 侧栏抽成 `ReaderShell`，先只搬渲染，不改行为
       （`ReaderShell` 布局 + slot、`ReaderArticle` 正文、`panels/ReaderSidebar` 侧栏；新增 7 条组件测试）
-- [ ] **ReaderApp 拆分 ②**：各练习面板路由抽成 `SessionHost`（背词/考试/听写/听力/速读/仿写）
+- [x] **ReaderApp 拆分 ②**：各练习面板路由抽成 `SessionHost`（背词/考试/听写/听力/速读/仿写）
+      （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
+      （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
+      剩余大块是侧栏/工具栏 props 接线，离 1200 还有距离）
 - [ ] **面板瘦身**：`SpeedReadPanel`（778）/ `StudyPanel`（744）拆「渲染块」与「会话状态机」，目标 <600 行
 - [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
       （共 36 条：`useExport` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；

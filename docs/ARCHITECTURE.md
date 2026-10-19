@@ -15,6 +15,7 @@ src/reader/      React 视图层
   panels/        展示组件（尽量薄：收 props、渲染）
   ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
   ReaderArticle.tsx 正文区（标题 + 编辑态 + ReaderBody）
+  SessionHost.tsx   会话面板路由（背词/考试/快刷/听写/听力/仿写 → 对应 panel）
   panels/ReaderSidebar.tsx 右侧栏（页签 + 五个面板的接线）
   ReaderApp.tsx  组装：状态总线 + 把 hooks/panels 接起来
 src/ui/          跟读练习（旧模块，独立于精读词库）
