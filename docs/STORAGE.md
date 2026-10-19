@@ -236,6 +236,7 @@ server/storeApi.js（路由，不认识具体 DB）
       ↓ 同一组方法：loadVocab / saveVocab / listArticles / saveArticle / loadLearning / saveLearning…
 server/sqliteStore.js（词库/文章/快照/导出）
 server/sqliteLearning.js（学习记录 section 读写）
+server/sqliteBackup.js（迁移前 / 每日整库备份）
 server/sqliteUtil.js（事务与字段转换）
 ```
 

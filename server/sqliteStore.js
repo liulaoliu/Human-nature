@@ -1,7 +1,8 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V5, SCHEMA_VERSION } from './sqliteSchema.js'
+import { backupBeforeMigration, backupDaily } from './sqliteBackup.js'
 import {
   hasLearningRows,
   LEARNING_SECTIONS,
@@ -46,10 +47,6 @@ try {
 export { SCHEMA_VERSION } from './sqliteSchema.js'
 /** 和前端 IdbVocabRepo 保持一致：留最近 8 版 + 历史最大的一版。 */
 const SNAP_KEEP = 8
-/** schema 迁移前的整库备份，留最近 5 份。 */
-const DB_BACKUP_KEEP = 5
-/** 每天第一次打开时留一份整库备份，留最近 7 天。 */
-const DAILY_BACKUP_KEEP = 7
 
 /** 默认放在项目 data/（已在 .gitignore 里），可用 XUEBA_DB 覆盖。 */
 export function resolveDbPath(root) {
@@ -472,61 +469,6 @@ function assertDatabaseHealthy(db) {
   if (String(result).toLowerCase() !== 'ok') {
     throw new Error(`SQLite 完整性检查未通过：${String(result)}`)
   }
-}
-
-/**
- * schema 升级前把整库 VACUUM 成独立文件，放在 `data/backups/`。
- * 迁移只增不删，但真出事故时至少要能回到升级前；保留最近 5 份。
- */
-function backupBeforeMigration(db, dbPath, version) {
-  if (version <= 0 || version >= SCHEMA_VERSION) return null
-  const dir = join(dirname(dbPath), 'backups')
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const file = join(dir, `xueba-v${version}-${stamp}.db`)
-  const target = file.replace(/'/g, "''")
-  db.exec(`VACUUM INTO '${target}'`)
-  try {
-    chmodSync(file, 0o600)
-  } catch {
-    // Windows 忽略权限位
-  }
-  const files = readdirSync(dir)
-    .filter((name) => /^xueba-v\d+-.*\.db$/.test(name))
-    .sort()
-  for (const name of files.slice(0, Math.max(0, files.length - DB_BACKUP_KEEP))) {
-    rmSync(join(dir, name), { force: true })
-  }
-  return file
-}
-
-/**
- * 每天首次打开已有库时做一份整库备份。
- *
- * 不是替代学习记录快照：快照防误清空，这个防「整个文件被误删/改坏后没有第二份」。
- * 只在本进程当天第一次打开时做；已经存在当天文件就跳过。
- */
-function backupDaily(db, dbPath, version) {
-  if (version <= 0) return null
-  const dir = join(dirname(dbPath), 'backups')
-  mkdirSync(dir, { recursive: true, mode: 0o700 })
-  const day = new Date().toISOString().slice(0, 10)
-  const file = join(dir, `xueba-daily-${day}.db`)
-  if (existsSync(file)) return null
-  const target = file.replace(/'/g, "''")
-  db.exec(`VACUUM INTO '${target}'`)
-  try {
-    chmodSync(file, 0o600)
-  } catch {
-    // Windows 忽略权限位
-  }
-  const files = readdirSync(dir)
-    .filter((name) => /^xueba-daily-.*\.db$/.test(name))
-    .sort()
-  for (const name of files.slice(0, Math.max(0, files.length - DAILY_BACKUP_KEEP))) {
-    rmSync(join(dir, name), { force: true })
-  }
-  return file
 }
 
 const cache = new Map()

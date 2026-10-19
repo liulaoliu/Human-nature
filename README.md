@@ -515,6 +515,7 @@ server/
   appServer.js             static 模式入口（只监听 127.0.0.1）
   sqliteStore.js           SQLite schema / 词库快照 / 文章 / 导出（Node 自带 node:sqlite）
   sqliteLearning.js        学习记录（练习/错题/读完/写作/背词）规范化读写
+  sqliteBackup.js          迁移前 / 每日整库备份与保留策略
   sqliteUtil.js            SQLite 事务与字段转换小工具
   storeApi.js              /api/store/* 路由（dev 的 Vite 插件和 static 共用）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案
