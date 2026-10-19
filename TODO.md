@@ -15,7 +15,28 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      剩余大块是侧栏/工具栏 props 接线，离 1200 还有距离）
+      当前 **2424 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+
+      **明天再战（每刀一次 commit，先补测试再搬）**
+      1. [ ] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
+             `dayStats` / `last7` / `dueForecastRows` / `savedGroups` / `byArticle` / `confusableTodo` /
+             `confusableBatch` / `lemmaCandidates` / `posCandidates` / `visibleBatch` 抽成
+             `useReaderDerived({ library, sessions, studyDays, batch, ... })`；纯派生无副作用，用 `renderHook` 钉住
+             几个关键输出即可。验收：`ReaderApp` 掉 ~100 行，行为不变。
+      2. [ ] **侧栏宿主**（约 -130 行）：新增 `ReaderSidebarHost`，接收 hook API 整包（`aiPack` / `aiTasks` /
+             `useExport` / `useDictTools` / learning 等）与少量状态 setter，在宿主里拼出
+             `overview` / `mastery` / `stats` / `pick` / `vocab` 五组 props；`ReaderApp` 只传 `sideTab` + 宿主 props。
+             先给宿主挂一个「假 API → 断言分组对象字段」的组件测试。验收：`ReaderApp` 掉 ~130 行。
+      3. [ ] **工具栏宿主**（约 -70 行）：同法抽 `ReaderToolbarHost`，把 `toolbar={...}`（约 76 行）整块搬走。
+      4. [ ] **会话外回调归位**（最大块，约 -250 行）：把 `retryMistakeVocab/Listen/Dict`、`commitBatchItems`、
+             `addItemsToVocab`、`addPhrasesToVocab`、`removeWordFromVocab`、`copyLanguagePrompt`、`applyPaste`、
+             `copyMissingAgain`、`applyAnyPaste`、`handleReview`、`handleEdit`、`saveRetell`、`deleteRetell`、
+             `startSiege`、`toggleSkimmed` 按归属收进对应 hook（词库写入口仍只能有一个），每个 hook 补
+             「成功 / 坏输入 / 幂等」测试。这刀最大，可以再拆成 2–3 个子主题分别提交。
+
+      **验收与红线**：每刀 `npm run gates` 全绿（含上帝文件门禁，`ReaderApp` 基线只准下调）；不新增读写词库的
+      effect（写入口仍只有 `useLibraryAutoFill` / `persist`）；拆完 `ReaderApp` 行数同步下调
+      `tool/check_god_file.mjs` 的 `BASELINE`。全部切完再回头核对 ≤1200 的目标，若仍不达标继续找新的宿主边界。
 - [x] **面板瘦身**：`SpeedReadPanel`（779 → 597）/ `StudyPanel`（746 → 512）拆「渲染块」与「会话状态机」
       （`StudyDrill` 抽出强制锤炼；速读拆出 `SpeedReadSentence` / `SpeedReadBasket` + `SpeedReadDone`；新增 12 条组件测试）
 - [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
