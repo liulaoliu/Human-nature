@@ -798,7 +798,7 @@ export default function ReaderApp() {
     switchMode, switchDeck, switchScope,
     startArticleAll,
     grade: gradeStudy,
-    back: studyBack,
+    back: studyBack, forward: studyNext,
     markUnknown: studyMarkUnknown,
     close: closeStudy,
     retryForgot,
@@ -2413,7 +2413,7 @@ export default function ReaderApp() {
               setStudyDraft(null)
             }}
             onGrade={gradeStudy}
-            onBack={studyBack}
+            onBack={studyBack} onNext={studyNext}
             onMarkUnknown={studyMarkUnknown}
             onDrillCleared={studyClearDrill}
             onRetryForgot={retryForgot}

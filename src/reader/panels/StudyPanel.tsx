@@ -85,6 +85,7 @@ export interface StudyPanelProps {
   onCancelEdit: () => void
   onGrade: (grade: ReviewGrade) => void
   onBack: () => void
+  onNext: () => void
   onMarkUnknown: () => void
   onDrillCleared: () => void
   onRetryForgot: () => void
@@ -158,14 +159,17 @@ export function DrillBoard({
   const [step, setStep] = useState(0)
   const [text, setText] = useState('')
   const [wrong, setWrong] = useState(false)
-  /** 选词义：键盘高亮的选项（A/D 移动，回车确认） */
-  const [focus, setFocus] = useState(0)
+  /** 选词义：键盘高亮的选项（-1 = 还没按 A/D，不预选，避免泄露答案） */
+  const [focus, setFocus] = useState(-1)
+  /** 选错的那一项（只标红它，不把正确项标出来） */
+  const [wrongPick, setWrongPick] = useState<number | null>(null)
   // 换卡重置
   useEffect(() => {
     setStep(0)
     setText('')
     setWrong(false)
-    setFocus(0)
+    setFocus(-1)
+    setWrongPick(null)
   }, [card.id])
 
   const cur = steps[step]
@@ -174,6 +178,7 @@ export function DrillBoard({
   const next = () => {
     setText('')
     setWrong(false)
+    setWrongPick(null)
     if (step + 1 >= total) onDone()
     else setStep(step + 1)
   }
@@ -195,10 +200,13 @@ export function DrillBoard({
     }
   }
 
-  const pick = (o?: { text: string; correct: boolean }) => {
+  const pick = (o: { text: string; correct: boolean } | undefined, i: number) => {
     if (!o) return
     if (o.correct) next()
-    else setWrong(true)
+    else {
+      setWrong(true)
+      setWrongPick(i)
+    }
   }
 
   // 选词义键盘操作：1-4 直接选，A/D（或 ←/→）切换高亮，回车确认
@@ -210,18 +218,18 @@ export function DrillBoard({
       const n = Number(k)
       if (n >= 1 && n <= options.length) {
         e.preventDefault()
-        pick(options[n - 1])
+        pick(options[n - 1], n - 1)
         return
       }
       if (k === 'a' || e.key === 'ArrowLeft') {
         e.preventDefault()
-        setFocus((f) => (f - 1 + options.length) % options.length)
+        setFocus((f) => (f <= 0 ? options.length - 1 : f - 1))
       } else if (k === 'd' || e.key === 'ArrowRight') {
         e.preventDefault()
-        setFocus((f) => (f + 1) % options.length)
-      } else if (e.key === 'Enter') {
+        setFocus((f) => (f < 0 || f >= options.length - 1 ? 0 : f + 1))
+      } else if (e.key === 'Enter' && focus >= 0) {
         e.preventDefault()
-        pick(options[focus])
+        pick(options[focus], focus)
       }
     }
     window.addEventListener('keydown', onKey)
@@ -274,8 +282,8 @@ export function DrillBoard({
             {options.map((o, i) => (
               <button
                 key={o.text}
-                className={`${wrong && o.correct ? 'primary ' : ''}${i === focus ? 'focused' : ''}`}
-                onClick={() => pick(o)}
+                className={`${i === wrongPick ? 'wrong-choice ' : ''}${i === focus ? 'focused' : ''}`}
+                onClick={() => pick(o, i)}
                 title={`按 ${i + 1} 选择`}
               >
                 <kbd>{i + 1}</kbd> {o.text}
@@ -368,6 +376,7 @@ export default function StudyPanel({
   onCancelEdit,
   onGrade,
   onBack,
+  onNext,
   onMarkUnknown,
   onDrillCleared,
   onRetryForgot,
@@ -397,8 +406,11 @@ export default function StudyPanel({
     <div className="study">
       <div className="bar study-bar">
         <button onClick={onClose}>结束（Esc）</button>
-        <button onClick={onBack} disabled={index <= 0} title="回到上一个单词">
-          ← 上一个
+        <button onClick={onBack} disabled={index <= 0} title="回到上一个单词（Q）">
+          ← 上一个 <kbd>Q</kbd>
+        </button>
+        <button onClick={onNext} disabled={index >= queueLength} title="下一个单词（E）；不评分，直接切换">
+          <kbd>E</kbd> 下一个 →
         </button>
         <button onClick={onExam} title="直接考试：拼写 / 例句填空 / 搭配填空 / 听力填空">
           考试

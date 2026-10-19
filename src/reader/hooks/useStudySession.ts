@@ -296,6 +296,13 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex((i) => Math.max(0, i - 1))
   }, [queue, index, resetCardUi])
 
+  /** 切到下一个单词（不评分，只切换）。 */
+  const forward = useCallback(() => {
+    if (!queue || index >= queue.length) return
+    resetCardUi()
+    setIndex((i) => i + 1)
+  }, [queue, index, resetCardUi])
+
   /** 「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
   const markUnknown = useCallback(() => {
     if (!queue) return
@@ -439,10 +446,11 @@ export function useStudySession(params: UseStudySessionParams) {
     }
   }, [queue, addStudyTime])
 
-  // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Esc 退出
+  // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
   useEffect(() => {
     if (!queue || editOpen || drillOn) return
     const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       const canGrade = spelling ? checked : revealed
@@ -455,6 +463,7 @@ export function useStudySession(params: UseStudySessionParams) {
         }
         return
       }
+      const key = e.key.toLowerCase()
       if (e.key === ' ' || e.key === 'Enter') {
         e.preventDefault()
         if (index >= queue.length) return
@@ -466,11 +475,17 @@ export function useStudySession(params: UseStudySessionParams) {
         grade('good')
       } else if (gradeKeys[e.key]) {
         if (canGrade) grade(gradeKeys[e.key])
+      } else if (key === 'q') {
+        e.preventDefault()
+        back()
+      } else if (key === 'e') {
+        e.preventDefault()
+        forward()
       } else if (e.key === 'Escape') close()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [queue, editOpen, index, revealed, spelling, checked, grade, close, drillOn])
+  }, [queue, editOpen, index, revealed, spelling, checked, grade, close, drillOn, back, forward])
 
   return {
     scope,
@@ -517,6 +532,7 @@ export function useStudySession(params: UseStudySessionParams) {
     startArticleAll,
     grade,
     back,
+    forward,
     markUnknown,
     close,
     retryForgot,
