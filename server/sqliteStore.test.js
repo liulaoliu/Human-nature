@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync, readdirSync } from 'node:fs'
+import { mkdtempSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -85,14 +85,24 @@ describe('sqliteStore：词库', () => {
       /^xueba-daily-.*\.db$/.test(name),
     )
     expect(daily).toHaveLength(1)
+    const dailyPath = join(dirname(path), 'backups', daily[0])
+    const check = new DatabaseSync(dailyPath, { readOnly: true })
+    expect(Object.values(check.prepare('PRAGMA quick_check').get())[0]).toBe('ok')
+    check.close()
 
-    // 同一天再打开不重复做整库备份。
+    // 同一天再打开不重复做整库备份；但已有的当天备份坏了要重新做。
     second.close()
+    writeFileSync(dailyPath, 'not a sqlite file')
     const third = openStore(path)
     expect(third.loadVocab().items).toHaveLength(2)
-    expect(
-      readdirSync(join(dirname(path), 'backups')).filter((name) => /^xueba-daily-.*\.db$/.test(name)),
-    ).toHaveLength(1)
+    const repaired = readdirSync(join(dirname(path), 'backups')).filter((name) =>
+      /^xueba-daily-.*\.db$/.test(name),
+    )
+    expect(repaired).toHaveLength(1)
+    expect(statSync(join(dirname(path), 'backups', repaired[0])).size).toBeGreaterThan(0)
+    const recheck = new DatabaseSync(join(dirname(path), 'backups', repaired[0]), { readOnly: true })
+    expect(Object.values(recheck.prepare('PRAGMA quick_check').get())[0]).toBe('ok')
+    recheck.close()
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {

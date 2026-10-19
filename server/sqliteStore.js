@@ -515,7 +515,7 @@ export function openStore(dbPath) {
     assertDatabaseHealthy(db)
     const currentVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
     try {
-      const backup = backupBeforeMigration(db, dbPath, currentVersion)
+      const backup = backupBeforeMigration(db, dbPath, currentVersion, DatabaseSync)
       if (backup) console.info(`[sqlite] 迁移前备份：${backup}`)
     } catch (e) {
       // 备份失败就不冒险迁移，让前端回退 IndexedDB，人工处理后再启动。
@@ -523,7 +523,7 @@ export function openStore(dbPath) {
     }
     ensureSchema(db)
     try {
-      const daily = backupDaily(db, dbPath, currentVersion)
+      const daily = backupDaily(db, dbPath, currentVersion, DatabaseSync)
       if (daily) console.info(`[sqlite] 每日备份：${daily}`)
     } catch (e) {
       // 每日备份失败不挡启动；迁移备份失败才挡（见上面）。
