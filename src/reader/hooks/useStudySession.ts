@@ -196,6 +196,8 @@ export function useStudySession(params: UseStudySessionParams) {
               ? `这篇没有待学的新${thing}`
               : `没有待学的新${thing}，去「复习」吧`,
         )
+        // 换牌组后旧队列已经不对应当前牌组，直接收起，避免界面显示错位的卡
+        if (opts?.deck != null && nextDeck !== deck) setQueue(null)
         return
       }
       closeQuiz()
@@ -209,13 +211,23 @@ export function useStudySession(params: UseStudySessionParams) {
 
   const switchMode = useCallback((m: StudyMode) => start({ mode: m }), [start])
   const switchScope = useCallback((s: StudyScope) => start({ scope: s }), [start])
-  const switchDeck = useCallback((d: StudyDeck) => start({ deck: d }), [start])
+  const switchDeck = useCallback(
+    (d: StudyDeck) => {
+      if (d === deck) return
+      if (!library.items.some((it) => inStudyDeck(it, d))) {
+        flash(d === 'collocation' ? '还没有词组/习语：先在阅读里收藏语言点' : '还没有可背的单词')
+        return
+      }
+      start({ deck: d })
+    },
+    [deck, library.items, flash, start],
+  )
 
   /** 「本篇全部」：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）。 */
   const startArticleAll = useCallback(() => {
     const p = poolFor('article')
     if (!p.length) {
-      flash('这篇还没有生词')
+      flash(deck === 'collocation' ? '这篇还没有搭配' : '这篇还没有生词')
       return
     }
     setScope('article')
@@ -224,7 +236,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setQueue(sortItems(p, 'due'))
     setRoundTotal(p.length)
     setIndex(0)
-  }, [poolFor, flash, closeQuiz, resetSession, setScope])
+  }, [poolFor, deck, flash, closeQuiz, resetSession, setScope])
 
   const grade = useCallback(
     (g: ReviewGrade) => {
