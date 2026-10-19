@@ -54,7 +54,8 @@ import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat, type DayActivity } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
-import { createArticleRepo, type ArticleRepoPort, type SavedArticle } from '../adapters/articleRepo'
+import { createArticleRepo } from '../adapters/articleRepo'
+import type { ArticleRepoPort, SavedArticle } from '../core/ports'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import StatsPanel from './panels/StatsPanel'
 import DictPanel from './panels/DictPanel'
@@ -118,7 +119,6 @@ import {
 import type { Paragraph, Sentence, SentenceLanguage, } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
 import './reader.css'
-
 interface Doc {
   paragraphs: Paragraph[]
   sentences: Sentence[]

@@ -72,6 +72,11 @@
     （Node 默认不走系统代理，`tools/tts-core.mjs` 显式读 `HTTPS_PROXY` / `HTTP_PROXY`）。
     规矩：**服务端本地引擎（Piper 优先，espeak-ng 应急）先兜底，浏览器语音只作最后一道**；
     离线音色必须能在顶栏手动选；离线引擎没有逐词时间戳时**不要缓存空数组**，否则 Edge 恢复后也拿不回高亮。
+11. **IndexedDB 不能是唯一资产库**。它按来源隔离、会被浏览器回收、多标签没有统一事务；
+    数据层已改为 **SQLite 主存（`data/xueba.db`）+ IndexedDB 兜底/镜像**。
+    规矩：新增用户资产先走 `core/ports.ts` 端口 → `adapters` 的 HybridRepo；schema 变更走
+    `PRAGMA user_version` 迁移；服务端只加固定路由（`server/storeApi.js`），不加任意 SQL 接口。
+    详细取舍见 `docs/STORAGE.md`。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -86,6 +91,9 @@
 | Piper 失败 → espeak 应急 | 临时把模型目录改空（`PIPER_VOICES_DIR=/tmp/empty` 重启）→ 手动选 Piper 音色 → 读本句 | 仍出声（自动落到 Espeak 应急音色），不报 502 |
 | TTS 自动兜底 | 让 Edge 不可用（断网 / 代理坏）→ 读本句 | 仍出声（先 Piper，再 espeak-ng）；约 20 秒后自动回头重试 Edge |
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
+| SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
+| SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points` |
+| 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
 
 ## 五、已经就绪的层 / 还差什么
 

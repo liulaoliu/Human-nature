@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createServer } from 'node:http'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { contentType, safeJoin } from './util.js'
@@ -8,6 +9,10 @@ import { restartDecision } from './watchdog.js'
 import { getPort } from './status.js'
 import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
+import { closeAllStores } from './sqliteStore.js'
+
+const require = createRequire(import.meta.url)
+const { DatabaseSync } = require('node:sqlite')
 
 describe('util', () => {
   it('contentType 按扩展名', () => {
@@ -70,6 +75,75 @@ describe('httpApp 请求处理', () => {
       expect(missing.status).toBe(404)
     } finally {
       await new Promise((r) => server.close(r))
+    }
+  })
+
+  it('SQLite store：健康 / 词库 / 文章 / 导出 / 同源校验', async () => {
+    const dist = mkdtempSync(join(tmpdir(), 'sa-dist-'))
+    const pub = mkdtempSync(join(tmpdir(), 'sa-pub-'))
+    const dbPath = join(mkdtempSync(join(tmpdir(), 'sa-db-')), 'xueba.db')
+    mkdirSync(join(dist, 'assets'), { recursive: true })
+    writeFileSync(join(dist, 'index.html'), 'x')
+    const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub, dbPath }))
+    await new Promise((r) => server.listen(0, '127.0.0.1', r))
+    const base = `http://127.0.0.1:${server.address().port}`
+    const json = (init) => ({ 'Content-Type': 'application/json', ...init })
+    try {
+      const health = await fetch(`${base}/api/store/health`).then((r) => r.json())
+      expect(health).toMatchObject({ ok: true, engine: 'sqlite' })
+
+      const library = { items: [{ id: 'w1', word: 'test' }], stats: {} }
+      const putVocab = await fetch(`${base}/api/store/vocab`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify(library),
+      })
+      expect(putVocab.status).toBe(200)
+      expect((await fetch(`${base}/api/store/vocab`).then((r) => r.json())).value.items).toHaveLength(1)
+
+      const article = {
+        id: 'a1',
+        title: 'A',
+        text: 'x',
+        paragraphs: [],
+        sentences: [],
+        sourceKey: null,
+        updatedAt: '2026-01-01T00:00:00.000Z',
+      }
+      const putArticle = await fetch(`${base}/api/store/articles/a1`, {
+        method: 'PUT',
+        headers: json(),
+        body: JSON.stringify(article),
+      })
+      expect(putArticle.status).toBe(200)
+      expect((await fetch(`${base}/api/store/articles`).then((r) => r.json())).articles[0].id).toBe('a1')
+
+      const dump = await fetch(`${base}/api/store/export`).then((r) => r.json())
+      expect(dump.vocab.items).toHaveLength(1)
+      expect(dump.articles[0].id).toBe('a1')
+
+      const dbFile = await fetch(`${base}/api/store/db`)
+      expect(dbFile.status).toBe(200)
+      expect(dbFile.headers.get('content-type')).toContain('sqlite')
+      const bytes = Buffer.from(await dbFile.arrayBuffer())
+      expect(bytes.byteLength).toBeGreaterThan(0)
+      // 下载的是 VACUUM INTO 出来的一致性快照，不是可能漏 WAL 的主库文件。
+      const downloaded = join(mkdtempSync(join(tmpdir(), 'sa-download-')), 'xueba.db')
+      writeFileSync(downloaded, bytes)
+      const copy = new DatabaseSync(downloaded, { readOnly: true })
+      expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(2)
+      copy.close()
+
+      const evil = await fetch(`${base}/api/store/vocab`, {
+        method: 'PUT',
+        headers: { ...json(), Origin: 'http://evil.test' },
+        body: JSON.stringify(library),
+      })
+      expect(evil.status).toBe(403)
+    } finally {
+      await new Promise((r) => server.close(r))
+      closeAllStores()
     }
   })
 

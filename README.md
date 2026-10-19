@@ -1,7 +1,7 @@
 # 学吧老哥（精读 / 跟读）
 
 一个**本地优先**的英语工具：把**任意一篇英文文章**变成"能逐句读、划词查、随口朗读、出题考"的材料——
-**先快速吃透一篇，再靠重复把它记住**。数据全在本机（localStorage / IndexedDB），核心功能不需要账号或 API key。
+**先快速吃透一篇，再靠重复把它记住**。数据全在本机（SQLite 主存 + IndexedDB 兜底），核心功能不需要账号或 API key。
 
 ## 亮点
 
@@ -66,7 +66,7 @@ npm run dev
 
 平时不用开终端跑 `npm run dev`。内置一个零依赖的小服务，**默认跑的就是实时开发服务器（Vite HMR）**：
 代码一改（哪怕是用 AI/opencode 改的），浏览器里的页面**即时热更新**；端口和 `npm run dev` 一样是 5173，
-所以生词本 / 已保存文章 / 跟读进度（IndexedDB、localStorage）**一直都在**，不需要"构建"或"切换模式"。
+所以生词本 / 已保存文章（SQLite，服务不可用时 IndexedDB 兜底）/ 跟读进度（IndexedDB、localStorage）**一直都在**，不需要"构建"或"切换模式"。
 
 ```
 启动服务.cmd          # 后台静默启动（独立进程，关窗口不影响），显示状态并打开浏览器
@@ -186,7 +186,8 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   - **`.epub`**：按章拆成多篇，标题形如「书名 · 章节」，一次全部存入「已保存」。
   - 创建即存入「已保存」。
 - **备份**：右栏「导出全部（备份）」把**词库 + 已保存的文章**打包成一个 JSON；「导入备份」还原（覆盖本机：词库整库替换、统计整段替换，兼容全部备份 / 词库 JSON / 文章数组 / 单篇）。想**保留本机现有数据、把备份并进来**用旁边的「合并导入」：生词按原形去重互补、背单词/活动按天累加、错题按 id 累加，文章按 id 覆盖同篇。
-- **存**：正文连同粘回的翻译/语法一起存 IndexedDB（独立库 `shadowing-reader`）。
+- **存**：正文连同粘回的翻译/语法一起存本地 SQLite（`data/xueba.db`）；没有本地服务 / 静态部署时
+  自动回退 IndexedDB（独立库 `shadowing-reader`）。
   「保存这篇」后**边改边自动存**；刷新或下次打开会**自动恢复上次那篇**。
   选择框分「内置（articles.json）」和「已保存」两组，同一篇保存过就优先用保存版。
 - **排版**：顶栏可调**字号**（小/中/大/特大）、**加粗**、**衬线字体**，都记在本机。
@@ -201,8 +202,9 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 
 **想用系统自带的复制**（比如把某句拿去翻译）：按住 **`Alt`** 再拖选（或 **`Alt` 点击某句**直接复制该句），走浏览器原生选区，不会被划词逻辑清掉，`Ctrl/⌘+C` 即可。
 
-词库存 IndexedDB（独立库 `shadowing-vocab`，不动录音库）。注意：现有「导出备份」只覆盖 localStorage，
-**词库和保存的文章要分别用「导出 JSON」/「保存这篇」自己留底**。
+词库和已保存文章默认存本地 SQLite（`data/xueba.db`）。没有本地服务 / 静态部署时自动回退 IndexedDB；
+第一次连上 SQLite 时会把浏览器里旧的 IndexedDB 词库和文章自动迁上来。数据分层和导出方式见
+[`docs/STORAGE.md`](docs/STORAGE.md)。
 
 数据模型、模块拆解和开发路线见 [`docs/新特性开发要求.md`](docs/新特性开发要求.md)。
 
@@ -265,6 +267,25 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 - 侧栏「选词·分析 → 📖 离线词典」有：按词汇量**挑超纲词**、给生词本**补齐**音标/词性/中英释义、
   **校正原形**、**生成形近混淆项**。AI 回执也会自动用词典校验/补齐。
 
+## 数据存在哪
+
+| 数据 | 位置 | 说明 |
+|---|---|---|
+| 词库 / 已保存文章 | `data/xueba.db`（SQLite） | 主存；可用 `XUEBA_DB=/path/to.db` 改位置 |
+| 同一份词库/文章的兜底 | 浏览器 IndexedDB | 本地服务没起、静态部署、Node < 22.5 时自动使用；升级后首次连上会自动迁移 |
+| 跟读录音 | 浏览器 IndexedDB `shadowing` | 音频 blob，体积大；暂未迁 SQLite（计划 `data/takes/` + 元数据） |
+| 校准 / 改过的正文 / 统计 / 目标 | 浏览器 localStorage | 小数据，随「导出全部」备份 |
+| TTS 缓存 | `public/tts/` | 可再生，不算用户资产 |
+
+- SQLite 用 Node 22.5+ 自带的 `node:sqlite`，不装原生依赖；旧 Node 自动回退 IndexedDB。
+- `data/xueba.db` 里除了整库 JSON（事实来源），还有 `words` / `word_usage` / `word_examples` /
+  `article_sentences` / `lang_points` 等派生表，可以直接用 SQL 查单词、翻译、语言点；字段和
+  迁移见 [`docs/STORAGE.md`](docs/STORAGE.md)。
+- 数据库文件权限 `0600`、目录 `0700`；服务只监听 `127.0.0.1`，写接口校验同源 `Origin`。
+- 直接备份数据库：浏览器打开 `http://localhost:5173/api/store/db`，或
+  `curl -OJ http://localhost:5173/api/store/db`；也可以用 DB Browser / `sqlite3` 打开 `data/xueba.db`。
+- 数据库文件在 `.gitignore` 里，不会误提交。
+
 ## 备份 / 换电脑
 
 进度（文字偏移、正文起点、选字锚点、`T` 改过的正文）都在浏览器 localStorage 里，
@@ -286,6 +307,8 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 
 - 种子文件只在 localStorage **全空**时生效，同一台机器上本地数据优先，不会被旧种子倒灌。
 - 备份**不含录音**（录音在 IndexedDB 里、是音频，体积大）。换电脑录音要自己另想办法。
+- 换电脑想连词库/文章一起带走：优先用「导出全部（备份）」；也可以直接拷 `data/xueba.db`
+  （SQLite 是单文件，新机器放到同样的 `data/` 下即可）。
 - `public/shadowing-state.json` 含你改过的正文，要不要提交进 git 自己定。
 
 ## 按键
@@ -441,6 +464,9 @@ src/
     session.ts       ViewModel，不依赖 React，可以直接单测
   adapters/
     browserAudio.ts  AudioPlayerPort / RecorderPort 的浏览器实现
+    vocabRepo.ts     词库持久化：SQLite 优先（`/api/store`），IndexedDB 兜底/镜像
+    articleRepo.ts   已保存文章：SQLite 优先，IndexedDB 兜底/镜像
+    storeApi.ts      `/api/store/*` 的 HTTP 客户端（只做传输）
     takeRepo.ts      IndexedDB 持久化（录音，每块只留最新一条）
     calibrationRepo.ts  localStorage 持久化（文字偏移 / 正文起点 / 选字锚点 / 手动撕合）
     scriptEditRepo.ts   localStorage 持久化（「改文本」改过的正文，优先于原文库）
@@ -481,10 +507,15 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
   vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
   vite-tts-endpoint.mjs    dev-only：/api/tts → Edge TTS（浏览器语音会假死的替代）
+  vite-store-endpoint.mjs  dev-only：/api/store → SQLite（词库 / 文章 / 导出）
   tts-core.mjs             TTS 引擎（edge / Piper / espeak-ng / sapi）+ 自动兜底 + 磁盘缓存 + 逐词时间戳（dev / static 共用）
   install-piper.sh         下载 Piper 二进制 + 4 个离线英语音色（Linux aarch64 / x86_64）
   build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
   build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）
+server/
+  appServer.js             static 模式入口（只监听 127.0.0.1）
+  sqliteStore.js           SQLite schema / 词库快照 / 文章 / 导出（Node 自带 node:sqlite）
+  storeApi.js              /api/store/* 路由（dev 的 Vite 插件和 static 共用）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案
   extract-articles.py  从 PDF 抽正文，带 wpm 质量闸门
   validate-articles.py 单独跑质量闸门
@@ -498,7 +529,7 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
 ## 测试
 
 ```
-npm test          # 596 个（没生成 public/articles.json 时少几个，一样是绿的）
+npm test          # 916 个（其中 5 个跳过；没生成 public/articles.json 时再少几个，一样是绿的）
 npm run build     # tsc -b && vite build
 ```
 

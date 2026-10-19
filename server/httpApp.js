@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 import { handleTts } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
+import { handleStoreApi } from './storeApi.js'
 
 const DATA_FILES = new Set([
   'articles.json',
@@ -60,7 +61,7 @@ function serveFile(res, file, { head = false, cache = false } = {}) {
  *  - articles.json / shadowing-state.json 优先 public（重新生成不必 rebuild）
  *  - 其余静态文件来自 dist/
  */
-export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = Date.now() }) {
+export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = Date.now(), dbPath } = {}) {
   return (req, res) => {
     const url = req.url || '/'
     const pathname = url.split('?')[0]
@@ -71,6 +72,18 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
         pid: process.pid,
         uptime: (Date.now() - startedAt) / 1000,
         time: new Date().toISOString(),
+      })
+      return
+    }
+
+    // SQLite 主存储：/api/store/*（词库 / 文章 / 导出；没有 node:sqlite 时前端回退 IndexedDB）
+    if (pathname.startsWith('/api/store')) {
+      handleStoreApi(req, res, { root: join(distDir, '..'), dbPath }).catch((e) => {
+        if (!res.headersSent) {
+          res.statusCode = 500
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end(JSON.stringify({ ok: false, error: e instanceof Error ? e.message : 'store error' }))
+        }
       })
       return
     }

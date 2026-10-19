@@ -1,37 +1,14 @@
-import type { Paragraph, Sentence } from '../types/document'
+import type { ArticleRepoPort, SavedArticle } from '../core/ports'
+import { storeHealth, storeRequest } from './storeApi'
+
+export type { ArticleRepoPort, SavedArticle } from '../core/ports'
 
 /**
- * 已保存的文章持久化（IndexedDB）。
+ * 已保存文章持久化（IndexedDB 兜底实现）。
  *
- * 为什么要存整篇（而不是只存原文、每次重新切句）：
- * 粘回来的翻译/语法/搭配是挂在句子上的，重新切句会丢。所以连 paragraphs /
- * sentences 一起存，下次打开是你上次离开时的样子。
- *
- * 用独立库 `shadowing-reader`，不和录音库、词库争版本号。
+ * 主存现在优先走服务端 SQLite（见 HybridArticleRepo）；没有本地服务 / 静态部署时
+ * 仍用这个独立库 `shadowing-reader`，不和录音库、词库争版本号。
  */
-export interface SavedArticle {
-  id: string
-  title: string
-  /** 所属的书（EPUB 导入自动填书名；手动可选） */
-  book?: string
-  /** 对应 articles.json 的键；手动粘贴的为 null */
-  sourceKey: string | null
-  /** 清洗后的正文；编辑模式与重新切句用 */
-  text: string
-  paragraphs: Paragraph[]
-  sentences: Sentence[]
-  /** 首次创建时间（老数据没有 → 用 updatedAt 兜底） */
-  createdAt?: string
-  updatedAt: string
-}
-
-export interface ArticleRepoPort {
-  list(): Promise<SavedArticle[]>
-  get(id: string): Promise<SavedArticle | null>
-  save(article: SavedArticle): Promise<void>
-  remove(id: string): Promise<void>
-}
-
 const DB_NAME = 'shadowing-reader'
 const DB_VERSION = 1
 const STORE = 'articles'
@@ -108,10 +85,111 @@ export class MemoryArticleRepo implements ArticleRepoPort {
 }
 
 export function createArticleRepo(): ArticleRepoPort {
+  return new HybridArticleRepo()
+}
+
+function createLocalArticleRepo(): ArticleRepoPort {
   try {
     if (typeof indexedDB === 'undefined') return new MemoryArticleRepo()
     return new IdbArticleRepo()
   } catch {
     return new MemoryArticleRepo()
+  }
+}
+
+function sortArticles(list: SavedArticle[]): SavedArticle[] {
+  return [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+}
+
+type StoreMode = 'unknown' | 'sqlite' | 'local'
+
+/**
+ * 文章主存储：本地服务在 → SQLite；服务不在 → IndexedDB 兜底。
+ *
+ * 首次连上时把 IndexedDB 里有、SQLite 里没有的文章补上去；
+ * 同一 id 两边都有时，`updatedAt` 更新的那一版优先（离线改过的文章不会被旧库盖掉）。
+ * 每次写 SQLite 成功都往 IndexedDB 镜像一份，作为服务挂掉时的本地备份。
+ */
+export class HybridArticleRepo implements ArticleRepoPort {
+  private mode: StoreMode = 'unknown'
+
+  constructor(private readonly local: ArticleRepoPort = createLocalArticleRepo()) {}
+
+  private async useSqlite(): Promise<boolean> {
+    if (this.mode === 'unknown') {
+      this.mode = (await storeHealth()) ? 'sqlite' : 'local'
+    }
+    return this.mode === 'sqlite'
+  }
+
+  async list(): Promise<SavedArticle[]> {
+    if (await this.useSqlite()) {
+      try {
+        const r = await storeRequest<{ articles: SavedArticle[] }>('/articles')
+        const byId = new Map(r.articles.map((a) => [a.id, a]))
+        for (const local of await this.local.list()) {
+          const server = byId.get(local.id)
+          if (!server || (local.updatedAt && local.updatedAt > server.updatedAt)) {
+            await storeRequest(`/articles/${encodeURIComponent(local.id)}`, {
+              method: 'PUT',
+              body: JSON.stringify(local),
+            })
+            byId.set(local.id, local)
+          }
+        }
+        return sortArticles([...byId.values()])
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return this.local.list()
+  }
+
+  async get(id: string): Promise<SavedArticle | null> {
+    if (await this.useSqlite()) {
+      try {
+        const r = await storeRequest<{ value: SavedArticle | null }>(`/articles/${encodeURIComponent(id)}`)
+        if (r.value) return r.value
+        const local = await this.local.get(id)
+        if (local) {
+          await storeRequest(`/articles/${encodeURIComponent(id)}`, {
+            method: 'PUT',
+            body: JSON.stringify(local),
+          })
+          return local
+        }
+        return null
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return this.local.get(id)
+  }
+
+  async save(article: SavedArticle): Promise<void> {
+    if (await this.useSqlite()) {
+      try {
+        await storeRequest(`/articles/${encodeURIComponent(article.id)}`, {
+          method: 'PUT',
+          body: JSON.stringify(article),
+        })
+        void this.local.save(article).catch(() => {})
+        return
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    await this.local.save(article)
+  }
+
+  async remove(id: string): Promise<void> {
+    if (await this.useSqlite()) {
+      try {
+        await storeRequest(`/articles/${encodeURIComponent(id)}`, { method: 'DELETE' })
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    await this.local.remove(id)
   }
 }

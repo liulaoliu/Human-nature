@@ -3,7 +3,7 @@ import { cleanText } from '../../core/cleaner'
 import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
 import type { Paragraph, Sentence } from '../../types/document'
-import type { ArticleRepoPort, SavedArticle } from '../../adapters/articleRepo'
+import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 
 /** 一篇打开的文档。 */
 export interface ReaderDoc {

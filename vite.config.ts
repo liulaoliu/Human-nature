@@ -9,9 +9,18 @@ import { fishStaticPlugin } from './tools/vite-fish-endpoint.mjs'
 import { ttsEndpointPlugin } from './tools/vite-tts-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
 import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
+// @ts-expect-error .mjs 没有类型声明
+import { storeEndpointPlugin } from './tools/vite-store-endpoint.mjs'
 
 export default defineConfig({
-  plugins: [react(), projectStatePlugin(), fishStaticPlugin(), ttsEndpointPlugin(), aiEndpointPlugin()],
+  plugins: [
+    react(),
+    projectStatePlugin(),
+    fishStaticPlugin(),
+    ttsEndpointPlugin(),
+    aiEndpointPlugin(),
+    storeEndpointPlugin(),
+  ],
   base: './',
   build: {
     rollupOptions: {
@@ -25,6 +34,11 @@ export default defineConfig({
     // 麦克风也要重新授权。strictPort 让端口占用时直接报错，而不是悄悄换。
     port: 5173,
     strictPort: true,
+    // data/ 里是 SQLite 的 db/wal/shm，写一次就变；不忽略会让 Vite 以为源码变了，
+    // 页面自动刷新 → 自动保存 → 再刷新。public/tts 是 TTS 缓存，同理。
+    watch: { ignored: ['**/data/**', '**/public/tts/**', '**/public/shadowing-state.json'] },
+    // 别让 dev server 把 /data/xueba.db 当静态文件直接吐出去。
+    fs: { deny: ['**/data/**'] },
   },
   preview: { port: 5173, strictPort: true },
   test: {

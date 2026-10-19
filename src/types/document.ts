@@ -262,6 +262,29 @@ export interface VocabLibrary {
 }
 
 /**
+ * 已保存的文章。
+ *
+ * 为什么要存整篇（而不是只存原文、每次重新切句）：
+ * 粘回来的翻译/语法/搭配是挂在句子上的，重新切句会丢。所以连 paragraphs /
+ * sentences 一起存，下次打开是你上次离开时的样子。
+ */
+export interface SavedArticle {
+  id: string
+  title: string
+  /** 所属的书（EPUB 导入自动填书名；手动可选） */
+  book?: string
+  /** 对应 articles.json 的键；手动粘贴的为 null */
+  sourceKey: string | null
+  /** 清洗后的正文；编辑模式与重新切句用 */
+  text: string
+  paragraphs: Paragraph[]
+  sentences: Sentence[]
+  /** 首次创建时间（老数据没有 → 用 updatedAt 兜底） */
+  createdAt?: string
+  updatedAt: string
+}
+
+/**
  * 精读结果。一键提示词的「粘回解析」和（以后可选的）API 共用这一结构，
  * 所以现在只实现粘贴解析，以后接 API 也不用改数据模型。
  */

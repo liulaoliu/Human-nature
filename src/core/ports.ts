@@ -1,6 +1,8 @@
 /** Model 层的边界。框架无关，测试时全部注入假实现。 */
 
-import type { VocabLibrary } from '../types/document'
+import type { SavedArticle, VocabLibrary } from '../types/document'
+
+export type { SavedArticle } from '../types/document'
 
 export interface Chunk {
   index: number
@@ -191,6 +193,14 @@ export interface VocabSnapshot {
   at: string
   /** 这一版有多少条 */
   count: number
+}
+
+/** 已保存文章仓储。实现可以是 IndexedDB、HTTP/SQLite，或测试里的内存假实现。 */
+export interface ArticleRepoPort {
+  list(): Promise<SavedArticle[]>
+  get(id: string): Promise<SavedArticle | null>
+  save(article: SavedArticle): Promise<void>
+  remove(id: string): Promise<void>
 }
 
 export interface VocabRepoPort {

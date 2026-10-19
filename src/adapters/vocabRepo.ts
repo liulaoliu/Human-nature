@@ -1,6 +1,7 @@
 import type { VocabRepoPort, VocabSnapshot } from '../core/ports'
 import type { VocabLibrary } from '../types/document'
 import { createLibrary } from '../core/vocab'
+import { storeHealth, storeRequest } from './storeApi'
 
 const DB_NAME = 'shadowing-vocab'
 const DB_VERSION = 1
@@ -195,10 +196,118 @@ export class MemoryVocabRepo implements VocabRepoPort {
 }
 
 export function createVocabRepo(): VocabRepoPort {
+  return new HybridVocabRepo()
+}
+
+function createLocalVocabRepo(): VocabRepoPort {
   try {
     if (typeof indexedDB === 'undefined') return new MemoryVocabRepo()
     return new IdbVocabRepo()
   } catch {
     return new MemoryVocabRepo()
+  }
+}
+
+type StoreMode = 'unknown' | 'sqlite' | 'local'
+
+/**
+ * 词库主存储：本地服务在 → SQLite（`data/xueba.db`）；服务不在 → IndexedDB 兜底。
+ *
+ * 首次连上 SQLite 且服务端还是空库时，把浏览器里旧的 IndexedDB 词库自动迁上去
+ * （`/vocab/if-empty` 在服务端事务里做「空才写」，多标签页同时迁移也不会互相覆盖）。
+ * 之后每次写 SQLite 成功，都顺手往 IndexedDB 镜像一份，作为服务挂掉时的本地备份。
+ */
+export class HybridVocabRepo implements VocabRepoPort {
+  private mode: StoreMode = 'unknown'
+
+  constructor(private readonly local: VocabRepoPort = createLocalVocabRepo()) {}
+
+  private async useSqlite(): Promise<boolean> {
+    if (this.mode === 'unknown') {
+      this.mode = (await storeHealth()) ? 'sqlite' : 'local'
+    }
+    return this.mode === 'sqlite'
+  }
+
+  async load(): Promise<VocabLibrary> {
+    if (await this.useSqlite()) {
+      try {
+        const r = await storeRequest<{ value: VocabLibrary | null }>('/vocab')
+        if (r.value) return r.value
+        // 服务端还是空库：把浏览器里的旧词库迁上去（首次升级走这里）。
+        const local = await this.local.load()
+        if (local.items.length > 0) {
+          const migrated = await storeRequest<{ migrated: boolean; value: VocabLibrary | null }>(
+            '/vocab/if-empty',
+            { method: 'PUT', body: JSON.stringify(local) },
+          )
+          return migrated.value ?? local
+        }
+        return createLibrary()
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return this.local.load()
+  }
+
+  async save(library: VocabLibrary): Promise<void> {
+    if (await this.useSqlite()) {
+      try {
+        await storeRequest('/vocab', { method: 'PUT', body: JSON.stringify(library) })
+        // 镜像到 IndexedDB：SQLite 文件损坏/服务起不来时还有本机一份。
+        void this.local.save(library).catch(() => {})
+        return
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    await this.local.save(library)
+  }
+
+  async loadPrev(): Promise<VocabLibrary | null> {
+    if (await this.useSqlite()) {
+      try {
+        return (await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev')).value
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return (await this.local.loadPrev?.()) ?? null
+  }
+
+  async listSnapshots(): Promise<VocabSnapshot[]> {
+    if (await this.useSqlite()) {
+      try {
+        return (await storeRequest<{ snapshots: VocabSnapshot[] }>('/vocab/snapshots')).snapshots
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return (await this.local.listSnapshots?.()) ?? []
+  }
+
+  async loadSnapshot(at: string): Promise<VocabLibrary | null> {
+    if (await this.useSqlite()) {
+      try {
+        return (
+          await storeRequest<{ value: VocabLibrary | null }>(`/vocab/snapshots/${encodeURIComponent(at)}`)
+        ).value
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    return (await this.local.loadSnapshot?.(at)) ?? null
+  }
+
+  async clear(): Promise<void> {
+    if (await this.useSqlite()) {
+      try {
+        await storeRequest('/vocab', { method: 'DELETE' })
+      } catch {
+        this.mode = 'local'
+      }
+    }
+    await this.local.clear()
   }
 }

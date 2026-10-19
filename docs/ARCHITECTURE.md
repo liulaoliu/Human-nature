@@ -9,7 +9,7 @@
 ```
 src/types/       纯数据模型（Document / VocabItem / SentenceLanguage…），零逻辑
 src/core/        纯领域逻辑：不碰 React、不碰 DOM、不碰存储 —— 全部可单测
-src/adapters/    实现 core 端口（ports）的 IO 层：IndexedDB / fetch / TTS / 备份
+src/adapters/    实现 core 端口（ports）的 IO 层：SQLite(HTTP) / IndexedDB / fetch / TTS / 备份
 src/reader/      React 视图层
   hooks/         有状态编排（会话状态机、与 IO 的接线），不含排版
   panels/        展示组件（尽量薄：收 props、渲染）
@@ -76,11 +76,25 @@ types ← core ← adapters ← reader
 2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示恢复。
 3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 8 版 + 历史最大的一版永久保留），
    提供 `listSnapshots / loadSnapshot`；侧栏有「恢复上一版词库」（误清/误导入一键退回）。
-4. **同一份事实存多处**：词条 ← 词库(IDB) / 文章 `Sentence.vocab` / 待选清单(localStorage) /
-   错题本 / 「导出全部」JSON；语言点 ← 文章 `SentenceLanguage` / 词库里的语言点条目。
+4. **同一份事实存多处**：词条 ← SQLite(`data/xueba.db`) / IndexedDB 镜像 / 文章 `Sentence.vocab` /
+   待选清单(localStorage) / 错题本 / 「导出全部」JSON；语言点 ← 文章 `SentenceLanguage` / 词库里的语言点条目。
    → 坏了就靠「导入备份」＋「恢复上一版词库」；写入侧永远走上面三条。
 
 > 新增「用户资产」时先问：**它有第二份吗？** 没有就先补上第二份，再谈别的。
+
+### 存储：SQLite 主存，IndexedDB 只做兜底
+
+词库 / 已保存文章默认走本地服务的 SQLite（`data/xueba.db`，Node 自带 `node:sqlite`）；
+服务没起、静态部署、Node < 22.5 时自动回退 IndexedDB。详细取舍、schema、迁移和导出见
+[`docs/STORAGE.md`](STORAGE.md)。改数据层时：
+
+- 先改 `src/core/ports.ts` 的端口，再改 `src/adapters/*` 的 HybridRepo，**不要**在视图里直接 `fetch('/api/store')`；
+- 服务端只暴露固定路由（`server/storeApi.js`），不加任意 SQL 接口；
+- SQLite 内部分两层：`vocab` / `articles` 的 `payload` JSON 是事实来源，
+  `words` / `article_sentences` / `lang_points` 等是**同一事务里重建的派生表**；
+  不要绕过 `saveVocab` / `saveArticle` 直接写派生表；
+- schema 变更走 `PRAGMA user_version` 迁移；新表/新列要留旧库升级测试；
+- 用户资产写入必须同时考虑 IndexedDB 兜底和「导出全部」。
 
 ## 四、有意为之的例外（别当违规修）
 
@@ -90,6 +104,9 @@ types ← core ← adapters ← reader
 - **`ReaderApp.tsx` 偏大（3200 行）**：已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。它现在是「状态总线 + 接线」，领域逻辑要一律往 core/hooks 外面搬。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
+- **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
+  不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。
+  真要迁，先改端口为异步，再走服务端 SQLite。
 - **`core/dictionary.ts` 里有 fetch**：本质是加载器，欠一次搬家（已登记 TODO 到 `adapters/`）。
 
 ## 五、命令

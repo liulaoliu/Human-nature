@@ -3,8 +3,7 @@ import { cleanText } from '../../core/cleaner'
 import { segment } from '../../core/segmenter'
 import { buildCleanupPrompt } from '../../core/analyzer'
 import { extractEpub, extractPdfText } from '../importers'
-import type { ArticleRepoPort } from '../../adapters/articleRepo'
-import type { SavedArticle } from '../../adapters/articleRepo'
+import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 
 export interface UseArticleImportParams {
   repo: RefObject<ArticleRepoPort | null>

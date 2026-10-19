@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
-import type { SavedArticle } from '../adapters/articleRepo'
+import type { SavedArticle } from '../core/ports'
 import { calendarDayKey } from '../core/activity'
 
 interface Props {

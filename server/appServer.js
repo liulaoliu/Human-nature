@@ -26,7 +26,14 @@ process.on('exit', () => {
   }
 })
 
-const server = createServer(createRequestHandler({ distDir, publicDir, fishDir }))
+const server = createServer(
+  createRequestHandler({
+    distDir,
+    publicDir,
+    fishDir,
+    dbPath: process.env.XUEBA_DB || join(root, 'data', 'xueba.db'),
+  }),
+)
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`端口 ${port} 被占用：可能是开发服务器（npm run dev）还在跑，先关掉它，或运行 停止服务.cmd。`)
@@ -35,7 +42,9 @@ server.on('error', (e) => {
   }
   process.exit(1)
 })
-server.listen(port, () => {
+// 只监听本机：SQLite 数据接口没有登录态，不能对局域网开放。
+server.listen(port, '127.0.0.1', () => {
   console.log(`学吧老哥 服务已启动： http://localhost:${port}/`)
   console.log(`  精读页： http://localhost:${port}/reader.html`)
+  console.log(`  数据：   ${process.env.XUEBA_DB || join(root, 'data', 'xueba.db')}`)
 })

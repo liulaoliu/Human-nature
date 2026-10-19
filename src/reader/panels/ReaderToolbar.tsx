@@ -1,6 +1,6 @@
 import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
-import type { SavedArticle } from '../../adapters/articleRepo'
+import type { SavedArticle } from '../../core/ports'
 import type { VocabLevel } from '../../core/analyzer'
 import type { TtsAccent } from '../../core/ttsVoices'
 import { fmtDur } from '../format'
