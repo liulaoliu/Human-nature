@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
 import { useStudySession } from './useStudySession'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
+import { installFakeStorage } from '../testStorage'
 import type { VocabLibrary } from '../../types/document'
 
 /**
@@ -36,10 +37,16 @@ function Harness({ library }: { library: VocabLibrary }) {
 
 const lib = (items: VocabLibrary['items']): VocabLibrary => ({ ...createLibrary(), items })
 
+let restoreStorage: () => void = () => {}
+
 beforeEach(() => {
-  localStorage.clear()
+  restoreStorage = installFakeStorage()
   api = null
   flash.mockClear()
+})
+
+afterEach(() => {
+  restoreStorage()
 })
 
 describe('useStudySession：单词之间切换', () => {

@@ -1,15 +1,22 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { learningRepo } from '../../adapters/learningRepo'
 import {
   hasPendingLearningChanges,
   resetLearningSyncStateForTest,
 } from '../learningState'
+import { installFakeStorage } from '../testStorage'
 import { useLearningSync } from './useLearningSync'
 
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+})
+
 afterEach(() => {
-  localStorage.clear()
+  restoreStorage()
   resetLearningSyncStateForTest()
   vi.useRealTimers()
   vi.restoreAllMocks()

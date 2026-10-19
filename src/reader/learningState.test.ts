@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { learningRepo } from '../adapters/learningRepo'
 import { emptyLearning } from '../core/learning'
+import { installFakeStorage } from './testStorage'
 import {
   hasPendingLearningChanges,
   hydrateLearningFromServer,
@@ -13,8 +14,14 @@ import {
   writeLearningToLocalStorage,
 } from './learningState'
 
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+})
+
 afterEach(() => {
-  localStorage.clear()
+  restoreStorage()
   resetLearningSyncStateForTest()
   vi.restoreAllMocks()
 })
