@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useHotkeys } from '../useHotkeys'
 import { inStudyDeck, isStudyable, type StudyDeck } from '../../core/entryKind'
 import {
   buildLearnQueue,
@@ -447,9 +448,9 @@ export function useStudySession(params: UseStudySessionParams) {
   }, [queue, addStudyTime])
 
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
-  useEffect(() => {
-    if (!queue || editOpen || drillOn) return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
+      if (!queue || editOpen || drillOn) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
@@ -482,10 +483,10 @@ export function useStudySession(params: UseStudySessionParams) {
         e.preventDefault()
         forward()
       } else if (e.key === 'Escape') close()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [queue, editOpen, index, revealed, spelling, checked, grade, close, drillOn, back, forward])
+    },
+    !!queue && !editOpen && !drillOn,
+    40,
+  )
 
   return {
     scope,

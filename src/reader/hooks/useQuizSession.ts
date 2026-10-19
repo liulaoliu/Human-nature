@@ -24,6 +24,7 @@ import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
 import type { PracticeKind } from '../../core/practice'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
+import { useHotkeys } from '../useHotkeys'
 import {
   parseQuizSessionSnapshot,
   type QuizResultRow,
@@ -443,9 +444,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
   }, [])
 
   // 快捷键：回车 提交 / 下一题；词形辨析可用 1/2/3 选选项；Esc 退出
-  useEffect(() => {
-    if (!queue) return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
+      if (!queue) return
       if (e.key === 'Escape') {
         close()
         return
@@ -467,10 +468,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
           check(opt)
         }
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [queue, index, checked, check, next, close])
+    },
+    !!queue,
+    60,
+  )
 
   return {
     // 设置

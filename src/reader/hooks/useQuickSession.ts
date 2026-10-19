@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { reviewItem, sortItems } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
+import { useHotkeys } from '../useHotkeys'
 
 export interface UseQuickSessionParams {
   /** 快刷候选池（按当前范围）。 */
@@ -59,9 +60,9 @@ export function useQuickSession({
   const close = useCallback(() => setQueue(null), [])
 
   // 快捷键：1/← 不认识，2/→ 认识，空格看释义，Esc 退出
-  useEffect(() => {
-    if (!queue) return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
+      if (!queue) return
       if (e.key === 'Escape') {
         close()
         return
@@ -79,10 +80,10 @@ export function useQuickSession({
         e.preventDefault()
         grade(true)
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [queue, index, grade, close])
+    },
+    !!queue,
+    35,
+  )
 
   return { queue, setQueue, index, revealed, setRevealed, start, grade, close }
 }

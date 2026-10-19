@@ -75,6 +75,7 @@ import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
 import { useStudySession } from './hooks/useStudySession'
 import { useLearningData } from './hooks/useLearningData'
+import { useHotkeys } from './useHotkeys'
 import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
@@ -587,11 +588,15 @@ export default function ReaderApp() {
   }, [])
 
   // 跟踪 Ctrl / ⌘ 按住状态（选择逻辑靠它切换「整句 / 按词吸附」）
-  useEffect(() => {
-    const down = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
       if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(true)
       if (e.key === 'Alt') setAltHeld(true)
-    }
+    },
+    true,
+    10,
+  )
+  useEffect(() => {
     const up = (e: KeyboardEvent) => {
       if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(false)
       if (e.key === 'Alt') setAltHeld(false)
@@ -600,11 +605,9 @@ export default function ReaderApp() {
       setCtrlHeld(false)
       setAltHeld(false)
     }
-    window.addEventListener('keydown', down)
     window.addEventListener('keyup', up)
     window.addEventListener('blur', blur)
     return () => {
-      window.removeEventListener('keydown', down)
       window.removeEventListener('keyup', up)
       window.removeEventListener('blur', blur)
     }
@@ -1196,17 +1199,16 @@ export default function ReaderApp() {
   })
 
   // 听力理解题 / 仿写：Esc 退出
-  useEffect(() => {
-    if (!listenOpen && !writingOpen) return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
       if (e.key === 'Escape') {
         setListenOpen(false)
         setWritingOpen(false)
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [listenOpen, writingOpen])
+    },
+    listenOpen || writingOpen,
+    20,
+  )
 
   /** 记一次选词模式会话（sessions 由 useLocalStorageState 落盘，最多留 500 条）。 */
   const recordSession = useCallback((seconds: number, picked: number) => {
@@ -1381,8 +1383,8 @@ export default function ReaderApp() {
   } = dictApi
 
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
       // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
       if (studyQueue || quizQueue || quickQueue || dictQueue) return
       if (speedReadOpen || listenOpen || langOpen) return
@@ -1393,10 +1395,10 @@ export default function ReaderApp() {
       if (k === 'w') toggleVocabRef.current()
       else if (k === 'a') navVocabRef.current(-1)
       else if (k === 'd') navVocabRef.current(1)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [studyQueue, quizQueue, speedReadOpen, listenOpen, langOpen])
+    },
+    true,
+    10,
+  )
 
   /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
   const visibleBatch = useMemo(

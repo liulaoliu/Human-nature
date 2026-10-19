@@ -17,6 +17,7 @@ import type { PracticeKind } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
 import { dictMistake } from '../../core/mistakes'
 import { useLocalStorageState, persistentEnum, persistentNumber } from './useLocalStorageState'
+import { useHotkeys } from '../useHotkeys'
 import {
   parseDictSessionSnapshot,
   type DictItemData,
@@ -430,9 +431,9 @@ export function useDictation(params: UseDictationParams) {
   }, [])
 
   // 快捷键：回车 检查 / 下一句，Tab 重听，Esc 退出
-  useEffect(() => {
-    if (!queue) return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
+      if (!queue) return
       if (e.key === 'Escape') {
         close()
         return
@@ -452,10 +453,10 @@ export function useDictation(params: UseDictationParams) {
       if (index >= queue.length) return
       if (!checked) check()
       else next()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [queue, index, checked, check, next, close, speak])
+    },
+    !!queue,
+    50,
+  )
 
   return {
     mode,
