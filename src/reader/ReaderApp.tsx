@@ -3,9 +3,7 @@ import type { ArticleBook } from '../core/matchArticle'
 import { wordSpans } from '../core/wordSelect'
 import {
   applyExamples,
-  applyLemmaMap,
   articleWordsOf,
-  dedupeLibrary,
   displayMeaning,
   editItem,
   hasOwnExamples,
@@ -97,7 +95,6 @@ import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
 import { loadTatoeba, tatoebaExamples } from './tatoeba'
 import { dictionary } from './dictionary'
-import { dictLemmaPairs } from '../core/ecdict'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
@@ -641,9 +638,10 @@ export default function ReaderApp() {
   )
 
   /**
-   * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句）。
+   * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句 + 词典词形归并）。
    * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
    */
+  const dictReady = useDictionary()
   const { lookupTatoeba, tatoebaReady } = useLibraryAutoFill({
     sentences: doc?.sentences ?? null,
     saved,
@@ -651,6 +649,7 @@ export default function ReaderApp() {
     libraryRef,
     libraryLoaded,
     persist,
+    dict: dictReady ? dictionary() : null,
   })
 
   /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
@@ -2105,22 +2104,6 @@ export default function ReaderApp() {
   }, [pasted, applyAiWeb, applyPaste])
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
-  const dictReady = useDictionary()
-
-  /**
-   * 离线词典就绪后：把「非原型」的词条自动归一到词典原形并合并（幂等）。
-   * 修的是 `overthrown`（没释义）、`sprawling`（和 `sprawl` 并列）这类残留。
-   * 手动改过（edited/mastered）的不动。
-   */
-  useEffect(() => {
-    if (!dictReady) return
-    const dict = dictionary()
-    if (!dict) return
-    const pairs = dictLemmaPairs(dict, library.items, { skipLocked: true })
-    if (!pairs.length) return
-    persist(dedupeLibrary(applyLemmaMap(library, pairs)))
-  }, [dictReady, library, persist])
-
   const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
     library,
     persist,

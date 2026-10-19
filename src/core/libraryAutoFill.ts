@@ -13,8 +13,9 @@
  * 纯函数 ⇒ 可以用单测直接证明「跑两遍结果一样、不同顺序结果一样、不丢改动」。
  */
 import type { VocabItem, VocabLibrary } from '../types/document'
-import { applyExamples, pickOfflineExamples } from './vocab'
+import { applyExamples, applyLemmaMap, dedupeLibrary, pickOfflineExamples } from './vocab'
 import { langPointSignature, upsertLanguagePoints, type LanguagePoint } from './langPoints'
+import { dictLemmaPairs, type Ecdict } from './ecdict'
 
 /** 离线例句查询（装了离线库才给；返回候选例句）。 */
 export interface OfflineExampleLookup {
@@ -28,6 +29,13 @@ export interface AutoFillSources {
   collected: Record<string, string>
   /** 离线例句（Tatoeba）；没装/没就绪就别给 */
   offline?: OfflineExampleLookup
+  /**
+   * 离线词典算出的词形归并（非原型 → 原型）。
+   * 必须在收藏语言点**之前**做：先合并同根词，避免语言点又建出重复条目。
+   */
+  lemmaPairs?: { from: string; to: string }[]
+  /** 离线词典已就绪时直接给；内部会反复归并到稳定（处理多跳词形）。 */
+  dict?: Ecdict | null
 }
 
 export interface AutoFillResult {
@@ -35,7 +43,7 @@ export interface AutoFillResult {
   /** 更新后的「已收签名」（调用方按需落盘） */
   collected: Record<string, string>
   /** 这次实际补了什么（日志 / 测试断言用） */
-  applied: { langPoints: number; offlineExamples: number }
+  applied: { lemmaFixes: number; langPoints: number; offlineExamples: number }
   /** 词库一个字都没动 → 调用方跳过写库 */
   libraryUntouched: boolean
   /** 签名表也没变 */
@@ -71,7 +79,27 @@ export function autoFillLibrary(
   let lib = library
   let collected = sources.collected
   let collectedChanged = false
+  let lemmaFixes = 0
   let langPoints = 0
+
+  // 0) 词形归并：非原型合并到词典原形（跳过手动改过/已掌握的词）
+  if (sources.dict) {
+    // 词典可能是多跳的（algaes → algae → alga），循环到稳定；最多 5 轮防病态循环。
+    for (let i = 0; i < 5; i++) {
+      const pairs = dictLemmaPairs(sources.dict, lib.items, { skipLocked: true })
+      if (!pairs.length) break
+      const next = dedupeLibrary(applyLemmaMap(lib, pairs))
+      if (next === lib) break
+      lib = next
+      lemmaFixes += pairs.length
+    }
+  } else if (sources.lemmaPairs?.length) {
+    const next = dedupeLibrary(applyLemmaMap(lib, sources.lemmaPairs))
+    if (next !== lib) {
+      lib = next
+      lemmaFixes = sources.lemmaPairs.length
+    }
+  }
 
   // 1) 语言点收藏：按「每篇内容签名」只收一遍（删掉的条目不会自己回来）
   if (sources.langPoints.length) {
@@ -111,7 +139,7 @@ export function autoFillLibrary(
   return {
     library: lib,
     collected,
-    applied: { langPoints, offlineExamples },
+    applied: { lemmaFixes, langPoints, offlineExamples },
     libraryUntouched: lib === library,
     collectedUntouched: !collectedChanged,
   }

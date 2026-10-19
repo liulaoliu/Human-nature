@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState, type MutableRefObject } from 'react'
 import type { Sentence, VocabLibrary } from '../../types/document'
 import { autoFillLibrary } from '../../core/libraryAutoFill'
+import type { Ecdict } from '../../core/ecdict'
 import { languagePointsOf } from '../../core/langPoints'
 import { loadTatoeba, tatoebaExamples } from '../tatoeba'
 import { useLocalStorageState } from './useLocalStorageState'
@@ -29,6 +30,8 @@ export interface UseLibraryAutoFillParams {
   libraryLoaded: boolean
   /** 落库（ReaderApp 的 persist） */
   persist: (library: VocabLibrary) => void
+  /** 离线词典（就绪后给，null = 未加载）；词形归并也在同一个 effect 里做 */
+  dict?: Ecdict | null
 }
 
 export interface UseLibraryAutoFillResult {
@@ -47,6 +50,7 @@ export function useLibraryAutoFill({
   libraryRef,
   libraryLoaded,
   persist,
+  dict,
 }: UseLibraryAutoFillParams): UseLibraryAutoFillResult {
   /** 每篇文章收过的语言点签名（一篇只收一遍：删掉的条目不会自己回来） */
   const [langCollected, setLangCollected] = useLocalStorageState<Record<string, string>>('reader:langCollected', {})
@@ -91,10 +95,11 @@ export function useLibraryAutoFill({
       langPoints: languagePoints,
       collected: langCollected,
       offline: tatoebaReady ? { lookup: lookupTatoeba } : undefined,
+      dict,
     })
     if (!out.libraryUntouched) persist(out.library)
     if (!out.collectedUntouched) setLangCollected(out.collected)
-  }, [libraryLoaded, languagePoints, langCollected, tatoebaReady, lookupTatoeba, persist, setLangCollected, libraryRef])
+  }, [libraryLoaded, languagePoints, langCollected, tatoebaReady, lookupTatoeba, persist, setLangCollected, libraryRef, dict])
 
   return { lookupTatoeba, tatoebaReady, languagePointCount: languagePoints.length }
 }

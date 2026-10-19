@@ -4,7 +4,7 @@ import { createLibrary, markWord, normalizeWord } from './vocab'
 import { upsertLanguagePoints, type LanguagePoint } from './langPoints'
 import { TEST_NOW, vocabItem } from './testFixtures'
 import { applyLemmaMap, dedupeLibrary } from './vocab'
-import { dictLemmaPairs } from './ecdict'
+import { dictLemmaPairs, type Ecdict } from './ecdict'
 
 const src = (articleId: string, sentenceId: string, sentenceText = 'Sentence.') => ({
   articleId,
@@ -25,7 +25,7 @@ describe('autoFillLibrary（词库自动补全的唯一入口）', () => {
     const out = autoFillLibrary(lib, { langPoints: [], collected: {} }, TEST_NOW)
     expect(out.libraryUntouched).toBe(true)
     expect(out.collectedUntouched).toBe(true)
-    expect(out.applied).toEqual({ langPoints: 0, offlineExamples: 0 })
+    expect(out.applied).toEqual({ lemmaFixes: 0, langPoints: 0, offlineExamples: 0 })
   })
 
   it('跑两遍结果一样（幂等）：第二遍不再动词库，签名也不变', () => {
@@ -67,6 +67,29 @@ describe('autoFillLibrary（词库自动补全的唯一入口）', () => {
     expect(second.collected.B).not.toBe(first.collected.B)
     expect(second.library.items.find((it) => it.lemma === 'take its toll')?.meaning).toBe('造成损害（重跑）')
     expect(second.applied.langPoints).toBe(1) // 只动了 B 这篇
+  })
+
+  it('同一次调用里先做词形归并，再收语言点（P0 双写回归）', () => {
+    const dict = {
+      entries: new Map(),
+      forms: new Map([['runs', 'run']]),
+      near: new Map(),
+    } as unknown as Ecdict
+    const lib = markWord(createLibrary(), { word: 'runs', articleId: 'A' }, TEST_NOW).library
+    const points = [phrase('fall back on', '转而依靠')]
+    const out = autoFillLibrary(lib, { langPoints: points, collected: {}, dict }, TEST_NOW)
+    expect(out.library.items.map((it) => it.word).sort()).toEqual(['fall back on', 'run'])
+    expect(out.applied.lemmaFixes).toBe(1)
+    expect(out.applied.langPoints).toBe(1)
+
+    // 再跑一遍：两件事都已做过，不能再写库
+    const again = autoFillLibrary(
+      out.library,
+      { langPoints: points, collected: out.collected, dict },
+      TEST_NOW,
+    )
+    expect(again.library).toBe(out.library)
+    expect(again.libraryUntouched).toBe(true)
   })
 
   it('词典词形归并不影响收藏条目（交替跑稳定）', () => {
