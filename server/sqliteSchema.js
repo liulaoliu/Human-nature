@@ -2,10 +2,11 @@
  * SQLite schema 定义与版本号。
  *
  * 事实来源仍然是 JSON payload；这里只放表结构，避免 store 的读写逻辑被 DDL 淹没。
- * v1 → v2 迁移：新增派生表 + articles 查询列，旧库打开时由 sqliteStore 自动迁移。
+ * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
+ * v4 旧词条文章 id，v5 学习记录快照。
  */
 
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 5
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -311,4 +312,22 @@ CREATE TABLE IF NOT EXISTS kind_stats (
   correct INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (article_id, kind)
 );
+`
+
+/**
+ * v5：学习记录快照。
+ *
+ * 学习记录是直接写在规范化表里的，没有 JSON 事实来源可回滚；每次替换/增量写之前
+ * 先留一份完整快照，缩水、误清空、迁移出错时都能恢复。
+ * 只留最近若干份；快照表不进 `hasLearningRows`，避免“只有快照没有记录”时误判。
+ */
+export const SCHEMA_V5 = `
+CREATE TABLE IF NOT EXISTS learning_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  record_count INTEGER NOT NULL DEFAULT 0,
+  payload TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_learning_snapshots_at ON learning_snapshots(at DESC);
 `

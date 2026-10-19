@@ -75,7 +75,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 4`（v3 建学习记录表，v4 修旧词条的标题式文章 id）。
+schema 版本：`PRAGMA user_version = 5`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -164,6 +164,7 @@ pick_sessions(at, seconds, picked)                                        -- 选
 study_word_days(day, word_id, ordinal)                                    -- 每天背过哪些词（日志用）
 skimmed_articles(article_id)                                              -- 精读「略读」进度
 kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
+learning_snapshots(id, at, reason, record_count, payload JSON)             -- 覆盖前快照（最近 30 份 + 记录最多一份）
 ```
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
@@ -177,6 +178,12 @@ kind_stats(article_id, kind, total, correct)                              -- 按
   以后新增答题事件时，应改成“事件表 → 聚合视图”，不要同时手写事件和聚合。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
   `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。
+- v5 防御：每次整份/增量写入前，在同一事务里把当前学习记录存进 `learning_snapshots`
+  （最多保留最近 30 份 + 记录最多的一份）；误清空、缩水后可通过
+  `GET /api/store/learning/snapshots` 查看、`POST /api/store/learning/snapshots/:id/restore` 恢复。
+  恢复动作本身也先快照当前状态，恢复错了还能回去。
+- 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
+  `data/backups/`（保留最近 5 份）。WAL 下用 `synchronous = FULL`，断电时宁可慢一点，也不丢最后一笔提交。
 
 ### 4.4 性能与边界
 
@@ -245,8 +252,8 @@ server/sqliteUtil.js（事务与字段转换）
 
 ## 八、下一阶段（还没做）
 
-0. **学习记录已迁 SQLite（v3 建表，v4 修旧 id）**：练习、错题、读完/精读、写作、复述、活动、背词/选词记录
-   已落表；localStorage 作为同步缓存。下一步把“答题明细”从聚合值改成事件表，
+0. **学习记录已迁 SQLite（v3 建表，v4 修旧 id，v5 快照）**：练习、错题、读完/精读、写作、复述、活动、背词/选词记录
+   已落表；localStorage 作为同步缓存；每次写前有快照，可恢复。下一步把“答题明细”从聚合值改成事件表，
    让 `activity` / `kindStats` 可重算，而不是只保存结果。
 1. **录音迁到服务端**：`data/takes/<id>.bin` + SQLite 元数据（`file_name` 索引），
    前端 `HybridTakeRepo`；第一次打开某篇时把该篇旧录音补传。

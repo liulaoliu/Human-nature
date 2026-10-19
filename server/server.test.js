@@ -165,6 +165,19 @@ describe('httpApp 请求处理', () => {
       expect(dump.articles[0].id).toBe('a1')
       expect(dump.learning.practice).toEqual([])
 
+      const snapshots = await fetch(`${base}/api/store/learning/snapshots`).then((r) => r.json())
+      expect(snapshots.snapshots.length).toBeGreaterThan(0)
+      const snapId = snapshots.snapshots[0].id
+      const snapDetail = await fetch(`${base}/api/store/learning/snapshots/${snapId}`).then((r) => r.json())
+      expect(snapDetail.value.value.practice).toHaveLength(1)
+      const restore = await fetch(`${base}/api/store/learning/snapshots/${snapId}/restore`, {
+        method: 'POST',
+        headers: json(),
+      }).then((r) => r.json())
+      expect(restore.ok).toBe(true)
+      expect(restore.value.value.practice).toHaveLength(1)
+      expect((await fetch(`${base}/api/store/learning`).then((r) => r.json())).value.practice).toHaveLength(1)
+
       const dbFile = await fetch(`${base}/api/store/db`)
       expect(dbFile.status).toBe(200)
       expect(dbFile.headers.get('content-type')).toContain('sqlite')
@@ -175,7 +188,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(4)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(5)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

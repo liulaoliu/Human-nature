@@ -172,6 +172,33 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       }
     }
 
+    if (path === '/learning/snapshots' && method === 'GET') {
+      sendJson(res, 200, { ok: true, snapshots: store.listLearningSnapshots() })
+      return
+    }
+
+    const learningSnap = path.match(/^\/learning\/snapshots\/(\d+)$/)
+    if (learningSnap && method === 'GET') {
+      const value = store.loadLearningSnapshot(Number(learningSnap[1]))
+      if (!value) {
+        fail(res, 404, '学习记录快照不存在')
+        return
+      }
+      sendJson(res, 200, { ok: true, value })
+      return
+    }
+
+    const learningRestore = path.match(/^\/learning\/snapshots\/(\d+)\/restore$/)
+    if (learningRestore && method === 'POST') {
+      const value = store.restoreLearningSnapshot(Number(learningRestore[1]))
+      if (!value) {
+        fail(res, 404, '学习记录快照不存在')
+        return
+      }
+      sendJson(res, 200, { ok: true, value })
+      return
+    }
+
     if (path === '/learning' && method === 'GET') {
       sendJson(res, 200, { ok: true, value: store.loadLearning() })
       return

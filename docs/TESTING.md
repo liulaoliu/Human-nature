@@ -92,7 +92,9 @@
 | TTS 自动兜底 | 让 Edge 不可用（断网 / 代理坏）→ 读本句 | 仍出声（先 Piper，再浏览器语音）；约 20 秒后自动回头重试 Edge |
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
-| SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points` |
+| SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
+| 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
+| schema 迁移备份 | 用旧版本创建的 `data/xueba.db` 启动新版 | 启动日志有「迁移前备份」；`data/backups/xueba-v<旧版本>-*.db` 存在，保留最近 5 份 |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
 
 ## 五、已经就绪的层 / 还差什么

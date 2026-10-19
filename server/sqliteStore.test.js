@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { mkdtempSync } from 'node:fs'
+import { mkdtempSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { closeAllStores, openStore } from './sqliteStore.js'
 
 const require = createRequire(import.meta.url)
@@ -80,7 +80,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(4)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(5)
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {
@@ -319,6 +319,36 @@ describe('sqliteStore：学习记录', () => {
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
   })
 
+  it('覆盖前自动留快照，误清空后可以恢复', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+    // 第一次写入空库不留快照；这次覆盖前会把完整记录存下来。
+    store.saveLearning({ ...learning, practice: [] })
+
+    const snaps = store.listLearningSnapshots()
+    expect(snaps.length).toBeGreaterThan(0)
+    const before = store.loadLearningSnapshot(snaps[0].id)
+    expect(before.value.practice).toHaveLength(2)
+    expect(before.recordCount).toBeGreaterThan(0)
+    expect(store.loadLearningSnapshot(999999)).toBeNull()
+
+    const restored = store.restoreLearningSnapshot(snaps[0].id)
+    expect(restored.value.practice).toHaveLength(2)
+    expect(store.loadLearning().practice).toHaveLength(2)
+    // 恢复动作本身也先留了“恢复前”的快照，恢复错了还能回去。
+    expect(store.listLearningSnapshots().length).toBeGreaterThan(snaps.length)
+  })
+
+  it('快照只留最近 30 份 + 记录最多的一份', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+    for (let i = 0; i < 35; i++) {
+      store.saveLearning({ ...learning, practice: [{ at: `2026-03-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`, kind: 'quiz', total: i, correct: i }] })
+    }
+    expect(store.listLearningSnapshots().length).toBeLessThanOrEqual(31)
+    expect(store.listLearningSnapshots().some((s) => s.recordCount >= 8)).toBe(true)
+  })
+
   it('if-empty 只在服务端没有任何学习记录时迁移', () => {
     const store = openStore(tempDb())
     const first = store.migrateLearning(learning)
@@ -337,7 +367,7 @@ describe('sqliteStore：学习记录', () => {
   })
 })
 
-describe('sqliteStore：v1 → v4 迁移', () => {
+describe('sqliteStore：v1 → v5 迁移', () => {
   it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
@@ -401,7 +431,11 @@ describe('sqliteStore：v1 → v4 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(4)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(5)
+    // 迁移前整库备份，出事能回到 v1。
+    const backups = readdirSync(join(dirname(path), 'backups'))
+    expect(backups).toHaveLength(1)
+    expect(backups[0]).toMatch(/^xueba-v1-.*\.db$/)
     const saved = store.loadVocab().items[0]
     expect(saved.source.articleId).toBe('a1')
     expect(saved.examples[0].articleId).toBe('a1')
