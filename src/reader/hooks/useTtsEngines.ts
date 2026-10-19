@@ -1,20 +1,12 @@
 import { useEffect, useState } from 'react'
+import type { TtsEngineInfo } from '../../core/ttsVoices'
 
-export interface TtsEngineVoice {
-  /** 形如 sapi:Microsoft Zira Desktop */
-  id: string
-  name: string
-  gender?: string
-  lang?: string
-}
-
-export interface TtsEngines {
+export interface TtsEngines extends TtsEngineInfo {
   edge: boolean
-  sapi: { available: boolean; voices: TtsEngineVoice[] }
 }
 
 /**
- * 探测服务端可用的 TTS 引擎（主要用来发现「离线系统语音 SAPI」）。
+ * 探测服务端可用的 TTS 引擎（离线系统语音 SAPI / Linux espeak-ng）。
  * 服务端没起 / 探测失败时返回 null，此时只用 Edge 在线音色。
  */
 export function useTtsEngines(): TtsEngines | null {

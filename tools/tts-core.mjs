@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import {
   createReadStream,
   existsSync,
@@ -12,13 +12,15 @@ import {
 import { join } from 'node:path'
 
 /**
- * TTS 共享核心（dev 走 Vite 插件，static 走 httpApp.js）。两个引擎：
+ * TTS 共享核心（dev 走 Vite 插件，static 走 httpApp.js）。三个引擎：
  *
  *   edge（默认，在线）  GET /api/tts?voice=en-US-AriaNeural&text=Hello   → audio/mpeg
  *   sapi（离线，系统）  GET /api/tts?voice=sapi:Microsoft%20Zira%20Desktop&text=Hello → audio/wav
- *   GET /api/tts/words?voice=…&text=…    → 逐词时间戳 JSON（仅 edge；sapi 为 []）
- *   GET /api/tts/engines                 → { edge, sapi: { available, voices } }
+ *   local（离线，Linux）GET /api/tts?voice=local:en-us&text=Hello         → audio/wav
+ *   GET /api/tts/words?voice=…&text=…    → 逐词时间戳 JSON（仅 edge；离线引擎为 []）
+ *   GET /api/tts/engines                 → { edge, sapi, local: { available, voices } }
  *
+ * Edge 连续失败时自动降级到本机 espeak-ng（20 秒后自动重试 Edge）；本机也没有时由前端退回浏览器语音。
  * 缓存：public/tts/<sha1(engine+voice+text)>.<mp3|wav>（edge 另存同名 .json 逐词时间戳）。
  * 只服务本机自用：文本长度上限、并发上限、硬超时、失败重试、缓存条数上限。
  */
@@ -27,11 +29,38 @@ export const DEFAULT_VOICE = 'en-US-AriaNeural'
 
 const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/
 const SAPI_PREFIX = 'sapi:'
+const LOCAL_PREFIX = 'local:'
 const MAX_TEXT = 600
 const MAX_CONCURRENT = 2
 const SYNTH_TIMEOUT_MS = 20000
 const RETRIES = 1
 const MAX_CACHE_FILES = 800
+/** Edge 失败后先走本地引擎多久，再回头重试 Edge。 */
+const EDGE_RETRY_MS = 20000
+
+/** 本机 espeak-ng 的可选音色（固定白名单，避免把任意字符串拼进命令行）。 */
+const LOCAL_VOICES = [
+  { id: 'local:en-us', name: 'Espeak 美音 · 男', voice: 'en-us', gender: 'Male', lang: 'en-US' },
+  { id: 'local:en-us+f3', name: 'Espeak 美音 · 女', voice: 'en-us+f3', gender: 'Female', lang: 'en-US' },
+  { id: 'local:en-gb', name: 'Espeak 英音 · 男', voice: 'en-gb', gender: 'Male', lang: 'en-GB' },
+  {
+    id: 'local:en-gb-x-rp',
+    name: 'Espeak 英音 RP · 男',
+    voice: 'en-gb-x-rp',
+    gender: 'Male',
+    lang: 'en-GB',
+  },
+  {
+    id: 'local:en-gb-x-rp+f3',
+    name: 'Espeak 英音 RP · 女',
+    voice: 'en-gb-x-rp+f3',
+    gender: 'Female',
+    lang: 'en-GB',
+  },
+]
+const LOCAL_VOICE_MAP = new Map(LOCAL_VOICES.map((v) => [v.id, v]))
+/** 当前是否处于「Edge 降级期」；0 = 正常。 */
+let edgeDownUntil = 0
 
 /** 正在合成的任务（同一 key 不重复合成）。 */
 const inflight = new Map()
@@ -68,11 +97,15 @@ function rmQuiet(p) {
 }
 
 /** 从 voice 参数解析出引擎 / 音色 / 缓存扩展名。 */
-function parseTarget(rawIn) {
+export function parseTarget(rawIn) {
   const raw = (rawIn || '').trim()
   if (raw.startsWith(SAPI_PREFIX)) {
     const name = raw.slice(SAPI_PREFIX.length).trim()
     if (name) return { engine: 'sapi', voice: name, ext: 'wav' }
+  }
+  if (raw.startsWith(LOCAL_PREFIX)) {
+    // 只认白名单音色；拼错的 local:xxx 不要静默拿去跑命令行。
+    if (LOCAL_VOICE_MAP.has(raw)) return { engine: 'local', voice: raw, ext: 'wav' }
   }
   if (EDGE_VOICE_RE.test(raw)) return { engine: 'edge', voice: raw, ext: 'mp3' }
   return { engine: 'edge', voice: DEFAULT_VOICE, ext: 'mp3' }
@@ -194,9 +227,80 @@ function listSapiVoices() {
   })
 }
 
+// ---- local（离线，Linux espeak-ng） ----
+let espeakBin
+/** 找 espeak-ng（老系统可能只有 espeak）；结果缓存。 */
+function findEspeak() {
+  if (espeakBin !== undefined) return espeakBin
+  for (const bin of ['espeak-ng', 'espeak']) {
+    try {
+      const r = spawnSync(bin, ['--version'], { stdio: 'ignore', timeout: 2000 })
+      if (r.status === 0) {
+        espeakBin = bin
+        return bin
+      }
+    } catch {
+      // 试下一个
+    }
+  }
+  espeakBin = null
+  return null
+}
+
+let localCache = null
+/** 本机可用的离线音色（没有 espeak 就是空）。 */
+function listLocalVoices() {
+  if (localCache) return localCache
+  if (!findEspeak()) {
+    localCache = []
+    return localCache
+  }
+  localCache = LOCAL_VOICES.map(({ id, name, gender, lang }) => ({ id, name, gender, lang }))
+  return localCache
+}
+
+/** Edge 失败时挑一个口音相近的本地音色。 */
+function localFallbackTarget(edgeVoice) {
+  const voices = listLocalVoices()
+  if (!voices.length) return null
+  const want = /^en-(US|CA)/i.test(edgeVoice) ? 'local:en-us' : 'local:en-gb-x-rp'
+  const id = voices.some((v) => v.id === want) ? want : voices[0].id
+  return { engine: 'local', voice: id, ext: 'wav' }
+}
+
+function synthLocal(text, voiceId, outWav) {
+  return new Promise((resolve, reject) => {
+    const bin = findEspeak()
+    const v = LOCAL_VOICE_MAP.get(voiceId)
+    if (!bin || !v) {
+      reject(new Error('espeak-ng not installed'))
+      return
+    }
+    // 文本以 - 开头会被 espeak 当成选项；补个空格即可（不影响读音）。
+    const input = text.startsWith('-') ? ` ${text}` : text
+    const ps = spawn(bin, ['-v', v.voice, '-s', '160', '-w', outWav, input], {
+      stdio: ['ignore', 'ignore', 'pipe'],
+    })
+    let err = ''
+    ps.stderr.on('data', (d) => {
+      err += String(d)
+    })
+    ps.on('error', reject)
+    ps.on('close', (code) => {
+      try {
+        if (code === 0 && existsSync(outWav) && statSync(outWav).size > 44) resolve()
+        else reject(new Error(`espeak exit ${code}: ${err.slice(0, 200)}`))
+      } catch (e) {
+        reject(e)
+      }
+    })
+  })
+}
+
 // ---- 通用合成到文件 ----
 async function synthOnce(text, target, outPath, wordsPath) {
   if (target.engine === 'sapi') return synthSapi(text, target.voice, outPath, wordsPath)
+  if (target.engine === 'local') return synthLocal(text, target.voice, outPath)
   return synthEdge(text, target.voice, outPath)
 }
 
@@ -243,21 +347,60 @@ function pruneCache(dir) {
   }
 }
 
-async function ensureAudio(text, target, file, cacheDir) {
-  if (existsSync(file) && statSync(file).size > 0) return
-  const existing = inflight.get(file)
-  if (existing) return existing
-  const job = withSlot(async () => {
-    if (existsSync(file) && statSync(file).size > 0) return
-    await synthToFile(text, target, file)
-    pruneCache(cacheDir)
-  })
-  inflight.set(file, job)
+function fileReady(p) {
   try {
-    await job
-  } finally {
-    inflight.delete(file)
+    return existsSync(p) && statSync(p).size > 0
+  } catch {
+    return false
   }
+}
+
+/**
+ * 确保音频已缓存，返回实际要服务的文件（可能是在线 mp3，也可能是降级后的本地 wav）。
+ * Edge 失败 → 立即用 espeak-ng 合成到 `<file>.local.wav`；20 秒内后续请求直接复用本地文件，
+ * 过了降级期再回头重试 Edge，恢复后自动回到在线音色。
+ */
+async function ensureAudio(text, target, file, cacheDir) {
+  const fallbackFile = target.engine === 'edge' ? `${file}.local.wav` : null
+  const pick = () => {
+    if (fileReady(file)) return { file, ext: target.ext }
+    if (fallbackFile && Date.now() < edgeDownUntil && fileReady(fallbackFile)) {
+      return { file: fallbackFile, ext: 'wav' }
+    }
+    return null
+  }
+  const hit = pick()
+  if (hit) return hit
+
+  let job = inflight.get(file)
+  if (!job) {
+    job = withSlot(async () => {
+      if (pick()) return
+      try {
+        if (target.engine === 'edge' && Date.now() < edgeDownUntil) throw new Error('edge cooling down')
+        await synthToFile(text, target, file)
+      } catch (e) {
+        if (target.engine !== 'edge' || !fallbackFile) throw e
+        const fb = localFallbackTarget(target.voice)
+        if (!fb) throw e
+        edgeDownUntil = Date.now() + EDGE_RETRY_MS
+        await synthToFile(text, fb, fallbackFile)
+      }
+      pruneCache(cacheDir)
+    })
+    inflight.set(file, job)
+    try {
+      await job
+    } finally {
+      inflight.delete(file)
+    }
+  } else {
+    await job
+  }
+
+  const out = pick()
+  if (out) return out
+  throw new Error('tts produced no audio')
 }
 
 function bad(res, code, msg) {
@@ -269,9 +412,16 @@ function bad(res, code, msg) {
 
 async function handleEngines(res) {
   const sapi = await listSapiVoices()
+  const local = listLocalVoices()
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
-  res.end(JSON.stringify({ edge: true, sapi: { available: sapi.length > 0, voices: sapi } }))
+  res.end(
+    JSON.stringify({
+      edge: true,
+      sapi: { available: sapi.length > 0, voices: sapi },
+      local: { available: local.length > 0, voices: local },
+    }),
+  )
   return true
 }
 
@@ -303,7 +453,11 @@ export async function handleTts(req, res, { cacheDir }) {
 
   // 只查缓存、不合成（增量预生成用来找「缺哪几句」）
   if (url.searchParams.get('check') === '1') {
-    const cached = existsSync(file) && statSync(file).size > 0
+    // Edge 降级期内，上次生成的本地兜底也算「这句有音频」，避免反复预生成；
+    // Edge 恢复后则只认在线缓存，让预生成补回真正的在线音频。
+    const cached =
+      fileReady(file) ||
+      (target.engine === 'edge' && Date.now() < edgeDownUntil && fileReady(`${file}.local.wav`))
     res.statusCode = 200
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.end(JSON.stringify({ cached }))
@@ -312,10 +466,10 @@ export async function handleTts(req, res, { cacheDir }) {
 
   try {
     mkdirSync(cacheDir, { recursive: true })
-    await ensureAudio(text, target, file, cacheDir)
+    const out = await ensureAudio(text, target, file, cacheDir)
 
     if (pathname === '/api/tts/words') {
-      const jf = `${file}.json`
+      const jf = `${out.file}.json`
       if (existsSync(jf)) {
         const st = statSync(jf)
         res.statusCode = 200
@@ -331,16 +485,16 @@ export async function handleTts(req, res, { cacheDir }) {
       return true
     }
 
-    const st = statSync(file)
+    const st = statSync(out.file)
     res.statusCode = 200
-    res.setHeader('Content-Type', target.ext === 'wav' ? 'audio/wav' : 'audio/mpeg')
+    res.setHeader('Content-Type', out.ext === 'wav' ? 'audio/wav' : 'audio/mpeg')
     res.setHeader('Content-Length', st.size)
     res.setHeader('Cache-Control', 'public, max-age=604800')
     if (req.method === 'HEAD') {
       res.end()
       return true
     }
-    createReadStream(file).pipe(res)
+    createReadStream(out.file).pipe(res)
   } catch (e) {
     return bad(res, 502, `tts failed: ${e && e.message ? e.message : e}`)
   }

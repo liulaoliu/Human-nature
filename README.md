@@ -211,20 +211,26 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 
 ```
 点朗读 → GET /api/tts?voice=…&text=…  →（首次）合成 → 缓存 → <audio> 播放
-                              └ 服务端不可用 / 离线 → 自动退回浏览器语音
+                              ├ Edge 连不上 → 自动改用本机 espeak-ng（20 秒后回头重试 Edge）
+                              └ 本机也没有 / 服务端不可用 → 自动退回浏览器语音
 ```
 
-**两个引擎**（用一个 `voice` 参数切换，顶栏下拉里选）：
+**三个引擎**（用一个 `voice` 参数切换，顶栏下拉里选）：
 
 | 引擎 | voice 形如 | 联网 | 说明 |
 |---|---|---|---|
 | **edge**（默认） | `en-US-AriaNeural` | 是 | 微软 Edge 朗读的神经音色，免费但**非官方**（个人自用 OK，商用别用） |
+| **local**（离线） | `local:en-us` | 否 | Linux 本机 **espeak-ng**，装完即用、不联网；音质机器人但稳定，作为 Edge 抽风时的自动兜底，也可手动选 |
 | **sapi**（离线） | `sapi:Microsoft Zira Desktop` | 否 | **系统自带语音**（Windows SAPI），**免下载、不联网、不白嫖**；音色少、音质一般 |
+
+> Linux 想启用本地引擎：`sudo apt install espeak-ng speech-dispatcher`
+> （`espeak-ng` 给服务端兜底/手动音色；`speech-dispatcher` 让 Chromium 的浏览器语音也有声）。
 
 - **为什么不用浏览器自带 `speechSynthesis`**：它会**假死**（`speaking` 卡在 true 却不出声），只能刷新救。
   改用 `<audio>` 播服务端音频后，这类问题从根上消失。
 - **口音可换**：顶栏音色下拉（**美式 / 英式 / 澳式 / 加式 / 爱尔兰 / 印度 / 新西兰 / 南非 / 新加坡…** +
-  本机可用的**离线系统语音**），改了下一个朗读即时生效；在线音色表在 `src/core/ttsVoices.ts`。
+  本机可用的**离线引擎**：Linux espeak-ng / Windows SAPI），改了下一个朗读即时生效；
+  在线音色表在 `src/core/ttsVoices.ts`。
   > Edge 只提供 **locale 级**口音，**没有**「伦敦东区（Cockney）」「加州（West Coast）」这种次区域口音；
   > 想更细只能上声音克隆（XTTS-v2 / ElevenLabs）。
 - **进度看得见**：合成阶段按钮显示「**🔊 合成中…**」，出声后「**🔊 朗读中**」。
@@ -234,13 +240,14 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   同一句第二次是**本地文件、瞬发**。缓存上限 800 条，超出按最旧自动清理。
 - **逐词高亮 / 点词起播**：朗读时**当前词实时高亮**；点句子里的**任意词 → 从该词开始播**
   （在原音频里 seek，不重新合成、不改语气，零延迟）。
-- **逐词时间戳**：**两个引擎都产出**逐词 `{part, start, end}`（毫秒），与音频同目录同名（`<hash>.mp3.json` / `<hash>.wav.json`），
+- **逐词时间戳**：Edge / SAPI 产出逐词 `{part, start, end}`（毫秒），与音频同目录同名（`<hash>.mp3.json` / `<hash>.wav.json`），
   也可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转
-  （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。
+  （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。**espeak-ng 不提供时间戳**，该路返回 `[]`，
+  逐词高亮会自动跳过，音频照常播放。
 - **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.js`；
   引擎与缓存逻辑共用 `tools/tts-core.mjs`。在线那路用 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
   加固：并发上限 2、硬超时 20s、失败重试 1 次、`.part` 清理。
-- **合法替代**：想彻底不碰微软又比 SAPI 好听，可换本机 Piper / Azure 语音（未内置，留作扩展点）。
+- **合法替代**：内置的 espeak-ng 胜在稳定/离线，音质一般；想更好听可再换本机 Piper / Azure 语音（未内置，留作扩展点）。
 
 ### 离线词典（ECDICT + M-W）
 
@@ -469,7 +476,7 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
   vite-state-endpoint.mjs  dev-only：把「存入项目」的备份写进 public/（Node 代码放这，不进 tsc）
   vite-fish-endpoint.mjs   dev-only：把 assets/imgs/fish 当静态资源提供（/fish 列表、/fish/<name>）
   vite-tts-endpoint.mjs    dev-only：/api/tts → Edge TTS（浏览器语音会假死的替代）
-  tts-core.mjs             TTS 引擎（edge 在线 / sapi 离线）+ 磁盘缓存 + 逐词时间戳（dev / static 共用）
+  tts-core.mjs             TTS 引擎（edge 在线 / espeak-ng / sapi 离线）+ 自动兜底 + 磁盘缓存 + 逐词时间戳（dev / static 共用）
   build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
   build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案

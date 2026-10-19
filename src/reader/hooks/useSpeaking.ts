@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
-import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
+import { DEFAULT_TTS_VOICE, isOfflineTtsVoice } from '../../core/ttsVoices'
 import { wordSpans } from '../../core/wordSelect'
 
 /** 一个词的音频区间（毫秒）。 */
@@ -54,8 +54,8 @@ export interface UseSpeakingOptions {
   selectedId: string | null
   /** Edge TTS 音色 id（改口音就是改它）。 */
   voice?: string
-  /** 从服务端 Edge 语音退回浏览器语音时通知（reason: server=服务端连不上；autoplay=自动播放被拦）。 */
-  onFallback?: (reason: 'server' | 'autoplay') => void
+  /** 从服务端语音退回浏览器语音时通知（server=服务端连不上；local=本机离线语音失败；autoplay=自动播放被拦）。 */
+  onFallback?: (reason: 'server' | 'local' | 'autoplay') => void
 }
 
 /**
@@ -224,8 +224,10 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       const token = tokenRef.current
 
       const useBrowser = () => playBrowser(t, onEnd, rate)
+      // 离线引擎也走服务端，但不能被 Edge 的临时降级连坐。
+      const offline = isOfflineTtsVoice(voiceRef.current)
 
-      if (!canUseServer()) {
+      if (!offline && !canUseServer()) {
         useBrowser()
         return
       }
@@ -298,18 +300,23 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       }
       a.onerror = () => {
         if (token !== tokenRef.current) return
-        // 服务端暂时不可用：降级一段时间后自动重试 Edge（不再永久退回浏览器语音）
-        const wasUp = canUseServer()
-        serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
-        if (wasUp) fallbackRef.current?.('server')
+        if (isOfflineTtsVoice(voiceRef.current)) {
+          fallbackRef.current?.('local')
+        } else {
+          // 服务端暂时不可用：降级一段时间后自动重试 Edge（不再永久退回浏览器语音）
+          const wasUp = canUseServer()
+          serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
+          if (wasUp) fallbackRef.current?.('server')
+        }
         useBrowser()
       }
-      // 逐词时间戳（服务端随音频一起生成）：有缓存直接用；没有才请求。sapi 无时间戳，跳过。
-      if (!cachedTimings && !voiceRef.current.startsWith('sapi:')) {
+      // 逐词时间戳（服务端随音频一起生成）：有缓存直接用；没有才请求。离线引擎无时间戳，跳过。
+      if (!cachedTimings && !isOfflineTtsVoice(voiceRef.current)) {
         fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((j) => {
-            if (Array.isArray(j)) onTimings(alignTimings(t, j))
+            // 空数组 = Edge 这次降级到了本地引擎；不缓存，等 Edge 恢复后还能取到真时间戳。
+            if (Array.isArray(j) && j.length) onTimings(alignTimings(t, j))
           })
           .catch(() => {
             // 忽略：拿不到时间戳就不高亮
@@ -328,6 +335,9 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
               // 自动播放被拦：本次退回浏览器语音，但服务端仍可用（下次照旧试 Edge）
               fallbackRef.current?.('autoplay')
               useBrowser()
+            } else if (isOfflineTtsVoice(voiceRef.current)) {
+              fallbackRef.current?.('local')
+              useBrowser()
             } else {
               const wasUp = canUseServer()
               serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
@@ -337,9 +347,13 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
           })
         }
       } catch {
-        const wasUp = canUseServer()
-        serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
-        if (wasUp) fallbackRef.current?.('server')
+        if (isOfflineTtsVoice(voiceRef.current)) {
+          fallbackRef.current?.('local')
+        } else {
+          const wasUp = canUseServer()
+          serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
+          if (wasUp) fallbackRef.current?.('server')
+        }
         useBrowser()
       }
     },
@@ -429,8 +443,8 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
     prefetchingRef.current = true
     try {
       while (prefetchQueueRef.current.length) {
-        // 服务端在降级期：先不预热，队列留着，恢复后自动继续
-        if (!canUseServer()) break
+        // 服务端在 Edge 降级期：先不预热，队列留着，恢复后自动继续；离线引擎不受影响
+        if (!isOfflineTtsVoice(voiceRef.current) && !canUseServer()) break
         const t = prefetchQueueRef.current.shift()!
         const k = `${voiceRef.current}\n${t}`
         if (prefetchDoneRef.current.has(k)) {
@@ -484,14 +498,14 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       for (const t of uniq) {
         const key = `${voiceRef.current}\n${t}`
         if (timingsCacheRef.current.has(key)) continue
-        if (voiceRef.current.startsWith('sapi:')) continue
+        if (isOfflineTtsVoice(voiceRef.current)) continue
         if (!canUseServer()) return
         if (warmTimingsQueuedRef.current.has(key)) continue
         warmTimingsQueuedRef.current.add(key)
         void fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
           .then((r) => (r.ok ? r.json() : null))
           .then((j) => {
-            if (Array.isArray(j)) timingsCacheRef.current.set(key, alignTimings(t, j))
+            if (Array.isArray(j) && j.length) timingsCacheRef.current.set(key, alignTimings(t, j))
           })
           .catch(() => {
             // 忽略

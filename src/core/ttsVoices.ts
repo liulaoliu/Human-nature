@@ -109,3 +109,59 @@ export const TTS_ACCENTS: TtsAccent[] = [
 
 /** 扁平化的合法音色 id 集合。 */
 export const TTS_VOICE_IDS: Set<string> = new Set(TTS_ACCENTS.flatMap((a) => a.voices.map((v) => v.id)))
+
+/** 服务端探测到的离线引擎音色（SAPI / Linux espeak-ng）。 */
+export interface TtsEngineVoice {
+  /** 形如 sapi:Microsoft Zira Desktop / local:en-us */
+  id: string
+  name: string
+  gender?: string
+  lang?: string
+}
+
+/** `/api/tts/engines` 里的离线引擎信息。 */
+export interface TtsEngineInfo {
+  sapi?: { available: boolean; voices: TtsEngineVoice[] }
+  local?: { available: boolean; voices: TtsEngineVoice[] }
+}
+
+/** 离线引擎前缀：Windows SAPI / Linux 本地语音。 */
+const OFFLINE_VOICE_PREFIXES = ['sapi:', 'local:'] as const
+
+/** 是不是离线引擎音色：没有逐词时间戳，也不受 Edge 临时降级影响。 */
+export function isOfflineTtsVoice(voice: string): boolean {
+  return OFFLINE_VOICE_PREFIXES.some((p) => voice.startsWith(p))
+}
+
+function cleanEngineName(name: string): string {
+  return name.replace(/^Microsoft\s+/i, '').replace(/\s+Desktop$/i, '')
+}
+
+/** 把一路离线引擎的音色并成下拉分组；没有可用音色返回 null。 */
+export function engineVoiceAccent(
+  label: string,
+  engine: { available?: boolean; voices?: TtsEngineVoice[] } | null | undefined,
+): TtsAccent | null {
+  if (!engine?.available || !engine.voices?.length) return null
+  return {
+    label,
+    voices: engine.voices.map((v) => ({
+      id: v.id,
+      name: v.lang ? `${cleanEngineName(v.name)}（${v.lang}）` : cleanEngineName(v.name),
+      gender: /^(male|m|男)$/i.test(v.gender ?? '') ? '男' : '女',
+    })),
+  }
+}
+
+/**
+ * 朗读音色下拉的完整分组：Edge 在线音色在前，本机可用的离线引擎追加在后。
+ * 探测失败（null）时只显示 Edge，行为与老版本一致。
+ */
+export function buildTtsAccents(engines: TtsEngineInfo | null | undefined): TtsAccent[] {
+  const out = [...TTS_ACCENTS]
+  const local = engineVoiceAccent('离线 · 本地语音（espeak-ng，不联网）', engines?.local)
+  if (local) out.push(local)
+  const sapi = engineVoiceAccent('离线 · 系统语音（不联网）', engines?.sapi)
+  if (sapi) out.push(sapi)
+  return out
+}

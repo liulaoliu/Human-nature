@@ -76,7 +76,7 @@ import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
-import { DEFAULT_TTS_VOICE, TTS_ACCENTS, type TtsAccent } from '../core/ttsVoices'
+import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
 import { useAiPack } from './hooks/useAiPack'
 import { useDictation } from './hooks/useDictation'
 import { useQuizSession } from './hooks/useQuizSession'
@@ -246,24 +246,9 @@ export default function ReaderApp() {
   const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
   /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
   const [ttsVoice, setTtsVoice] = useLocalStorageState('reader:ttsVoice', DEFAULT_TTS_VOICE, persistentString)
-  // 引擎探测：发现离线的系统语音（SAPI）后，并入音色下拉
+  // 引擎探测：发现本机离线引擎（SAPI / espeak-ng）后，并入音色下拉
   const ttsEngines = useTtsEngines()
-  const ttsAccents = useMemo<TtsAccent[]>(() => {
-    const sapi = ttsEngines?.sapi
-    if (!sapi?.available || !sapi.voices.length) return TTS_ACCENTS
-    const short = (n: string) => n.replace(/^Microsoft\s+/i, '').replace(/\s+Desktop$/i, '')
-    return [
-      ...TTS_ACCENTS,
-      {
-        label: '离线 · 系统语音（免下载、不联网）',
-        voices: sapi.voices.map((v) => ({
-          id: v.id,
-          name: v.lang ? `${short(v.name)}（${v.lang}）` : short(v.name),
-          gender: v.gender === 'Male' ? '男' : '女',
-        })),
-      },
-    ]
-  }, [ttsEngines])
+  const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
   /** 自动标词的词汇标准 */
   const [vocabLevel, setVocabLevel] = useLocalStorageState<VocabLevel>(
     'reader:vocabLevel',
@@ -303,7 +288,9 @@ export default function ReaderApp() {
     voice: ttsVoice,
     onFallback: (reason) => {
       if (reason === 'server') {
-        flash('Edge 在线语音连不上，已临时改用浏览器语音；可在音色里选「离线 · 系统语音」')
+        flash('服务端语音连不上，已改用浏览器语音；可在音色里选「离线 · 本地语音」（需安装 espeak-ng）')
+      } else if (reason === 'local') {
+        flash('本地离线语音失败，已改用浏览器语音；请检查 espeak-ng 是否可用')
       } else {
         flash('浏览器拦了自动播放，已改用浏览器语音（点一下页面再试）')
       }
