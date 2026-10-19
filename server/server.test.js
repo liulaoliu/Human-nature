@@ -10,6 +10,7 @@ import { getPort } from './status.js'
 import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
+import { allowLocalRequest } from './sameOrigin.js'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')
@@ -25,6 +26,15 @@ describe('util', () => {
     expect(safeJoin(root, '/a/b.txt')).toBe(resolve(root, 'a/b.txt'))
     expect(safeJoin(root, '/../secret')).toBeNull()
     expect(safeJoin(root, '/a/../../secret')).toBeNull()
+  })
+})
+
+describe('sameOrigin', () => {
+  it('同源放行；跨站 Origin / Sec-Fetch-Site 拒绝；无 Origin 的本机脚本放行', () => {
+    expect(allowLocalRequest({ headers: { host: 'localhost:5173', origin: 'http://localhost:5173' } })).toBe(true)
+    expect(allowLocalRequest({ headers: { host: 'localhost:5173', origin: 'http://evil.test' } })).toBe(false)
+    expect(allowLocalRequest({ headers: { host: 'localhost:5173', 'sec-fetch-site': 'cross-site' } })).toBe(false)
+    expect(allowLocalRequest({ headers: { host: 'localhost:5173' } })).toBe(true)
   })
 })
 
@@ -70,6 +80,25 @@ describe('httpApp 请求处理', () => {
 
       const bad = await fetch(`http://127.0.0.1:${port}/__state`, { method: 'POST', body: 'not json' })
       expect(bad.status).toBe(400)
+
+      const evilState = await fetch(`http://127.0.0.1:${port}/__state`, {
+        method: 'POST',
+        headers: { Origin: 'http://evil.test' },
+        body,
+      })
+      expect(evilState.status).toBe(403)
+
+      const evilAi = await fetch(`http://127.0.0.1:${port}/api/ai/run`, {
+        method: 'POST',
+        headers: { Origin: 'http://evil.test', 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      expect(evilAi.status).toBe(403)
+
+      const crossTts = await fetch(`http://127.0.0.1:${port}/api/tts?text=hello`, {
+        headers: { 'Sec-Fetch-Site': 'cross-site' },
+      })
+      expect(crossTts.status).toBe(403)
 
       const missing = await fetch(`http://127.0.0.1:${port}/nope.xyz`)
       expect(missing.status).toBe(404)

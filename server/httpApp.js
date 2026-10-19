@@ -4,6 +4,7 @@ import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 import { handleTts } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
 import { handleStoreApi } from './storeApi.js'
+import { allowLocalRequest } from './sameOrigin.js'
 
 const DATA_FILES = new Set([
   'articles.json',
@@ -65,6 +66,19 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
   return (req, res) => {
     const url = req.url || '/'
     const pathname = url.split('?')[0]
+
+    // 有副作用 / 会花钱 / 会写盘的入口统一挡跨站（store 内部还会再校验一次，dev 插件也直接复用）
+    const guarded =
+      pathname.startsWith('/api/store') ||
+      pathname.startsWith('/api/ai/') ||
+      pathname.startsWith('/api/tts') ||
+      pathname === '/__state'
+    if (guarded && !allowLocalRequest(req)) {
+      res.statusCode = 403
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+      res.end('跨站请求被拒绝')
+      return
+    }
 
     if (pathname === '/api/status') {
       sendJson(res, 200, {

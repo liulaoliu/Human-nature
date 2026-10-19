@@ -1,5 +1,6 @@
 import { resolve } from 'node:path'
 import { handleTts } from './tts-core.mjs'
+import { allowLocalRequest } from '../server/sameOrigin.js'
 
 /**
  * dev-only：把 `/api/tts` 接到 Edge TTS（见 tts-core.mjs）。
@@ -16,6 +17,12 @@ export function ttsEndpointPlugin() {
       server.middlewares.use((req, res, next) => {
         const path = (req.url || '').split('?')[0]
         if (!path.startsWith('/api/tts')) return next()
+        if (!allowLocalRequest(req)) {
+          res.statusCode = 403
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end('跨站请求被拒绝')
+          return
+        }
         handleTts(req, res, { cacheDir }).catch(() => {
           if (!res.headersSent) {
             res.statusCode = 500

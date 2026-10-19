@@ -1,4 +1,5 @@
 import { handleAiApi } from './ai-core.mjs'
+import { allowLocalRequest } from '../server/sameOrigin.js'
 
 /**
  * dev-only：把 `/api/ai/*`（一键跑批）接到 dev server 上，让 `npm run dev` 下
@@ -11,6 +12,12 @@ export function aiEndpointPlugin() {
     configureServer(server) {
       server.middlewares.use((req, res, next) => {
         if (!req.url || !req.url.startsWith('/api/ai/')) return next()
+        if (!allowLocalRequest(req)) {
+          res.statusCode = 403
+          res.setHeader('Content-Type', 'text/plain; charset=utf-8')
+          res.end('跨站请求被拒绝')
+          return
+        }
         handleAiApi(req, res, { root: server.config.root })
       })
     },

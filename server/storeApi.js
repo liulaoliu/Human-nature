@@ -3,6 +3,7 @@ import { chmodSync, createReadStream, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION } from './sqliteStore.js'
+import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.js'
 
 const MAX_BODY = 64 * 1024 * 1024
 
@@ -53,13 +54,7 @@ async function readJson(req) {
  * 校验 Origin（有就必填且 Host 一致）挡住浏览器里的跨站写入；curl / 脚本不带 Origin 仍可用。
  */
 function sameOrigin(req) {
-  const origin = req.headers.origin
-  if (!origin) return true
-  try {
-    return new URL(origin).host === (req.headers.host || '')
-  } catch {
-    return false
-  }
+  return allowLocalRequest(req)
 }
 
 function decodePart(s) {
@@ -79,7 +74,8 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
   const path = url.pathname.replace(/^\/api\/store/, '') || '/'
   const method = req.method || 'GET'
 
-  if (method !== 'GET' && method !== 'HEAD' && !sameOrigin(req)) {
+  const needsGuard = (method !== 'GET' && method !== 'HEAD') || isCrossSiteRequest(req)
+  if (needsGuard && !sameOrigin(req)) {
     fail(res, 403, '跨站请求被拒绝')
     return
   }

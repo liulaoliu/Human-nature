@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { allowLocalRequest } from '../server/sameOrigin.js'
 
 /**
  * dev-only：「存入项目」按钮 POST /__state 时，把备份写到
@@ -31,11 +32,26 @@ export function projectStatePlugin() {
       })
       server.middlewares.use('/__state', (req, res, next) => {
         if (req.method !== 'POST') return next()
+        if (!allowLocalRequest(req)) {
+          res.statusCode = 403
+          res.setHeader('Content-Type', 'application/json; charset=utf-8')
+          res.end('{"ok":false,"error":"cross-site"}')
+          return
+        }
         let body = ''
+        let tooLarge = false
         req.on('data', (chunk) => {
+          if (tooLarge) return
           body += chunk
+          if (body.length > 8 * 1024 * 1024) tooLarge = true
         })
         req.on('end', () => {
+          if (tooLarge) {
+            res.statusCode = 413
+            res.setHeader('Content-Type', 'application/json')
+            res.end('{"ok":false}')
+            return
+          }
           try {
             JSON.parse(body) // 只收合法 JSON
             const dir = resolve(server.config.root, 'public')
