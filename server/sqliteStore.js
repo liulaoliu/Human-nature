@@ -18,7 +18,7 @@ import { list, nowIso, num, text, tx } from './sqliteUtil.js'
  *  2. `words` / `article_sentences` / `lang_points` 等是**同一次事务里重建的派生表**，
  *     方便 SQL 查询、统计、以后做 FTS；不直接写，避免两份事实打架。
  *
- * 学习记录（v3）不同：`practice_records` / `reading_progress` / `study_word_days` 等
+ * 学习记录（v3 建表，v4 修旧 id）不同：`practice_records` / `reading_progress` / `study_word_days` 等
  * 是规范化的事实表，直接读写；偏好/会话状态不在这里，仍留在 localStorage。
  *
  * 版本迭代：用 `PRAGMA user_version` 做 schema 迁移；迁移只增不删，旧库能直接打开。
@@ -344,6 +344,58 @@ function rebuildAllProjections(db) {
   }
 }
 
+/**
+ * v4：早期词条的 `source.articleId` 存的是文章标题（不是 `saved:…` id）。
+ * 重新切句后按标题还能唯一对上，就一次性换成真正的文章 id；
+ * 结构相同的 `examples[].articleId` / `contexts[].articleId` 一起换。
+ *
+ * 只改能唯一对上的标题；同名文章、找不到的标题保持原样，不猜。
+ */
+function normalizeLegacySourceIds(db) {
+  const byTitle = new Map()
+  for (const r of db.prepare('SELECT id, title FROM articles').all()) {
+    const title = text(r.title)
+    if (!title) continue
+    // 同名文章不猜：置空后下面会跳过。
+    if (byTitle.has(title)) byTitle.set(title, null)
+    else byTitle.set(title, String(r.id))
+  }
+  if (!byTitle.size) return
+
+  const row = db.prepare('SELECT payload FROM vocab WHERE id = 1').get()
+  if (!row) return
+  const lib = parsePayload(String(row.payload))
+  let changed = false
+  const mapId = (v) => {
+    const s = text(v)
+    if (!s) return v
+    const id = byTitle.get(s)
+    if (!id) return v
+    changed = true
+    return id
+  }
+
+  for (const item of list(lib?.items)) {
+    if (!item || typeof item !== 'object') continue
+    if (item.source && typeof item.source === 'object') {
+      item.source.articleId = mapId(item.source.articleId)
+    }
+    for (const ex of list(item.examples)) {
+      if (ex && typeof ex === 'object') ex.articleId = mapId(ex.articleId)
+    }
+    for (const ctx of list(item.contexts)) {
+      if (ctx && typeof ctx === 'object') ctx.articleId = mapId(ctx.articleId)
+    }
+  }
+
+  if (!changed) return
+  db.prepare('UPDATE vocab SET payload = ?, updated_at = ? WHERE id = 1').run(
+    JSON.stringify(lib),
+    nowIso(),
+  )
+  rebuildVocabProjection(db, lib)
+}
+
 function ensureSchema(db) {
   const row = db.prepare('PRAGMA user_version').get()
   let version = Number(row?.user_version ?? 0)
@@ -371,6 +423,11 @@ function ensureSchema(db) {
     })
     db.exec('PRAGMA user_version = 3')
     version = 3
+  }
+  if (version < 4) {
+    tx(db, () => normalizeLegacySourceIds(db))
+    db.exec('PRAGMA user_version = 4')
+    version = 4
   }
   return version
 }

@@ -80,7 +80,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(3)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(4)
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {
@@ -337,8 +337,8 @@ describe('sqliteStore：学习记录', () => {
   })
 })
 
-describe('sqliteStore：v1 → v3 迁移', () => {
-  it('旧库的 JSON 会自动回填派生表，原数据不动', () => {
+describe('sqliteStore：v1 → v4 迁移', () => {
+  it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
     old.exec(`
@@ -353,7 +353,17 @@ describe('sqliteStore：v1 → v3 迁移', () => {
       .run(
         JSON.stringify({
           schemaVersion: 1,
-          items: [{ id: 'w1', word: 'run', lemma: 'run', usage: ['run out'], examples: [{ text: 'I run.' }] }],
+          items: [
+            {
+              id: 'w1',
+              word: 'run',
+              lemma: 'run',
+              usage: ['run out'],
+              source: { articleId: 'Old', sentenceId: 's1', sentenceText: 'I run.' },
+              examples: [{ text: 'I run.', articleId: 'Old' }],
+              contexts: [{ articleId: 'Old', sentenceId: 's1', sentenceText: 'I run.' }],
+            },
+          ],
         }),
         1,
         '2026-01-01T00:00:00.000Z',
@@ -391,8 +401,14 @@ describe('sqliteStore：v1 → v3 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(3)
-    expect(store.loadVocab().items).toHaveLength(1)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(4)
+    const saved = store.loadVocab().items[0]
+    expect(saved.source.articleId).toBe('a1')
+    expect(saved.examples[0].articleId).toBe('a1')
+    expect(saved.contexts[0].articleId).toBe('a1')
+    expect(store.db.prepare('SELECT source_article_id FROM words WHERE id = ?').get('w1').source_article_id).toBe('a1')
+    expect(store.db.prepare('SELECT article_id FROM word_contexts WHERE word_id = ?').get('w1').article_id).toBe('a1')
+    expect(store.db.prepare('SELECT article_id FROM word_examples WHERE word_id = ?').get('w1').article_id).toBe('a1')
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM word_usage').get().n).toBe(1)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM article_sentences').get().n).toBe(1)

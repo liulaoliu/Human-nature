@@ -5,7 +5,7 @@
  * v1 → v2 迁移：新增派生表 + articles 查询列，旧库打开时由 sqliteStore 自动迁移。
  */
 
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (

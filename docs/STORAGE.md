@@ -75,7 +75,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 3`。
+schema 版本：`PRAGMA user_version = 4`（v3 建学习记录表，v4 修旧词条的标题式文章 id）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -175,6 +175,8 @@ kind_stats(article_id, kind, total, correct)                              -- 按
   **不进这些表**。
 - `reader:activity` / `reader:kindStats` 目前是聚合值；历史数据只能先按聚合保存。
   以后新增答题事件时，应改成“事件表 → 聚合视图”，不要同时手写事件和聚合。
+- v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
+  `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。
 
 ### 4.4 性能与边界
 
@@ -243,7 +245,7 @@ server/sqliteUtil.js（事务与字段转换）
 
 ## 八、下一阶段（还没做）
 
-0. **学习记录已迁 SQLite（v3）**：练习、错题、读完/精读、写作、复述、活动、背词/选词记录
+0. **学习记录已迁 SQLite（v3 建表，v4 修旧 id）**：练习、错题、读完/精读、写作、复述、活动、背词/选词记录
    已落表；localStorage 作为同步缓存。下一步把“答题明细”从聚合值改成事件表，
    让 `activity` / `kindStats` 可重算，而不是只保存结果。
 1. **录音迁到服务端**：`data/takes/<id>.bin` + SQLite 元数据（`file_name` 索引），
