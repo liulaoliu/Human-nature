@@ -225,6 +225,8 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 
 > Linux 想启用本地引擎：`sudo apt install espeak-ng speech-dispatcher`
 > （`espeak-ng` 给服务端兜底/手动音色；`speech-dispatcher` 让 Chromium 的浏览器语音也有声）。
+> 服务端 Edge 会显式读取 `HTTPS_PROXY` / `HTTP_PROXY`（Node 默认不走系统代理），代理可用时优先在线音色，
+> 仍然失败才降级到 espeak-ng。
 
 - **为什么不用浏览器自带 `speechSynthesis`**：它会**假死**（`speaking` 卡在 true 却不出声），只能刷新救。
   改用 `<audio>` 播服务端音频后，这类问题从根上消失。

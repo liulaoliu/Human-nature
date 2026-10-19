@@ -112,15 +112,22 @@ export function parseTarget(rawIn) {
 }
 
 // ---- Edge（在线） ----
+/** Node 不会自动读系统代理；Edge TTS 走不通时优先显式用环境里的 HTTP(S) 代理。 */
+export function edgeProxyFromEnv(env = process.env) {
+  return env.HTTPS_PROXY || env.https_proxy || env.HTTP_PROXY || env.http_proxy || ''
+}
+
 async function synthEdge(text, voice, outPath) {
   const mod = await import('node-edge-tts')
   const lang = voice.split('-').slice(0, 2).join('-')
+  const proxy = edgeProxyFromEnv()
   const tts = new mod.EdgeTTS({
     voice,
     lang,
     outputFormat: 'audio-24khz-48kbitrate-mono-mp3',
     saveSubtitles: true, // 逐词时间戳写到 `<outPath>.json`
     timeout: SYNTH_TIMEOUT_MS,
+    ...(proxy ? { proxy } : {}),
   })
   await tts.ttsPromise(text, outPath)
 }

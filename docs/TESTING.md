@@ -68,7 +68,8 @@
    规矩：左右两栏的列表用 `display:flex`（`.lp-body` 撑满 + `.lp-act` 贴右），别用「只给一侧定位」的 grid；
    组件测试断言 `.lp-body` / `.lp-act` 的从属与先后，防止再漂。
 10. **TTS 兜底不能只押浏览器 `speechSynthesis`**。Linux Chromium 默认没装 `speech-dispatcher` / `espeak-ng`，
-    `getVoices()` 是空数组、`speak()` 静默失败；服务端 Edge 也可能因 IPv6 / 代理报 `ENETUNREACH`。
+    `getVoices()` 是空数组、`speak()` 静默失败；服务端 Edge 也可能因 IPv6 / 代理报 `ENETUNREACH`
+    （Node 默认不走系统代理，`tools/tts-core.mjs` 显式读 `HTTPS_PROXY` / `HTTP_PROXY`）。
     规矩：**服务端本地引擎（espeak-ng）先兜底，浏览器语音只作最后一道**；离线音色必须能在顶栏手动选；
     离线引擎没有逐词时间戳时**不要缓存空数组**，否则 Edge 恢复后也拿不回高亮。
 
