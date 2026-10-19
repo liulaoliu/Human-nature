@@ -2,6 +2,7 @@ import type { VocabRepoPort, VocabSnapshot } from '../core/ports'
 import type { VocabLibrary } from '../types/document'
 import { createLibrary } from '../core/vocab'
 import { storeHealth, storeRequest } from './storeApi'
+import { HybridMode } from './hybridMode'
 
 const DB_NAME = 'shadowing-vocab'
 const DB_VERSION = 1
@@ -208,25 +209,22 @@ function createLocalVocabRepo(): VocabRepoPort {
   }
 }
 
-type StoreMode = 'unknown' | 'sqlite' | 'local'
-
 /**
  * 词库主存储：本地服务在 → SQLite（`data/xueba.db`）；服务不在 → IndexedDB 兜底。
  *
  * 首次连上 SQLite 且服务端还是空库时，把浏览器里旧的 IndexedDB 词库自动迁上去
  * （`/vocab/if-empty` 在服务端事务里做「空才写」，多标签页同时迁移也不会互相覆盖）。
  * 之后每次写 SQLite 成功，都顺手往 IndexedDB 镜像一份，作为服务挂掉时的本地备份。
+ *
+ * 模式选择与重试见 `HybridMode`：服务恢复后会自动切回 SQLite，不会整个会话锁死在本地。
  */
 export class HybridVocabRepo implements VocabRepoPort {
-  private mode: StoreMode = 'unknown'
+  private readonly hybrid = new HybridMode(() => storeHealth())
 
   constructor(private readonly local: VocabRepoPort = createLocalVocabRepo()) {}
 
-  private async useSqlite(): Promise<boolean> {
-    if (this.mode === 'unknown') {
-      this.mode = (await storeHealth()) ? 'sqlite' : 'local'
-    }
-    return this.mode === 'sqlite'
+  private useSqlite(): Promise<boolean> {
+    return this.hybrid.useSqlite()
   }
 
   async load(): Promise<VocabLibrary> {
@@ -245,7 +243,7 @@ export class HybridVocabRepo implements VocabRepoPort {
         }
         return createLibrary()
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return this.local.load()
@@ -259,7 +257,7 @@ export class HybridVocabRepo implements VocabRepoPort {
         void this.local.save(library).catch((e) => console.warn('[词库] 镜像到 IndexedDB 失败', e))
         return
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     await this.local.save(library)
@@ -270,7 +268,7 @@ export class HybridVocabRepo implements VocabRepoPort {
       try {
         return (await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev')).value
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return (await this.local.loadPrev?.()) ?? null
@@ -281,7 +279,7 @@ export class HybridVocabRepo implements VocabRepoPort {
       try {
         return (await storeRequest<{ snapshots: VocabSnapshot[] }>('/vocab/snapshots')).snapshots
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return (await this.local.listSnapshots?.()) ?? []
@@ -294,7 +292,7 @@ export class HybridVocabRepo implements VocabRepoPort {
           await storeRequest<{ value: VocabLibrary | null }>(`/vocab/snapshots/${encodeURIComponent(at)}`)
         ).value
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return (await this.local.loadSnapshot?.(at)) ?? null
@@ -305,7 +303,7 @@ export class HybridVocabRepo implements VocabRepoPort {
       try {
         await storeRequest('/vocab', { method: 'DELETE' })
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     await this.local.clear()

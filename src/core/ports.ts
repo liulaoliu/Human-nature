@@ -202,6 +202,8 @@ export interface ArticleRepoPort {
   get(id: string): Promise<SavedArticle | null>
   save(article: SavedArticle): Promise<void>
   remove(id: string): Promise<void>
+  /** 启动时把本地兜底数据补进主存（读接口自身不做写入）。 */
+  reconcile?(): Promise<void>
 }
 
 /**

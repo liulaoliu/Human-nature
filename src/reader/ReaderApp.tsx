@@ -568,13 +568,18 @@ export default function ReaderApp() {
   useEffect(() => {
     const ar = createArticleRepo()
     articles.current = ar
-    ar
-      .list()
-      .then((list) => {
-        setSaved(list)
-        setSavedLoaded(true)
-      })
-      .catch(() => setSavedLoaded(true))
+    const load = async () => {
+      // 先把本地兜底补进 SQLite（失败不阻塞列表：list 会合并本地较新的版本）
+      try {
+        await ar.reconcile?.()
+      } catch (e) {
+        console.warn('[文章] 启动迁移失败', e)
+      }
+      const list = await ar.list()
+      setSaved(list)
+      setSavedLoaded(true)
+    }
+    void load().catch(() => setSavedLoaded(true))
     fetch(`${import.meta.env.BASE_URL}articles.json`)
       .then((x) => (x.ok ? x.json() : Promise.reject(new Error(String(x.status)))))
       .then((b: ArticleBook) => setBook(b))

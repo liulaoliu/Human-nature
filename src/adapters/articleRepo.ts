@@ -1,5 +1,6 @@
 import type { ArticleRepoPort, SavedArticle } from '../core/ports'
 import { storeHealth, storeRequest } from './storeApi'
+import { HybridMode } from './hybridMode'
 
 export type { ArticleRepoPort, SavedArticle } from '../core/ports'
 
@@ -101,25 +102,47 @@ function sortArticles(list: SavedArticle[]): SavedArticle[] {
   return [...list].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
 }
 
-type StoreMode = 'unknown' | 'sqlite' | 'local'
-
 /**
  * 文章主存储：本地服务在 → SQLite；服务不在 → IndexedDB 兜底。
  *
- * 首次连上时把 IndexedDB 里有、SQLite 里没有的文章补上去；
+ * 启动时由 `reconcile()` 把 IndexedDB 里「服务端没有 / 更新」的文章补上去；
  * 同一 id 两边都有时，`updatedAt` 更新的那一版优先（离线改过的文章不会被旧库盖掉）。
- * 每次写 SQLite 成功都往 IndexedDB 镜像一份，作为服务挂掉时的本地备份。
+ * 读写接口本身不再顺手迁移 —— 读就是读。每次写 SQLite 成功都往 IndexedDB 镜像一份。
+ * 模式选择与重试见 `HybridMode`。
  */
 export class HybridArticleRepo implements ArticleRepoPort {
-  private mode: StoreMode = 'unknown'
+  private readonly hybrid = new HybridMode(() => storeHealth())
 
   constructor(private readonly local: ArticleRepoPort = createLocalArticleRepo()) {}
 
-  private async useSqlite(): Promise<boolean> {
-    if (this.mode === 'unknown') {
-      this.mode = (await storeHealth()) ? 'sqlite' : 'local'
+  private useSqlite(): Promise<boolean> {
+    return this.hybrid.useSqlite()
+  }
+
+  /**
+   * 把 IndexedDB 里「服务端没有 / 更新」的文章补上（只在启动时调用一次）。
+   *
+   * 以前这个迁移藏在 `list()` 里：任何一次列表读取都顺手 PUT，读接口有副作用，
+   * 失败还会把模式踢回 local。现在读接口只读，迁移由宿主显式触发。
+   */
+  async reconcile(): Promise<void> {
+    if (!(await this.useSqlite())) return
+    try {
+      const r = await storeRequest<{ articles: SavedArticle[] }>('/articles')
+      const byId = new Map(r.articles.map((a) => [a.id, a]))
+      for (const local of await this.local.list()) {
+        const server = byId.get(local.id)
+        if (!server || (local.updatedAt && local.updatedAt > server.updatedAt)) {
+          await storeRequest(`/articles/${encodeURIComponent(local.id)}`, {
+            method: 'PUT',
+            body: JSON.stringify(local),
+          })
+        }
+      }
+    } catch {
+      // 迁移失败不阻塞阅读：list() 仍会把本地较新的版本合并进来。
+      this.hybrid.fail()
     }
-    return this.mode === 'sqlite'
   }
 
   async list(): Promise<SavedArticle[]> {
@@ -127,19 +150,16 @@ export class HybridArticleRepo implements ArticleRepoPort {
       try {
         const r = await storeRequest<{ articles: SavedArticle[] }>('/articles')
         const byId = new Map(r.articles.map((a) => [a.id, a]))
+        // 只读合并：本地更新的一版直接显示（未迁移成功的文章也不会“消失”）。
         for (const local of await this.local.list()) {
           const server = byId.get(local.id)
           if (!server || (local.updatedAt && local.updatedAt > server.updatedAt)) {
-            await storeRequest(`/articles/${encodeURIComponent(local.id)}`, {
-              method: 'PUT',
-              body: JSON.stringify(local),
-            })
             byId.set(local.id, local)
           }
         }
         return sortArticles([...byId.values()])
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return this.local.list()
@@ -150,17 +170,10 @@ export class HybridArticleRepo implements ArticleRepoPort {
       try {
         const r = await storeRequest<{ value: SavedArticle | null }>(`/articles/${encodeURIComponent(id)}`)
         if (r.value) return r.value
-        const local = await this.local.get(id)
-        if (local) {
-          await storeRequest(`/articles/${encodeURIComponent(id)}`, {
-            method: 'PUT',
-            body: JSON.stringify(local),
-          })
-          return local
-        }
-        return null
+        // 服务端没有：读本地兜底，迁移交给 reconcile()。
+        return this.local.get(id)
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     return this.local.get(id)
@@ -176,7 +189,7 @@ export class HybridArticleRepo implements ArticleRepoPort {
         void this.local.save(article).catch((e) => console.warn('[文章] 镜像到 IndexedDB 失败', e))
         return
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     await this.local.save(article)
@@ -187,7 +200,7 @@ export class HybridArticleRepo implements ArticleRepoPort {
       try {
         await storeRequest(`/articles/${encodeURIComponent(id)}`, { method: 'DELETE' })
       } catch {
-        this.mode = 'local'
+        this.hybrid.fail()
       }
     }
     await this.local.remove(id)
