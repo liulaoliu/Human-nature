@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { Sentence } from '../../types/document'
 import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
 import { readJson, readNum, writeJson, writeNum } from '../storage'
-import LangPhrases from './LangPhrases'
 import { useHotkeys } from '../useHotkeys'
-import { KIND_LABEL } from '../../core/entryKind'
-import { getSentenceLanguages } from '../../core/language'
 import {
   DEFAULT_WPM,
   checkDrill,
@@ -18,8 +15,8 @@ import {
   type SpeedRow,
 } from '../../core/speedRead'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentNumber } from '../hooks/useLocalStorageState'
-
-type Phase = 'read' | 'reveal' | 'drill' | 'drill-answer'
+import SpeedReadSentence, { type SpeedReadPhase as Phase } from './SpeedReadSentence'
+import SpeedReadBasket, { SpeedReadDone, type CollectedItem } from './SpeedReadBasket'
 
 export interface SpeedReadPanelProps {
   sentences: Sentence[]
@@ -56,12 +53,6 @@ function readCursor(k: string): number {
   return readNum(k, 0)
 }
 
-/** 「本页加入」清单里的一项：词/词组 + 来源句（跨句累积、持久化）。 */
-interface CollectedItem {
-  word: string
-  sentenceId: string | null
-  sentenceText: string
-}
 const collectedKey = (docKey: string) => `reader:speedCollected:${docKey}`
 function loadCollected(docKey: string): CollectedItem[] {
   const arr = readJson<unknown>(collectedKey(docKey), [])
@@ -551,227 +542,54 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         <div style={{ width: `${n ? (Math.min(index, n) / n) * 100 : 0}%` }} />
       </div>
 
-      {collected.length > 0 && (
-        <div className={'speed-basket-panel' + (collectedOpen ? '' : ' collapsed')}>
-          <div className="speed-basket-head">
-            <b>本页加入（{collected.length}）</b>
-            <label className="check-inline" title="开=显示已加入生词本的单词；关=列表显示为空">
-              <input type="checkbox" checked={showCollected} onChange={(e) => setShowCollected(e.target.checked)} />
-              显示已加入
-            </label>
-            <button onClick={() => setCollectedOpen((v) => !v)} title={collectedOpen ? '折叠清单' : '展开清单'}>
-              {collectedOpen ? '▾ 折叠' : '▸ 展开'}
-            </button>
-          </div>
-          <div className="speed-basket-body">
-            {showCollected ? (
-              <div className="speed-basket-list">
-                {collected.map((it, i) => (
-                  <div className="speed-basket-row" key={`${it.sentenceId}|${it.word}|${i}`}>
-                    <span className="speed-basket-word">{it.word}</span>
-                    {it.sentenceText && (
-                      <span className="muted ellipsis" title={it.sentenceText}>
-                        {it.sentenceText}
-                      </span>
-                    )}
-                    <button
-                      className={confirmIdx === i ? 'danger' : ''}
-                      onClick={() => tapDelete(i)}
-                      title={confirmIdx === i ? '再点一次确认移出（两步确认）' : '从生词本移出（剔除误加）'}
-                    >
-                      {confirmIdx === i ? '确认删除' : '删除'}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="muted speed-basket-empty">已加入的单词已隐藏（勾选「显示已加入」查看）</div>
-            )}
-          </div>
-        </div>
-      )}
+      <SpeedReadBasket
+        collected={collected}
+        collectedOpen={collectedOpen}
+        showCollected={showCollected}
+        confirmIdx={confirmIdx}
+        onToggleOpen={() => setCollectedOpen((v) => !v)}
+        onShowChange={setShowCollected}
+        onTapDelete={tapDelete}
+      />
 
       {done ? (
-        <div className="study-done speed-summary">
-          <p>
-            读完 <b>{summary.count}</b> 句 · 平均 <b>{summary.avgWpm}</b> 词/分 · 超时 <b>{summary.slow}</b> 句
-            {summary.drillTotal > 0 ? ` · 拷打对 ${summary.drillCorrect}/${summary.drillTotal}` : ''}
-          </p>
-          <div className="bar">
-            <button className="primary" onClick={restart}>
-              再来一遍
-            </button>
-            <button onClick={onClose}>回到阅读</button>
-          </div>
-        </div>
+        <SpeedReadDone summary={summary} onRestart={restart} onClose={onClose} />
       ) : (
         sentence && (
-          <>
-            <div className="study-card speed-card">
-              <div className="bar speed-meta">
-                <span className={over ? 'speed-pace over' : 'speed-pace ok'}>{over ? '⏱ 超时' : '⚡ 在配速内'}</span>
-                <span className="muted">
-                  {words} 词 · 目标 {(target / 1000).toFixed(1)}s · 已用 {(elapsed / 1000).toFixed(1)}s
-                </span>
-              </div>
-              <div className="speed-timebar">
-                <div className={over ? 'over' : ''} style={{ width: `${pace}%` }} />
-              </div>
-
-              {/* 拷打时隐藏原文文字，但保留 div 占位，避免布局跳动 */}
-              <div className="speed-sentence-slot">
-                <div
-                  className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
-                  style={{ userSelect: pickMode || vocabMode ? 'none' : 'text' }}
-                >
-                  {sentenceParts}
-                </div>
-                {phase === 'drill' && (
-                  <div className="speed-hidden-overlay">原文已隐藏 —— 只看挖空句，从选项里选</div>
-                )}
-              </div>
-
-              {phase === 'read' && (
-                <div className="speed-hint muted">
-                  先自己读一遍 → 按 <kbd>空格</kbd> 看释义与语言点
-                </div>
-              )}
-
-              {(phase === 'reveal' || phase === 'drill-answer') && (
-                <div className="speed-reveal">
-                  {sentence.translation && <div className="speed-tr">{sentence.translation}</div>}
-                  {getSentenceLanguages(sentence).map((L, li) => (
-                    <div className="speed-lang" key={li}>
-                      {L.source === 'manual' && <div className="muted">手动语言点</div>}
-                      {L.structure && <div>结构：{L.structure}</div>}
-                      {L.grammar && <div>语法：{L.grammar}</div>}
-                      <LangPhrases label={KIND_LABEL.idiom} items={L.idioms ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
-                      <LangPhrases label={KIND_LABEL.phrase} items={L.phrases ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
-                      {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
-                    </div>
-                  ))}
-                  {sentence.collocations.length > 0 && <div className="muted">搭配：{sentence.collocations.join('；')}</div>}
-                  {readMs > 0 && (
-                    <div className="muted">
-                      本句速度 {Math.round((words / readMs) * 60000)} 词/分{slow ? '（超时）' : ''}
-                    </div>
-                  )}
-                  {slow && (
-                    <div className="speed-banner">
-                      {autoDrill && drill ? '⏱ 超时了，先来一道再继续' : '⏱ 这句超时了（没题可练，直接继续）'}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {(phase === 'drill' || phase === 'drill-answer') && drill && (
-                <div className="speed-drill">
-                  <div className="speed-drill-title">
-                    拷打：把空填回来
-                    <span className="muted">（{drill.via === 'phrase' ? '语言点搭配' : drill.via === 'vocab' ? '本句生词' : '实词'}）</span>
-                  </div>
-                  <div className="speed-drill-prompt">{drill.prompt}</div>
-                  <div className="quiz-options">
-                    {drill.options.map((opt, i) => {
-                      const cls = !picked
-                        ? ''
-                        : opt === drill.answer
-                          ? 'primary'
-                          : opt === picked
-                            ? 'danger'
-                            : ''
-                      return (
-                        <button key={opt} className={cls} disabled={!!picked} onClick={() => chooseDrill(opt)}>
-                          <kbd>{i + 1}</kbd> {opt}
-                        </button>
-                      )
-                    })}
-                  </div>
-                  {picked && (
-                    <div className={'speed-drill-result ' + (drillOk ? 'ok' : 'bad')}>
-                      {drillOk ? '✔ 正确' : `✘ 正确答案：${drill.answer}`}
-                      <div className="muted speed-answer-sentence">{sentence.text}</div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {phase !== 'drill' && (
-              <div className="speed-addword">
-                <div className="speed-selbar">
-                  <span className="muted">勾顶栏「选词模式」后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
-                  {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
-                  {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
-                </div>
-                <div className="speed-addword-row">
-                  <button className="primary" disabled={!selWords.length} onClick={addSelected}>
-                    ＋ 加入清单{selWords.length ? `（${selWords.length}）` : ''}
-                  </button>
-                  {selWords.length > 1 && (
-                    <button
-                      onClick={mergePhrase}
-                      title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入；同一个词的不同位置互不影响）"
-                    >
-                      ＋ 合成本句词组
-                    </button>
-                  )}
-                  <input
-                    className="speed-addword-input"
-                    placeholder="也可手打词 / 词组，回车加入"
-                    value={wordDraft}
-                    onChange={(e) => setWordDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addCustom(wordDraft)
-                      }
-                    }}
-                  />
-                  <button disabled={!wordDraft.trim()} onClick={() => addCustom(wordDraft)}>
-                    加入
-                  </button>
-                </div>
-                {knownWords.length > 0 && (
-                  <div className="speed-known">
-                    <span className="muted">本句已在生词本（点两下移出）：</span>
-                    {knownWords.map((w) => (
-                      <button
-                        key={w}
-                        className={'speed-known-chip' + (confirmDel === w ? ' danger' : '')}
-                        onClick={() => tapRemove(w)}
-                        title={confirmDel === w ? '再点一次确认移出' : '移出生词本（两步确认）'}
-                      >
-                        {confirmDel === w ? `确认移出「${w}」` : w}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="bar study-actions">
-              <button onClick={() => onSpeak(sentence.text)} title="朗读本句（已缓存则秒播）">
-                {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
-              </button>
-              {phase === 'read' && (
-                <button className="primary" onClick={advance}>
-                  读完了（空格）
-                </button>
-              )}
-              {phase === 'reveal' && (
-                <button className="primary" onClick={advance}>
-                  {slow && autoDrill && drill ? '来一道（空格）' : '下一句（空格）'}
-                </button>
-              )}
-              {phase === 'drill-answer' && (
-                <button className="primary" onClick={advance}>
-                  下一句（空格）
-                </button>
-              )}
-              <button onClick={onClose}>退出</button>
-            </div>
-          </>
+          <SpeedReadSentence
+            sentence={sentence}
+            phase={phase}
+            sentenceParts={sentenceParts}
+            over={over}
+            words={words}
+            target={target}
+            elapsed={elapsed}
+            pace={pace}
+            pickMode={pickMode}
+            vocabMode={vocabMode}
+            autoDrill={autoDrill}
+            drill={drill}
+            picked={picked}
+            drillOk={drillOk}
+            readMs={readMs}
+            slow={slow}
+            selWords={selWords}
+            addedWord={addedWord}
+            wordDraft={wordDraft}
+            knownWords={knownWords}
+            confirmDel={confirmDel}
+            ttsState={ttsState}
+            onAddPhrases={onAddPhrases}
+            addSelected={addSelected}
+            mergePhrase={mergePhrase}
+            setWordDraft={setWordDraft}
+            addCustom={addCustom}
+            tapRemove={tapRemove}
+            advance={advance}
+            onClose={onClose}
+            onSpeak={onSpeak}
+            chooseDrill={chooseDrill}
+          />
         )
       )}
     </div>

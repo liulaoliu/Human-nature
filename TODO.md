@@ -16,7 +16,8 @@
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
       剩余大块是侧栏/工具栏 props 接线，离 1200 还有距离）
-- [ ] **面板瘦身**：`SpeedReadPanel`（778）/ `StudyPanel`（744）拆「渲染块」与「会话状态机」，目标 <600 行
+- [x] **面板瘦身**：`SpeedReadPanel`（779 → 597）/ `StudyPanel`（746 → 512）拆「渲染块」与「会话状态机」
+      （`StudyDrill` 抽出强制锤炼；速读拆出 `SpeedReadSentence` / `SpeedReadBasket` + `SpeedReadDone`；新增 12 条组件测试）
 - [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
       （共 36 条：`useExport` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；
       定时器类 hook 用 `clearTimeout` 断言卸载清理，纯回调 hook 无卸载副作用）
