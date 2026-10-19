@@ -97,7 +97,7 @@ export default function StatsPanel({
       <div className="heat">
         <div className="heat-months">
           {heat.monthLabels.map((m) => (
-            <span key={m.col} style={{ gridColumnStart: m.col + 1 }}>
+            <span key={`${m.col}-${m.label}`} style={{ gridColumnStart: m.col + 1 }}>
               {m.label}月
             </span>
           ))}

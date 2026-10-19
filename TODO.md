@@ -21,12 +21,15 @@
 - [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
       （共 36 条：`useExport` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；
       定时器类 hook 用 `clearTimeout` 断言卸载清理，纯回调 hook 无卸载副作用）
-- [ ] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
+- [x] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
+      （`ReaderApp.integration.test.tsx`：mock 仓储/词典/例句加载，恢复上次文章 → 补全写一次；
+      粘回语言点 JSON → 写进词库一次、同份结果再应用不重复；顺带修了热力图月份 key 重复）
 - [x] **`catch {}` 分类**：用户资产 IO 一律 `console.warn` + 可见提示；可选能力保留空 catch 并写明理由
       （新增 `reportStorageFailure`；词库读失败/学习记录写失败/待选写失败/文章列表读失败都已可见；
       TTS、剪贴板、`navigator.storage.persist()` 等保留空 catch 并注明可降级）
-- [ ] **无障碍**：给划词/悬浮气泡/纯图标按钮补 `aria-label`，键盘可走到主要操作
-      （纯图标按钮已补：改名/编辑/删除/朗读/前一天/后一天等；划词气泡与句子键盘导航待做）
+- [x] **无障碍**：给划词/悬浮气泡/纯图标按钮补 `aria-label`，键盘可走到主要操作
+      （纯图标按钮已补：改名/编辑/删除/朗读/前一天/后一天等；句子加 `role=button`+`tabIndex`+Enter/Space，
+      选词气泡加 `role=status`+`aria-live`，`ReaderArticle.test` 钉住）
 - [x] **词库增量 upsert**：按 `id + 内容` 只重建变化的词条，替代每次全量 clear + rebuild
       （`server/sqliteStore.js` 按 `id + 内容` 对比：只删/重写变化与删除的词条；新增 1 条 rowid 稳定性测试）
 

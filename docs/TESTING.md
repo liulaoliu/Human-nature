@@ -122,6 +122,7 @@
 ## 五、已经就绪的层 / 还差什么
 
 **已就绪**：纯逻辑单测（`src/core/*.test.ts`）+ **钩子接线测试**（`src/reader/hooks/*.test.tsx`）
++ **集成测试**（`src/reader/ReaderApp.integration.test.tsx`：假仓储挂载，自动补全只写一次、语言点粘回不重不漏）
 + **组件测试**（`src/reader/panels/*.test.tsx`：`ExportPanel`（内容×范围×动作交给打印的条目与标题）、
 `SideVocab`（生词/语言点两个页签、打印只交当前页签）、`LangPointList`（分组/来源句/两步删除）；
 `ReaderShell`/`ReaderArticle` 钉三个 slot 的顺序与编辑态；`SessionHost`（六类会话面板按状态互斥渲染）；
