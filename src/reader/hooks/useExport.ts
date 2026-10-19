@@ -25,66 +25,9 @@ import {
   mergeStudyDays,
   mergeWritingHistory,
 } from '../../core/mergeBackup'
+import { parseBackupPayload } from '../../core/backupParse'
 
 /** 一份备份里解析出来的各项数据（缺的字段为 undefined / 空）。 */
-interface ParsedBackup {
-  articles: SavedArticle[]
-  library: VocabLibrary | null
-  sessions?: PickSession[]
-  studyDays?: StudyDay[]
-  activity?: DayActivity[]
-  writingHistory?: WritingRecord[]
-  practice?: PracticeRecord[]
-  mistakes?: MistakeEntry[]
-  retells?: RetellRecord[]
-  studiedDays?: StudiedDay[]
-  skimmed?: string[]
-  kindStats?: KindStats
-  /** 目标 / 备忘 / 读完历史 */
-  readDone?: ReadDone[]
-  readGoal?: number
-  goalMemo?: string
-}
-
-/** 解析导入的 JSON：兼容「全部备份」「词库 JSON」「文章数组」「单篇」。 */
-function parseBackupPayload(data: unknown): ParsedBackup {
-  const out: ParsedBackup = { articles: [], library: null }
-  if (Array.isArray(data)) {
-    if (data.length && data[0] && typeof data[0] === 'object' && 'sentences' in data[0]) {
-      out.articles = data as SavedArticle[]
-    } else if (data.length && data[0] && typeof data[0] === 'object' && 'lemma' in data[0]) {
-      out.library = { schemaVersion: 1, items: data as VocabLibrary['items'] }
-    }
-    return out
-  }
-  if (data && typeof data === 'object') {
-    const obj = data as Record<string, unknown>
-    if (Array.isArray(obj.articles)) out.articles = obj.articles as SavedArticle[]
-    if (obj.library && typeof obj.library === 'object' && Array.isArray((obj.library as VocabLibrary).items)) {
-      out.library = obj.library as VocabLibrary
-    } else if (Array.isArray(obj.items)) {
-      out.library = data as VocabLibrary
-    }
-    if (Array.isArray(obj.stats)) out.sessions = obj.stats as PickSession[]
-    if (Array.isArray(obj.studyStats)) out.studyDays = obj.studyStats as StudyDay[]
-    if (Array.isArray(obj.activity)) out.activity = obj.activity as DayActivity[]
-    if (Array.isArray(obj.writingHistory)) out.writingHistory = obj.writingHistory as WritingRecord[]
-    if (Array.isArray(obj.practice)) out.practice = obj.practice as PracticeRecord[]
-    if (Array.isArray(obj.mistakes)) out.mistakes = obj.mistakes as MistakeEntry[]
-    if (Array.isArray(obj.retells)) out.retells = obj.retells as RetellRecord[]
-    if (Array.isArray(obj.studiedDays)) out.studiedDays = obj.studiedDays as StudiedDay[]
-    if (Array.isArray(obj.skimmed)) out.skimmed = obj.skimmed.filter((id): id is string => typeof id === 'string')
-    if (obj.kindStats && typeof obj.kindStats === 'object' && !Array.isArray(obj.kindStats)) {
-      out.kindStats = obj.kindStats as KindStats
-    }
-    if (Array.isArray(obj.readDone)) out.readDone = obj.readDone as ReadDone[]
-    if (typeof obj.readGoal === 'number') out.readGoal = obj.readGoal
-    if (typeof obj.goalMemo === 'string') out.goalMemo = obj.goalMemo
-    if (!out.articles.length && 'sentences' in obj && 'paragraphs' in obj) out.articles = [data as SavedArticle]
-  }
-  return out
-}
-
 export interface UseExportParams {
   articles: RefObject<ArticleRepoPort | null>
   library: VocabLibrary
@@ -243,7 +186,10 @@ export function useExport({
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
       setSaved((await articles.current?.list()) ?? [])
-      flash(`导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}`)
+      flash(
+        `导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}` +
+          (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
+      )
     } catch {
       flash('导入失败：不是有效的 JSON 备份')
     }
@@ -275,7 +221,10 @@ export function useExport({
       if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
-      flash(`合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}`)
+      flash(
+        `合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}` +
+          (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
+      )
     } catch {
       flash('合并失败：不是有效的 JSON 备份')
     }

@@ -29,6 +29,22 @@ describe('learning 记录', () => {
     expect(hasLearningData(data)).toBe(true)
   })
 
+  it('数值字段坏了也丢弃，不让 NaN 进统计', () => {
+    const data = normalizeLearning({
+      practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 'x', correct: 1 }],
+      mistakes: [{ id: 'm1', kind: 'vocab', at: '2026-01-01T00:00:00.000Z', count: 'x', label: 'm1' }],
+      studyDays: [{ day: '2026-01-01', seconds: 'x', cards: 1 }],
+      sessions: [{ at: '2026-01-01T00:00:00.000Z', seconds: 1, picked: 'x' }],
+      activity: [{ day: '2026-01-01', counts: { read: 'x', speak: 2 } }],
+    })
+    expect(data.practice).toHaveLength(0)
+    expect(data.mistakes).toHaveLength(0)
+    expect(data.studyDays).toHaveLength(0)
+    expect(data.sessions).toHaveLength(0)
+    expect(data.activity).toEqual([{ day: '2026-01-01', counts: { speak: 2 } }])
+    expect(hasLearningData(data)).toBe(true)
+  })
+
   it('只有偏好/空记录时 hasLearningData=false', () => {
     expect(hasLearningData(emptyLearning())).toBe(false)
   })

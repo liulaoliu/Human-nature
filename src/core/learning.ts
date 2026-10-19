@@ -100,28 +100,59 @@ export function normalizeLearning(raw: unknown): LearningData {
   const out = emptyLearning()
   if (!isObject(raw)) return out
   out.practice = asArray<PracticeRecord>(raw.practice).filter(
-    (r) => isObject(r) && typeof r.at === 'string' && typeof r.kind === 'string',
+    (r) =>
+      isObject(r) &&
+      typeof r.at === 'string' &&
+      typeof r.kind === 'string' &&
+      Number.isFinite(Number(r.total)) &&
+      Number.isFinite(Number(r.correct)),
   )
   out.mistakes = asArray<MistakeEntry>(raw.mistakes).filter(
-    (r) => isObject(r) && typeof r.id === 'string' && typeof r.kind === 'string',
+    (r) =>
+      isObject(r) &&
+      typeof r.id === 'string' &&
+      typeof r.kind === 'string' &&
+      typeof r.at === 'string' &&
+      typeof r.label === 'string' &&
+      Number.isFinite(Number(r.count)),
   )
   out.readDone = asArray<ReadDone>(raw.readDone).filter(
-    (r) => isObject(r) && typeof r.articleId === 'string' && typeof r.day === 'string',
+    (r) => isObject(r) && typeof r.articleId === 'string' && typeof r.day === 'string' && typeof r.at === 'string',
   )
   out.writingHistory = asArray<WritingRecord>(raw.writingHistory).filter(
     (r) => isObject(r) && typeof r.at === 'string' && typeof r.text === 'string',
   )
   out.retells = asArray<RetellRecord>(raw.retells).filter(
-    (r) => isObject(r) && typeof r.at === 'string' && typeof r.articleId === 'string',
+    (r) =>
+      isObject(r) &&
+      typeof r.at === 'string' &&
+      typeof r.articleId === 'string' &&
+      typeof r.text === 'string' &&
+      Number.isFinite(Number(r.words)),
   )
-  out.activity = asArray<DayActivity>(raw.activity).filter(
-    (r) => isObject(r) && typeof r.day === 'string' && isObject(r.counts),
-  )
+  out.activity = asArray<DayActivity>(raw.activity)
+    .filter((r) => isObject(r) && typeof r.day === 'string' && isObject(r.counts))
+    .map((r) => {
+      const counts: Record<string, number> = {}
+      for (const [cat, n] of Object.entries(r.counts)) {
+        const v = Number(n)
+        if (Number.isFinite(v) && v > 0) counts[cat] = v
+      }
+      return { day: r.day, counts }
+    })
   out.studyDays = asArray<StudyDay>(raw.studyDays).filter(
-    (r) => isObject(r) && typeof r.day === 'string',
+    (r) =>
+      isObject(r) &&
+      typeof r.day === 'string' &&
+      Number.isFinite(Number(r.seconds)) &&
+      Number.isFinite(Number(r.cards)),
   )
   out.sessions = asArray<PickSession>(raw.sessions).filter(
-    (r) => isObject(r) && typeof r.at === 'string',
+    (r) =>
+      isObject(r) &&
+      typeof r.at === 'string' &&
+      Number.isFinite(Number(r.seconds)) &&
+      Number.isFinite(Number(r.picked)),
   )
   out.studiedDays = asArray<StudiedDay>(raw.studiedDays)
     .filter((r) => isObject(r) && typeof r.day === 'string')
