@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { VocabItem } from '../../types/document'
+import type { StudyDeck } from '../../core/entryKind'
 import {
   cleanGloss,
   displayMeaning,
@@ -40,6 +41,8 @@ export interface StudyPanelProps {
   extraCount: number
   index: number
   mode: StudyMode
+  /** 当前牌组：普通单词 / 搭配（词组·习语） */
+  deck: StudyDeck
   scope: StudyScope
   spelling: boolean
   revealed: boolean
@@ -65,6 +68,7 @@ export interface StudyPanelProps {
   onClose: () => void
   onExam: () => void
   onSwitchMode: (mode: StudyMode) => void
+  onSwitchDeck: (deck: StudyDeck) => void
   onSwitchScope: (scope: StudyScope) => void
   onStartArticleAll: () => void
   onNewLimitChange: (n: number) => void
@@ -138,7 +142,7 @@ const STEP_LABEL: Record<DrillStep['kind'], string> = {
 }
 
 /** 超时「强制锤炼」：拼写 → 选词义 → 写搭配 → 听写句子，全过才解锁评分。 */
-function DrillBoard({
+export function DrillBoard({
   card,
   items,
   onSpeak,
@@ -154,11 +158,14 @@ function DrillBoard({
   const [step, setStep] = useState(0)
   const [text, setText] = useState('')
   const [wrong, setWrong] = useState(false)
+  /** 选词义：键盘高亮的选项（A/D 移动，回车确认） */
+  const [focus, setFocus] = useState(0)
   // 换卡重置
   useEffect(() => {
     setStep(0)
     setText('')
     setWrong(false)
+    setFocus(0)
   }, [card.id])
 
   const cur = steps[step]
@@ -187,6 +194,39 @@ function DrillBoard({
       next()
     }
   }
+
+  const pick = (o?: { text: string; correct: boolean }) => {
+    if (!o) return
+    if (o.correct) next()
+    else setWrong(true)
+  }
+
+  // 选词义键盘操作：1-4 直接选，A/D（或 ←/→）切换高亮，回车确认
+  useEffect(() => {
+    if (cur?.kind !== 'meaning') return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      const k = e.key.toLowerCase()
+      const n = Number(k)
+      if (n >= 1 && n <= options.length) {
+        e.preventDefault()
+        pick(options[n - 1])
+        return
+      }
+      if (k === 'a' || e.key === 'ArrowLeft') {
+        e.preventDefault()
+        setFocus((f) => (f - 1 + options.length) % options.length)
+      } else if (k === 'd' || e.key === 'ArrowRight') {
+        e.preventDefault()
+        setFocus((f) => (f + 1) % options.length)
+      } else if (e.key === 'Enter') {
+        e.preventDefault()
+        pick(options[focus])
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [cur, options, focus])
 
   if (!cur) {
     // 没有任何可锤炼步骤：直接放行
@@ -231,16 +271,18 @@ function DrillBoard({
         <div className="drill-body">
           <div className="study-word">{card.word}</div>
           <div className="quiz-options">
-            {options.map((o) => (
+            {options.map((o, i) => (
               <button
                 key={o.text}
-                className={wrong && o.correct ? 'primary' : ''}
-                onClick={() => (o.correct ? next() : setWrong(true))}
+                className={`${wrong && o.correct ? 'primary ' : ''}${i === focus ? 'focused' : ''}`}
+                onClick={() => pick(o)}
+                title={`按 ${i + 1} 选择`}
               >
-                {o.text}
+                <kbd>{i + 1}</kbd> {o.text}
               </button>
             ))}
           </div>
+          <div className="muted drill-keys">1–4 选择 · A / D 切换 · 回车确认</div>
         </div>
       )}
 
@@ -285,6 +327,7 @@ export default function StudyPanel({
   extraCount,
   index,
   mode,
+  deck,
   scope,
   spelling,
   revealed,
@@ -308,6 +351,7 @@ export default function StudyPanel({
   onClose,
   onExam,
   onSwitchMode,
+  onSwitchDeck,
   onSwitchScope,
   onStartArticleAll,
   onNewLimitChange,
@@ -365,6 +409,17 @@ export default function StudyPanel({
           </button>
           <button className={mode === 'review' ? 'primary' : ''} onClick={() => onSwitchMode('review')}>
             复习 {dueCount}
+          </button>
+        </span>
+        <span className="view-toggle" title="背单词：普通单词；背搭配：词组 / 习语（切换会立即重开一轮）">
+          <button className={deck === 'word' ? 'primary' : ''} onClick={() => onSwitchDeck('word')}>
+            背单词
+          </button>
+          <button
+            className={deck === 'collocation' ? 'primary' : ''}
+            onClick={() => onSwitchDeck('collocation')}
+          >
+            背搭配
           </button>
         </span>
         <select value={scope} onChange={(e) => onSwitchScope(e.target.value as StudyScope)} title="背词范围；改完立即按新范围重开一轮">

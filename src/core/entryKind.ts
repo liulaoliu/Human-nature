@@ -39,6 +39,23 @@ export function isStudyable(item: { kind?: VocabKind } | null | undefined): bool
   return kindOf(item) !== 'usage'
 }
 
+/** 背词牌组：普通单词 / 搭配（词组·习语）。 */
+export type StudyDeck = 'word' | 'collocation'
+
+/**
+ * 这条属于哪个背词牌组。
+ * - word：只背普通单词（词组/习语抽到「背搭配」里）
+ * - collocation：只背词组 / 习语（用法笔记两边都不进）
+ */
+export function inStudyDeck(
+  item: { kind?: VocabKind } | null | undefined,
+  deck: StudyDeck,
+): boolean {
+  if (!isStudyable(item)) return false
+  const k = kindOf(item)
+  return deck === 'collocation' ? k === 'phrase' || k === 'idiom' : k === 'word'
+}
+
 /** 按类型筛（不传 / 空数组 = 全部）。 */
 export function filterByKind(items: VocabItem[], kinds?: VocabKind[] | null): VocabItem[] {
   if (!kinds?.length) return items

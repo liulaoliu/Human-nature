@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { isStudyable } from '../../core/entryKind'
+import { inStudyDeck, isStudyable, type StudyDeck } from '../../core/entryKind'
 import {
   buildLearnQueue,
   buildReviewQueue,
@@ -84,6 +84,12 @@ export function useStudySession(params: UseStudySessionParams) {
     'learn',
     persistentEnum(['learn', 'review'] as const, 'learn'),
   )
+  /** 背单词 / 背搭配（词组·习语）。词组不再混在「背单词」里。 */
+  const [deck, setDeck] = useLocalStorageState<StudyDeck>(
+    'reader:studyDeck',
+    'word',
+    persistentEnum(['word', 'collocation'] as const, 'word'),
+  )
 
   const [queue, setQueue] = useState<VocabItem[] | null>(null)
   const [index, setIndex] = useState(0)
@@ -116,17 +122,21 @@ export function useStudySession(params: UseStudySessionParams) {
   const [drillCleared, setDrillCleared] = useState(false)
 
   // ---- 候选池 ----
-  /** 可背的：用法笔记（中文说明）不进卡片 */
-  const studyable = useMemo(() => library.items.filter(isStudyable), [library.items])
+  /** 可背的：按当前牌组过滤；用法笔记（中文说明）不进卡片 */
+  const studyable = useMemo(
+    () => library.items.filter((it) => isStudyable(it) && inStudyDeck(it, deck)),
+    [library.items, deck],
+  )
   const poolFor = useCallback(
-    (s: StudyScope) => {
-      if (s === 'all') return studyable
-      if (s === 'lapses') return studyable.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (s === 'unmastered') return studyable.filter((it) => it.status !== 'mastered')
+    (s: StudyScope, d: StudyDeck = deck) => {
+      const base = d === deck ? studyable : library.items.filter((it) => inStudyDeck(it, d))
+      if (s === 'all') return base
+      if (s === 'lapses') return base.filter((it) => (it.reviewState.lapses ?? 0) > 0)
+      if (s === 'unmastered') return base.filter((it) => it.status !== 'mastered')
       // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
-      return studyable.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
+      return base.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
     },
-    [studyable, articleIdentity, docLemmas],
+    [studyable, deck, articleIdentity, docLemmas],
   )
   const pool = useMemo(() => poolFor(scope), [poolFor, scope])
   const dueCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length, [pool])
@@ -161,27 +171,30 @@ export function useStudySession(params: UseStudySessionParams) {
     resetCardUi()
   }, [resetCardUi])
 
-  /** 开始背单词：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
+  /** 开始背单词/背搭配：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
   const start = useCallback(
-    (opts?: { mode?: StudyMode; scope?: StudyScope }) => {
+    (opts?: { mode?: StudyMode; scope?: StudyScope; deck?: StudyDeck }) => {
       const nextMode = opts?.mode ?? mode
       const nextScope = opts?.scope ?? scope
+      const nextDeck = opts?.deck ?? deck
       if (opts?.mode != null) setMode(nextMode)
       if (opts?.scope != null) setScope(nextScope)
-      const p = poolFor(nextScope)
+      if (opts?.deck != null) setDeck(nextDeck)
+      const p = poolFor(nextScope, nextDeck)
       const q =
         nextMode === 'review'
           ? buildReviewQueue(p, new Date())
           : buildLearnQueue(p, new Date(), { newLimit, newToday })
       if (!q.length) {
+        const thing = nextDeck === 'collocation' ? '搭配' : '词'
         flash(
           nextMode === 'review'
             ? nextScope === 'article'
-              ? '这篇没有到期的复习词'
-              : '没有到期的复习词，去「新学习」吧'
+              ? `这篇没有到期的复习${thing}`
+              : `没有到期的复习${thing}，去「新学习」吧`
             : nextScope === 'article'
-              ? '这篇没有待学的新词'
-              : '没有待学的新词，去「复习」吧',
+              ? `这篇没有待学的新${thing}`
+              : `没有待学的新${thing}，去「复习」吧`,
         )
         return
       }
@@ -191,11 +204,12 @@ export function useStudySession(params: UseStudySessionParams) {
       setRoundTotal(q.length)
       setIndex(0)
     },
-    [poolFor, mode, scope, newLimit, newToday, flash, closeQuiz, resetSession, setMode, setScope],
+    [poolFor, mode, scope, deck, newLimit, newToday, flash, closeQuiz, resetSession, setMode, setScope, setDeck],
   )
 
   const switchMode = useCallback((m: StudyMode) => start({ mode: m }), [start])
   const switchScope = useCallback((s: StudyScope) => start({ scope: s }), [start])
+  const switchDeck = useCallback((d: StudyDeck) => start({ deck: d }), [start])
 
   /** 「本篇全部」：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）。 */
   const startArticleAll = useCallback(() => {
@@ -453,6 +467,8 @@ export function useStudySession(params: UseStudySessionParams) {
     setSpelling,
     mode,
     setMode,
+    deck,
+    switchDeck,
     queue,
     index,
     revealed,

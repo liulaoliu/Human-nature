@@ -3,6 +3,7 @@ import {
   KIND_LABEL,
   KIND_ORDER,
   filterByKind,
+  inStudyDeck,
   isLangPoint,
   isStudyable,
   isWordEntry,
@@ -51,11 +52,25 @@ describe('分类判断', () => {
       ['usage', false],
     ])
   })
+
+  it('inStudyDeck：背单词只收单词，背搭配只收词组/习语，用法两边都不进', () => {
+    expect(KIND_ORDER.map((k) => [k, inStudyDeck(item(k), 'word')])).toEqual([
+      ['word', true],
+      ['phrase', false],
+      ['idiom', false],
+      ['usage', false],
+    ])
+    expect(KIND_ORDER.map((k) => [k, inStudyDeck(item(k), 'collocation')])).toEqual([
+      ['word', false],
+      ['phrase', true],
+      ['idiom', true],
+      ['usage', false],
+    ])
+  })
 })
 
 describe('筛选', () => {
   const items = KIND_ORDER.map((k) => vocabItem({ id: `i-${k}`, word: `w-${k}`, lemma: `w-${k}`, kind: k }))
-
   it('filterByKind：不传 = 全部；传了就只留那几类', () => {
     expect(filterByKind(items)).toBe(items)
     expect(filterByKind(items, [])).toBe(items)

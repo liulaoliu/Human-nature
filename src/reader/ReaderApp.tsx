@@ -764,7 +764,7 @@ export default function ReaderApp() {
     scope: studyScope,
     spelling: studySpelling,
     setSpelling: setStudySpelling,
-    mode: studyMode,
+    mode: studyMode, deck: studyDeck,
     queue: studyQueue,
     index: studyIndex,
     revealed: studyRevealed,
@@ -795,8 +795,7 @@ export default function ReaderApp() {
     clearDrill: studyClearDrill,
     unflushedSeconds: studyUnflushed,
     start: startStudy,
-    switchMode,
-    switchScope,
+    switchMode, switchDeck, switchScope,
     startArticleAll,
     grade: gradeStudy,
     back: studyBack,
@@ -2364,7 +2363,7 @@ export default function ReaderApp() {
             roundTotal={studyRoundTotal}
             extraCount={studyExtraCount}
             index={studyIndex}
-            mode={studyMode}
+            mode={studyMode} deck={studyDeck}
             scope={studyScope}
             spelling={studySpelling}
             revealed={studyRevealed}
@@ -2391,7 +2390,7 @@ export default function ReaderApp() {
               setQuizResults([])
               setQuizSetupOpen(true)
             }}
-            onSwitchMode={switchMode}
+            onSwitchMode={switchMode} onSwitchDeck={switchDeck}
             onSwitchScope={switchScope}
             onStartArticleAll={startArticleAll}
             onNewLimitChange={setNewLimit}
