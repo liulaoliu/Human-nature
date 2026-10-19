@@ -252,13 +252,14 @@ export default function ReaderToolbar({
           className="tb-voice"
           value={ttsVoice}
           onChange={(e) => onTtsVoiceChange(e.target.value)}
-          title="朗读口音（Edge TTS 音色）：美式 / 英式 / 澳式 / 印度…；改完下一个朗读即生效"
+          title="朗读音色（Edge 在线 / Piper 离线）：美式 / 英式 / 澳式 / 印度…；改完下一个朗读即生效"
         >
           {ttsAccents.map((a) => (
             <optgroup key={a.label} label={a.label}>
               {a.voices.map((v) => (
                 <option key={v.id} value={v.id}>
-                  {v.name}（{v.gender}）
+                  {v.name}
+                  {v.name.includes(`（${v.gender}）`) ? '' : `（${v.gender}）`}
                 </option>
               ))}
             </optgroup>

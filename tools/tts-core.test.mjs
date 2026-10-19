@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgeProxyFromEnv, parseTarget } from './tts-core.mjs'
+import { edgeLangFor, edgeProxyFromEnv, parseTarget, pickVoiceFor } from './tts-core.mjs'
 
 describe('parseTarget', () => {
   it('Edge 音色', () => {
@@ -18,10 +18,10 @@ describe('parseTarget', () => {
     })
   })
 
-  it('本机 espeak-ng 只认白名单', () => {
-    expect(parseTarget('local:en-us')).toEqual({
+  it('本机离线音色只认白名单（Piper / espeak-ng）', () => {
+    expect(parseTarget('local:piper-us-lessac')).toEqual({
       engine: 'local',
-      voice: 'local:en-us',
+      voice: 'local:piper-us-lessac',
       ext: 'wav',
     })
     expect(parseTarget('local:en-gb-x-rp+f3')).toEqual({
@@ -37,6 +37,36 @@ describe('parseTarget', () => {
     expect(parseTarget('local:')).toEqual(fallback)
     expect(parseTarget('')).toEqual(fallback)
     expect(parseTarget(null)).toEqual(fallback)
+  })
+})
+
+describe('edgeLangFor', () => {
+  it('美式 / 加拿大用 en-US，其余英语口音用 en-GB', () => {
+    expect(edgeLangFor('en-US-AriaNeural')).toBe('en-US')
+    expect(edgeLangFor('en-CA-ClaraNeural')).toBe('en-US')
+    expect(edgeLangFor('en-GB-SoniaNeural')).toBe('en-GB')
+    expect(edgeLangFor('en-AU-NatashaNeural')).toBe('en-GB')
+    expect(edgeLangFor('en-IN-NeerjaNeural')).toBe('en-GB')
+  })
+})
+
+describe('pickVoiceFor', () => {
+  const voices = [
+    { id: 'us-f', lang: 'en-US', gender: 'Female' },
+    { id: 'us-m', lang: 'en-US', gender: 'Male' },
+    { id: 'gb-f', lang: 'en-GB', gender: 'Female' },
+  ]
+
+  it('优先同口音 + 同性别', () => {
+    expect(pickVoiceFor(voices, 'en-US', 'Male')?.id).toBe('us-m')
+    expect(pickVoiceFor(voices, 'en-US', 'Female')?.id).toBe('us-f')
+    expect(pickVoiceFor(voices, 'en-GB', 'Female')?.id).toBe('gb-f')
+  })
+
+  it('没有同性别时退到同口音，再退到任意', () => {
+    expect(pickVoiceFor(voices, 'en-GB', 'Male')?.id).toBe('gb-f')
+    expect(pickVoiceFor(voices, 'en-AU', 'Male')?.id).toBe('us-f')
+    expect(pickVoiceFor([], 'en-US', 'Male')).toBeNull()
   })
 })
 

@@ -9,18 +9,20 @@ import {
   statSync,
   unlinkSync,
 } from 'node:fs'
-import { join } from 'node:path'
+import { homedir } from 'node:os'
+import { dirname, join } from 'node:path'
 
 /**
  * TTS 共享核心（dev 走 Vite 插件，static 走 httpApp.js）。三个引擎：
  *
  *   edge（默认，在线）  GET /api/tts?voice=en-US-AriaNeural&text=Hello   → audio/mpeg
  *   sapi（离线，系统）  GET /api/tts?voice=sapi:Microsoft%20Zira%20Desktop&text=Hello → audio/wav
- *   local（离线，Linux）GET /api/tts?voice=local:en-us&text=Hello         → audio/wav
+ *   local（离线，Linux）GET /api/tts?voice=local:piper-us-lessac&text=Hello → audio/wav
  *   GET /api/tts/words?voice=…&text=…    → 逐词时间戳 JSON（仅 edge；离线引擎为 []）
  *   GET /api/tts/engines                 → { edge, sapi, local: { available, voices } }
  *
- * Edge 连续失败时自动降级到本机 espeak-ng（20 秒后自动重试 Edge）；本机也没有时由前端退回浏览器语音。
+ * Edge 连续失败时自动降级到本机 Piper（神经音色），再失败用 espeak-ng 应急；
+ * 本机也没有时由前端退回浏览器语音。Piper 降级 60 秒、Edge 降级 20 秒后都会回头重试。
  * 缓存：public/tts/<sha1(engine+voice+text)>.<mp3|wav>（edge 另存同名 .json 逐词时间戳）。
  * 只服务本机自用：文本长度上限、并发上限、硬超时、失败重试、缓存条数上限。
  */
@@ -37,30 +39,73 @@ const RETRIES = 1
 const MAX_CACHE_FILES = 800
 /** Edge 失败后先走本地引擎多久，再回头重试 Edge。 */
 const EDGE_RETRY_MS = 20000
+/** Piper 失败后先用 espeak 顶多久，再回头重试 Piper。 */
+const PIPER_RETRY_MS = 60000
 
-/** 本机 espeak-ng 的可选音色（固定白名单，避免把任意字符串拼进命令行）。 */
-const LOCAL_VOICES = [
-  { id: 'local:en-us', name: 'Espeak 美音 · 男', voice: 'en-us', gender: 'Male', lang: 'en-US' },
-  { id: 'local:en-us+f3', name: 'Espeak 美音 · 女', voice: 'en-us+f3', gender: 'Female', lang: 'en-US' },
-  { id: 'local:en-gb', name: 'Espeak 英音 · 男', voice: 'en-gb', gender: 'Male', lang: 'en-GB' },
+/**
+ * espeak-ng 应急音色：音质机器人，但只依赖 apt，Piper 不可用/失败时兜底。
+ * 固定白名单，避免把任意字符串拼进命令行。
+ */
+const ESPEAK_VOICES = [
+  { id: 'local:en-us', name: 'Espeak 应急 美音（男）', voice: 'en-us', gender: 'Male', lang: 'en-US' },
+  { id: 'local:en-us+f3', name: 'Espeak 应急 美音（女）', voice: 'en-us+f3', gender: 'Female', lang: 'en-US' },
+  { id: 'local:en-gb', name: 'Espeak 应急 英音（男）', voice: 'en-gb', gender: 'Male', lang: 'en-GB' },
   {
     id: 'local:en-gb-x-rp',
-    name: 'Espeak 英音 RP · 男',
+    name: 'Espeak 应急 英音 RP（男）',
     voice: 'en-gb-x-rp',
     gender: 'Male',
     lang: 'en-GB',
   },
   {
     id: 'local:en-gb-x-rp+f3',
-    name: 'Espeak 英音 RP · 女',
+    name: 'Espeak 应急 英音 RP（女）',
     voice: 'en-gb-x-rp+f3',
     gender: 'Female',
     lang: 'en-GB',
   },
 ]
-const LOCAL_VOICE_MAP = new Map(LOCAL_VOICES.map((v) => [v.id, v]))
+
+/** Piper 离线神经音色；只有模型文件存在时才出现在下拉里。 */
+const PIPER_VOICES = [
+  {
+    id: 'local:piper-us-lessac',
+    name: 'Piper 美音 Lessac',
+    model: 'en_US-lessac-medium',
+    gender: 'Female',
+    lang: 'en-US',
+  },
+  {
+    id: 'local:piper-us-ryan',
+    name: 'Piper 美音 Ryan（高清）',
+    model: 'en_US-ryan-high',
+    gender: 'Male',
+    lang: 'en-US',
+  },
+  {
+    id: 'local:piper-gb-cori',
+    name: 'Piper 英音 Cori（高清）',
+    model: 'en_GB-cori-high',
+    gender: 'Female',
+    lang: 'en-GB',
+  },
+  {
+    id: 'local:piper-gb-northern',
+    name: 'Piper 英音 Northern',
+    model: 'en_GB-northern_english_male-medium',
+    gender: 'Male',
+    lang: 'en-GB',
+  },
+]
+
+const LOCAL_VOICE_MAP = new Map([
+  ...PIPER_VOICES.map((v) => [v.id, { ...v, kind: 'piper' }]),
+  ...ESPEAK_VOICES.map((v) => [v.id, { ...v, kind: 'espeak' }]),
+])
 /** 当前是否处于「Edge 降级期」；0 = 正常。 */
 let edgeDownUntil = 0
+/** 当前是否处于「Piper 降级期」；0 = 正常。 */
+let piperDownUntil = 0
 
 /** 正在合成的任务（同一 key 不重复合成）。 */
 const inflight = new Map()
@@ -234,7 +279,7 @@ function listSapiVoices() {
   })
 }
 
-// ---- local（离线，Linux espeak-ng） ----
+// ---- local（离线，Piper 优先 / espeak-ng 应急） ----
 let espeakBin
 /** 找 espeak-ng（老系统可能只有 espeak）；结果缓存。 */
 function findEspeak() {
@@ -254,32 +299,172 @@ function findEspeak() {
   return null
 }
 
-let localCache = null
-/** 本机可用的离线音色（没有 espeak 就是空）。 */
-function listLocalVoices() {
-  if (localCache) return localCache
+let espeakCache = null
+function listEspeakVoices() {
+  if (espeakCache) return espeakCache
   if (!findEspeak()) {
-    localCache = []
-    return localCache
+    espeakCache = []
+    return espeakCache
   }
-  localCache = LOCAL_VOICES.map(({ id, name, gender, lang }) => ({ id, name, gender, lang }))
-  return localCache
+  espeakCache = ESPEAK_VOICES.map(({ id, name, gender, lang }) => ({ id, name, gender, lang }))
+  return espeakCache
 }
 
-/** Edge 失败时挑一个口音相近的本地音色。 */
-function localFallbackTarget(edgeVoice) {
-  const voices = listLocalVoices()
-  if (!voices.length) return null
-  const want = /^en-(US|CA)/i.test(edgeVoice) ? 'local:en-us' : 'local:en-gb-x-rp'
-  const id = voices.some((v) => v.id === want) ? want : voices[0].id
-  return { engine: 'local', voice: id, ext: 'wav' }
+let piperBin
+/** 找 Piper：环境变量 → PATH → 本机安装目录。 */
+function findPiper() {
+  if (piperBin !== undefined) return piperBin
+  const candidates = [
+    process.env.PIPER_BIN,
+    'piper',
+    join(homedir(), '.local/opt/piper/piper'),
+    '/opt/piper/piper',
+    '/usr/local/bin/piper',
+    '/usr/bin/piper',
+  ].filter(Boolean)
+  for (const bin of candidates) {
+    try {
+      const r = spawnSync(bin, ['--help'], { stdio: 'ignore', timeout: 2000 })
+      if (r.status === 0) {
+        piperBin = bin
+        return bin
+      }
+    } catch {
+      // 试下一个
+    }
+  }
+  piperBin = null
+  return null
 }
 
-function synthLocal(text, voiceId, outWav) {
+/** Piper 模型目录：环境变量 → 二进制同级的 voices → 常见共享目录。 */
+function piperVoicesDir() {
+  const bin = findPiper()
+  const binDir = bin && bin.includes('/') ? dirname(bin) : ''
+  const candidates = [
+    process.env.PIPER_VOICES_DIR,
+    binDir ? join(binDir, 'voices') : '',
+    join(homedir(), '.local/share/piper-voices'),
+    '/usr/local/share/piper-voices',
+    '/usr/share/piper-voices',
+    '/opt/piper/voices',
+  ].filter(Boolean)
+  for (const d of candidates) {
+    if (existsSync(d)) return d
+  }
+  return ''
+}
+
+function piperModelPath(model) {
+  const dir = piperVoicesDir()
+  if (!dir) return null
+  const path = join(dir, `${model}.onnx`)
+  return existsSync(path) && existsSync(`${path}.json`) ? path : null
+}
+
+let piperCache = null
+/** 已安装模型的 Piper 音色；模型不存在就不显示。 */
+function listPiperVoices() {
+  if (piperCache) return piperCache
+  if (!findPiper()) {
+    piperCache = []
+    return piperCache
+  }
+  piperCache = PIPER_VOICES.filter((v) => piperModelPath(v.model)).map(
+    ({ id, name, gender, lang }) => ({ id, name, gender, lang }),
+  )
+  return piperCache
+}
+
+/** 顶栏下拉的离线音色：Piper 在前，espeak 应急在后。 */
+function listLocalVoices() {
+  return [...listPiperVoices(), ...listEspeakVoices()]
+}
+
+/** Edge 音色 → 本地口音（美式/英式）。 */
+export function edgeLangFor(voice) {
+  return /^en-(US|CA)/i.test(voice) ? 'en-US' : 'en-GB'
+}
+
+const EDGE_FEMALE_NAMES = new Set([
+  'Aria',
+  'Jenny',
+  'Michelle',
+  'Ava',
+  'Emma',
+  'Ana',
+  'Sonia',
+  'Libby',
+  'Maisie',
+  'Natasha',
+  'Clara',
+  'Emily',
+  'Neerja',
+  'Molly',
+  'Leah',
+  'Luna',
+  'Yan',
+  'Rosa',
+])
+
+/** 从 Edge 音色名猜性别，本地兜底时尽量不换性别。 */
+function edgeGenderFor(voice) {
+  const name = (voice.split('-')[2] || '').replace(/Neural$/, '')
+  return EDGE_FEMALE_NAMES.has(name) ? 'Female' : 'Male'
+}
+
+/** 优先同口音 + 同性别，其次同口音，最后任意。 */
+export function pickVoiceFor(voices, lang, gender) {
+  return (
+    voices.find((v) => v.lang === lang && v.gender === gender) ||
+    voices.find((v) => v.lang === lang) ||
+    voices[0] ||
+    null
+  )
+}
+
+/** Edge 失败时按 Piper → espeak 的顺序挑本地音色。 */
+function localFallbackTargets(edgeVoice) {
+  const lang = edgeLangFor(edgeVoice)
+  const gender = edgeGenderFor(edgeVoice)
+  const out = []
+  const piper = pickVoiceFor(listPiperVoices(), lang, gender)
+  if (piper) out.push({ engine: 'local', voice: piper.id, ext: 'wav' })
+  const espeak = pickVoiceFor(listEspeakVoices(), lang, gender)
+  if (espeak) out.push({ engine: 'local', voice: espeak.id, ext: 'wav' })
+  return out
+}
+
+function targetConfig(target) {
+  return target.engine === 'local' ? LOCAL_VOICE_MAP.get(target.voice) || null : null
+}
+
+/** 手动选了 Piper 但 Piper 失败时，用 espeak 顶。 */
+function fallbackTargets(target) {
+  if (target.engine === 'edge') return localFallbackTargets(target.voice)
+  const v = targetConfig(target)
+  if (!v || v.kind !== 'piper') return []
+  const espeak = pickVoiceFor(listEspeakVoices(), v.lang, v.gender)
+  return espeak ? [{ engine: 'local', voice: espeak.id, ext: 'wav' }] : []
+}
+
+function targetDownUntil(target) {
+  if (target.engine === 'edge') return edgeDownUntil
+  const v = targetConfig(target)
+  return v?.kind === 'piper' ? piperDownUntil : 0
+}
+
+function fallbackFileFor(target, file) {
+  if (target.engine === 'edge') return `${file}.local.wav`
+  const v = targetConfig(target)
+  return v?.kind === 'piper' ? `${file}.fallback.wav` : null
+}
+
+function synthEspeak(text, voiceId, outWav) {
   return new Promise((resolve, reject) => {
     const bin = findEspeak()
     const v = LOCAL_VOICE_MAP.get(voiceId)
-    if (!bin || !v) {
+    if (!bin || !v || v.kind !== 'espeak') {
       reject(new Error('espeak-ng not installed'))
       return
     }
@@ -304,10 +489,44 @@ function synthLocal(text, voiceId, outWav) {
   })
 }
 
+function synthPiper(text, model, outWav) {
+  return new Promise((resolve, reject) => {
+    const bin = findPiper()
+    const modelPath = piperModelPath(model)
+    if (!bin || !modelPath) {
+      reject(new Error('piper not installed'))
+      return
+    }
+    const ps = spawn(bin, ['--model', modelPath, '--output_file', outWav, '--quiet'], {
+      stdio: ['pipe', 'ignore', 'pipe'],
+    })
+    let err = ''
+    ps.stderr.on('data', (d) => {
+      err += String(d)
+    })
+    ps.on('error', reject)
+    ps.on('close', (code) => {
+      try {
+        if (code === 0 && existsSync(outWav) && statSync(outWav).size > 44) resolve()
+        else reject(new Error(`piper exit ${code}: ${err.slice(0, 200)}`))
+      } catch (e) {
+        reject(e)
+      }
+    })
+    ps.stdin.write(text)
+    ps.stdin.end()
+  })
+}
+
 // ---- 通用合成到文件 ----
 async function synthOnce(text, target, outPath, wordsPath) {
   if (target.engine === 'sapi') return synthSapi(text, target.voice, outPath, wordsPath)
-  if (target.engine === 'local') return synthLocal(text, target.voice, outPath)
+  if (target.engine === 'local') {
+    const v = targetConfig(target)
+    if (v?.kind === 'piper') return synthPiper(text, v.model, outPath)
+    if (v?.kind === 'espeak') return synthEspeak(text, target.voice, outPath)
+    throw new Error(`unknown local voice: ${target.voice}`)
+  }
   return synthEdge(text, target.voice, outPath)
 }
 
@@ -362,37 +581,52 @@ function fileReady(p) {
   }
 }
 
+/** 当前可服务的文件：主文件，或降级期内已生成的本地兜底文件。 */
+function pickAudio(target, file) {
+  if (fileReady(file)) return { file, ext: target.ext }
+  const fb = fallbackFileFor(target, file)
+  if (fb && Date.now() < targetDownUntil(target) && fileReady(fb)) {
+    return { file: fb, ext: 'wav' }
+  }
+  return null
+}
+
 /**
- * 确保音频已缓存，返回实际要服务的文件（可能是在线 mp3，也可能是降级后的本地 wav）。
- * Edge 失败 → 立即用 espeak-ng 合成到 `<file>.local.wav`；20 秒内后续请求直接复用本地文件，
- * 过了降级期再回头重试 Edge，恢复后自动回到在线音色。
+ * 按兜底链逐级合成：Edge → Piper → espeak-ng；手动选 Piper 时则是 Piper → espeak-ng。
+ * 失败一次就把对应引擎打入临时降级期，后续请求直接走下一级，避免每句都等超时。
+ */
+async function synthWithFallbacks(text, target, file) {
+  const fallbackFile = fallbackFileFor(target, file)
+  let lastErr
+  for (const attempt of [target, ...fallbackTargets(target)]) {
+    if (Date.now() < targetDownUntil(attempt)) continue
+    const outPath = attempt === target ? file : fallbackFile
+    if (!outPath) continue
+    try {
+      await synthToFile(text, attempt, outPath)
+      return
+    } catch (e) {
+      lastErr = e
+      if (attempt.engine === 'edge') edgeDownUntil = Date.now() + EDGE_RETRY_MS
+      if (targetConfig(attempt)?.kind === 'piper') piperDownUntil = Date.now() + PIPER_RETRY_MS
+    }
+  }
+  throw lastErr || new Error('tts failed')
+}
+
+/**
+ * 确保音频已缓存，返回实际要服务的文件（在线 mp3 / 本地 wav）。
+ * 自动兜底：Edge → Piper → espeak-ng；降级期结束后回头重试上级引擎。
  */
 async function ensureAudio(text, target, file, cacheDir) {
-  const fallbackFile = target.engine === 'edge' ? `${file}.local.wav` : null
-  const pick = () => {
-    if (fileReady(file)) return { file, ext: target.ext }
-    if (fallbackFile && Date.now() < edgeDownUntil && fileReady(fallbackFile)) {
-      return { file: fallbackFile, ext: 'wav' }
-    }
-    return null
-  }
-  const hit = pick()
+  const hit = pickAudio(target, file)
   if (hit) return hit
 
   let job = inflight.get(file)
   if (!job) {
     job = withSlot(async () => {
-      if (pick()) return
-      try {
-        if (target.engine === 'edge' && Date.now() < edgeDownUntil) throw new Error('edge cooling down')
-        await synthToFile(text, target, file)
-      } catch (e) {
-        if (target.engine !== 'edge' || !fallbackFile) throw e
-        const fb = localFallbackTarget(target.voice)
-        if (!fb) throw e
-        edgeDownUntil = Date.now() + EDGE_RETRY_MS
-        await synthToFile(text, fb, fallbackFile)
-      }
+      if (pickAudio(target, file)) return
+      await synthWithFallbacks(text, target, file)
       pruneCache(cacheDir)
     })
     inflight.set(file, job)
@@ -405,7 +639,7 @@ async function ensureAudio(text, target, file, cacheDir) {
     await job
   }
 
-  const out = pick()
+  const out = pickAudio(target, file)
   if (out) return out
   throw new Error('tts produced no audio')
 }
@@ -460,11 +694,9 @@ export async function handleTts(req, res, { cacheDir }) {
 
   // 只查缓存、不合成（增量预生成用来找「缺哪几句」）
   if (url.searchParams.get('check') === '1') {
-    // Edge 降级期内，上次生成的本地兜底也算「这句有音频」，避免反复预生成；
-    // Edge 恢复后则只认在线缓存，让预生成补回真正的在线音频。
-    const cached =
-      fileReady(file) ||
-      (target.engine === 'edge' && Date.now() < edgeDownUntil && fileReady(`${file}.local.wav`))
+    // 降级期内，上次生成的本地兜底也算「这句有音频」，避免反复预生成；
+    // 上级引擎恢复后则只认主缓存，让预生成补回更高质量音频。
+    const cached = Boolean(pickAudio(target, file))
     res.statusCode = 200
     res.setHeader('Content-Type', 'application/json; charset=utf-8')
     res.end(JSON.stringify({ cached }))

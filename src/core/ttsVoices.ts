@@ -159,7 +159,7 @@ export function engineVoiceAccent(
  */
 export function buildTtsAccents(engines: TtsEngineInfo | null | undefined): TtsAccent[] {
   const out = [...TTS_ACCENTS]
-  const local = engineVoiceAccent('离线 · 本地语音（espeak-ng，不联网）', engines?.local)
+  const local = engineVoiceAccent('离线 · 本地语音（不联网）', engines?.local)
   if (local) out.push(local)
   const sapi = engineVoiceAccent('离线 · 系统语音（不联网）', engines?.sapi)
   if (sapi) out.push(sapi)
