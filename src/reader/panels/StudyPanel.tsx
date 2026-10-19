@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import type { StudyDeck } from '../../core/entryKind'
+import { useHotkeys } from '../useHotkeys'
 import {
   cleanGloss,
   displayMeaning,
@@ -210,9 +211,9 @@ export function DrillBoard({
   }
 
   // 选词义键盘操作：1-4 直接选，A/D（或 ←/→）切换高亮，回车确认
-  useEffect(() => {
-    if (cur?.kind !== 'meaning') return
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
+      if (cur?.kind !== 'meaning') return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const k = e.key.toLowerCase()
       const n = Number(k)
@@ -231,10 +232,10 @@ export function DrillBoard({
         e.preventDefault()
         pick(options[focus], focus)
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [cur, options, focus])
+    },
+    cur?.kind === 'meaning',
+    40,
+  )
 
   if (!cur) {
     // 没有任何可锤炼步骤：直接放行

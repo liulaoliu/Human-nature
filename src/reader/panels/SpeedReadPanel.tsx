@@ -3,6 +3,7 @@ import type { Sentence } from '../../types/document'
 import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
 import { readJson, readNum, writeJson, writeNum } from '../storage'
 import LangPhrases from './LangPhrases'
+import { useHotkeys } from '../useHotkeys'
 import { KIND_LABEL } from '../../core/entryKind'
 import { getSentenceLanguages } from '../../core/language'
 import {
@@ -426,8 +427,8 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     }
   }, [])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
+  useHotkeys(
+    (e) => {
       // 正在输入框里打字时，不要触发空格翻页 / 数字选项
       const el = e.target as HTMLElement | null
       if (langEditorOpen) return
@@ -470,10 +471,10 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         e.preventDefault()
         advance()
       }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [advance, chooseDrill, onClose, phase, drill, go, langEditorOpen])
+    },
+    !langEditorOpen,
+    25,
+  )
 
   const restart = () => {
     setRows([])

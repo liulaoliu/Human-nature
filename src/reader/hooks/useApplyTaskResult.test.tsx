@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { useApplyTaskResult, type UseApplyTaskResultParams } from './useApplyTaskResult'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { AiTaskKey } from './useAiTasks'
@@ -36,7 +36,18 @@ function makeParams(lib = baseLibrary()): UseApplyTaskResultParams {
   return {
     library: lib,
     libraryRef: { current: lib },
-    sentence: { id: 's1', text: 'He runs.', translation: '', grammarNote: '', collocations: [], vocab: [] },
+    sentence: {
+      id: 's1',
+      paraId: 'p1',
+      text: 'He runs.',
+      audio: null,
+      translation: null,
+      grammarNote: null,
+      collocations: [],
+      vocab: [],
+      tags: [],
+      reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 },
+    },
     persist: vi.fn(),
     mergeBatch: vi.fn(),
     batchItemsFromWords: (words) => words.map((w) => ({ word: w, sentence: 'He runs.', sentenceId: 's1' })),

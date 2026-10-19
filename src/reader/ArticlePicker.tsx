@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
 import { calendarDayKey } from '../core/activity'
+import { useHotkeys } from './useHotkeys'
 
 interface Props {
   book: ArticleBook | null
@@ -37,16 +38,18 @@ export default function ArticlePicker({
     const onDown = (e: MouseEvent) => {
       if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
     }
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false)
-    }
     document.addEventListener('mousedown', onDown)
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('mousedown', onDown)
-      document.removeEventListener('keydown', onKey)
-    }
+    return () => document.removeEventListener('mousedown', onDown)
   }, [open])
+
+  // Esc 关下拉：走全局键盘分发，最高优先级（弹层打开时先关它）
+  useHotkeys(
+    (e) => {
+      if (e.key === 'Escape') setOpen(false)
+    },
+    open,
+    100,
+  )
 
   const label = useMemo(() => {
     if (currentValue.startsWith('b:')) return currentValue.slice(2)
