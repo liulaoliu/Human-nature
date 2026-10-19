@@ -16,6 +16,9 @@ export interface PersistentOptions<T> {
   serialize?: (value: T) => string
 }
 
+/** 写 localStorage 失败（配额满 / 隐私模式）时广播；界面负责提示，不能静默吞掉。 */
+export const STORAGE_ERROR_EVENT = 'reader:storage-error'
+
 export function useLocalStorageState<T>(
   key: string,
   initial: T,
@@ -48,8 +51,14 @@ export function useLocalStorageState<T>(
       localStorage.setItem(key, serializeRef.current(state))
       // 学习记录同步用：只在真正写入后通知，偏好/会话键由监听方过滤。
       window.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key } }))
-    } catch {
-      // 忽略（隐私模式 / 配额满）
+    } catch (e) {
+      // 配额满 / 隐私模式：状态还在内存里，但刷新就丢。必须让用户知道。
+      console.warn(`[存储] 写入 ${key} 失败`, e)
+      try {
+        window.dispatchEvent(new CustomEvent(STORAGE_ERROR_EVENT, { detail: { key } }))
+      } catch {
+        // 广播失败也不能再抛
+      }
     }
   }, [key, state])
 

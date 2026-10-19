@@ -112,6 +112,7 @@ import {
   persistentNumber,
   persistentString,
   useLocalStorageState,
+  STORAGE_ERROR_EVENT,
 } from './hooks/useLocalStorageState'
 import type { Paragraph, Sentence, SentenceLanguage, } from '../types/document'
 import mascotAI from '../../assets/imgs/GinShinImapct.png'
@@ -188,6 +189,19 @@ export default function ReaderApp() {
     setToast(message)
     window.setTimeout(() => setToast(''), 1900)
   }, [])
+
+  // 本机存储写失败（配额满 / 隐私模式）：提示一次，别让用户以为已经保存
+  useEffect(() => {
+    let last = 0
+    const onError = () => {
+      const now = Date.now()
+      if (now - last < 5000) return
+      last = now
+      flash('本机存储已满：这次的改动只在本页有效，刷新会丢；请先导出备份')
+    }
+    window.addEventListener(STORAGE_ERROR_EVENT, onError)
+    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onError)
+  }, [flash])
 
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
