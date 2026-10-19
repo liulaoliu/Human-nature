@@ -9,6 +9,7 @@ import {
   parseLemmaTable,
   parsePhraseTable,
   parsePosTable,
+  type AnalysisTask,
 } from '../../core/analyzer'
 import { applyLanguage, parseLanguage } from '../../core/language'
 import { parseListeningQuiz, type ListeningQuiz } from '../../core/listening'
@@ -126,8 +127,11 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         persist(next)
       }
 
+      // 一种任务 = 一个处理器（注册表）；新增 AI 任务只在这里加一条，不再改 if 链
+      const handlers: Partial<Record<AiTaskKey, () => ApplyOutcome>> = {}
+
       // 自动标词：AI 返回的是一串单词 → 清洗 → 用离线词典归一到原形、按级别过滤 → 进「待选」
-      if (task === 'auto_vocab') {
+      handlers.auto_vocab = () => {
         // AI 可能一行给好几个词、或逗号分隔，还可能带编号/词性/中文 → 统一切开再清洗成纯单词
         const parsed = text
           .split(/[\s,，、;；\n\r]+/)
@@ -208,7 +212,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
-      if (task === 'confusable') {
+      handlers.confusable = () => {
         const parsed = parseConfusables(text)
         if (!parsed.length)
           return { report: ['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'], missing: null, ok: false }
@@ -238,7 +242,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 用法示例：按中文含义给词补例句（英+中）
-      if (task === 'example') {
+      handlers.example = () => {
         const rows = parseExampleTable(text)
         if (!rows.length) return { report: ['没解析出例句（格式：单词 | 英 | 中 | 英 | 中）'], missing: null, ok: false }
         commit(applyExamples(lib, rows))
@@ -246,7 +250,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 词组 / 习语：给词补「词组」「习语」两块（与用法、例句分开）
-      if (task === 'phrase') {
+      handlers.phrase = () => {
         const rows = parsePhraseTable(text)
         if (!rows.length)
           return { report: ['没解析出词组/习语（格式：单词 | 词组1；词组2 | 习语1；习语2）'], missing: null, ok: false }
@@ -260,7 +264,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 语法标记：给名词/动词/形容词标「可数性 / 及物性」等
-      if (task === 'grammar_mark') {
+      handlers.grammar_mark = () => {
         const rows = parseGrammarMarkTable(text)
         if (!rows.length)
           return { report: ['没解析出语法标记（格式：单词 | 标记1；标记2，标记取可数/不可数/及物/不及物…）'], missing: null, ok: false }
@@ -274,7 +278,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 原形校正：改 word/lemma，再合并重复
-      if (task === 'lemma') {
+      handlers.lemma = () => {
         const pairs = parseLemmaTable(text)
         if (!pairs.length) return { report: ['没解析出原形（格式：原词形 | 原形）'], missing: null, ok: false }
         const before = lib.items.length
@@ -292,7 +296,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // -ing/-ed 语法辨析：写回原形 / 词性 / 笔记
-      if (task === 'pos') {
+      handlers.pos = () => {
         const rows = parsePosTable(text)
         if (!rows.length)
           return { report: ['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'], missing: null, ok: false }
@@ -314,7 +318,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 听力理解题：解析严格 JSON 并存起来
-      if (task === 'listening') {
+      handlers.listening = () => {
         const quiz = parseListeningQuiz(text)
         if (!quiz.questions.length)
           return { report: ['没解析出题目（需要严格 JSON：{"questions":[…] }，含 type/stem/answer）'], missing: null, ok: false }
@@ -328,7 +332,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 逐句语言点：写回句子
-      if (task === 'language') {
+      handlers.language = () => {
         const rows = parseLanguage(text)
         if (!rows.length)
           return { report: ['没解析出语言点（需要 JSON：{"sentences":[{"id":…}] }）'], missing: null, ok: false }
@@ -345,7 +349,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
 
       // 仿写：生成任务
-      if (task === 'imitation') {
+      handlers.imitation = () => {
         const t = parseImitationTask(text)
         if (!t) return { report: ['没解析出仿写任务（需要 JSON：{task, model, rubric}）'], missing: null, ok: false }
         setWritingTask(t)
@@ -353,7 +357,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         return { report: [`已生成仿写任务（${t.rubric.length} 个维度）`], missing: null, ok: true }
       }
       // 仿写：批改
-      if (task === 'feedback') {
+      handlers.feedback = () => {
         const f = parseWritingFeedback(text)
         if (!f) return { report: ['没解析出批改结果（需要 JSON：{scores, issues, polished}）'], missing: null, ok: false }
         setWritingFeedback(f)
@@ -371,6 +375,10 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         recordActivity('write', 1)
         return { report: [`批改完成：${f.total}/${f.max}，${f.issues.length} 处修改`], missing: null, ok: true }
       }
+
+      // 任务注册表命中就直接执行；没命中的（lookup / analysis 等）走下面的通用解析
+      const handler = task ? handlers[task] : undefined
+      if (handler) return handler()
 
       // 通用：查词表格 / 逐句翻译 / JSON
       const result = parseAnalysis(text)
@@ -432,7 +440,8 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       }
       const fellBack = !result.words?.length && !result.sentences?.length && !!task && !!sentence
       if (fellBack && task) {
-        const updated = applyToSentence(sentence, task, text)
+        // 注册表里的任务已在上面 return；能走到这里且带 task 的都是 AnalysisTask
+        const updated = applyToSentence(sentence, task as AnalysisTask, text)
         setDoc((d) => (d ? { ...d, sentences: d.sentences.map((x) => (x.id === updated.id ? updated : x)) } : d))
       }
 
