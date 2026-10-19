@@ -118,9 +118,28 @@ describe('HybridArticleRepo：SQLite 优先，IndexedDB 兜底', () => {
     })
 
     const repo = new HybridArticleRepo(local)
+    await repo.reconcile?.()
     const list = await repo.list()
     expect(list.map((a) => a.id)).toEqual(['a1'])
     expect(calls.some((c) => c.path === '/api/store/articles/a1' && c.init?.method === 'PUT')).toBe(true)
+  })
+
+  it('list 是只读的：本地较新的文章只合并显示，不顺手 PUT', async () => {
+    const local = new MemoryArticleRepo()
+    await local.save(article('a1'))
+    const calls = mockStore({
+      '/api/store/health': () => jsonResponse({ ok: true }),
+      '/api/store/articles': () => jsonResponse({ ok: true, articles: [] }),
+    })
+
+    const repo = new HybridArticleRepo(local)
+    const list = await repo.list()
+    expect(list.map((a) => a.id)).toEqual(['a1'])
+    expect(calls.some((c) => c.init?.method === 'PUT')).toBe(false)
+    // get 同理：读不到就读本地兜底，迁移交给 reconcile
+    const got = await repo.get('a1')
+    expect(got?.id).toBe('a1')
+    expect(calls.some((c) => c.init?.method === 'PUT')).toBe(false)
   })
 
   it('保存 / 删除同时写 SQLite 与 IndexedDB 镜像', async () => {
