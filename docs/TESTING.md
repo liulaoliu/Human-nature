@@ -85,6 +85,13 @@
     `@vitest-environment jsdom` 也不保证拿得到 —— 直接 `localStorage.setItem` 会报
     `Cannot read properties of undefined`。规矩：组件/钩子测试统一
     `installFakeStorage()`（`src/reader/testStorage.ts`），`afterEach` 还原；详见 §5.2。
+14. **读接口不要顺手写库**。`HybridArticleRepo.list()/get()` 以前会把本地较新的文章 `PUT` 回服务端，
+    读一次列表就 N+1 次网络写，失败还会把 repo 切成 local。规矩：读只读 + 合并；迁移放显式
+    `reconcile()`，由宿主在启动时调一次；新增仓储先问「这个方法有没有副作用」。
+15. **全局键盘只能有一个分发器**。各模式各挂 `window.addEventListener('keydown')` 时，靠内部
+    「当前是不是我」判断，新增模式很容易一次按键触发两个动作。规矩：一律用
+    `src/reader/useHotkeys.ts` + `hotkeys.ts`，按优先级只让最高层响应；同优先级才并行
+    （如 ReaderApp 的 Ctrl 跟踪 + 正文快捷键）。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
