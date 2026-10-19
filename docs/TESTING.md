@@ -81,6 +81,10 @@
     现象：服务临时停掉时答的题，服务恢复后不刷新就一直没进 SQLite；只有下次改到同一 section 才碰巧补上。
     规矩：失败**保留 dirty**，按 5s 起、最长 60s 的退避**整份重试**（不能只重放 pending，
     否则更早失败、已经不在 pending 里的 section 会漏）；卸载时置 disposed，别让在途请求又排定时器。
+13. **测试里别直接摸全局 `localStorage`**。Node 26 自带只读全局，jsdom 又因不透明来源跳过，
+    `@vitest-environment jsdom` 也不保证拿得到 —— 直接 `localStorage.setItem` 会报
+    `Cannot read properties of undefined`。规矩：组件/钩子测试统一
+    `installFakeStorage()`（`src/reader/testStorage.ts`），`afterEach` 还原；详见 §5.2。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -97,7 +101,7 @@
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
 | SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
-| 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次不重复计数 |
+| 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次：练习/错题/写作/复述按记录去重不翻倍，学习时长/活动按天累加（会翻倍，属已知口径） |
 | 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
 | 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |
