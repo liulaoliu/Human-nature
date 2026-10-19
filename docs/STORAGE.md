@@ -183,7 +183,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   `GET /api/store/learning/snapshots` 查看、`POST /api/store/learning/snapshots/:id/restore` 恢复。
   恢复动作本身也先快照当前状态，恢复错了还能回去。
 - 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
-  `data/backups/`（保留最近 5 份）。WAL 下用 `synchronous = FULL`，断电时宁可慢一点，也不丢最后一笔提交。
+  `data/backups/`（迁移备份保留 5 份）；每天第一次打开已有库再留一份 `xueba-daily-YYYY-MM-DD.db`
+  （保留 7 天）。WAL 下用 `synchronous = FULL`，断电时宁可慢一点，也不丢最后一笔提交。
+- 打开失败（磁盘临时只读、锁冲突、备份失败）不缓存 null，下一次请求会重试，不会一个进程内永久瘫掉。
 
 ### 4.4 性能与边界
 
