@@ -1,4 +1,5 @@
 import { hasLearningData, normalizeLearning, type LearningData, type LearningSection } from '../core/learning'
+import type { LearningRepoPort } from '../core/ports'
 import { learningRepo } from '../adapters/learningRepo'
 
 /**
@@ -157,9 +158,9 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
  * - 本地有尚未写回 SQLite 的修改：只补缺失键，保留本地（离线期间的修改优先）。
  * - 本地没有待同步修改：SQLite 为准，覆盖本地过期缓存，避免旧缓存下次反过来盖新库。
  */
-export async function hydrateLearningFromServer(): Promise<void> {
+export async function hydrateLearningFromServer(repo: LearningRepoPort = learningRepo): Promise<void> {
   try {
-    const data = await learningRepo.load()
+    const data = await repo.load()
     if (!data) return // 服务不可用：不知道服务端有没有数据，后面不能用空记录覆盖
     serverChecked = true
     if (!hasLearningData(data)) return
@@ -180,7 +181,10 @@ export function resetLearningSyncStateForTest(): void {
  * 不传 `sections` = 整份写（启动补库用）；传了 = 只写这几块，
  * 例如答题只改 `practice` / `kindStats` / `activity`，不必重写写作历史。
  */
-export async function syncLearningToServer(sections?: LearningSection[]): Promise<boolean> {
+export async function syncLearningToServer(
+  sections?: LearningSection[],
+  repo: LearningRepoPort = learningRepo,
+): Promise<boolean> {
   const dirtyToken = (() => {
     try {
       return storage()?.getItem(LEARNING_DIRTY_KEY) ?? null
@@ -195,9 +199,9 @@ export async function syncLearningToServer(sections?: LearningSection[]): Promis
   try {
     if (sections && sections.length) {
       const payload = Object.fromEntries(sections.map((section) => [section, data[section]])) as Partial<LearningData>
-      await learningRepo.savePartial(payload)
+      await repo.savePartial(payload)
     } else {
-      await learningRepo.save(data)
+      await repo.save(data)
     }
     // 保存期间又有新修改时 token 已变，不能清，等下一轮继续写。
     clearLearningDirtyIfUnchanged(dirtyToken)

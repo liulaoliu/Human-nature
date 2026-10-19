@@ -213,6 +213,10 @@ export interface ArticleRepoPort {
 export interface LearningRepoPort {
   load(): Promise<LearningData | null>
   save(data: LearningData): Promise<void>
+  /** 只提交变化的 section（按表删/插）；服务端不支持时也应实现成整份 save。 */
+  savePartial(data: Partial<LearningData>): Promise<void>
+  /** 首次迁移：只往空库写，避免两个标签页/两台机器互相覆盖。 */
+  migrate(data: LearningData): Promise<{ migrated: boolean; value: LearningData } | null>
 }
 
 export interface VocabRepoPort {

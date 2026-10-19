@@ -8,6 +8,7 @@ import {
 } from '../learningState'
 import { installFakeStorage } from '../testStorage'
 import { useLearningSync } from './useLearningSync'
+import type { LearningRepoPort } from '../../core/ports'
 
 let restoreStorage: () => void = () => {}
 
@@ -103,6 +104,37 @@ describe('useLearningSync', () => {
       await vi.advanceTimersByTimeAsync(5_000)
     })
     expect(save).toHaveBeenCalledTimes(2)
+    unmount()
+  })
+
+  it('可注入假仓储：不依赖模块单例（增量提交只带变化的 section）', async () => {
+    vi.useFakeTimers()
+    localStorage.setItem(
+      'reader:practice',
+      JSON.stringify([{ at: '2026-05-01T00:00:00.000Z', kind: 'quiz', total: 5, correct: 5 }]),
+    )
+    const save = vi.fn(async () => {})
+    const savePartial = vi.fn(async () => {})
+    const repo: LearningRepoPort = {
+      load: async () => null,
+      save,
+      savePartial,
+      migrate: async () => null,
+    }
+    const { unmount } = renderHook(() => useLearningSync(repo))
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
+    expect(save).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      window.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key: 'reader:practice' } }))
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(800)
+    })
+    expect(savePartial).toHaveBeenCalledWith({ practice: [expect.objectContaining({ kind: 'quiz' })] })
     unmount()
   })
 
