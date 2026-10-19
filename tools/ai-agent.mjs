@@ -14,6 +14,9 @@
  *   npm run ai:agent new/ai-jobs-x.json    # 指定工作包
  *   node tools/ai-agent.mjs new/ai-jobs-x.json new/out.json   # 指定输出
  *
+ * 模型：默认用 opencode 当前配置的模型；可用 `AI_AGENT_MODEL=provider/model`
+ * 或 config.local.json 的 `ai.agentModel` 覆盖（例如 `deepseek/deepseek-flash`）。
+ *
  * 也可直接双击仓库根目录的「跑AI结果.cmd」。
  */
 import { spawnSync } from 'node:child_process'
@@ -61,6 +64,23 @@ function extractResultJson(text) {
   return null
 }
 
+/** 从 config.local.json 的 ai.agentModel 或环境变量 AI_AGENT_MODEL 取模型（可选）。 */
+function agentModel() {
+  const fromEnv = process.env.AI_AGENT_MODEL
+  if (fromEnv) return fromEnv
+  try {
+    const local = JSON.parse(readFileSync(join(ROOT, 'config.local.json'), 'utf8'))
+    return local?.ai?.agentModel || ''
+  } catch {
+    return ''
+  }
+}
+
+/** Windows 上拼 shell 命令行时给含空格/引号的参数加引号。 */
+function winQuote(s) {
+  return /[\s"]/.test(s) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s)
+}
+
 function main() {
   const jobsPath = process.argv[2] ? resolve(ROOT, process.argv[2]) : latestJobs()
   if (!jobsPath || !existsSync(jobsPath)) {
@@ -73,6 +93,8 @@ function main() {
 
   console.log(`工作包  : ${relIn}`)
   console.log(`结果写到: ${relOut}`)
+  const model = agentModel()
+  if (model) console.log(`模型    : ${model}（AI_AGENT_MODEL / config.local.json）`)
   console.log('启动 opencode agent（非交互，不会提问）…\n')
 
   // 只保留 ASCII，避免 Windows cmd.exe 传参的编码问题；目录名不含空格（new/...）。
@@ -80,14 +102,25 @@ function main() {
     `Process ${relIn} as an AI job pack: follow its instructions field, answer every job, ` +
     `and write the result JSON to ${relOut}. Do only this and never ask questions.`
 
-  // Windows 上 opencode 是 .cmd，Node 必须走 shell 才能拉起。
+  const args = ['run', '--agent', 'ai-batch', '--auto']
+  if (model) args.push('--model', model)
+  args.push(message)
+
+  // Windows 上 opencode 是 .cmd，Node 必须走 shell 才能拉起；
+  // POSIX 直接 spawn 参数数组（旧写法把整串命令当文件名，Linux/macOS 会 ENOENT）。
   const useShell = process.platform === 'win32'
-  const res = spawnSync(`opencode run --agent ai-batch --auto "${message}"`, {
-    cwd: ROOT,
-    shell: useShell,
-    encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  })
+  const res = useShell
+    ? spawnSync(['opencode', ...args].map(winQuote).join(' '), {
+        cwd: ROOT,
+        shell: true,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'inherit'],
+      })
+    : spawnSync('opencode', args, {
+        cwd: ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'inherit'],
+      })
 
   if (res.error) {
     console.error('启动 opencode 失败：', res.error.message)

@@ -142,7 +142,11 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   （待选/补音标/混淆项/例句/词组·习语/语法标记/原形/-ing-ed/翻译/语言点/听力）打成一个 `ai-jobs-*.json`；整包丢给 AI
   （网页版也行，或**喂给本机 agent**），再把回答按 `{ results: [{ id, raw }] }` 存成 JSON
   **一键导回**，逐条应用并汇总回执，省掉「复制→粘贴→再来」的循环。
-  - **本机 agent**：导出 `ai-jobs-*.json` → 喂给 agent → 结果 JSON 导回（推荐，最省事）。
+  - **本机 agent（不用另配 key）**：导出 `ai-jobs-*.json` → `npm run ai:agent`（或双击 `跑AI结果.cmd`）→ 结果 JSON 导回。
+    它用本机 opencode 已配置的模型，Linux / macOS / Windows 都可用；想换模型可设环境变量
+    `AI_AGENT_MODEL=provider/model`，或写进 `config.local.json` 的 `ai.agentModel`。
+  - **接其他 OpenAI 兼容服务**（OpenRouter / 硅基流动 / 本地 Ollama 等）：在 `config.local.json` 写
+    `{ "ai": { "baseUrl": "…", "apiKey": "…", "model": "…" } }`（该文件已 gitignore，不会进仓库）。
   - **网页版（DeepSeek 等）**：「📋 复制下一批提示词」→ 网页粘贴 → 整段回复贴回「应用结果」框 →
     「✅ 应用网页版结果」。翻译 / 语言点**按句分块**（每块 6 句），避免一条塞太多被截断；
     侧栏显示**进度（完成 X/N · 还要做 Y · 缺项 Z）**和「还要做」清单，缺的可「🔁 重发缺项」，
