@@ -3,6 +3,7 @@ import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ReaderArticle, { type ReaderArticleProps } from './ReaderArticle'
+import { sentenceFixture } from '../core/testFixtures'
 
 /** 正文区组件测试：标题回退、改名入口、编辑态/阅读态切换。 */
 function setup(over: Partial<ReaderArticleProps> = {}) {
@@ -66,5 +67,19 @@ describe('ReaderArticle', () => {
     const { container } = setup()
     expect(screen.getByText(/点句子=整句/)).toBeTruthy()
     expect(container.querySelector('article.article')).toBeTruthy()
+  })
+
+  it('句子可键盘选中；选词气泡对读屏可见', () => {
+    const sentence = sentenceFixture('s1', 'They abandon it.')
+    const { props } = setup({
+      doc: { paragraphs: [{ id: 'p1', sentenceIds: ['s1'] }], sentences: [sentence] },
+      vocabMode: true,
+      lastPicked: { word: 'abandon', sid: 's1' },
+      bubblePos: { top: 1, left: 2 },
+    })
+    const sent = screen.getByRole('button', { name: 'They abandon it.' })
+    fireEvent.keyDown(sent, { key: 'Enter' })
+    expect(props.onSelectSentence).toHaveBeenCalledWith('s1')
+    expect(screen.getByRole('status').textContent).toBe('abandon')
   })
 })

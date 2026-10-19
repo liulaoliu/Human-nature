@@ -132,7 +132,7 @@ export default function ReaderBody({
         </div>
       )}
       {vocabMode && lastPicked && bubblePos && (
-        <div className="bubble" style={{ top: bubblePos.top, left: bubblePos.left }}>
+        <div className="bubble" role="status" aria-live="polite" style={{ top: bubblePos.top, left: bubblePos.left }}>
           {lastPicked.word}
         </div>
       )}
@@ -145,6 +145,9 @@ export default function ReaderBody({
               <span key={sid} className="s-pair">
                 <span
                   data-sid={sid}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={s.text}
                   className={
                     'sent' +
                     (selectedId === sid ? ' sel' : '') +
@@ -158,6 +161,12 @@ export default function ReaderBody({
                       return
                     }
                     onSelectSentence(sid)
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onSelectSentence(sid)
+                    }
                   }}
                 >
                   {sentenceNodes(
