@@ -18,18 +18,13 @@ import {
   type VocabSortBy,
 } from '../core/vocab'
 import {
-  buildBatchLookupPrompt,
-  buildConfusablePrompt,
-  buildLemmaPrompt,
-  buildPhrasePrompt,
-  buildGrammarMarkPrompt,
-  buildPosPrompt,
   type AnalysisTask,
   type VocabLevel,
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
 import { isWordEntry } from '../core/entryKind'
+import { buildMissingPrompt } from './missingPrompts'
 import { splitGlossText } from '../core/langPoints'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
@@ -1729,63 +1724,11 @@ export default function ReaderApp() {
   const copyMissingAgain = useCallback(async () => {
     if (!pasteMissing || !pasteMissing.words.length) return
     const { task, words } = pasteMissing
-    const byLemma = new Map(library.items.map((it) => [it.lemma, it]))
     try {
-      if (task === 'confusable') {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('confusable')
-        await navigator.clipboard.writeText(buildConfusablePrompt(entries))
-      } else if (task === 'lemma') {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, context: it?.source?.sentenceText }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('lemma')
-        await navigator.clipboard.writeText(buildLemmaPrompt(entries))
-      } else if (task === 'pos') {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, context: it?.source?.sentenceText }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('pos')
-        await navigator.clipboard.writeText(buildPosPrompt(entries))
-      } else if (task === 'phrase') {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('phrase')
-        await navigator.clipboard.writeText(buildPhrasePrompt(entries))
-      } else if (task === 'grammar_mark') {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, meaning: it?.meaning ?? null }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('grammar_mark')
-        await navigator.clipboard.writeText(buildGrammarMarkPrompt(entries))
-      } else {
-        const entries = words.map((w) => {
-          const it = byLemma.get(lemmaOf(w))
-          return { word: it?.word ?? w, context: it?.source?.sentenceText }
-        })
-        askedWordsRef.current = words
-        askedIdsRef.current = []
-        setLastTask('lookup')
-        await navigator.clipboard.writeText(buildBatchLookupPrompt(entries))
-      }
+      askedWordsRef.current = words
+      askedIdsRef.current = []
+      setLastTask(task)
+      await navigator.clipboard.writeText(buildMissingPrompt(task, words, library.items))
       flash(`已复制缺失的 ${words.length} 个词，去 AI 后再贴回`)
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
