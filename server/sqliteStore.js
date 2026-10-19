@@ -13,6 +13,7 @@ import {
   writeLearning,
 } from './sqliteLearning.js'
 import { list, nowIso, num, text, tx } from './sqliteUtil.js'
+import { rebuildVocabProjection } from './sqliteVocab.js'
 
 /**
  * 服务端 SQLite 存储（Node 22.5+ 自带的 `node:sqlite`，不引原生 npm 包）。
@@ -108,132 +109,6 @@ function backfillArticleColumns(db) {
       String(row.id),
     )
   }
-}
-
-const WORD_CHILD_TABLES = [
-  'word_usage',
-  'word_phrases',
-  'word_idioms',
-  'word_tags',
-  'word_grammar_marks',
-  'word_examples',
-  'word_contexts',
-  'word_confusables',
-]
-
-function clearWordProjection(db) {
-  for (const t of WORD_CHILD_TABLES) db.prepare(`DELETE FROM ${t}`).run()
-  db.prepare('DELETE FROM words').run()
-}
-
-/**
- * 词库 JSON → words / word_* 派生表。
- * 只在 saveVocab / migrateVocab / clearVocab / 迁移时调用，且都在写事务里。
- */
-function rebuildVocabProjection(db, lib) {
-  clearWordProjection(db)
-  const items = list(lib?.items)
-  if (!items.length) return
-
-  const insertWord = db.prepare(`
-    INSERT OR REPLACE INTO words (
-      id, word, lemma, kind, lang_point_id, phonetic, part_of_speech, meaning, definition,
-      status, note, source_article_id, source_file_name, source_sentence_id, source_sentence_text,
-      review_ease, review_due, review_interval, review_repetitions, review_lapses,
-      last_printed_at, priority_until, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  const insertText = {
-    word_usage: db.prepare('INSERT INTO word_usage (word_id, ordinal, text) VALUES (?, ?, ?)'),
-    word_phrases: db.prepare('INSERT INTO word_phrases (word_id, ordinal, text) VALUES (?, ?, ?)'),
-    word_idioms: db.prepare('INSERT INTO word_idioms (word_id, ordinal, text) VALUES (?, ?, ?)'),
-    word_tags: db.prepare('INSERT INTO word_tags (word_id, ordinal, text) VALUES (?, ?, ?)'),
-    word_grammar_marks: db.prepare('INSERT INTO word_grammar_marks (word_id, ordinal, text) VALUES (?, ?, ?)'),
-  }
-  const insertExample = db.prepare(`
-    INSERT INTO word_examples (word_id, ordinal, text, translation, article_id, file_name, sentence_id, origin)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  const insertContext = db.prepare(`
-    INSERT INTO word_contexts (word_id, ordinal, article_id, file_name, sentence_id, sentence_text, meaning, at)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  const insertConfusable = db.prepare(
-    'INSERT INTO word_confusables (word_id, ordinal, word, meaning) VALUES (?, ?, ?, ?)',
-  )
-
-  items.forEach((it, i) => {
-    if (!it || typeof it !== 'object') return
-    const id = text(it.id) ?? `${text(it.lemma) ?? text(it.word) ?? 'word'}:${i}`
-    const review = it.reviewState && typeof it.reviewState === 'object' ? it.reviewState : {}
-    insertWord.run(
-      id,
-      text(it.word) ?? '',
-      text(it.lemma) ?? text(it.word) ?? '',
-      text(it.kind) ?? 'word',
-      text(it.langPointId),
-      text(it.phonetic),
-      text(it.partOfSpeech),
-      text(it.meaning),
-      text(it.definition),
-      text(it.status) ?? 'unqueried',
-      text(it.note) ?? '',
-      text(it.source?.articleId),
-      text(it.source?.fileName),
-      text(it.source?.sentenceId),
-      text(it.source?.sentenceText),
-      num(review.ease, 2.5),
-      text(review.due),
-      num(review.interval),
-      num(review.repetitions),
-      num(review.lapses),
-      text(it.lastPrintedAt),
-      text(it.priorityUntil),
-      text(it.createdAt) ?? nowIso(),
-      text(it.updatedAt) ?? nowIso(),
-    )
-
-    for (const [table, values] of Object.entries({
-      word_usage: it.usage,
-      word_phrases: it.phrases,
-      word_idioms: it.idioms,
-      word_tags: it.tags,
-      word_grammar_marks: it.grammarMarks,
-    })) {
-      list(values).forEach((value, ordinal) => insertText[table].run(id, ordinal, text(value) ?? ''))
-    }
-
-    list(it.examples).forEach((ex, ordinal) => {
-      if (!ex || typeof ex !== 'object') return
-      insertExample.run(
-        id,
-        ordinal,
-        text(ex.text) ?? '',
-        text(ex.translation),
-        text(ex.articleId),
-        text(ex.fileName),
-        text(ex.sentenceId),
-        text(ex.origin),
-      )
-    })
-    list(it.contexts).forEach((ctx, ordinal) => {
-      if (!ctx || typeof ctx !== 'object') return
-      insertContext.run(
-        id,
-        ordinal,
-        text(ctx.articleId) ?? '',
-        text(ctx.fileName),
-        text(ctx.sentenceId),
-        text(ctx.sentenceText) ?? '',
-        text(ctx.meaning),
-        text(ctx.at) ?? nowIso(),
-      )
-    })
-    list(it.confusables).forEach((c, ordinal) => {
-      if (!c || typeof c !== 'object') return
-      insertConfusable.run(id, ordinal, text(c.word) ?? '', text(c.meaning))
-    })
-  })
 }
 
 function deleteArticleProjection(db, articleId) {
@@ -563,6 +438,17 @@ export function openStore(dbPath) {
           const prev = db.prepare('SELECT payload, item_count, updated_at FROM vocab WHERE id = 1').get()
           // 内容没变就别再全量重建派生表/写快照（自动补全 effect 重跑时很常见）。
           if (prev && String(prev.payload) === payload) return
+          // 旧 payload 坏了就退回全量重建，别让一次脏数据把这次保存也拖垮。
+          let prevLib
+          if (prev) {
+            try {
+              prevLib = parsePayload(String(prev.payload))
+            } catch {
+              prevLib = undefined
+            }
+          } else {
+            prevLib = null
+          }
           const backup = db.prepare('SELECT item_count FROM vocab_prev WHERE id = 1').get()
           // 和前端一致：备份只留「更大的那一份」，缩水事故时保住事故前那一版。
           if (prev && Number(prev.item_count) > 0 && Number(prev.item_count) >= Number(backup?.item_count ?? 0)) {
@@ -579,7 +465,7 @@ export function openStore(dbPath) {
             count,
           )
           pruneSnapshots(db)
-          rebuildVocabProjection(db, lib)
+          rebuildVocabProjection(db, lib, prevLib)
         })
       },
       /**

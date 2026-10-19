@@ -99,7 +99,8 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 ### 4.2 派生表（给 SQL / 统计 / 以后 FTS 用）
 
 每次 `saveVocab` / `saveArticle` 在**同一个事务**里从 JSON 重建，不能单独写；
-所以不会出现「JSON 更新了、表还是旧的」。
+所以不会出现「JSON 更新了、表还是旧的」。词库按 `id + 内容` 做**增量**（实现在
+`server/sqliteVocab.js`）：只重写新增 / 变化 / 删除的词条，未变化的保留原 rowid；文章仍按整篇重建。
 
 ```sql
 -- 词条：单词 / 词组 / 习语 / 用法笔记共用
@@ -198,10 +199,11 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 
 ### 4.4 性能与边界
 
-- 当前单用户、词库千级：整库 JSON 约 1–2MB，保存时重建 1k 多行派生表约百毫秒；
+- 当前单用户、词库千级：整库 JSON 约 1–2MB；保存时只重写发生变化的词条，
+  千级库通常只动几条（自动补全/评分不会再把整表 delete + insert）。
   读取仍走 JSON，页面不需要逐表 JOIN。
-- 如果词库涨到几万/几十万，**不要继续每次全量重建**：改成按 `updatedAt` 增量 upsert，
-  再给 `words` / `article_sentences` 建 FTS5；这是下一阶段，不是现在。
+- 文章仍是整篇重建（一篇几十到几百句，成本可控）。词库涨到几万/几十万后，
+  下一步是给 `words` / `article_sentences` 建 FTS5。
 - `words(lemma)`、`words(updated_at)`、`article_sentences(article_id, ordinal)`、
   `lang_point_terms(text)` 都有索引；复杂查询直接开 `data/xueba.db` 用 SQL：
 

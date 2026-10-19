@@ -175,6 +175,40 @@ describe('sqliteStore：词库', () => {
     expect(store.db.prepare('SELECT meaning FROM word_contexts WHERE word_id = ?').get('w1').meaning).toBe('跑步')
     expect(store.db.prepare('SELECT word FROM word_confusables WHERE word_id = ?').get('w1').word).toBe('ran')
   })
+
+  it('增量重建：未变化词条不动，变化/删除只动自己', () => {
+    const store = openStore(tempDb())
+    const items = [
+      { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
+      { id: 'w2', word: 'walk', lemma: 'walk', usage: ['walk away'] },
+    ]
+    store.saveVocab({ schemaVersion: 1, items })
+    const rowid1 = store.db.prepare('SELECT rowid FROM words WHERE id = ?').get('w1').rowid
+
+    store.saveVocab({
+      schemaVersion: 1,
+      items: [
+        { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
+        { id: 'w2', word: 'walked', lemma: 'walk', usage: ['walked away'] },
+        { id: 'w3', word: 'jump', lemma: 'jump' },
+      ],
+    })
+    // 没变的 w1 保留原 rowid（全量重建会换掉）
+    expect(store.db.prepare('SELECT rowid FROM words WHERE id = ?').get('w1').rowid).toBe(rowid1)
+    expect(store.db.prepare('SELECT word FROM words WHERE id = ?').get('w2').word).toBe('walked')
+    expect(store.db.prepare('SELECT text FROM word_usage WHERE word_id = ?').get('w2').text).toBe('walked away')
+    expect(store.db.prepare('SELECT word FROM words WHERE id = ?').get('w3').word).toBe('jump')
+
+    store.saveVocab({
+      schemaVersion: 1,
+      items: [
+        { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
+        { id: 'w3', word: 'jump', lemma: 'jump' },
+      ],
+    })
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(2)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM word_usage WHERE word_id = ?').get('w2').n).toBe(0)
+  })
 })
 
 describe('sqliteStore：文章', () => {
