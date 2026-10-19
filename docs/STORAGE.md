@@ -169,9 +169,10 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
   `PUT /api/store/learning/partial` 只替换变化的 section（如 `{ practice, kindStats }`），都在一个事务里。
-- 前端 `localStorage` 仍是**同步缓存**：启动时先补本地缺失的键，之后变更由
-  `useLearningSync` 按 section 防抖写回 SQLite，不重写写作历史/背词日记录等无关表；
-  静态部署/服务不可用时继续只用 localStorage。
+- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
+  保留本地，之后由 `useLearningSync` 按 section 防抖写回 SQLite；没有待同步修改时以 SQLite 为准，
+  直接覆盖过期缓存，避免旧缓存反过来盖新库。成功写回后才清 dirty，失败下次继续重试。
+  不重写写作历史/背词日记录等无关表；静态部署/服务不可用时继续只用 localStorage。
 - 偏好/会话（主题、字号、面板、上次文章、草稿、会话快照、待选清单、`langCollected`）
   **不进这些表**。
 - `reader:activity` / `reader:kindStats` 目前是聚合值；历史数据只能先按聚合保存。

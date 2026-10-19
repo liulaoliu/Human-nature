@@ -3,8 +3,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { learningRepo } from '../adapters/learningRepo'
 import { emptyLearning } from '../core/learning'
 import {
+  hasPendingLearningChanges,
   hydrateLearningFromServer,
   learningSectionForKey,
+  markLearningDirty,
   readLearningFromLocalStorage,
   resetLearningSyncStateForTest,
   syncLearningToServer,
@@ -31,7 +33,7 @@ describe('学习记录 localStorage 同步缓存', () => {
     expect(JSON.parse(localStorage.getItem('reader:practice')!)).toHaveLength(1)
   })
 
-  it('启动恢复只补缺失键，不覆盖本地已有记录', async () => {
+  it('没有待同步修改时，启动以服务端为准，覆盖过期缓存', async () => {
     localStorage.setItem('reader:practice', JSON.stringify([
       { at: '2026-02-01T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 },
     ]))
@@ -51,8 +53,34 @@ describe('学习记录 localStorage 同步缓存', () => {
 
     await hydrateLearningFromServer()
 
+    expect(JSON.parse(localStorage.getItem('reader:practice')!)[0].at).toBe('2026-01-01T00:00:00.000Z')
+    expect(localStorage.getItem('reader:mistakes')).toContain('vocab:w1')
+  })
+
+  it('本地有待同步修改时，启动保留本地并只补缺失键', async () => {
+    localStorage.setItem('reader:practice', JSON.stringify([
+      { at: '2026-02-01T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 },
+    ]))
+    markLearningDirty()
+    vi.spyOn(learningRepo, 'load').mockResolvedValue({
+      practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8 }],
+      mistakes: [{ id: 'vocab:w1', kind: 'vocab', at: '2026-01-01T00:00:00.000Z', count: 1, label: 'w1' }],
+      readDone: [],
+      writingHistory: [],
+      retells: [],
+      activity: [],
+      studyDays: [],
+      sessions: [],
+      studiedDays: [],
+      skimmed: [],
+      kindStats: {},
+    })
+
+    await hydrateLearningFromServer()
+
     expect(JSON.parse(localStorage.getItem('reader:practice')!)[0].at).toBe('2026-02-01T00:00:00.000Z')
     expect(localStorage.getItem('reader:mistakes')).toContain('vocab:w1')
+    expect(hasPendingLearningChanges()).toBe(true)
   })
 
   it('还没问过服务端时，不拿空数据覆盖服务端', async () => {
@@ -85,6 +113,25 @@ describe('学习记录 localStorage 同步缓存', () => {
     expect(partial).toHaveBeenCalledWith(expect.objectContaining({ practice: [
       expect.objectContaining({ kind: 'quiz', correct: 9 }),
     ] }))
+  })
+
+  it('写回成功才清 dirty；失败保留，下次还会重试', async () => {
+    vi.spyOn(learningRepo, 'load').mockResolvedValue(emptyLearning())
+    await hydrateLearningFromServer()
+    localStorage.setItem(
+      'reader:practice',
+      JSON.stringify([{ at: '2026-04-01T00:00:00.000Z', kind: 'quiz', total: 5, correct: 4 }]),
+    )
+    markLearningDirty()
+
+    vi.spyOn(learningRepo, 'save').mockResolvedValue()
+    await expect(syncLearningToServer()).resolves.toBe(true)
+    expect(hasPendingLearningChanges()).toBe(false)
+
+    markLearningDirty()
+    vi.spyOn(learningRepo, 'save').mockRejectedValue(new Error('offline'))
+    await expect(syncLearningToServer()).resolves.toBe(false)
+    expect(hasPendingLearningChanges()).toBe(true)
   })
 
   it('localStorage 键能映射到 section', () => {

@@ -23,7 +23,6 @@ import {
   type Take,
   type TakeRepoPort,
 } from '../core/ports'
-
 export interface SessionState {
   status: 'empty' | 'loading' | 'ready' | 'error'
   fileName: string
@@ -72,7 +71,6 @@ export interface SessionState {
   /** script 按块摊开的结果，长度恒等于 chunks.length */
   aligned: AlignedChunk[]
 }
-
 /**
  * 说完之后静多久算「读完了」。
  * 默认 2.5 秒：正常句子之间的停顿不到 1 秒，但跟读时想一下再开口、
@@ -1094,6 +1092,8 @@ export class SessionStore {
           'reader:activity',
           JSON.stringify(addActivity(list, dayKeyLocal(new Date()), 'speak', 1)),
         )
+        // 和 useLocalStorageState 一样通知同步钩子，否则「说」的记录只留在缓存里。
+        globalThis.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key: 'reader:activity' } }))
       }
     } catch {
       // 忽略

@@ -49,6 +49,42 @@ export function learningSectionForKey(key: string | null | undefined): LearningS
  */
 let serverChecked = false
 
+/**
+ * 本地是否有还没成功写回 SQLite 的学习记录修改。
+ *
+ * 有：启动时保留本地，整份补写服务端（快照会保住服务端旧状态）。
+ * 没有：启动时以 SQLite 为准，直接覆盖本地可能过期的缓存，避免旧缓存反过来盖新库。
+ */
+const LEARNING_DIRTY_KEY = 'reader:learningDirty'
+let dirtySeq = 0
+
+export function hasPendingLearningChanges(): boolean {
+  try {
+    return !!storage()?.getItem(LEARNING_DIRTY_KEY)
+  } catch {
+    return false
+  }
+}
+
+export function markLearningDirty(): void {
+  try {
+    storage()?.setItem(LEARNING_DIRTY_KEY, `${Date.now()}:${++dirtySeq}`)
+  } catch {
+    // 隐私模式 / 配额满：内存里的 serverChecked 仍能防止空库误覆盖
+  }
+}
+
+function clearLearningDirtyIfUnchanged(token: string | null): void {
+  if (!token) return
+  const s = storage()
+  if (!s) return
+  try {
+    if (s.getItem(LEARNING_DIRTY_KEY) === token) s.removeItem(LEARNING_DIRTY_KEY)
+  } catch {
+    // ignore
+  }
+}
+
 function storage(): Storage | null {
   try {
     return typeof localStorage === 'undefined' ? null : localStorage
@@ -117,7 +153,9 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
 
 /**
  * 启动时从 SQLite 恢复。
- * 只补 localStorage 缺失的键；本地已有数据优先（离线期间的修改不会被旧服务端数据盖掉）。
+ *
+ * - 本地有尚未写回 SQLite 的修改：只补缺失键，保留本地（离线期间的修改优先）。
+ * - 本地没有待同步修改：SQLite 为准，覆盖本地过期缓存，避免旧缓存下次反过来盖新库。
  */
 export async function hydrateLearningFromServer(): Promise<void> {
   try {
@@ -125,7 +163,7 @@ export async function hydrateLearningFromServer(): Promise<void> {
     if (!data) return // 服务不可用：不知道服务端有没有数据，后面不能用空记录覆盖
     serverChecked = true
     if (!hasLearningData(data)) return
-    writeLearningToLocalStorage(data, true)
+    writeLearningToLocalStorage(data, hasPendingLearningChanges())
   } catch {
     // 静态部署 / 服务没起：继续用 localStorage
   }
@@ -143,6 +181,13 @@ export function resetLearningSyncStateForTest(): void {
  * 例如答题只改 `practice` / `kindStats` / `activity`，不必重写写作历史。
  */
 export async function syncLearningToServer(sections?: LearningSection[]): Promise<boolean> {
+  const dirtyToken = (() => {
+    try {
+      return storage()?.getItem(LEARNING_DIRTY_KEY) ?? null
+    } catch {
+      return null
+    }
+  })()
   const data = readLearningFromLocalStorage()
   // 还没成功问过服务端时，空记录可能只是“本地没数据”，不能拿去清服务端。
   // 问过之后如果还是空，就是用户真的清空了，应该让服务端也清空。
@@ -154,6 +199,8 @@ export async function syncLearningToServer(sections?: LearningSection[]): Promis
     } else {
       await learningRepo.save(data)
     }
+    // 保存期间又有新修改时 token 已变，不能清，等下一轮继续写。
+    clearLearningDirtyIfUnchanged(dirtyToken)
     return true
   } catch {
     return false

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import type { LearningSection } from '../../core/learning'
-import { learningSectionForKey, syncLearningToServer } from '../learningState'
+import { learningSectionForKey, markLearningDirty, syncLearningToServer } from '../learningState'
 
 const DEBOUNCE_MS = 800
 
@@ -38,6 +38,7 @@ export function useLearningSync(): void {
     const note = (key: string | null | undefined) => {
       const section = learningSectionForKey(key)
       if (!section) return
+      markLearningDirty()
       pending.add(section)
       schedule()
     }
