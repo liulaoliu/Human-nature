@@ -27,7 +27,6 @@ const BASELINE = {
   'src/reader/ReaderApp.tsx': 1037,
   'src/ui/App.tsx': 1192,
   'src/state/session.ts': 1186,
-  'src/core/vocab.ts': 1123,
   'src/state/session.test.ts': 1058,
   'src/state/script.test.ts': 803,
 }
