@@ -149,7 +149,8 @@
 `useSelection`（点句 toggle / A-D 循环 / 待选去重计数 / mark 走唯一写入口 / 来源定位回填）、
 `useAiPack` 的跑批轮询（error 立即停 / 失联 30s 判错 / 取消打断 / 卸载清定时器；假计时器）、
 `useToast`（自动消失 / 连续 flash 不被旧 timer 清掉 / 卸载清定时器）。
-TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / 多余忽略），连字符词典在 `core/dictionary`。
+TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / 多余忽略），服务端时间戳/预热请求在
+`adapters/ttsCache`（URL 编码 / 非 2xx / 空数组 / 坏 JSON 一律降级为不高亮），连字符词典在 `core/dictionary`。
 视图层 `ReaderScreen` 只留外壳，三个槽位在 `screen/*Zone`（纯映射，不单测；由 `ReaderApp.integration.test.tsx` 覆盖条件渲染）。
 组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
 
