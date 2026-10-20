@@ -42,6 +42,30 @@ export function dayKeyLocal(d: Date = new Date()): string {
   return calendarDayKey(new Date(d.getTime() - DAY_ROLLOVER_HOUR * 3600 * 1000))
 }
 
+/**
+ * 把 localStorage / 备份里读到的活动数组洗成可用形状。
+ * 元素级脏数据（`null`、`day: 5`、`counts: null`）整条丢掉，而不是让它把
+ * `addActivity` / 汇总函数炸掉（外层 catch 会把今天这笔一起吞掉）。
+ */
+export function normalizeActivity(raw: unknown): DayActivity[] {
+  if (!Array.isArray(raw)) return []
+  const out: DayActivity[] = []
+  for (const row of raw) {
+    if (!row || typeof row !== 'object') continue
+    const r = row as Record<string, unknown>
+    if (typeof r.day !== 'string' || !r.day.trim()) continue
+    if (!r.counts || typeof r.counts !== 'object') continue
+    const counts: Partial<Record<ActivityCat, number>> = {}
+    for (const cat of ACTIVITY_CATS) {
+      const n = Number((r.counts as Record<string, unknown>)[cat])
+      if (Number.isFinite(n) && n > 0) counts[cat] = n
+    }
+    out.push({ day: r.day, counts })
+  }
+  out.sort((a, b) => a.day.localeCompare(b.day))
+  return out
+}
+
 /** 把某天某类活动加 n（同一天合并；超过上限截断）。纯函数。 */
 export function addActivity(
   list: DayActivity[],

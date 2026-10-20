@@ -10,7 +10,7 @@
  * 存储实现见 `adapters/learningRepo.ts`：SQLite 优先，localStorage 作为同步缓存。
  */
 
-import type { DayActivity } from './activity'
+import { normalizeActivity, type DayActivity } from './activity'
 import type { AnswerEvent } from './answerEvents'
 import { ANSWER_EVENT_CAP, normalizeAnswerEvents } from './answerEvents'
 import type { ReadDone } from './goals'
@@ -136,16 +136,7 @@ export function normalizeLearning(raw: unknown): LearningData {
       typeof r.text === 'string' &&
       Number.isFinite(Number(r.words)),
   )
-  out.activity = asArray<DayActivity>(raw.activity)
-    .filter((r) => isObject(r) && typeof r.day === 'string' && isObject(r.counts))
-    .map((r) => {
-      const counts: Record<string, number> = {}
-      for (const [cat, n] of Object.entries(r.counts)) {
-        const v = Number(n)
-        if (Number.isFinite(v) && v > 0) counts[cat] = v
-      }
-      return { day: r.day, counts }
-    })
+  out.activity = normalizeActivity(raw.activity)
   out.studyDays = asArray<StudyDay>(raw.studyDays).filter(
     (r) =>
       isObject(r) &&

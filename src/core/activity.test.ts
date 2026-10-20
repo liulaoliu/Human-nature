@@ -7,6 +7,7 @@ import {
   dayKeyLocal,
   dayTotal,
   levelFor,
+  normalizeActivity,
   sumCats,
   type DayActivity,
 } from './activity'
@@ -159,5 +160,22 @@ describe('buildHeatmap', () => {
       const days = hm.cells[c].map((x) => x.key)
       expect(new Set(days).size).toBe(7)
     }
+  })
+})
+
+describe('normalizeActivity（元素级守卫）', () => {
+  it('丢掉 null / day 非字符串 / counts 非对象，好的照常保留', () => {
+    const out = normalizeActivity([
+      null,
+      'x',
+      { day: 5, counts: { speak: 2 } },
+      { day: '2026-10-01', counts: null },
+      { day: '2026-10-02', counts: { speak: 2, bad: 1, read: -1 } },
+    ])
+    expect(out).toEqual([{ day: '2026-10-02', counts: { speak: 2 } }])
+  })
+
+  it('非数组 → 空数组', () => {
+    expect(normalizeActivity({ day: '2026-10-01', counts: {} })).toEqual([])
   })
 })

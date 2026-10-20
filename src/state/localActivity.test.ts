@@ -48,6 +48,18 @@ describe('recordLocalActivity（跟读记一笔「说」）', () => {
     expect(list[0].counts.speak).toBe(1)
   })
 
+  it('数组里有元素级脏数据：只丢坏行，今天这笔和合法历史都保留', () => {
+    localStorage.setItem(
+      ACTIVITY_KEY,
+      JSON.stringify([null, { day: 5, counts: { speak: 2 } }, { day: '2000-01-01', counts: null }, { day: '2000-01-01', counts: { speak: 2 } }]),
+    )
+    recordLocalActivity('speak')
+    const list = JSON.parse(localStorage.getItem(ACTIVITY_KEY) ?? '[]')
+    expect(list.map((x: { day: string }) => x.day)).toEqual(['2000-01-01', dayKeyLocal()])
+    expect(list[0].counts.speak).toBe(2)
+    expect(list[1].counts.speak).toBe(1)
+  })
+
   it('没有 localStorage（隐私模式）就安静跳过', () => {
     expect(() => recordLocalActivity('speak', 1, undefined)).not.toThrow()
   })

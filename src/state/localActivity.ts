@@ -9,7 +9,7 @@
  * 从 `state/session.ts` 抽出来的原因：这是**跨模块的约定**（键名、事件名、口径），
  * 藏在 store 文件的最后容易被当成内部工具函数改坏。
  */
-import { addActivity, dayKeyLocal, type DayActivity } from '../core/activity'
+import { addActivity, dayKeyLocal, normalizeActivity, type DayActivity } from '../core/activity'
 
 /** 与精读页 `useLocalStorageState('reader:activity')` 是同一条键，改了那边就丢数据 */
 export const ACTIVITY_KEY = 'reader:activity'
@@ -18,8 +18,7 @@ export const LOCAL_STATE_EVENT = 'reader:local-state'
 /** 读出本机已有的活动记录：坏数据当空库（**不能因为一条脏数据就把今天这笔记丢**） */
 function readExisting(storage: Storage): DayActivity[] {
   try {
-    const raw = JSON.parse(storage.getItem(ACTIVITY_KEY) ?? '[]')
-    return Array.isArray(raw) ? (raw as DayActivity[]) : []
+    return normalizeActivity(JSON.parse(storage.getItem(ACTIVITY_KEY) ?? '[]'))
   } catch {
     return []
   }
