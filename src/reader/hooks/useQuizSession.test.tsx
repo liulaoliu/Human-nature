@@ -18,6 +18,7 @@ const persist = vi.fn()
 const markStudied = vi.fn()
 const recordActivity = vi.fn()
 const recordPractice = vi.fn()
+const recordAnswer = vi.fn()
 const addMistake = vi.fn()
 const dropMistake = vi.fn()
 const closeOthers = vi.fn()
@@ -36,6 +37,7 @@ function Harness({ library }: { library: VocabLibrary }) {
     markStudied,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
   })
@@ -88,6 +90,9 @@ describe('useQuizSession：出题与判分', () => {
     act(() => api!.setInput('run'))
     act(() => api!.check())
     expect(api!.result).toBe(true)
+    expect(recordAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ articleId: 'A', source: 'quiz', kind: 'spell', cat: 'vocab', correct: true }),
+    )
     expect(api!.results).toEqual([{ id: 'w1:spell', itemId: 'w1', correct: true }])
     expect(persist).toHaveBeenCalledTimes(1)
     expect(markStudied).toHaveBeenCalledWith('w1')

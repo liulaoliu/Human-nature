@@ -83,7 +83,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(6)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(7)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -363,6 +363,27 @@ describe('sqliteStore：学习记录', () => {
     studiedDays: [{ day: '2026-01-01', ids: ['w1', 'w2'] }],
     skimmed: ['a1'],
     kindStats: { a1: { quiz: { total: 10, correct: 8 } } },
+    answerEvents: [
+      {
+        at: '2026-01-05T10:00:00.000Z',
+        day: '2026-01-05',
+        articleId: 'a1',
+        source: 'quiz',
+        kind: 'cloze',
+        cat: 'vocab',
+        correct: true,
+        questionId: 'q1',
+      },
+      {
+        at: '2026-01-05T10:01:00.000Z',
+        day: '2026-01-05',
+        articleId: 'a1',
+        source: 'quiz',
+        kind: 'cloze',
+        cat: 'vocab',
+        correct: false,
+      },
+    ],
   }
 
   it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', () => {
@@ -381,8 +402,11 @@ describe('sqliteStore：学习记录', () => {
     ])
     expect(got.studiedDays).toEqual([{ day: '2026-01-01', ids: ['w1', 'w2'] }])
     expect(got.kindStats).toEqual({ a1: { quiz: { total: 10, correct: 8 } } })
+    expect(got.answerEvents).toHaveLength(2)
+    expect(got.answerEvents[1]).toMatchObject({ day: '2026-01-05', kind: 'cloze', correct: false })
 
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM practice_records').get().n).toBe(2)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM answer_events').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM study_word_days').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM reading_progress').get().n).toBe(1)
 
@@ -414,6 +438,60 @@ describe('sqliteStore：学习记录', () => {
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', () => {
     const store = openStore(tempDb())
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
+  })
+
+  it('答题事件可重建活动与题型统计（baseline + events）', () => {
+    const store = openStore(tempDb())
+    // 模拟 v7 迁移时留下的历史聚合基线
+    store.db
+      .prepare('INSERT OR REPLACE INTO learning_derived_baseline (id, payload, at) VALUES (1, ?, ?)')
+      .run(
+        JSON.stringify({
+          activity: [{ day: '2026-01-01', counts: { vocab: 2 } }],
+          kindStats: { a1: { cloze: { total: 2, correct: 2 } } },
+        }),
+        '2026-01-06T00:00:00.000Z',
+      )
+    store.saveLearning({
+      ...learning,
+      activity: [],
+      kindStats: {},
+      answerEvents: [
+        { at: '2026-01-05T10:00:00.000Z', day: '2026-01-05', articleId: 'a1', source: 'quiz', kind: 'cloze', cat: 'vocab', correct: true },
+        { at: '2026-01-05T10:01:00.000Z', day: '2026-01-05', articleId: 'a1', source: 'quiz', kind: 'cloze', cat: 'vocab', correct: false },
+        { at: '2026-01-05T10:02:00.000Z', day: '2026-01-05', articleId: 'a1', source: 'dictation', kind: 'dictation', cat: 'listen', correct: true },
+      ],
+    })
+
+    store.rebuildLearningDerived()
+
+    const got = store.loadLearning()
+    expect(got.activity).toEqual([
+      { day: '2026-01-01', counts: { vocab: 2 } },
+      { day: '2026-01-05', counts: { vocab: 2, listen: 1 } },
+    ])
+    expect(got.kindStats).toEqual({ a1: { cloze: { total: 4, correct: 3 } } })
+    // 其它学习记录不受影响
+    expect(got.practice).toHaveLength(2)
+  })
+
+  it('恢复旧快照不会删掉 append-only 的答题事件', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+    const current = store.loadLearning()
+    // 模拟 v7 之前的旧快照：没有 answerEvents 字段
+    const { answerEvents: _drop, ...old } = current
+    const info = store.db
+      .prepare(
+        'INSERT INTO learning_snapshots (at, reason, record_count, payload) VALUES (?, ?, ?, ?)',
+      )
+      .run('2026-01-06T00:00:00.000Z', 'legacy', 1, JSON.stringify(old))
+    expect(store.loadLearning().answerEvents).toHaveLength(2)
+
+    store.saveLearning({ ...learning, practice: [] })
+    const restored = store.restoreLearningSnapshot(Number(info.lastInsertRowid))
+    expect(restored.value.practice).toHaveLength(2)
+    expect(restored.value.answerEvents).toHaveLength(2)
   })
 
   it('覆盖前自动留快照，误清空后可以恢复', () => {
@@ -464,7 +542,7 @@ describe('sqliteStore：学习记录', () => {
   })
 })
 
-describe('sqliteStore：v1 → v6 迁移', () => {
+describe('sqliteStore：v1 → v7 迁移', () => {
   it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
@@ -528,7 +606,7 @@ describe('sqliteStore：v1 → v6 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(6)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(7)
     // 迁移前整库备份，出事能回到 v1。
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))

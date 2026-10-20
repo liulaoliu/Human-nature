@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import type { MutableRefObject } from 'react'
 import type { ActivityCat } from '../../core/activity'
+import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
 import type { VocabLibrary } from '../../types/document'
@@ -31,6 +32,7 @@ export interface UseSessionServicesParams {
   markStudied: (itemId: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
+  recordAnswer: (event: AnswerEventInput) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
   studyFlush: (seconds: number, cards: number) => void
@@ -69,6 +71,7 @@ export function useSessionServices({
   markStudied,
   recordActivity,
   recordPractice,
+  recordAnswer,
   addMistake,
   dropMistake,
   studyFlush,
@@ -127,6 +130,7 @@ export function useSessionServices({
     markStudied,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     onKinds: mergeKindStats,
@@ -156,6 +160,7 @@ export function useSessionServices({
     askedIdsRef,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     closeOthers: () => {
@@ -279,6 +284,7 @@ export function useSessionServices({
 
   const dictApi = useDictation({
     doc,
+    articleIdentity,
     libraryLemmas: docLemmas,
     speak,
     warmTexts,
@@ -288,6 +294,7 @@ export function useSessionServices({
     batchItemsFromWords,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     closeOthers: () => {

@@ -51,6 +51,17 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
       activity: [{ day: '2026-10-01', counts: { read: 2 } }],
       skimmed: ['a1'],
       kindStats: { a1: { quiz: { total: 5, correct: 4 } } },
+      answerEvents: [
+        {
+          at: '2026-10-01T00:00:00.000Z',
+          day: '2026-10-01',
+          articleId: 'a1',
+          source: 'quiz',
+          kind: 'cloze',
+          cat: 'vocab',
+          correct: true,
+        },
+      ],
       readGoal: 12,
       goalMemo: '每天一篇',
     })
@@ -64,6 +75,7 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.activity).toHaveLength(1)
     expect(parsed.skimmed).toEqual(['a1'])
     expect(parsed.kindStats?.a1.quiz).toEqual({ total: 5, correct: 4 })
+    expect(parsed.answerEvents).toHaveLength(1)
     expect(parsed.readGoal).toBe(12)
     expect(parsed.goalMemo).toBe('每天一篇')
     expect(parsed.dropped).toBe(0)
@@ -98,11 +110,24 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
       practice: [{ at, kind: 'quiz', total: 5, correct: 4 }, { kind: 'quiz' }],
       skimmed: ['a1', '', 3],
       kindStats: { a1: { quiz: { total: 5, correct: 4 } }, bad: { quiz: { total: 'x' } } },
+      answerEvents: [
+        {
+          at,
+          day: '2026-10-01',
+          articleId: 'a1',
+          source: 'quiz',
+          kind: 'cloze',
+          cat: 'vocab',
+          correct: true,
+        },
+        { at: 'bad', source: 'quiz', kind: 'cloze', cat: 'vocab', correct: true },
+      ],
     })
     expect(parsed.practice).toHaveLength(1)
     expect(parsed.skimmed).toEqual(['a1'])
     expect(Object.keys(parsed.kindStats ?? {})).toEqual(['a1'])
-    expect(parsed.dropped).toBe(4) // 1 条练习 + 2 个 skimmed 坏值 + 1 个坏统计行
+    expect(parsed.answerEvents).toHaveLength(1)
+    expect(parsed.dropped).toBe(5) // 1 条练习 + 2 个 skimmed 坏值 + 1 个坏统计行 + 1 条坏事件
   })
 
   it('数组形态：文章数组 / 词条数组都能认', () => {

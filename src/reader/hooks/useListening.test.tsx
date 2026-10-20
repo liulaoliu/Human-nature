@@ -25,6 +25,7 @@ function params(over: Partial<UseListeningParams> = {}): UseListeningParams {
     askedIdsRef: { current: ['old'] },
     recordActivity: vi.fn(),
     recordPractice: vi.fn(),
+    recordAnswer: vi.fn(),
     addMistake: vi.fn(),
     dropMistake: vi.fn(),
     closeOthers: vi.fn(),
@@ -103,6 +104,13 @@ describe('useListening：判分与错题', () => {
     expect(result.current.result).toMatchObject({ total: 2, correct: 1 })
     expect(p.recordActivity).toHaveBeenCalledWith('listen', 2)
     expect(p.recordPractice).toHaveBeenCalledWith('listening', 2, 1)
+    expect(p.recordAnswer).toHaveBeenCalledTimes(2)
+    expect(p.recordAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ articleId: 'file:a.md', source: 'listening', kind: 'listening', cat: 'listen', correct: true }),
+    )
+    expect(p.recordAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ articleId: 'file:a.md', source: 'listening', kind: 'listening', cat: 'listen', correct: false }),
+    )
 
     expect(p.dropMistake).toHaveBeenCalledWith(expect.stringContaining('q1'))
     expect(p.addMistake).toHaveBeenCalledWith(expect.objectContaining({ id: expect.stringContaining('q2') }))

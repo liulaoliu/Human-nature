@@ -7,7 +7,7 @@
 - 分支：`main`
 - 本轮最后提交：`d78ada5 fix: 服务长开跨天自动补每日备份`
 - 工作树：干净
-- schema：`PRAGMA user_version = 6`
+- schema：`PRAGMA user_version = 7`
 - 门禁：`940 passed / 5 skipped`；`npm run gates`、`npm run build` 都通过
 - 实时库：`data/xueba.db`（本地，不进 git）
 
@@ -55,13 +55,13 @@ curl http://127.0.0.1:5173/api/store/articles/<id>/prev
 
 ## 下次优先做
 
-1. **答题事件表（P1，架构债）**
-   - 现状：`activity_days` / `kind_stats` 只有聚合值，无法从原始答题重算。
-   - 目标：加 append-only `answer_events`（建议 schema v7），从
-     `useQuizSession` / `useDictation` / `useListening` 记每题对错、题型、文章、时间；
-     `activity` / `kindStats` 改为事件派生（或至少能对账/重建）。
-   - 历史聚合数据要保留，不能假装能重算；迁移时标记“聚合基线 + 新事件”。
-   - 同步仍走 `LearningData` section，不要另起一套 localStorage 写库。
+1. **答题事件表（P1，架构债）✅ 已完成（2026-10-20）**
+   - 已加 append-only `answer_events`（schema v7），`useQuizSession` / `useDictation` / `useListening`
+     逐题记对错、题型、文章、时间、活动分类；`useLearningData.recordAnswer` 统一追加。
+   - `activity` / `kindStats` 仍写聚合值兼容 UI；v7 迁移把历史聚合存进
+     `learning_derived_baseline`，`POST /api/store/learning/rebuild-derived` 按「baseline + events」重建。
+   - 纯函数口径在 `core/answerEvents.ts`（解析守卫 / 追加 / 从事件重建）。
+   - 后续可选：统计面板增加「重建对账」入口；目前 API 已可用。
 2. **记录分页（P2）**
    - 当前练习 500 条、错题 300 条、写作 200 条等都有上限；数据量还没到，先不做。
    - 真要做：服务端 `limit/offset`，UI 按需加载；不要为了分页改事实来源。
@@ -76,8 +76,8 @@ curl http://127.0.0.1:5173/api/store/articles/<id>/prev
 - 词库自动补全只走 `core/libraryAutoFill.ts`，React 里只有一个 effect 调它，依赖不放 `library`。
 - 日期键只认 `core/activity.ts` 的 `dayKeyLocal` / `calendarDayKey`。
 - 不要再引入 espeak；TTS 链是 Edge → Piper → 浏览器 `speechSynthesis`。
-- 新 schema 迁移前自动整库备份；`sqliteStore.js` 已 798 行，接近 800 行门禁，新增存储逻辑优先拆
-  `server/sqlite*.js`。
+- 新 schema 迁移前自动整库备份；`sqliteStore.js` 已 698 行、`sqliteLearning.js` 626 行，
+  接近 800 行门禁，新增存储逻辑优先拆 `server/sqlite*.js`。
 - 提交前跑 `npm run gates`；上帝文件基线只准往下调。
 
 ## 本轮提交

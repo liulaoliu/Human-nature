@@ -59,6 +59,35 @@ describe('useLearningData（学习记录唯一收口）', () => {
     act(() => result.current.setters.setReadGoal(5))
     expect(result.current.data.readGoal).toBe(5)
   })
+
+  it('recordAnswer：每题追加一条事件，并落盘到 reader:answerEvents', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() =>
+      result.current.recordAnswer({
+        articleId: 'a1',
+        source: 'quiz',
+        kind: 'cloze',
+        cat: 'vocab',
+        correct: true,
+        questionId: 'q1',
+      }),
+    )
+    act(() =>
+      result.current.recordAnswer({
+        articleId: 'a1',
+        source: 'quiz',
+        kind: 'cloze',
+        cat: 'vocab',
+        correct: false,
+        questionId: 'q2',
+      }),
+    )
+    expect(result.current.answerEvents).toHaveLength(2)
+    expect(result.current.answerEvents[1]).toMatchObject({ kind: 'cloze', correct: false, questionId: 'q2' })
+    const stored = JSON.parse(localStorage.getItem('reader:answerEvents') ?? '[]')
+    expect(stored).toHaveLength(2)
+    expect(result.current.data.answerEvents).toHaveLength(2)
+  })
 })
 
 describe('useLearningData：复述 / 略读动作', () => {

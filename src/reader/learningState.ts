@@ -25,6 +25,7 @@ export const LEARNING_KEYS = {
   studiedDays: 'reader:studiedToday',
   skimmed: 'reader:intensiveSkimmed',
   kindStats: 'reader:kindStats',
+  answerEvents: 'reader:answerEvents',
 } as const
 
 export const LEARNING_KEY_SET: ReadonlySet<string> = new Set(Object.values(LEARNING_KEYS))
@@ -121,6 +122,7 @@ export function readLearningFromLocalStorage(): LearningData {
     studiedDays: readJson(LEARNING_KEYS.studiedDays, []),
     skimmed: readJson(LEARNING_KEYS.skimmed, []),
     kindStats: readJson(LEARNING_KEYS.kindStats, {}),
+    answerEvents: readJson(LEARNING_KEYS.answerEvents, []),
   })
 }
 
@@ -143,6 +145,7 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
     [LEARNING_KEYS.studiedDays]: data.studiedDays,
     [LEARNING_KEYS.skimmed]: data.skimmed,
     [LEARNING_KEYS.kindStats]: data.kindStats,
+    [LEARNING_KEYS.answerEvents]: data.answerEvents,
   }
   for (const [key, value] of Object.entries(values)) {
     try {

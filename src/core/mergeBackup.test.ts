@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   mergeActivity,
+  mergeAnswerEvents,
   mergeKindStats,
   mergeLibraries,
   mergeMistakes,
@@ -170,8 +171,31 @@ describe('mergeSkimmed', () => {
   })
 })
 
-describe('mergeKindStats', () => {
-  it('同一题型取题数更多的口径，重复导入不翻倍', () => {
+describe('mergeAnswerEvents', () => {
+  const e = (at: string, questionId?: string) => ({
+    at,
+    day: at.slice(0, 10),
+    articleId: 'a1',
+    source: 'quiz' as const,
+    kind: 'cloze',
+    cat: 'vocab' as const,
+    correct: true,
+    questionId,
+  })
+
+  it('按字段去重，重复导入不翻倍', () => {
+    const current = [e('2026-01-01T00:00:00.000Z', 'q1')]
+    const incoming = [e('2026-01-01T00:00:00.000Z', 'q1'), e('2026-01-02T00:00:00.000Z', 'q2')]
+    expect(mergeAnswerEvents(current, incoming).map((x) => x.questionId)).toEqual(['q1', 'q2'])
+  })
+
+  it('保留最近 cap 条', () => {
+    const out = mergeAnswerEvents([e('2026-01-01T00:00:00.000Z', 'q1')], [e('2026-01-02T00:00:00.000Z', 'q2')], 1)
+    expect(out.map((x) => x.questionId)).toEqual(['q2'])
+  })
+})
+
+describe('mergeKindStats', () => {  it('同一题型取题数更多的口径，重复导入不翻倍', () => {
     const current = { a: { cloze: { total: 5, correct: 3 } } }
     const incoming = { a: { cloze: { total: 5, correct: 3 }, spell: { total: 2, correct: 2 } } }
     const out = mergeKindStats(current, incoming)

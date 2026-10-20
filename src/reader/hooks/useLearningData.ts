@@ -1,6 +1,8 @@
 import { useCallback, useMemo } from 'react'
 import { addActivity, dayKeyLocal, type DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
+import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
+import { addAnswerEvent, createAnswerEvent, normalizeAnswerEvents } from '../../core/answerEvents'
 import type { ReadDone } from '../../core/goals'
 import type { MistakeEntry } from '../../core/mistakes'
 import type { PracticeRecord } from '../../core/practice'
@@ -39,6 +41,7 @@ export interface LearningCollections {
   studiedDays: StudiedDay[]
   skimmed: string[]
   kindStats: KindStats
+  answerEvents: AnswerEvent[]
   retells: RetellRecord[]
   readDone: ReadDone[]
   readGoal: number
@@ -55,6 +58,7 @@ export interface LearningSetters {
   setStudiedDays: (v: StudiedDay[]) => void
   setSkimmed: (v: string[]) => void
   setKindStats: (v: KindStats) => void
+  setAnswerEvents: (v: AnswerEvent[]) => void
   setRetells: (v: RetellRecord[]) => void
   setReadDone: (v: ReadDone[]) => void
   setReadGoal: (v: number) => void
@@ -90,6 +94,15 @@ export function useLearningData(params: UseLearningDataParams) {
   const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>('reader:practice', [])
   const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>('reader:mistakes', [])
   const [kindStats, setKindStats] = useLocalStorageState<KindStats>('reader:kindStats', {})
+  const [answerEvents, setAnswerEvents] = useLocalStorageState<AnswerEvent[]>('reader:answerEvents', [], {
+    parse: (raw) => {
+      try {
+        return normalizeAnswerEvents(JSON.parse(raw))
+      } catch {
+        return []
+      }
+    },
+  })
   const [retells, setRetells] = useLocalStorageState<RetellRecord[]>('reader:retells', [])
   const [sessions, setSessions] = useLocalStorageState<PickSession[]>('reader:vocabStats', [])
   const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>('reader:intensiveSkimmed', [])
@@ -106,6 +119,14 @@ export function useLearningData(params: UseLearningDataParams) {
   })
 
   const now = params.now
+
+  /** 追加一条答题事件（每题一条；聚合值仍由各自 hook 照常写）。 */
+  const recordAnswer = useCallback(
+    (event: AnswerEventInput) => {
+      setAnswerEvents((prev) => addAnswerEvent(prev, createAnswerEvent(event, now ? now() : new Date())))
+    },
+    [now, setAnswerEvents],
+  )
 
   /** 记一条复述打卡（空文本 / 没打开文章 → 不记）。 */
   const saveRetell = useCallback(
@@ -155,6 +176,7 @@ export function useLearningData(params: UseLearningDataParams) {
       studiedDays,
       skimmed: skimmedArticles,
       kindStats,
+      answerEvents,
       retells,
       readDone,
       readGoal,
@@ -169,6 +191,7 @@ export function useLearningData(params: UseLearningDataParams) {
       studiedDays,
       skimmedArticles,
       kindStats,
+      answerEvents,
       retells,
       readDone,
       readGoal,
@@ -186,6 +209,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setStudiedDays,
       setSkimmed: setSkimmedArticles,
       setKindStats,
+      setAnswerEvents,
       setRetells,
       setReadDone,
       setReadGoal,
@@ -200,6 +224,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setStudiedDays,
       setSkimmedArticles,
       setKindStats,
+      setAnswerEvents,
       setRetells,
       setReadDone,
       setReadGoal,
@@ -221,6 +246,9 @@ export function useLearningData(params: UseLearningDataParams) {
     setMistakes,
     kindStats,
     setKindStats,
+    answerEvents,
+    setAnswerEvents,
+    recordAnswer,
     retells,
     setRetells,
     sessions,

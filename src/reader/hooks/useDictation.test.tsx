@@ -19,6 +19,7 @@ const mergeBatch = vi.fn()
 const batchItemsFromWords = vi.fn(() => [])
 const recordActivity = vi.fn()
 const recordPractice = vi.fn()
+const recordAnswer = vi.fn()
 const addMistake = vi.fn()
 const dropMistake = vi.fn()
 const closeOthers = vi.fn()
@@ -30,6 +31,7 @@ const doc = {
 function Harness() {
   api = useDictation({
     doc,
+    articleIdentity: 'A',
     libraryLemmas: new Set<string>(),
     speak,
     warmTexts,
@@ -39,6 +41,7 @@ function Harness() {
     batchItemsFromWords,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     closeOthers,
@@ -111,6 +114,9 @@ describe('useDictation：判分', () => {
     expect(api!.results).toEqual([true])
     expect(api!.wrongItems).toEqual([])
     expect(recordActivity).toHaveBeenCalledWith('listen', 1)
+    expect(recordAnswer).toHaveBeenCalledWith(
+      expect.objectContaining({ articleId: 'A', source: 'dictation', kind: 'dictation', cat: 'listen', correct: true }),
+    )
     expect(dropMistake).toHaveBeenCalledTimes(1)
     expect(addMistake).not.toHaveBeenCalled()
   })

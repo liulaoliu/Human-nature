@@ -184,6 +184,9 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   钉解码、区间播放、录音归一化缓存与 `release` 回收，真实播放/麦克风仍走 §4。
 - **`core/vocab` 已按职责拆分**：`word` / `merge` / `analysis` / `library` / `review` 各有同名测试，
   `vocab.test.ts` 只守住 facade 的 re-export 与跨模块流程；原 102 条测试按子模块搬走，未删减。
+- **答题事件（v7）**：`core/answerEvents` 9 条（坏事件丢弃 / 上限 / 从事件重建活动与题型统计）；
+  `sqliteStore` 钉住事件落库、迁移基线、`rebuildLearningDerived` 的「baseline + events」口径；
+  三个会话 hook 各加一条「每题都追加事件」的接线断言。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 

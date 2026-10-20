@@ -19,6 +19,18 @@ describe('learning 记录', () => {
       studiedDays: [{ day: '2026-01-01', ids: ['w1', 2, 'w2'] }],
       skimmed: ['a1', '', 3],
       kindStats: { a1: { quiz: { total: 10, correct: 8 }, bad: { total: 'x' } } },
+      answerEvents: [
+        {
+          at: '2026-01-01T00:00:00.000Z',
+          day: '2026-01-01',
+          articleId: 'a1',
+          source: 'quiz',
+          kind: 'cloze',
+          cat: 'vocab',
+          correct: true,
+        },
+        { at: 'bad', source: 'quiz', kind: 'cloze', cat: 'vocab', correct: true },
+      ],
     })
     expect(data.practice).toHaveLength(1)
     expect(data.mistakes).toHaveLength(1)
@@ -26,6 +38,7 @@ describe('learning 记录', () => {
     expect(data.studiedDays).toEqual([{ day: '2026-01-01', ids: ['w1', 'w2'] }])
     expect(data.skimmed).toEqual(['a1'])
     expect(data.kindStats).toEqual({ a1: { quiz: { total: 10, correct: 8 } } })
+    expect(data.answerEvents).toHaveLength(1)
     expect(hasLearningData(data)).toBe(true)
   })
 
@@ -42,6 +55,23 @@ describe('learning 记录', () => {
     expect(data.studyDays).toHaveLength(0)
     expect(data.sessions).toHaveLength(0)
     expect(data.activity).toEqual([{ day: '2026-01-01', counts: { speak: 2 } }])
+    expect(hasLearningData(data)).toBe(true)
+  })
+
+  it('只有事件也算有学习数据', () => {
+    const data = normalizeLearning({
+      answerEvents: [
+        {
+          at: '2026-01-01T00:00:00.000Z',
+          day: '2026-01-01',
+          articleId: 'a1',
+          source: 'quiz',
+          kind: 'cloze',
+          cat: 'vocab',
+          correct: true,
+        },
+      ],
+    })
     expect(hasLearningData(data)).toBe(true)
   })
 

@@ -11,6 +11,7 @@ import { mergeReadDone } from '../../core/goals'
 import type { LearningCollections, LearningSetters } from './useLearningData'
 import {
   mergeActivity,
+  mergeAnswerEvents,
   mergeKindStats,
   mergeLibraries,
   mergeMistakes,
@@ -56,7 +57,7 @@ export function useExport({
   setWritingHistory,
 }: UseExportParams) {
   // 展开成旧名字：函数体不动，参数从 30 个降到 11 个
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, readDone, readGoal, goalMemo } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, readDone, readGoal, goalMemo } =
     learning
   const {
     setSessions,
@@ -68,6 +69,7 @@ export function useExport({
     setStudiedDays,
     setSkimmed,
     setKindStats,
+    setAnswerEvents,
     setReadDone,
     setReadGoal,
     setGoalMemo,
@@ -121,6 +123,7 @@ export function useExport({
       studiedDays,
       skimmed,
       kindStats,
+      answerEvents,
       readDone,
       readGoal,
       goalMemo,
@@ -154,6 +157,7 @@ export function useExport({
       if (parsed.studiedDays) setStudiedDays(parsed.studiedDays)
       if (parsed.skimmed) setSkimmed(parsed.skimmed)
       if (parsed.kindStats) setKindStats(parsed.kindStats)
+      if (parsed.answerEvents) setAnswerEvents(parsed.answerEvents)
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
@@ -198,6 +202,7 @@ export function useExport({
       if (parsed.studiedDays) setStudiedDays(mergeStudiedDays(studiedDays, parsed.studiedDays))
       if (parsed.skimmed) setSkimmed(mergeSkimmed(skimmed, parsed.skimmed))
       if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
+      if (parsed.answerEvents) setAnswerEvents(mergeAnswerEvents(answerEvents, parsed.answerEvents))
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
       writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))

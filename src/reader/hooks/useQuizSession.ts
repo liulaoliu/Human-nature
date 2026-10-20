@@ -22,6 +22,7 @@ const MAX_DRILL_ROUNDS = 5
 const isArticleKind = (k: QuizKind): k is ArticleQuizKind => (ARTICLE_KINDS as readonly string[]).includes(k)
 import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
+import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
 import { useHotkeys } from '../useHotkeys'
@@ -60,6 +61,8 @@ export interface UseQuizSessionParams {
   markStudied: (itemId: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
+  /** 每题追加一条答题事件（可选；旧调用方不传就只写聚合值）。 */
+  recordAnswer?: (event: AnswerEventInput) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
   /** 一轮考完时按题型汇总（做「词块/搭配正确率」等量化）。 */
@@ -83,6 +86,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     markStudied,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     onKinds,
@@ -343,6 +347,14 @@ export function useQuizSession(params: UseQuizSessionParams) {
         markStudied(q.itemId)
       }
       recordActivity(isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
+      recordAnswer?.({
+        articleId: articleIdentity,
+        source: 'quiz',
+        kind: q.kind,
+        cat: isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab',
+        correct: ok,
+        questionId: q.id,
+      })
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
       if (speakAfter) speak(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
@@ -357,7 +369,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
         )
       }
     },
-    [queue, index, checked, input, library, persist, autoRun, next, markStudied, speakAfter, speak, recordActivity, addMistake, dropMistake],
+    [queue, index, checked, input, library, persist, autoRun, next, markStudied, speakAfter, speak, recordActivity, recordAnswer, articleIdentity, addMistake, dropMistake],
   )
 
   /** 关闭考试并清掉待触发的自动切题（也顺手关掉设置面板）。 */

@@ -6,7 +6,7 @@
  * v4 旧词条文章 id，v5 学习记录快照，v6 文章上一版。
  */
 
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -344,5 +344,34 @@ CREATE TABLE IF NOT EXISTS article_prev (
   payload TEXT NOT NULL,
   title TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL
+);
+`
+
+/**
+ * v7：答题事件（append-only）。
+ *
+ * activity_days / kind_stats 只有聚合值，丢了/算错就无法对账。
+ * 新事件逐题落库；迁移时的历史聚合另存为 baseline，以后用
+ * 「baseline + events」就能重建派生统计，且不假装历史能量化到题。
+ */
+export const SCHEMA_V7 = `
+CREATE TABLE IF NOT EXISTS answer_events (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  at TEXT NOT NULL,
+  day TEXT NOT NULL DEFAULT '',
+  article_id TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  cat TEXT NOT NULL,
+  correct INTEGER NOT NULL DEFAULT 0,
+  question_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_answer_events_at ON answer_events(at);
+CREATE INDEX IF NOT EXISTS idx_answer_events_article_kind ON answer_events(article_id, kind);
+
+CREATE TABLE IF NOT EXISTS learning_derived_baseline (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  payload TEXT NOT NULL,
+  at TEXT NOT NULL
 );
 `

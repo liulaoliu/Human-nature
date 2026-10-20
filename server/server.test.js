@@ -194,6 +194,17 @@ describe('httpApp 请求处理', () => {
         studiedDays: [{ day: '2026-01-01', ids: ['w1'] }],
         skimmed: [],
         kindStats: {},
+        answerEvents: [
+          {
+            at: '2026-01-01T00:00:00.000Z',
+            day: '2026-01-01',
+            articleId: 'a1',
+            source: 'quiz',
+            kind: 'cloze',
+            cat: 'vocab',
+            correct: true,
+          },
+        ],
       }
       const putLearning = await fetch(`${base}/api/store/learning`, {
         method: 'PUT',
@@ -204,6 +215,14 @@ describe('httpApp 请求处理', () => {
       const learningGet = await fetch(`${base}/api/store/learning`).then((r) => r.json())
       expect(learningGet.value.practice).toHaveLength(1)
       expect(learningGet.value.activity[0].counts.vocab).toBe(3)
+      expect(learningGet.value.answerEvents).toHaveLength(1)
+
+      const rebuilt = await fetch(`${base}/api/store/learning/rebuild-derived`, {
+        method: 'POST',
+        headers: json(),
+      }).then((r) => r.json())
+      expect(rebuilt.ok).toBe(true)
+      expect(rebuilt.value.answerEvents).toHaveLength(1)
 
       const partial = await fetch(`${base}/api/store/learning/partial`, {
         method: 'PUT',
@@ -252,7 +271,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(6)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(7)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

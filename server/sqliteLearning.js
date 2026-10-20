@@ -19,6 +19,7 @@ export const LEARNING_SECTION_TABLES = {
   studiedDays: ['study_word_days'],
   skimmed: ['skimmed_articles'],
   kindStats: ['kind_stats'],
+  answerEvents: ['answer_events'],
 }
 
 export const LEARNING_SECTIONS = Object.keys(LEARNING_SECTION_TABLES)
@@ -37,6 +38,7 @@ export function emptyLearning() {
     studiedDays: [],
     skimmed: [],
     kindStats: {},
+    answerEvents: [],
   }
 }
 
@@ -73,6 +75,7 @@ function assertLearning(data) {
     'sessions',
     'studiedDays',
     'skimmed',
+    'answerEvents',
   ]) {
     if (data[key] !== undefined && !Array.isArray(data[key])) {
       throw new Error(`学习记录 ${key} 必须是数组`)
@@ -220,8 +223,7 @@ function writeSkimmed(db, data) {
   }
 }
 
-function writeKindStats(db, data) {
-  const insert = db.prepare(
+function writeKindStats(db, data) {  const insert = db.prepare(
     'INSERT OR REPLACE INTO kind_stats (article_id, kind, total, correct) VALUES (?, ?, ?, ?)',
   )
   if (!data.kindStats || typeof data.kindStats !== 'object') return
@@ -231,6 +233,28 @@ function writeKindStats(db, data) {
       if (!stat || typeof stat !== 'object') continue
       insert.run(articleId, kind, num(stat.total), num(stat.correct))
     }
+  }
+}
+
+function writeAnswerEvents(db, data) {
+  const insert = db.prepare(`
+    INSERT INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const ev of list(data.answerEvents)) {
+    if (!ev || typeof ev !== 'object') continue
+    if (typeof ev.at !== 'string' || typeof ev.source !== 'string') continue
+    if (typeof ev.kind !== 'string' || typeof ev.cat !== 'string') continue
+    insert.run(
+      ev.at,
+      text(ev.day) ?? '',
+      text(ev.articleId) ?? '',
+      ev.source,
+      ev.kind,
+      ev.cat,
+      ev.correct ? 1 : 0,
+      text(ev.questionId),
+    )
   }
 }
 
@@ -246,6 +270,7 @@ const WRITERS = {
   studiedDays: writeStudiedDays,
   skimmed: writeSkimmed,
   kindStats: writeKindStats,
+  answerEvents: writeAnswerEvents,
 }
 
 export const LEARNING_SNAPSHOT_KEEP = 30
@@ -342,7 +367,13 @@ function shouldSnapshotPartial(db) {
 export function restoreLearningSnapshot(db, id) {
   const snap = loadLearningSnapshot(db, id)
   if (!snap) return null
-  writeLearning(db, snap.value)
+  // 答题事件是 append-only 审计：旧快照没这个字段时保留当前事件，别用恢复动作删掉。
+  const current = loadLearning(db)
+  const value = {
+    ...snap.value,
+    answerEvents: snap.value.answerEvents ?? current.answerEvents,
+  }
+  writeLearning(db, value)
   return { ...snap, value: loadLearning(db) }
 }
 
@@ -369,8 +400,97 @@ export function hasLearningRows(db) {
   return false
 }
 
-export function loadLearning(db) {
-  const out = emptyLearning()
+/**
+ * 迁移 v7 时把「历史聚合」存成 baseline。
+ *
+ * 历史数据没有逐题事件，不能假装能重算；baseline 代表「事件出现之前的总量」，
+ * 以后用 baseline + answer_events 重建，口径才诚实。
+ */
+export function saveDerivedBaseline(db, at = nowIso()) {
+  const value = loadLearning(db)
+  const payload = JSON.stringify({ activity: value.activity, kindStats: value.kindStats })
+  db.prepare('INSERT OR REPLACE INTO learning_derived_baseline (id, payload, at) VALUES (1, ?, ?)').run(
+    payload,
+    String(at),
+  )
+  return payload
+}
+
+export function loadDerivedBaseline(db) {
+  const row = db.prepare('SELECT payload, at FROM learning_derived_baseline WHERE id = 1').get()
+  if (!row) return { activity: [], kindStats: {}, at: null }
+  const parsed = parseJson(row.payload)
+  return {
+    activity: list(parsed?.activity),
+    kindStats: parsed?.kindStats && typeof parsed.kindStats === 'object' ? parsed.kindStats : {},
+    at: String(row.at),
+  }
+}
+
+/**
+ * 用「baseline + 答题事件」重建 activity_days / kind_stats。
+ *
+ * 只在事件表可信时调用；不碰 practice / 错题等其它学习记录。
+ * 返回重建后的聚合，便于测试和排查。
+ */
+export function rebuildLearningDerived(db) {
+  const base = loadDerivedBaseline(db)
+  const events = loadLearning(db).answerEvents
+
+  const activity = new Map()
+  const addActivity = (day, cat, n) => {
+    if (!day || !cat || n <= 0) return
+    const counts = activity.get(day) ?? {}
+    counts[cat] = (counts[cat] ?? 0) + n
+    activity.set(day, counts)
+  }
+  for (const day of base.activity) {
+    if (!day || typeof day !== 'object') continue
+    const counts = day.counts && typeof day.counts === 'object' ? day.counts : {}
+    for (const [cat, n] of Object.entries(counts)) addActivity(String(day.day), cat, num(n))
+  }
+
+  const kindStats = new Map()
+  const addKind = (articleId, kind, correct) => {
+    if (!articleId || !kind) return
+    if (!kindStats.has(articleId)) kindStats.set(articleId, new Map())
+    const byKind = kindStats.get(articleId)
+    const cur = byKind.get(kind) ?? { total: 0, correct: 0 }
+    cur.total += 1
+    if (correct) cur.correct += 1
+    byKind.set(kind, cur)
+  }
+  for (const [articleId, byKind] of Object.entries(base.kindStats)) {
+    for (const [kind, stat] of Object.entries(byKind ?? {})) {
+      if (!stat || typeof stat !== 'object') continue
+      if (!kindStats.has(articleId)) kindStats.set(articleId, new Map())
+      kindStats.get(articleId).set(kind, { total: num(stat.total), correct: num(stat.correct) })
+    }
+  }
+  for (const ev of events) {
+    if (!ev || typeof ev !== 'object') continue
+    addActivity(ev.day, ev.cat, 1)
+    if (ev.source === 'quiz') addKind(ev.articleId, ev.kind, ev.correct)
+  }
+
+  db.prepare('DELETE FROM activity_days').run()
+  const insertActivity = db.prepare('INSERT INTO activity_days (day, cat, count) VALUES (?, ?, ?)')
+  for (const [day, counts] of activity) {
+    for (const [cat, n] of Object.entries(counts)) insertActivity.run(day, cat, n)
+  }
+
+  db.prepare('DELETE FROM kind_stats').run()
+  const insertKind = db.prepare(
+    'INSERT INTO kind_stats (article_id, kind, total, correct) VALUES (?, ?, ?, ?)',
+  )
+  for (const [articleId, byKind] of kindStats) {
+    for (const [kind, stat] of byKind) insertKind.run(articleId, kind, stat.total, stat.correct)
+  }
+
+  return loadLearning(db).activity
+}
+
+export function loadLearning(db) {  const out = emptyLearning()
 
   out.practice = db
     .prepare('SELECT at, kind, total, correct, seconds, article_id FROM practice_records ORDER BY at ASC, id ASC')
@@ -488,6 +608,25 @@ export function loadLearning(db) {
       correct: Number(r.correct),
     }
   }
+
+  out.answerEvents = db
+    .prepare(
+      'SELECT at, day, article_id, source, kind, cat, correct, question_id FROM answer_events ORDER BY at ASC, id ASC',
+    )
+    .all()
+    .map((r) => {
+      const ev = {
+        at: String(r.at),
+        day: String(r.day ?? ''),
+        articleId: String(r.article_id ?? ''),
+        source: String(r.source),
+        kind: String(r.kind),
+        cat: String(r.cat),
+        correct: Number(r.correct) !== 0,
+      }
+      if (r.question_id !== null && r.question_id !== undefined) ev.questionId = String(r.question_id)
+      return ev
+    })
 
   return out
 }

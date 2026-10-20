@@ -18,6 +18,7 @@ import type { WritingRecord } from './writing'
 import type { PracticeRecord } from './practice'
 import type { MistakeEntry } from './mistakes'
 import type { KindStats, RetellRecord, StudiedDay } from './learning'
+import type { AnswerEvent } from './answerEvents'
 
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
@@ -113,8 +114,27 @@ export function mergePractice(
   return out.slice(-Math.max(0, cap))
 }
 
-const MISTAKE_CAP = 300
+/** 合并答题事件：按「时间 + 文章 + 题型 + 题目」去重，按时间升序，保留最近 cap 条。 */
+export function mergeAnswerEvents(
+  current: AnswerEvent[],
+  incoming: AnswerEvent[],
+  cap = 5000,
+): AnswerEvent[] {
+  const key = (e: AnswerEvent) =>
+    `${e.at}|${e.articleId}|${e.source}|${e.kind}|${e.correct ? 1 : 0}|${e.questionId ?? ''}`
+  const seen = new Set(current.map(key))
+  const out = [...current]
+  for (const e of incoming) {
+    const k = key(e)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(e)
+  }
+  out.sort((a, b) => a.at.localeCompare(b.at))
+  return out.slice(-Math.max(0, cap))
+}
 
+const MISTAKE_CAP = 300
 /** 合并错题本：同 id 累加次数、保留更近的一条；完全相同的一份记录不重复计数。 */
 export function mergeMistakes(
   current: MistakeEntry[],

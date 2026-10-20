@@ -75,7 +75,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 6`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版）。
+schema 版本：`PRAGMA user_version = 7`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版，v7 加答题事件与聚合基线）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -169,6 +169,9 @@ pick_sessions(at, seconds, picked)                                        -- 选
 study_word_days(day, word_id, ordinal)                                    -- 每天背过哪些词（日志用）
 skimmed_articles(article_id)                                              -- 精读「略读」进度
 kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
+answer_events(id, at, day, article_id, source, kind, cat, correct,
+              question_id)                                                -- 每题对错（v7，append-only）
+learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
 learning_snapshots(id, at, reason, record_count, payload JSON)             -- 覆盖前快照（最近 30 份 + 记录最多一份）
 ```
 
@@ -181,8 +184,13 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   服务恢复后不刷新页面也会补写。不重写写作历史/背词日记录等无关表；静态部署/服务不可用时继续只用 localStorage。
 - 偏好/会话（主题、字号、面板、上次文章、草稿、会话快照、待选清单、`langCollected`）
   **不进这些表**。
-- `reader:activity` / `reader:kindStats` 目前是聚合值；历史数据只能先按聚合保存。
-  以后新增答题事件时，应改成“事件表 → 聚合视图”，不要同时手写事件和聚合。
+- `reader:activity` / `reader:kindStats` 仍照常写聚合值（兼容现有 UI）；同时每题追加一条
+  `answer_events`，字段含 `at / day / articleId / source / kind / cat / correct / questionId`。
+  v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
+  历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
+  （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」重建
+  `activity_days` / `kind_stats`，不假装历史能量化到题。纯函数口径在 `core/answerEvents.ts`，
+  活动日一律用 `core/activity.dayKeyLocal`（事件写入时已落 `day`，服务端不另算日期）。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
   `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。
 - v5 防御：每次整份/增量写入前，在同一事务里把当前学习记录存进 `learning_snapshots`

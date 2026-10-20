@@ -1,7 +1,15 @@
 import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { SCHEMA_V1, SCHEMA_V2, SCHEMA_V3, SCHEMA_V5, SCHEMA_V6, SCHEMA_VERSION } from './sqliteSchema.js'
+import {
+  SCHEMA_V1,
+  SCHEMA_V2,
+  SCHEMA_V3,
+  SCHEMA_V5,
+  SCHEMA_V6,
+  SCHEMA_V7,
+  SCHEMA_VERSION,
+} from './sqliteSchema.js'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.js'
 import {
   hasLearningRows,
@@ -9,7 +17,9 @@ import {
   listLearningSnapshots,
   loadLearning,
   loadLearningSnapshot,
+  rebuildLearningDerived,
   restoreLearningSnapshot,
+  saveDerivedBaseline,
   writeLearning,
 } from './sqliteLearning.js'
 import { list, nowIso, num, text, tx } from './sqliteUtil.js'
@@ -316,6 +326,15 @@ function ensureSchema(db) {
     tx(db, () => { db.exec(SCHEMA_V6); db.exec('PRAGMA user_version = 6') })
     version = 6
   }
+  if (version < 7) {
+    tx(db, () => {
+      db.exec(SCHEMA_V7)
+      // 历史只有聚合值：先存成 baseline，之后的事件才可逐题对账/重建。
+      saveDerivedBaseline(db, nowIso())
+      db.exec('PRAGMA user_version = 7')
+    })
+    version = 7
+  }
   return version
 }
 
@@ -516,6 +535,10 @@ export function openStore(dbPath) {
       },
       restoreLearningSnapshot(id) {
         return tx(db, () => restoreLearningSnapshot(db, id))
+      },
+      /** 用 baseline + 答题事件重建活动/题型聚合（不碰其它学习记录）。 */
+      rebuildLearningDerived() {
+        return tx(db, () => rebuildLearningDerived(db))
       },
       saveLearning(data) {
         tx(db, () => writeLearning(db, data))

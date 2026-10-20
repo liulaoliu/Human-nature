@@ -35,6 +35,7 @@ const learning: LearningCollections = {
   studiedDays: [],
   skimmed: [],
   kindStats: {},
+  answerEvents: [],
   retells: [],
   readDone: [],
   readGoal: 2,

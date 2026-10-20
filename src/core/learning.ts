@@ -11,6 +11,8 @@
  */
 
 import type { DayActivity } from './activity'
+import type { AnswerEvent } from './answerEvents'
+import { ANSWER_EVENT_CAP, normalizeAnswerEvents } from './answerEvents'
 import type { ReadDone } from './goals'
 import type { MistakeEntry } from './mistakes'
 import type { PracticeRecord } from './practice'
@@ -51,6 +53,8 @@ export interface LearningData {
   studiedDays: StudiedDay[]
   skimmed: string[]
   kindStats: KindStats
+  /** 每题对错的原始事件（append-only，用于对账 / 重建聚合） */
+  answerEvents: AnswerEvent[]
 }
 
 /** 学习记录里可以单独增量同步的部分。 */
@@ -68,6 +72,7 @@ export const LEARNING_SECTIONS: LearningSection[] = [
   'studiedDays',
   'skimmed',
   'kindStats',
+  'answerEvents',
 ]
 
 /** 空记录。每次都返回新数组/新对象，避免调用方改到共享常量。 */
@@ -84,6 +89,7 @@ export function emptyLearning(): LearningData {
     studiedDays: [],
     skimmed: [],
     kindStats: {},
+    answerEvents: [],
   }
 }
 
@@ -173,6 +179,7 @@ export function normalizeLearning(raw: unknown): LearningData {
       if (Object.keys(row).length) out.kindStats[articleId] = row
     }
   }
+  out.answerEvents = normalizeAnswerEvents(raw.answerEvents).slice(-ANSWER_EVENT_CAP)
   return out
 }
 
@@ -189,6 +196,7 @@ export function hasLearningData(data: LearningData): boolean {
     data.sessions.length > 0 ||
     data.studiedDays.some((d) => d.ids.length > 0) ||
     data.skimmed.length > 0 ||
-    Object.keys(data.kindStats).length > 0
+    Object.keys(data.kindStats).length > 0 ||
+    data.answerEvents.length > 0
   )
 }

@@ -13,6 +13,7 @@ import {
 import { wordSpans } from '../../core/wordSelect'
 import type { Sentence } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
+import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
 import { dictMistake } from '../../core/mistakes'
@@ -70,6 +71,8 @@ function loadDictSession(): DictSessionSnapshot | null {
 
 export interface UseDictationParams {
   doc: { sentences: Sentence[] } | null
+  /** 当前文章标识（答题事件归属用；没开文章时为空串）。 */
+  articleIdentity?: string
   libraryLemmas: Set<string>
   speak: (text: string) => void
   /** 预热若干文本的音频（后台合成、不下载正文）；填空并段用它缓存，避免每次重新合成。 */
@@ -81,6 +84,8 @@ export interface UseDictationParams {
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
   recordActivity: (cat: ActivityCat, n?: number) => void
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
+  /** 每题追加一条答题事件（可选；旧调用方不传就只写聚合值）。 */
+  recordAnswer?: (event: AnswerEventInput) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
   /** 开始听写时关掉其它会话（背单词/考试/快刷）。 */
@@ -95,6 +100,7 @@ export interface UseDictationParams {
 export function useDictation(params: UseDictationParams) {
   const {
     doc,
+    articleIdentity = '',
     libraryLemmas,
     speak,
     warmTexts,
@@ -104,6 +110,7 @@ export function useDictation(params: UseDictationParams) {
     batchItemsFromWords,
     recordActivity,
     recordPractice,
+    recordAnswer,
     addMistake,
     dropMistake,
     closeOthers,
@@ -342,6 +349,14 @@ export function useDictation(params: UseDictationParams) {
     }
     setChecked(true)
     recordActivity('listen', 1)
+    recordAnswer?.({
+      articleId: articleIdentity,
+      source: 'dictation',
+      kind: 'dictation',
+      cat: 'listen',
+      correct: ok,
+      questionId: item.id,
+    })
     setResults((r) => [...r, ok])
     if (!ok) {
       setWrongItems((w) => (w.some((x) => x.id === item.id) ? w : [...w, { id: item.id, text: item.text }]))
@@ -358,7 +373,7 @@ export function useDictation(params: UseDictationParams) {
         next()
       }, 700)
     }
-  }, [queue, index, input, mode, blanks, cloze, recordActivity, next, clearAdvance, addMistake, dropMistake])
+  }, [queue, index, input, mode, blanks, cloze, recordActivity, recordAnswer, articleIdentity, next, clearAdvance, addMistake, dropMistake])
 
   /** 听写「重练错题」：只重练本轮错的那些段。 */
   const retryWrong = useCallback(() => {

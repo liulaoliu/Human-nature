@@ -8,6 +8,7 @@ import {
   type ListeningQuiz,
   type ListeningResult,
 } from '../../core/listening'
+import type { AnswerEventInput } from '../../core/answerEvents'
 import { listenMistake } from '../../core/mistakes'
 import type { MistakeEntry } from '../../core/mistakes'
 import { useLocalStorageState, persistentNumber } from './useLocalStorageState'
@@ -21,6 +22,8 @@ export interface UseListeningParams {
   askedIdsRef: { current: string[] }
   recordActivity: (cat: 'listen', n?: number) => void
   recordPractice: (kind: 'listening', total: number, correct: number) => void
+  /** 每题追加一条答题事件（可选；旧调用方不传就只写聚合值）。 */
+  recordAnswer?: (event: AnswerEventInput) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
   /** 打开听力题时关掉其它会话。 */
@@ -39,6 +42,7 @@ export function useListening({
   askedIdsRef,
   recordActivity,
   recordPractice,
+  recordAnswer,
   addMistake,
   dropMistake,
   closeOthers,
@@ -115,11 +119,20 @@ export function useListening({
     recordPractice('listening', res.total, res.correct)
     // 错题本：听力错题（对→清掉，错→记上）
     for (const q of questions) {
+      const ok = isListeningCorrect(q, answers[q.id] ?? '')
+      recordAnswer?.({
+        articleId: articleIdentity,
+        source: 'listening',
+        kind: 'listening',
+        cat: 'listen',
+        correct: ok,
+        questionId: q.id,
+      })
       const id = listenMistake(articleIdentity, q, '').id
-      if (isListeningCorrect(q, answers[q.id] ?? '')) dropMistake(id)
+      if (ok) dropMistake(id)
       else addMistake(listenMistake(articleIdentity, q, new Date().toISOString()))
     }
-  }, [questions, answers, recordActivity, recordPractice, articleIdentity, addMistake, dropMistake])
+  }, [questions, answers, recordActivity, recordPractice, recordAnswer, articleIdentity, addMistake, dropMistake])
 
   /** 只重做错题。 */
   const retryWrong = useCallback(() => {

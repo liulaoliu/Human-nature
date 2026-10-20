@@ -219,6 +219,12 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       return
     }
 
+    if (path === '/learning/rebuild-derived' && method === 'POST') {
+      store.rebuildLearningDerived()
+      sendJson(res, 200, { ok: true, value: store.loadLearning() })
+      return
+    }
+
     if (path === '/learning' && method === 'GET') {
       sendJson(res, 200, { ok: true, value: store.loadLearning() })
       return
