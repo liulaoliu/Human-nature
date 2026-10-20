@@ -15,7 +15,6 @@ import {
   type AnalysisTask,
   type VocabLevel,
 } from '../core/analyzer'
-import { type ListeningQuestion } from '../core/listening'
 import { hasSentenceLanguage } from '../core/language'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
@@ -35,7 +34,6 @@ import { buildReadiness } from '../core/readiness'
 import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
-import { buildSiege } from '../core/siege'
 import VocabList from './VocabList'
 import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
@@ -70,6 +68,7 @@ import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { usePasteApply } from './hooks/usePasteApply'
+import { useMistakeActions } from './hooks/useMistakeActions'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
@@ -740,39 +739,18 @@ export default function ReaderApp() {
     dictApiRef.current?.startItems(items)
   }, [])
 
-  /** 错题本：重练考试错词。 */
-  const retryMistakeVocab = useCallback(() => {
-    const ids = mistakes.filter((m) => m.kind === 'vocab' && m.itemId).map((m) => m.itemId as string)
-    if (!ids.length) {
-      flash('没有考试错词')
-      return
-    }
-    startQuizItems(ids)
-  }, [mistakes, startQuizItems, flash])
-
-  /** 错题本：重练听力错题。 */
-  const retryMistakeListen = useCallback(() => {
-    const qs = mistakes
-      .filter((m) => m.kind === 'listen' && m.question)
-      .map((m) => m.question as ListeningQuestion)
-    if (!qs.length) {
-      flash('没有听力错题')
-      return
-    }
-    startListenQuestions(qs)
-  }, [mistakes, startListenQuestions, flash])
-
-  /** 错题本：重练听写漏词。 */
-  const retryMistakeDict = useCallback(() => {
-    const items = mistakes
-      .filter((m) => m.kind === 'dict' && m.text)
-      .map((m, i) => ({ id: `mk-${i}`, text: m.text as string }))
-    if (!items.length) {
-      flash('没有听写漏词')
-      return
-    }
-    startDictItems(items)
-  }, [mistakes, startDictItems, flash])
+  /** 错题本重练 / 包围战（逻辑在 hooks/useMistakeActions）。 */
+  const { retryMistakeVocab, retryMistakeListen, retryMistakeDict, startSiege } = useMistakeActions({
+    mistakes,
+    libraryItems: library.items,
+    startQuizItems,
+    startListenQuestions,
+    startDictItems,
+    setIntensiveOpen,
+    setQuizLoopWrong,
+    setQuizScope,
+    flash,
+  })
 
   /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
   /** 快刷会话（逻辑在 hooks/useQuickSession）。 */
@@ -1570,23 +1548,6 @@ export default function ReaderApp() {
     },
     [startQuizDrill, startQuizArticleDrill],
   )
-
-  /** 错题包围战：错题 + 优先重排 + 常错 + 学不稳 一起围剿，开「反复鞭打」打到全对。 */
-  const startSiege = useCallback(() => {
-    const picked = buildSiege(library.items, mistakes, { scope: 'all', limit: 40 })
-    if (!picked.length) {
-      flash('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
-      return
-    }
-    setIntensiveOpen(false)
-    setQuizLoopWrong(true)
-    setQuizScope('lapses')
-    startQuizItems(
-      picked.map((x) => x.item.id),
-      ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
-    )
-    flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
-  }, [library.items, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash])
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen

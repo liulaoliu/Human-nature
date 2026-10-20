@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **2032 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **1993 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -36,7 +36,7 @@
       3. [x] **工具栏宿主**（约 -70 行）：同法抽 `ReaderToolbarHost`，把 `toolbar={...}`（约 76 行）整块搬走。
              （已完成：`ReaderToolbarHost.tsx` + 6 条组件测试；进度条/版本筛选仍由 `ReaderApp` 持有并传入。
              实际 2213 → 2190 行（-23）：顶栏多为分散的标量状态，能整包搬的只有 `useReaderDoc` / `pregen` / `tts`）
-      4. [ ] **会话外回调归位**（最大块，约 -250 行）：把 `retryMistakeVocab/Listen/Dict`、`commitBatchItems`、
+      4. [x] **会话外回调归位**（最大块，约 -250 行）：把 `retryMistakeVocab/Listen/Dict`、`commitBatchItems`、
              `addItemsToVocab`、`addPhrasesToVocab`、`removeWordFromVocab`、`copyLanguagePrompt`、`applyPaste`、
              `copyMissingAgain`、`applyAnyPaste`、`handleReview`、`handleEdit`、`saveRetell`、`deleteRetell`、
              `startSiege`、`toggleSkimmed` 按归属收进对应 hook（词库写入口仍只能有一个），每个 hook 补
@@ -46,7 +46,9 @@
              - [x] **4b 提示词复制**：`copyLanguagePrompt` / `copyMissingAgain` → `hooks/useAiTasks`（+6 条钩子测试）
              - [x] **4c 粘贴应用**：`applyPaste` / `applyAnyPaste` → `hooks/usePasteApply`（+9 条钩子测试）
              - [x] **4d 复述 / 略读**：`saveRetell` / `deleteRetell` / `toggleSkimmed` → `hooks/useLearningData`（+4 条钩子测试）
-             - [ ] **4e 错题重练 / 包围战**：`retryMistakeVocab/Listen/Dict` / `startSiege`
+             - [x] **4e 错题重练 / 包围战**：`retryMistakeVocab/Listen/Dict` / `startSiege` → `hooks/useMistakeActions`
+                   （+7 条钩子测试；4a–4e 合计 2190 → 1993，-197）
+             - 小结：四刀切完 `ReaderApp` 从 2424 降到 1993；离 ≤1200 还差约 800 行，下一轮继续找宿主边界。
 
       **验收与红线**：每刀 `npm run gates` 全绿（含上帝文件门禁，`ReaderApp` 基线只准下调）；不新增读写词库的
       effect（写入口仍只有 `useLibraryAutoFill` / `persist`）；拆完 `ReaderApp` 行数同步下调
