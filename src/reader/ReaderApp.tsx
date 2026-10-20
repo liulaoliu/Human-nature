@@ -19,10 +19,8 @@ import { hasSentenceLanguage } from '../core/language'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
-  practiceForArticle,
   type PracticeKind,
 } from '../core/practice'
-import { buildArticleMastery, isStable } from '../core/mastery'
 import { buildArticleQuestions } from '../core/articleQuiz'
 import { type ArticleQuizKind } from '../core/quiz'
 import {
@@ -32,8 +30,7 @@ import {
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
 import { type AiJobsInput } from '../core/aiPackage'
-import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
-import { buildOutputBoard } from '../core/output'
+import { addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { type DrillKind } from './panels/IntensivePanel'
 import Composer from './panels/Composer'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -56,6 +53,7 @@ import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
 import { useVocabMode } from './hooks/useVocabMode'
+import { useArticleDerived } from './hooks/useArticleDerived'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
@@ -76,7 +74,7 @@ import { dictionary } from '../adapters/dictionary'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
-import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
+import { type IntensiveStageKey } from '../core/intensive'
 import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
 import { buildHeatmap } from '../core/activity'
 import {
@@ -1204,125 +1202,19 @@ export default function ReaderApp() {
     ],
   )
 
-  /** 本篇掌握度：词（SRS）+ 精读完成度 + 本篇技能正确率 + 本篇错题。 */
-  const articleMastery = useMemo(() => {
-    const words = articleWords
-    let stable = 0
-    let due = 0
-    let lapsed = 0
-    let fresh = 0
-    for (const it of words) {
-      if (isStable(it)) stable += 1
-      if (isDue(it)) due += 1
-      if ((it.reviewState.lapses ?? 0) > 0) lapsed += 1
-      if (it.reviewState.repetitions === 0) fresh += 1
-    }
-    const sents = doc?.sentences ?? []
-    const reading = {
-      sentences: sents.length,
-      translated: sents.filter((s) => s.translation).length,
-      language: sents.filter((s) => hasSentenceLanguage(s)).length,
-    }
-    const stat = (kind: PracticeKind) => {
-      const rows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === kind)
-      const total = rows.reduce((a, r) => a + r.total, 0)
-      const correct = rows.reduce((a, r) => a + r.correct, 0)
-      return total > 0 ? { total, correct } : undefined
-    }
-    const mine = mistakes.filter((m) => {
-      if (m.kind === 'vocab') return !!m.itemId && words.some((it) => it.id === m.itemId)
-      if (m.kind === 'listen') return m.articleId === articleIdentity
-      if (m.kind === 'dict') return !!m.text && sents.some((s) => s.text.includes(m.text ?? ''))
-      return false
-    })
-    return buildArticleMastery({
-      words: { total: words.length, stable, due, lapsed, fresh },
-      reading,
-      skills: { quiz: stat('quiz'), dictation: stat('dictation'), listening: stat('listening') },
-      mistakes: {
-        words: mine.filter((m) => m.kind === 'vocab').length,
-        sentences: mine.filter((m) => m.kind !== 'vocab').length,
-      },
-    })
-  }, [articleWords, doc, practice, mistakes, articleIdentity])
-
-  /** 精读工作流：按本篇当前数据算出各阶段进度与下一步。 */
-  const intensiveSkimmed = skimmedArticles.includes(articleIdentity)
-  const intensivePlan = useMemo(() => {
-    const w = articleWords
-    const quizRows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === 'quiz')
-    const quizTotal = quizRows.reduce((a, r) => a + r.total, 0)
-    const quizCorrect = quizRows.reduce((a, r) => a + r.correct, 0)
-    const sents = doc?.sentences ?? []
-    return buildIntensivePlan({
-      hasDoc: !!doc,
-      skimmed: intensiveSkimmed,
-      words: {
-        total: w.length,
-        withMeaning: w.filter((it) => !!it.meaning).length,
-        withChunks: w.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
-        withMarks: w.filter((it) => (it.grammarMarks?.length ?? 0) > 0).length,
-        studied: w.filter((it) => it.reviewState.repetitions > 0).length,
-        stable: w.filter((it) => isStable(it)).length,
-        due: w.filter((it) => isDue(it)).length,
-        noExample: w.filter((it) => !hasOwnExamples(it)).length,
-      },
-      sentences: {
-        total: sents.length,
-        translated: sents.filter((s) => !!s.translation).length,
-        language: sents.filter((s) => hasSentenceLanguage(s)).length,
-      },
-      quiz: quizTotal > 0 ? { total: quizTotal, correct: quizCorrect } : undefined,
-      writes: writingHistory.filter((r) => r.articleId === articleIdentity).length,
-    })
-  }, [doc, articleWords, practice, articleIdentity, writingHistory, intensiveSkimmed])
-
-  /** 本篇的复述记录。 */
-  const myRetells = useMemo(
-    () => retells.filter((r) => r.articleId === articleIdentity),
-    [retells, articleIdentity],
-  )
-
-  /** 产出看板：词块/搭配/习语正确率 + 仿写 + 复述 的量化。 */
-  const outputBoard = useMemo(() => {
-    const ks = kindStats[articleIdentity] ?? {}
-    const sumKinds = (list: string[]) => {
-      let total = 0
-      let correct = 0
-      for (const k of list) {
-        const s = ks[k]
-        if (s) {
-          total += s.total
-          correct += s.correct
-        }
-      }
-      return { total, correct }
-    }
-    const chunkStats = sumKinds(['usage', 'collocation', 'prep', 'idiom'])
-    const grammarStats = sumKinds(['grammar', 'phraseBlank', 'functionWord', 'ordering', 'translate', 'translate2'])
-    const writes = writingHistory.filter((r) => r.articleId === articleIdentity)
-    const avgScore = writes.length
-      ? Math.round(
-          writes.reduce(
-            (a, r) => a + (r.feedback.max > 0 ? (r.feedback.total / r.feedback.max) * 100 : 0),
-            0,
-          ) / writes.length,
-        )
-      : null
-    return buildOutputBoard({
-      chunkStats,
-      grammarStats,
-      words: {
-        total: articleWords.length,
-        withChunks: articleWords.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
-        studied: articleWords.filter((it) => it.reviewState.repetitions > 0).length,
-        stable: articleWords.filter((it) => isStable(it)).length,
-      },
-      writes: { count: writes.length, avgScore },
-      retells: { count: myRetells.length, words: myRetells.reduce((a, r) => a + r.words, 0) },
-      streak: activityStreak(activity),
-    })
-  }, [kindStats, articleIdentity, writingHistory, articleWords, myRetells, activity])
+  /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
+  const { articleMastery, intensiveSkimmed, intensivePlan, myRetells, outputBoard } = useArticleDerived({
+    articleIdentity,
+    articleWords,
+    doc,
+    practice,
+    mistakes,
+    writingHistory,
+    retells,
+    kindStats,
+    activity,
+    skimmedArticles,
+  })
 
   /** 一键：给「还没有自己例句」的本篇生词，批量补离线例句（Tatoeba）。 */
   const enrichExamplesFromTatoeba = useCallback(async () => {
