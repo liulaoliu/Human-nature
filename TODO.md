@@ -2,17 +2,25 @@
 
 > **2026-10-20 最新交接（换电脑先看这段）**
 >
-> - 分支 `main`，最后提交 `12df501`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：176 个测试文件，**1586 passed / 5 skipped**。
+> - 分支 `main`，最后提交 `7e94ddb`；工作树干净。
+> - schema **v7**；`npm run gates` 全绿：182 个测试文件，**1654 passed / 5 skipped**。
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - 本轮已完成：词库逻辑拆分（`core/vocab/*`）、TTS/侧栏/速读/背单词继续拆分、
 >   **答题事件表 v7**（append-only + 历史聚合基线 + 可重建统计）、
 >   **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）、
->   **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）。
+>   **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）、
+>   **跟读模块瘦身**（`state/session` 1185 → 943、`ui/App` 1191 → 624；纯规则进
+>   `core/recording|scriptAlign|anchorEdits|takeChunk`，账本进 `state/calibrationLedger`，
+>   偏好进 `state/shadowingPrefs`，顺带销掉 `ui/App.tsx` 的 R3 豁免）。
 > - 下一步优先级：
->   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS，以及「重建并核对」。（**用户自己做**）
->   2. [ ] 存量大文件（低优先，只准变小）：`src/state/session.ts` 1185、`src/ui/App.tsx` 1191。
->   3. [ ] 记录分页（P2）：数据量还没到，先不做。
+>   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS、跟读页（录音/撕块/选字锚定）、
+>      以及「重建并核对」。（**用户自己做**）
+>   2. [ ] 存量大文件（低优先，只准变小）：`src/state/session.test.ts` 1058、
+>      `src/reader/ReaderApp.tsx` 1037、`src/state/session.ts` 943、`src/state/script.test.ts` 803。
+>      （`ui/App.tsx` 已降到 624，出基线）
+>   3. [ ] 跟读模块剩下的两处 R3 债：`ui/ChunkSplitter` / `ui/FishLayer` 的 localStorage 读写，
+>      可照 `state/shadowingPrefs` 的路子搬走。
+>   4. [ ] 记录分页（P2）：数据量还没到，先不做。
 >
 > 下面「Review 重构待办（2026-10-19）」保留为历史记录，里面的事项均已完成；
 > 更早的录音 / PDF 抽取待办仍然有效，但别把旧状态当成最新状态。
