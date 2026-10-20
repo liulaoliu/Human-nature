@@ -1,13 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { DEFAULT_TTS_VOICE, isOfflineTtsVoice } from '../../core/ttsVoices'
-import { wordSpans } from '../../core/wordSelect'
+import { alignTimings, type WordTiming } from '../../core/ttsTiming'
 
-/** 一个词的音频区间（毫秒）。 */
-export interface WordTiming {
-  start: number
-  end: number
-}
+export type { WordTiming }
 
 /** 当前正在朗读的句子：文本 + 逐词时间 + 已播到哪（毫秒）。 */
 export interface NowPlaying {
@@ -20,32 +16,6 @@ export interface NowPlaying {
 const SERVER_RETRY_MS = 20000
 /** 选中某句时，后台预热它之后最多几句（顺序渐进，给下一次点击/连播省合成时间）。 */
 const PREFETCH_AHEAD = 4
-
-function normW(s: string): string {
-  return s.toLowerCase().normalize('NFKC').replace(/[^a-z0-9']/g, '')
-}
-
-/** 把服务端逐词时间戳对齐到该句的词序（供逐词高亮 / 点词跳播）。 */
-function alignTimings(text: string, timings: { part?: string; start: number; end: number }[]): WordTiming[] {
-  const spans = wordSpans(text)
-  const out: WordTiming[] = []
-  let j = 0
-  for (const sp of spans) {
-    const key = normW(sp.text)
-    let found = -1
-    for (let k = j; k < timings.length; k++) {
-      if (normW(timings[k].part ?? '') === key) {
-        found = k
-        break
-      }
-    }
-    const t = found >= 0 ? timings[found] : timings[j]
-    if (found >= 0) j = found + 1
-    else if (j < timings.length) j++
-    out.push(t ? { start: t.start, end: t.end } : { start: 0, end: 0 })
-  }
-  return out
-}
 
 export interface UseSpeakingOptions {
   /** 当前文章（只用到句子列表）；没有文章时为 null。 */
