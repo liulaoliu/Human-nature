@@ -1,14 +1,11 @@
-import type { ChangeEvent, RefObject } from 'react'
 import type { AnalysisTask } from '../../core/analyzer'
+import SidePickAiPack, { type SidePickAiPackProps } from './SidePickAiPack'
+import SidePickBatch, { type BatchItem, type SidePickBatchProps } from './SidePickBatch'
+import SidePickDictTools, { type SidePickDictToolsProps } from './SidePickDictTools'
 
-/** 「选词模式」里攒的待选生词。 */
-export interface BatchItem {
-  word: string
-  sentence: string
-  sentenceId: string | null
-}
+export type { BatchItem }
 
-export interface SidePickProps {
+export interface SidePickProps extends SidePickBatchProps, SidePickDictToolsProps, SidePickAiPackProps {
   /** 选区任务按钮（翻译/查词/…）。 */
   tasks: { task: AnalysisTask; label: string }[]
   onPrompt: (task: AnalysisTask) => void
@@ -20,81 +17,10 @@ export interface SidePickProps {
   vocabMode: boolean
   canMark: boolean
 
-  /** 待选清单。 */
-  visibleBatch: BatchItem[]
-  batchCount: number
-  onRemoveWord: (b: BatchItem) => void
-  onCommitBatch: () => void
-  onCopyBatchPrompt: () => void
-  onExportBatch: () => void
-  onClearBatch: () => void
   onAddSelectionToBatch: () => void
   onMark: () => void
   /** 手动加/改语言点。 */
   onOpenLang: () => void
-
-  /** 粘回与应用。 */
-  pasted: string
-  onPastedChange: (value: string) => void
-  pasteReport: string[]
-  pasteMissingCount: number
-  onApplyPaste: () => void
-  onCopyMissingAgain: () => void
-
-  /** AI 工作包（agent 路径）。 */
-  aiJobCount: number
-  aiScope: 'article' | 'all'
-  onAiScopeChange: (scope: 'article' | 'all') => void
-  /** 自动标词是否直接进生词本（跳过待选）。 */
-  autoVocabDirect: boolean
-  onAutoVocabDirectChange: (v: boolean) => void
-  /** 本篇是否已「自动标过词」（标过就不再进待办）+ 重跑。 */
-  autoVocabDoneHere: boolean
-  onRerunAutoVocab: () => void
-  onExportAiJobs: () => void
-  /** 离线词典（ECDICT）。 */
-  dictReady: boolean
-  onPickFromDict: () => void
-  onEnrichFromDict: () => void
-  onFixLemmasFromDict: () => void
-  onConfuseFromDict: () => void
-  /** 离线例句（Tatoeba）：给还没有例句的本篇生词批量补。 */
-  onEnrichExamples: () => void
-  /** 离线例句库是否已加载。 */
-  examplesReady: boolean
-  aiFileRef: RefObject<HTMLInputElement>
-  onAiFile: (e: ChangeEvent<HTMLInputElement>) => void
-
-  /** 一键跑批（服务端直连；key 在服务端，不经过网页/命令行）。 */
-  localConfigured: boolean | null
-  localRunning: boolean
-  localDone: number
-  localTotal: number
-  localRound: number
-  localPhase: string
-  localError: string
-  onRunLocal: () => void
-
-  /** 待办检查 / 进度提醒。 */
-  checklist: { key: string; label: string; done: number; total: number; manual?: boolean }[]
-  checklistDone: number
-  checklistTotal: number
-  nextHint: string
-  /** 把当前待办标记为已处理/跳过（用于个别补不齐、反复失败的词）。 */
-  onSkipPending: () => void
-
-  /** AI 工作包（网页版 / DeepSeek 路径）。 */
-  aiWebBatchSize: number
-  onAiWebBatchSizeChange: (n: number) => void
-  onCopyWebPrompt: () => void
-  onCopyWebMissing: () => void
-  onRefreshWeb: () => void
-  webTotal: number
-  webDone: number
-  webPending: number
-  webMissing: number
-  webPendingLabels: string[]
-  webBreakdown: { task: string; label: string; done: number; total: number }[]
 
   /** 混淆项 / 原形 / -ing-ed / 去重。 */
   confusableBatchCount: number
@@ -190,44 +116,15 @@ export default function SidePick({
 }: SidePickProps) {
   return (
     <div className="side-sec" data-sec="pick">
-      {batchCount > 0 && (
-        <div className="picked batch">
-          <div className="picked-head">
-            <span className="tag exact">待选 {visibleBatch.length}</span>
-            <span className="muted">
-              {visibleBatch.length ? '点正文里的词可加 / 减' : '挑出的词都已在生词本里'}
-            </span>
-          </div>
-          {visibleBatch.length > 0 && (
-            <div className="chips">
-              {visibleBatch.map((b) => (
-                <button key={b.word} className="chipx" onClick={() => onRemoveWord(b)} title="点击移除">
-                  {b.word} ×
-                </button>
-              ))}
-            </div>
-          )}
-          <div className="tasks">
-            <button className="primary" onClick={onCommitBatch} disabled={!visibleBatch.length}>
-              加入生词本
-            </button>
-            <button onClick={onCopyBatchPrompt} disabled={!visibleBatch.length}>
-              复制查词提示词
-            </button>
-            <button onClick={onExportBatch} disabled={!visibleBatch.length}>
-              导出 CSV
-            </button>
-            <button onClick={onClearBatch}>清空</button>
-          </div>
-          {batchCount > visibleBatch.length && (
-            <div className="muted hint">
-              {visibleBatch.length
-                ? `另有 ${batchCount - visibleBatch.length} 个已入库，不再显示（清空可重置）。`
-                : `挑出的 ${batchCount} 个词**都已在生词本里**了 —— 去「生词本 / 全部生词」看；待选只显示未入库的词。`}
-            </div>
-          )}
-        </div>
-      )}
+      <SidePickBatch
+        visibleBatch={visibleBatch}
+        batchCount={batchCount}
+        onRemoveWord={onRemoveWord}
+        onCommitBatch={onCommitBatch}
+        onCopyBatchPrompt={onCopyBatchPrompt}
+        onExportBatch={onExportBatch}
+        onClearBatch={onClearBatch}
+      />
 
       <div className="picked">
         <div className="picked-head">
@@ -271,268 +168,59 @@ export default function SidePick({
         </div>
       </div>
 
-      <div className="dict-tools">
-        <div className="muted">📖 离线词典：{dictReady ? '已就绪（ECDICT）' : '未加载（跑 npm run ecdict:build）'}</div>
-        <div className="muted">
-          🗣 离线例句：{examplesReady ? '已就绪（Tatoeba，建词自动补 3 条）' : '未安装（跑 npm run tatoeba:build）'}
-        </div>
-        <div className="bar">
-          <button
-            onClick={onPickFromDict}
-            disabled={!dictReady}
-            title="按当前词汇标准，用词典从本篇正文挑超纲词进「待选」（不用 AI）"
-          >
-            本篇挑词
-          </button>
-          <button
-            onClick={onEnrichFromDict}
-            disabled={!dictReady}
-            title="给生词本补齐音标/词性/中英文释义（词典有的才补）"
-          >
-            补齐生词本
-          </button>
-          <button
-            onClick={onFixLemmasFromDict}
-            disabled={!dictReady}
-            title="用词典校正原形（running→run）并去重"
-          >
-            校正原形
-          </button>
-          <button
-            onClick={onConfuseFromDict}
-            disabled={!dictReady}
-            title="用词典给缺混淆项的词本地生成干扰项（拼写形近、含义不同）"
-          >
-            补混淆项
-          </button>
-          <button
-            onClick={onEnrichExamples}
-            title="从离线例句库（Tatoeba）给「还没有例句」的本篇生词批量补真实例句；需先跑 tools/build-tatoeba.mjs"
-          >
-            📖 补离线例句
-          </button>
-        </div>
-      </div>
-
-      <textarea
-        className="paste"
-        placeholder="把 DeepSeek 的结果粘回这里，再点「应用结果」"
-        value={pasted}
-        onChange={(e) => onPastedChange(e.target.value)}
+      <SidePickDictTools
+        dictReady={dictReady}
+        onPickFromDict={onPickFromDict}
+        onEnrichFromDict={onEnrichFromDict}
+        onFixLemmasFromDict={onFixLemmasFromDict}
+        onConfuseFromDict={onConfuseFromDict}
+        examplesReady={examplesReady}
+        onEnrichExamples={onEnrichExamples}
       />
-      <div className="ai-pack">
-        <div className="muted">
-          ⚡ 一键打包：导出待办文件 → 整包交给 AI（网页版也行，喂给本机 agent 更快）→ 把结果 JSON 导回，一次应用全部，不用一条条复制粘贴。
-        </div>
-        {checklist.length > 0 && (
-          <div className="ai-check">
-            <div className="muted">
-              📋 待办检查 · 进度 <b>{checklistDone}</b>/{checklistTotal}
-              {checklistTotal > 0 && checklistDone >= checklistTotal ? ' 🎉' : ''}
-            </div>
-            <div className="ai-check-list">
-              {checklist.map((it) => {
-                const ok = it.total > 0 && it.done >= it.total
-                return (
-                  <div
-                    key={it.key}
-                    className={'ai-check-row' + (ok ? ' done' : '') + (it.manual ? ' manual' : '')}
-                  >
-                    <span className="ai-check-name">
-                      {it.manual ? '👤 ' : ''}
-                      {it.label}
-                    </span>
-                    <span className="muted">
-                      {it.done}/{it.total}
-                    </span>
-                    <span className="ai-check-mark">{ok ? '✔' : it.manual ? '待处理' : ''}</span>
-                  </div>
-                )
-              })}
-            </div>
-            {nextHint && <div className="muted ai-next">👉 {nextHint}</div>}
-            {webPending > 0 && (
-              <button
-                className="ai-skip"
-                onClick={() => {
-                  if (
-                    window.confirm(
-                      `把当前 ${webPending} 项待办标记为「已处理/跳过」？\n\n` +
-                        `不改动词库数据，只是不再提示（数据再变时可能重新出现）。\n` +
-                        `适合个别补不齐、反复失败的词。`,
-                    )
-                  )
-                    onSkipPending()
-                }}
-                title="标记为已处理，不再提示"
-              >
-                ⏭ 跳过这 {webPending} 项
-              </button>
-            )}
-          </div>
-        )}
-        <div className="ai-scope">
-          <span className="muted">范围</span>
-          <button className={aiScope === 'article' ? 'primary' : ''} onClick={() => onAiScopeChange('article')} title="只处理这篇的生词 / 翻译 / 语言点">
-            本篇
-          </button>
-          <button className={aiScope === 'all' ? 'primary' : ''} onClick={() => onAiScopeChange('all')} title="处理整个词库（补齐 / 混淆项等会覆盖所有生词）">
-            全库
-          </button>
-        </div>
-        {aiScope === 'all' && (
-          <div className="ai-scope-warn">
-            ⚠️ 全库范围：会处理整个生词本（当前 {webPending} 项待办），不只是本篇——词库大时又慢又费 token。
-          </div>
-        )}
-        <label
-          className="ai-direct"
-          title="开启后：自动标词挑出的词直接写进生词本（跳过「待选」），下次跑批再自动补音标/释义"
-        >
-          <input
-            type="checkbox"
-            checked={autoVocabDirect}
-            onChange={(e) => onAutoVocabDirectChange(e.target.checked)}
-          />
-          自动标词直接进生词本（跳过待选）
-        </label>
-        {autoVocabDoneHere && (
-          <div className="ai-direct-done">
-            <span className="muted">本篇「自动标词」已做过（不再自动进待办）</span>
-            <button onClick={onRerunAutoVocab} title="清掉本篇「已标词」标记，让一键跑批重新标词">
-              🔄 重跑自动标词
-            </button>
-          </div>
-        )}
-        <button
-          onClick={onExportAiJobs}
-          disabled={!aiJobCount}
-          title="把当前所有待办（自动标词 / 查词 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力）打成一个 JSON，整包发出去"
-        >
-          📦 导出 AI 工作包（{aiJobCount} 项）
-        </button>
-        <button
-          onClick={() => aiFileRef.current?.click()}
-          style={{ marginLeft: 6 }}
-          title="导入 AI 返回的结果 JSON（{ results: [{ id, raw }] }），按任务逐条应用并汇总回执"
-        >
-          📥 导入 AI 结果
-        </button>
-        <input ref={aiFileRef} type="file" accept="application/json,.json" style={{ display: 'none' }} onChange={onAiFile} />
 
-        <div className="ai-local">
-          <button
-            className="primary"
-            onClick={onRunLocal}
-            disabled={!webPending || localRunning || localConfigured === false}
-            title={
-              localConfigured === false
-                ? '服务端未配置 API key：把 key 填进 config.local.json（该文件已 gitignore）'
-                : '把待办直接发给本机服务端跑，跑完自动应用；会自动串联多轮（如：先选词进生词本，再自动补音标/释义），不用复制粘贴、不用命令行'
-            }
-          >
-            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webPending} 项）`}
-          </button>
-          {localConfigured === false && <span className="muted"> 未配置 key（config.local.json）</span>}
-          {localError && <span className="web-miss"> · {localError}</span>}
-        </div>
+      <SidePickAiPack
+        pasted={pasted}
+        onPastedChange={onPastedChange}
+        pasteReport={pasteReport}
+        pasteMissingCount={pasteMissingCount}
+        onApplyPaste={onApplyPaste}
+        onCopyMissingAgain={onCopyMissingAgain}
+        aiJobCount={aiJobCount}
+        aiScope={aiScope}
+        onAiScopeChange={onAiScopeChange}
+        autoVocabDirect={autoVocabDirect}
+        onAutoVocabDirectChange={onAutoVocabDirectChange}
+        autoVocabDoneHere={autoVocabDoneHere}
+        onRerunAutoVocab={onRerunAutoVocab}
+        onExportAiJobs={onExportAiJobs}
+        aiFileRef={aiFileRef}
+        onAiFile={onAiFile}
+        localConfigured={localConfigured}
+        localRunning={localRunning}
+        localDone={localDone}
+        localTotal={localTotal}
+        localRound={localRound}
+        localPhase={localPhase}
+        localError={localError}
+        onRunLocal={onRunLocal}
+        checklist={checklist}
+        checklistDone={checklistDone}
+        checklistTotal={checklistTotal}
+        nextHint={nextHint}
+        onSkipPending={onSkipPending}
+        aiWebBatchSize={aiWebBatchSize}
+        onAiWebBatchSizeChange={onAiWebBatchSizeChange}
+        onCopyWebPrompt={onCopyWebPrompt}
+        onCopyWebMissing={onCopyWebMissing}
+        onRefreshWeb={onRefreshWeb}
+        webTotal={webTotal}
+        webDone={webDone}
+        webPending={webPending}
+        webMissing={webMissing}
+        webPendingLabels={webPendingLabels}
+        webBreakdown={webBreakdown}
+      />
 
-        <div className="ai-web">
-          <div className="muted">
-            网页版（DeepSeek 等）：复制提示词 → 网页粘贴 → 整段回复贴回上面的框 → 应用。
-            翻译 / 语言点已按句分块，避免一次太多被截断。
-          </div>
-
-          <div className="web-progress">
-            {webTotal === 0 ? (
-              <span className="muted">当前没有待办</span>
-            ) : webPending === 0 ? (
-              <span className="web-done">🎉 全部完成（{webDone}/{webTotal}）</span>
-            ) : (
-              <span>
-                进度 <b>{webDone}</b>/{webTotal} · 还要做 <b>{webPending}</b>
-                {webMissing > 0 && <span className="web-miss"> · 缺项 {webMissing}</span>}
-              </span>
-            )}
-          </div>
-          {webBreakdown.length > 0 && (
-            <div className="web-flow">
-              {webBreakdown.map((g) => (
-                <div key={g.task} className={'web-flow-row' + (g.done === g.total ? ' done' : '')}>
-                  <span className="web-flow-name">{g.label}</span>
-                  <span className="muted">
-                    {g.done}/{g.total}
-                  </span>
-                  <span className="web-flow-mark">{g.done === g.total ? '✔' : ''}</span>
-                </div>
-              ))}
-            </div>
-          )}
-          {webPending > 0 && webPendingLabels.length > 0 && (
-            <div className="muted web-pending">
-              还要做：{webPendingLabels.join('、')}
-              {webPending > webPendingLabels.length ? ` …共 ${webPending} 项` : ''}
-            </div>
-          )}
-
-          <button
-            onClick={onCopyWebPrompt}
-            disabled={webPending === 0}
-            title="复制「下一批还没做」的任务；已完成的会自动跳过"
-          >
-            📋 复制下一批提示词（{webPending} 项待做）
-          </button>
-          <select
-            value={String(aiWebBatchSize)}
-            onChange={(e) => onAiWebBatchSizeChange(Number(e.target.value))}
-            style={{ marginLeft: 6 }}
-            title="每批几个任务（网页端回复容易截断，分批更稳）"
-          >
-            <option value="4">4/批</option>
-            <option value="6">6/批</option>
-            <option value="8">8/批</option>
-            <option value="12">12/批</option>
-            <option value="0">全部/批</option>
-          </select>
-          <div className="muted web-pending">
-              复制一批 → 网页问一次 → 把回复整段贴到上面的框 → 点「应用结果」。
-          </div>
-          <div className="bar" style={{ marginTop: 6 }}>
-            {webMissing > 0 && (
-              <button onClick={onCopyWebMissing} title="只重发「问过但没成功」的项">
-                🔁 重发缺项 {webMissing}
-              </button>
-            )}
-            <button
-              onClick={() => {
-                if (window.confirm('重置进度？\n已应用的成果不会删除；但所有待办会重新显示为「未做」。')) onRefreshWeb()
-              }}
-              title="清空进度（不删成果数据）；所有待办重新显示为未做"
-            >
-              ↺ 重置进度
-            </button>
-          </div>
-        </div>
-      </div>
-      <button className="primary" onClick={onApplyPaste} disabled={!pasted.trim()} style={{ marginTop: 6 }}>
-        应用结果
-      </button>
-      {pasteReport.length > 0 && (
-        <div className="paste-report">
-          {pasteReport.map((line, i) => (
-            <div key={i}>{line}</div>
-          ))}
-        </div>
-      )}
-      {pasteMissingCount > 0 && (
-        <button
-          onClick={onCopyMissingAgain}
-          style={{ marginTop: 6 }}
-          title="把 AI 没返回的词重新组成提示词，复制后再贴回"
-        >
-          🔁 复制未返回的 {pasteMissingCount} 个
-        </button>
-      )}
       <button
         onClick={onCopyConfusable}
         disabled={!confusableBatchCount}
