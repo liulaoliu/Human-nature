@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **1993 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **1946 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -49,6 +49,9 @@
              - [x] **4e 错题重练 / 包围战**：`retryMistakeVocab/Listen/Dict` / `startSiege` → `hooks/useMistakeActions`
                    （+7 条钩子测试；4a–4e 合计 2190 → 1993，-197）
              - 小结：四刀切完 `ReaderApp` 从 2424 降到 1993；离 ≤1200 还差约 800 行，下一轮继续找宿主边界。
+      5. [x] **浮层面板宿主**：速读 / 语言点 / 计划 / 包围战 / 目标 / 导出 / 日志 / 全部生词 →
+             `ReaderOverlaysHost`（+6 条组件测试；`ReaderApp` 1993 → 1946）。
+             下一批候选：选区状态（exact/selIndices/ctrl/alt）、新建/导入态、显示偏好。
 
       **验收与红线**：每刀 `npm run gates` 全绿（含上帝文件门禁，`ReaderApp` 基线只准下调）；不新增读写词库的
       effect（写入口仍只有 `useLibraryAutoFill` / `persist`）；拆完 `ReaderApp` 行数同步下调

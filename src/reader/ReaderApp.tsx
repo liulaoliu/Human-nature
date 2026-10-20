@@ -34,13 +34,10 @@ import { buildReadiness } from '../core/readiness'
 import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
-import VocabList from './VocabList'
-import SpeedReadPanel from './panels/SpeedReadPanel'
-import LanguageEditor from './panels/LanguageEditor'
-import PlanPanel from './panels/PlanPanel'
-import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
+import { type DrillKind } from './panels/IntensivePanel'
 import Composer from './panels/Composer'
 import ReaderToolbarHost from './ReaderToolbarHost'
+import ReaderOverlaysHost from './ReaderOverlaysHost'
 import ReaderShell from './ReaderShell'
 import ReaderArticle from './ReaderArticle'
 import ReaderSidebarHost from './ReaderSidebarHost'
@@ -78,11 +75,8 @@ import { dictionary } from '../adapters/dictionary'
 import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
-import JournalPanel from './panels/JournalPanel'
-import ExportPanel from './panels/ExportPanel'
 import { buildIntensivePlan, type IntensiveStageKey } from '../core/intensive'
 import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
-import GoalPanel from './panels/GoalPanel'
 import { buildHeatmap } from '../core/activity'
 import {
   persistentBool,
@@ -1768,173 +1762,132 @@ export default function ReaderApp() {
           writing={writingApi}
         />
 
-        {speedReadOpen && doc && (
-          <SpeedReadPanel
-            sentences={doc.sentences}
-            docKey={articleIdentity}
-            onClose={() => setSpeedReadOpen(false)}
-            onSpeak={speak}
-            ttsState={ttsState}
-            onAddItems={addItemsToVocab}
-            isKnown={(w) => knownLemmas.has(lemmaOf(w))}
-            wordMeaning={(w) => {
+        <ReaderOverlaysHost
+          speed={{
+            open: speedReadOpen && !!doc,
+            sentences: doc?.sentences ?? [],
+            docKey: articleIdentity,
+            onClose: () => setSpeedReadOpen(false),
+            onSpeak: speak,
+            ttsState,
+            onAddItems: addItemsToVocab,
+            isKnown: (w) => knownLemmas.has(lemmaOf(w)),
+            wordMeaning: (w) => {
               const it = library.items.find((x) => x.lemma === lemmaOf(w) || x.word.toLowerCase() === w.toLowerCase())
               return it ? displayMeaning(it) || it.meaning || null : null
-            }}
-            onFinishRead={markReadDone}
-            onAddPhrases={addPhrasesToVocab}
-            onHint={flash}
-            wordsInSentence={wordsInSentence}
-            onRemoveWord={removeWordFromVocab}
-            vocabMode={vocabMode}
-            onOpenLang={openLangFor}
-            langEditorOpen={langOpen}
-          />
-        )}
-
-        {langOpen && (
-          <LanguageEditor sentence={langTarget} onSave={saveLanguage} onClose={() => setLangOpen(false)} />
-        )}
-
-        {planOpen && (
-          <PlanPanel
-            onClose={() => setPlanOpen(false)}
-            hasDoc={!!doc}
-            articleTitle={articleTitle}
-            todoPending={aiWebPending}
-            todayCards={todayCards}
-            todayWrites={todayWrites}
-            todayKey={todayKey}
-            onNewArticle={() => {
+            },
+            onFinishRead: markReadDone,
+            onAddPhrases: addPhrasesToVocab,
+            onHint: flash,
+            wordsInSentence,
+            onRemoveWord: removeWordFromVocab,
+            vocabMode,
+            onOpenLang: openLangFor,
+            langEditorOpen: langOpen,
+          }}
+          lang={{ open: langOpen, sentence: langTarget, onSave: saveLanguage, onClose: () => setLangOpen(false) }}
+          plan={{
+            open: planOpen,
+            onClose: () => setPlanOpen(false),
+            hasDoc: !!doc,
+            articleTitle,
+            todoPending: aiWebPending,
+            todayCards,
+            todayWrites,
+            todayKey,
+            onNewArticle: () => {
               setPlanOpen(false)
               setComposing(true)
-            }}
-            onStartStudy={() => {
+            },
+            onStartStudy: () => {
               setPlanOpen(false)
               startStudy()
-            }}
-            onOpenSpeedRead={() => {
+            },
+            onOpenSpeedRead: () => {
               setPlanOpen(false)
               openSpeedRead()
-            }}
-          />
-        )}
-
-        {intensiveOpen && (
-          <IntensivePanel
-            onClose={() => setIntensiveOpen(false)}
-            articleTitle={articleTitle}
-            hasDoc={!!doc}
-            plan={intensivePlan}
-            skimmed={intensiveSkimmed}
-            onToggleSkimmed={toggleSkimmed}
-            onRunBatch={() => void runAiLocal()}
-            batchRunning={aiLocalRunning}
-            batchRound={aiLocalRound}
-            batchPhase={aiLocalPhase}
-            batchDone={aiLocalDone}
-            batchTotal={aiLocalTotal}
-            batchError={aiLocalError}
-            board={outputBoard}
-            retells={myRetells}
-            onSaveRetell={saveRetell}
-            onDeleteRetell={deleteRetell}
-            onStage={openIntensiveStage}
-            onDrill={startIntensiveDrill}
-            onSiege={startSiege}
-          />
-        )}
-
-        {goalOpen && (
-          <GoalPanel
-            onClose={() => setGoalOpen(false)}
-            todayKey={todayKey}
-            done={todayReadDone}
-            allDone={readDone}
-            goal={readGoal}
-            onGoalChange={setReadGoal}
-            memo={goalMemo}
-            onMemoChange={setGoalMemo}
-            articleTitle={articleTitle}
-            articleDone={articleReadDay !== null}
-            articleReadDay={articleReadDay}
-            onMarkDone={markReadDone}
-            onUndo={undoReadDone}
-          />
-        )}
-
-        {exportOpen && (
-          <ExportPanel
-            onClose={() => setExportOpen(false)}
-            libraryItems={library.items}
-            articleTitle={articleTitle}
-            articleWords={articleWords}
-            articles={exportArticles}
-            todayKey={todayKey}
-            onPrint={doPrint}
-            onExportAnki={doExportAnki}
-            onExportWordList={exportWordList}
-          />
-        )}
-
-        {journalOpen && (
-          <JournalPanel
-            onClose={() => setJournalOpen(false)}
-            days={journalAllDays}
-            day={journalDay}
-            onDayChange={setJournalDay}
-            data={journalData}
-            summary={journalSummaryRows}
-            heat={journalHeat}
-            onSpeak={speak}
-          />
-        )}
-
-        {browseAll && (
-          <div className="all-vocab">
-            <div className="bar">
-              <strong>全部生词（{library.items.length}）</strong>
-              <span className="view-toggle">
-                <button className={vocabView === 'card' ? 'primary' : ''} onClick={() => setVocabView('card')}>
-                  卡片
-                </button>
-                <button className={vocabView === 'table' ? 'primary' : ''} onClick={() => setVocabView('table')}>
-                  表格
-                </button>
-              </span>
-              <button onClick={() => doExportAnki(library.items)} disabled={!library.items.length}>
-                整库 Anki CSV
-              </button>
-              <button onClick={() => doPrint(library.items, '全部生词')} disabled={!library.items.length}>
-                整库 A4 打印
-              </button>
-              <button
-                onClick={() => doExportWrong(library.items)}
-                disabled={!library.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
-              >
-                导出错词
-              </button>
-              <button className="primary" onClick={() => setBrowseAll(false)}>
-                关闭
-              </button>
-            </div>
-            {allList.length ? (
-              <VocabList
-                items={allList}
-                view={vocabView}
-                focusLemma={focusLemma}
-                confirmDel={confirmDel}
-                onSpeak={speak}
-                onDelete={askDelete}
-                onReview={handleReview}
-                onEdit={handleEdit}
-                showSource
-              />
-            ) : (
-              <div className="muted">生词本是空的</div>
-            )}
-          </div>
-        )}
+            },
+          }}
+          intensive={{
+            open: intensiveOpen,
+            onClose: () => setIntensiveOpen(false),
+            articleTitle,
+            hasDoc: !!doc,
+            plan: intensivePlan,
+            skimmed: intensiveSkimmed,
+            onToggleSkimmed: toggleSkimmed,
+            onRunBatch: () => void runAiLocal(),
+            batchRunning: aiLocalRunning,
+            batchRound: aiLocalRound,
+            batchPhase: aiLocalPhase,
+            batchDone: aiLocalDone,
+            batchTotal: aiLocalTotal,
+            batchError: aiLocalError,
+            board: outputBoard,
+            retells: myRetells,
+            onSaveRetell: saveRetell,
+            onDeleteRetell: deleteRetell,
+            onStage: openIntensiveStage,
+            onDrill: startIntensiveDrill,
+            onSiege: startSiege,
+          }}
+          goal={{
+            open: goalOpen,
+            onClose: () => setGoalOpen(false),
+            todayKey,
+            done: todayReadDone,
+            allDone: readDone,
+            goal: readGoal,
+            onGoalChange: setReadGoal,
+            memo: goalMemo,
+            onMemoChange: setGoalMemo,
+            articleTitle,
+            articleDone: articleReadDay !== null,
+            articleReadDay,
+            onMarkDone: markReadDone,
+            onUndo: undoReadDone,
+          }}
+          exporter={{
+            open: exportOpen,
+            onClose: () => setExportOpen(false),
+            libraryItems: library.items,
+            articleTitle,
+            articleWords,
+            articles: exportArticles,
+            todayKey,
+            onPrint: doPrint,
+            onExportAnki: doExportAnki,
+            onExportWordList: exportWordList,
+          }}
+          journal={{
+            open: journalOpen,
+            onClose: () => setJournalOpen(false),
+            days: journalAllDays,
+            day: journalDay,
+            onDayChange: setJournalDay,
+            data: journalData,
+            summary: journalSummaryRows,
+            heat: journalHeat,
+            onSpeak: speak,
+          }}
+          allVocab={{
+            open: browseAll,
+            items: library.items,
+            list: allList,
+            view: vocabView,
+            onViewChange: setVocabView,
+            focusLemma,
+            confirmDel,
+            onSpeak: speak,
+            onDelete: askDelete,
+            onReview: handleReview,
+            onEdit: handleEdit,
+            onClose: () => setBrowseAll(false),
+            onExportAnki: doExportAnki,
+            onPrint: doPrint,
+            onExportWrong: doExportWrong,
+          }}
+        />
 
         {!studyQueue && !browseAll && !examActive && (composing || !doc) && (
           <Composer

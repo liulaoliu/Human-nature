@@ -139,6 +139,7 @@
 `usePasteApply`（单任务应用 / 工作包统一入口：空输入、成功清空、失败保留、语言点自动识别）。
 `useLearningData` 的复述 / 略读动作（空白与无文章不记、按时间删、来回切）、
 `useMistakeActions`（三类错题重练 + 包围战：空错题提示、按类型过滤、40 词上限）。
+组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
