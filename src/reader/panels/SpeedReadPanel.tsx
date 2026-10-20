@@ -69,6 +69,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     go,
     chooseDrill,
     restart,
+    close,
   } = useSpeedReadSession({ sentences, docKey, onClose, onFinishRead, langEditorOpen })
 
   /** 选词模式：开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点。 */
@@ -155,7 +156,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   return (
     <div className="study speed">
       <div className="bar study-bar">
-        <button onClick={onClose}>结束（Esc）</button>
+        <button onClick={close}>结束（Esc）</button>
         <span className="speed-nav">
           <button onClick={() => go(-1)} disabled={index <= 0} title="上一句（←）">
             ‹
@@ -216,7 +217,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       />
 
       {done ? (
-        <SpeedReadDone summary={summary} onRestart={restart} onClose={onClose} />
+        <SpeedReadDone summary={summary} onRestart={restart} onClose={close} />
       ) : (
         sentence && (
           <SpeedReadSentence

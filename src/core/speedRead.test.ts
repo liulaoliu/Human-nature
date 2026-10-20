@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { targetMs, wordCount, pickDrill, checkDrill, summarize } from './speedRead'
+import { targetMs, wordCount, pickDrill, checkDrill, summarize, docSignature, speedCursorKey } from './speedRead'
 import type { Sentence } from '../types/document'
 
 const S = (text: string, extra: Partial<Sentence> = {}): Sentence => ({
@@ -62,5 +62,31 @@ describe('speedRead', () => {
     expect(s.drillTotal).toBe(1)
     expect(s.drillCorrect).toBe(1)
     expect(s.avgWpm).toBe(Math.round((20 / 9000) * 60000))
+  })
+})
+
+describe('docSignature / speedCursorKey：速读游标不串篇', () => {
+  it('同样的正文 → 同样的签名（同一篇重开能续上）', () => {
+    expect(docSignature([S('Run fast.'), S('Walk slow.')])).toBe(docSignature([S('Run fast.'), S('Walk slow.')]))
+  })
+
+  it('不同正文 → 不同签名（同名文章也不会共用进度）', () => {
+    expect(docSignature([S('Run fast.')])).not.toBe(docSignature([S('Walk slow.')]))
+  })
+
+  it('句子切分不同 → 签名也不同（句间有分隔，ab|c 不等于 a|bc）', () => {
+    expect(docSignature([S('ab'), S('c')])).not.toBe(docSignature([S('a'), S('bc')]))
+  })
+
+  it('空正文有稳定的签名（不是 NaN / undefined）', () => {
+    expect(docSignature([])).toBe(docSignature([]))
+    expect(docSignature([])).toMatch(/^[0-9a-z]+$/)
+  })
+
+  it('键名 = 文章标识 + 签名：标识相同、正文不同 → 键不同', () => {
+    const a = speedCursorKey('', [S('Run fast.')])
+    const b = speedCursorKey('', [S('Walk slow.')])
+    expect(a).not.toBe(b)
+    expect(a.startsWith('reader:speedCursor:@')).toBe(true)
   })
 })

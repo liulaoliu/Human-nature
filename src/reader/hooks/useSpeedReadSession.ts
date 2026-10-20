@@ -7,6 +7,7 @@ import {
   checkDrill,
   contentWords,
   pickDrill,
+  speedCursorKey,
   summarize,
   targetMs,
   wordCount,
@@ -15,8 +16,6 @@ import {
 } from '../../core/speedRead'
 import { persistentBoolTrue, persistentNumber, useLocalStorageState } from './useLocalStorageState'
 import type { SpeedReadPhase as Phase } from '../panels/SpeedReadSentence'
-
-const cursorKey = (docKey: string) => `reader:speedCursor:${docKey}`
 
 export interface UseSpeedReadSessionOptions {
   sentences: Sentence[]
@@ -42,7 +41,12 @@ export function useSpeedReadSession({
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
-  const [index, setIndex] = useState(() => Math.min(readNum(cursorKey(docKey), 0), Math.max(0, n - 1)))
+  /**
+   * 游标键 = 文章标识 + 正文签名：标识相同的两篇文章（空标题 / 同名 / 「未命名」）
+   * 也不会共用进度，正文改过就从第一句重来。
+   */
+  const key = useMemo(() => speedCursorKey(docKey, sentences), [docKey, sentences])
+  const [index, setIndex] = useState(() => Math.min(readNum(key, 0), Math.max(0, n - 1)))
   const [phase, setPhase] = useState<Phase>('read')
   const [elapsed, setElapsed] = useState(0)
   const [readMs, setReadMs] = useState(0)
@@ -76,6 +80,28 @@ export function useSpeedReadSession({
   /** 干扰项池：整篇实词，选最像的做选项。 */
   const pool = useMemo(() => [...new Set(sentences.flatMap((s) => contentWords(s.text)))], [sentences])
 
+  /**
+   * 换到另一篇（面板没关就换了文章 / 正文被编辑过）：把成绩清掉，
+   * 游标回到那篇自己的位置——否则上一篇的「第 N 句」会跟着带到新文章上。
+   */
+  const keyRef = useRef(key)
+  useEffect(() => {
+    if (keyRef.current === key) return
+    keyRef.current = key
+    if (drillTimerRef.current != null) {
+      window.clearTimeout(drillTimerRef.current)
+      drillTimerRef.current = null
+    }
+    setRows([])
+    setIndex(Math.min(readNum(key, 0), Math.max(0, n - 1)))
+    setPhase('read')
+    setDrill(null)
+    setPicked('')
+    setDrillOk(null)
+    setReadMs(0)
+    setSlow(false)
+  }, [key, n])
+
   useEffect(() => {
     if (phase !== 'read' || done) return
     t0.current = Date.now()
@@ -94,7 +120,7 @@ export function useSpeedReadSession({
       setRows((r) => [...r, { words, ms: readMs || elapsed, slow, drillOk: okForDrill }])
       const next = index + 1
       try {
-        writeNum(cursorKey(docKey), next < n ? next : 0)
+        writeNum(key, next < n ? next : 0)
       } catch {
         // 忽略
       }
@@ -106,7 +132,7 @@ export function useSpeedReadSession({
       setPicked('')
       setDrillOk(null)
     },
-    [sentence, words, readMs, elapsed, slow, index, n, docKey],
+    [sentence, words, readMs, elapsed, slow, index, n, key],
   )
 
   const advance = useCallback(() => {
@@ -153,12 +179,12 @@ export function useSpeedReadSession({
       setReadMs(0)
       setSlow(false)
       try {
-        writeNum(cursorKey(docKey), next)
+        writeNum(key, next)
       } catch {
         // 忽略
       }
     },
-    [index, n, docKey],
+    [index, n, key],
   )
 
   const chooseDrill = useCallback(
@@ -186,6 +212,21 @@ export function useSpeedReadSession({
       if (drillTimerRef.current != null) window.clearTimeout(drillTimerRef.current)
     }
   }, [])
+
+  /**
+   * 退出速读：已经读到（或停在）最后一句就算这篇过完了，游标清零 ——
+   * 下次再进来从第一句开始，不会一开门就显示「第 N / N 句」。
+   */
+  const close = useCallback(() => {
+    if (n > 0 && index >= n - 1) {
+      try {
+        writeNum(key, 0)
+      } catch {
+        // 忽略
+      }
+    }
+    onClose()
+  }, [index, n, key, onClose])
 
   useHotkeys(
     (e) => {
@@ -216,7 +257,7 @@ export function useSpeedReadSession({
       }
       if (e.key === 'Escape') {
         e.preventDefault()
-        onClose()
+        close()
         return
       }
       if (phase === 'drill' && drill) {
@@ -246,11 +287,11 @@ export function useSpeedReadSession({
     setReadMs(0)
     setSlow(false)
     try {
-      writeNum(cursorKey(docKey), 0)
+      writeNum(key, 0)
     } catch {
       // 忽略
     }
-  }, [docKey])
+  }, [key])
 
   const pace = target > 0 ? Math.min(100, Math.round((elapsed / target) * 100)) : 0
   const over = elapsed > target
@@ -280,5 +321,6 @@ export function useSpeedReadSession({
     go,
     chooseDrill,
     restart,
+    close,
   }
 }

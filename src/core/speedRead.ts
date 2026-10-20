@@ -31,6 +31,29 @@ export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
+/**
+ * 正文签名：只由句子文本算（djb2），同一个标识的两篇文章也不会撞在一起。
+ *
+ * 为什么需要它：文章的「标识」可能是书名、空标题或「未命名」，两篇不同正文
+ * 完全可能共用同一个 docKey；游标只按 docKey 存就会串篇（新文章一进去就有进度）。
+ * 签名进键名后，正文不同 = 键不同 = 进度互不干扰；正文改过也自然从第一句重来。
+ */
+export function docSignature(sentences: Sentence[]): string {
+  let h = 5381
+  for (const s of sentences) {
+    const t = s.text
+    for (let i = 0; i < t.length; i++) h = ((h << 5) + h + t.charCodeAt(i)) | 0
+    h = ((h << 5) + h + 10) | 0 // 句间分隔，避免「ab|c」与「a|bc」同签名
+  }
+  return (h >>> 0).toString(36)
+}
+
+/** 速读游标的本机键：文章标识 + 正文签名。 */
+export function speedCursorKey(docKey: string, sentences: Sentence[]): string {
+  return `reader:speedCursor:${docKey}@${docSignature(sentences)}`
+}
+
+
 /** 目标阅读时长（毫秒）：词数 / WPM + 思考余量，并给上下限。 */
 export function targetMs(text: string, wpm = DEFAULT_WPM): number {
   const words = wordCount(text)
