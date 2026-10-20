@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **1696 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **1547 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -60,6 +60,8 @@
              （+5 条钩子测试；`ReaderApp` 1784 → 1741）。
       9. [x] **文章工作区**：文档动作组装 / 新建导入态 / 语言点编辑 → `hooks/useArticleWorkspace`
              （+6 条钩子测试；`ReaderApp` 1741 → 1696）。
+      10. [x] **会话服务层**：背词 / 考试 / 听力 / 快刷 / 听写 / 仿写 + 选词计时 + 错题重练
+              → `hooks/useSessionServices`（+6 条钩子测试；`ReaderApp` 1696 → 1547）。
 
       **验收与红线**：每刀 `npm run gates` 全绿（含上帝文件门禁，`ReaderApp` 基线只准下调）；不新增读写词库的
       effect（写入口仍只有 `useLibraryAutoFill` / `persist`）；拆完 `ReaderApp` 行数同步下调

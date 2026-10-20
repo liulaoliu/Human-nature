@@ -39,18 +39,15 @@ import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
 import { useAiPack } from './hooks/useAiPack'
-import { useDictation } from './hooks/useDictation'
-import { useQuizSession } from './hooks/useQuizSession'
-import { useStudySession } from './hooks/useStudySession'
 import { useLearningData } from './hooks/useLearningData'
 import { useHotkeys } from './useHotkeys'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
-import { useVocabMode } from './hooks/useVocabMode'
 import { useArticleDerived } from './hooks/useArticleDerived'
 import { useArticleWorkspace } from './hooks/useArticleWorkspace'
 import { useReaderViewData } from './hooks/useReaderViewData'
+import { useSessionServices } from './hooks/useSessionServices'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
@@ -60,16 +57,12 @@ import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { usePasteApply } from './hooks/usePasteApply'
-import { useMistakeActions } from './hooks/useMistakeActions'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
 import { loadTatoeba, tatoebaExamples } from '../adapters/tatoeba'
 import { dictionary } from '../adapters/dictionary'
-import { useQuickSession } from './hooks/useQuickSession'
-import { useListening } from './hooks/useListening'
-import { useWriting } from './hooks/useWriting'
 import { type IntensiveStageKey } from '../core/intensive'
 import {
   persistentBool,
@@ -265,14 +258,6 @@ export default function ReaderApp() {
    */
   /** 每日目标（个不同单词，0=不设目标） */
   const [dailyGoal, setDailyGoal] = useLocalStorageState('reader:dailyGoal', 20, persistentNumber)
-  /** 听写会话 API 的引用：供定义在 useDictation 之前的少数回调（打开听力/仿写、错题重练）使用。 */
-  const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
-  /** 考试会话 API 的引用：供定义在 useQuizSession 之前的少数回调（背单词开始时关闭考试）使用。 */
-  const quizApiRef = useRef<ReturnType<typeof useQuizSession> | null>(null)
-  /** 快刷会话 API 的引用：供定义在 useQuickSession 之前的少数回调使用。 */
-  const quickApiRef = useRef<ReturnType<typeof useQuickSession> | null>(null)
-  /** 听力理解会话 API 的引用：供定义在 useListening 之前的少数回调（错题本重练）使用。 */
-  const listenApiRef = useRef<ReturnType<typeof useListening> | null>(null)
   /** 是否在正文里显示语言点 */
   const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
   /** 每次生成混淆项的批量大小（0=全部） */
@@ -564,104 +549,6 @@ export default function ReaderApp() {
     setMistakes((prev) => removeMistake(prev, id))
   }, [])
 
-  // ===== 背单词会话（hooks/useStudySession）=====
-  const studyApi = useStudySession({
-    library,
-    articleIdentity,
-    docLemmas,
-    closeQuiz: () => quizApiRef.current?.close(),
-    flash,
-    persist,
-    markStudied,
-    recordActivity,
-    addStudyTime: studyFlush,
-    newLimit,
-    newToday,
-    onBumpNewToday: bumpNewToday,
-  })
-  const {
-    queue: studyQueue,
-    pool: studyPool,
-    unflushedSeconds: studyUnflushed,
-    start: startStudy,
-    close: closeStudy,
-  } = studyApi
-
-  // ===== 考试会话（hooks/useQuizSession）=====
-  const quizApi = useQuizSession({
-    library,
-    articleIdentity,
-    docLemmas,
-    doc,
-    closeOthers: () => closeStudy(),
-    speak,
-    flash,
-    persist,
-    markStudied,
-    recordActivity,
-    recordPractice,
-    addMistake,
-    dropMistake,
-    onKinds: mergeKindStats,
-  })
-  quizApiRef.current = quizApi
-  const {
-    setScope: setQuizScope,
-    setLoopWrong: setQuizLoopWrong,
-    setupOpen: quizSetupOpen,
-    setSetupOpen: setQuizSetupOpen,
-    queue: quizQueue,
-    setQueue: setQuizQueue,
-    index: quizIndex,
-    articleKinds: quizArticleKinds,
-    startArticle: startArticleQuiz,
-    startItems: startQuizItems,
-    startDrill: startQuizDrill,
-    startArticleDrill: startQuizArticleDrill,
-  } = quizApi
-
-  // ===== 听力理解会话（hooks/useListening）=====
-  const listenApi = useListening({
-    doc,
-    articleIdentity,
-    flash,
-    setLastTask,
-    askedWordsRef,
-    askedIdsRef,
-    recordActivity,
-    recordPractice,
-    addMistake,
-    dropMistake,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      quickApiRef.current?.close()
-      dictApiRef.current?.close()
-    },
-  })
-  listenApiRef.current = listenApi
-  const {
-    quiz: listenQuiz,
-    setQuiz: setListenQuiz,
-    open: listenOpen,
-    setOpen: setListenOpen,
-    count: listenCount,
-    setCount: setListenCount,
-    start: openListening,
-    startQuestions: startListenQuestions,
-  } = listenApi
-
-  /** 理解题面板：听力模式 / 阅读理解（文本）模式。 */
-  const [listenReadMode, setListenReadMode] = useState(false)
-  const openListeningMode = useCallback(
-    (read: boolean) => {
-      setListenReadMode(read)
-      openListening()
-    },
-    [openListening],
-  )
-
   /** 逐句速读。 */
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
   /** 今日计划。
@@ -682,55 +569,7 @@ export default function ReaderApp() {
     'updatedAt',
     persistentEnum(['word', 'createdAt', 'updatedAt', 'due'] as const, 'updatedAt'),
   )
-  const openSpeedRead = useCallback(() => {
-    if (!doc?.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    closeStudy()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(null)
-    setListenOpen(false)
-    setSpeedReadOpen(true)
-  }, [doc, closeStudy, flash])
-
-  /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
-  const startDictItems = useCallback((items: { id: string; text: string }[]) => {
-    dictApiRef.current?.startItems(items)
-  }, [])
-
-  /** 错题本重练 / 包围战（逻辑在 hooks/useMistakeActions）。 */
-  const { retryMistakeVocab, retryMistakeListen, retryMistakeDict, startSiege } = useMistakeActions({
-    mistakes,
-    libraryItems: library.items,
-    startQuizItems,
-    startListenQuestions,
-    startDictItems,
-    setIntensiveOpen,
-    setQuizLoopWrong,
-    setQuizScope,
-    flash,
-  })
-
   /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
-  /** 快刷会话（逻辑在 hooks/useQuickSession）。 */
-  const quickApi = useQuickSession({
-    studyPool,
-    library,
-    persist,
-    markStudied,
-    recordActivity,
-    flash,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-    },
-  })
-  quickApiRef.current = quickApi
-  const { queue: quickQueue, setQueue: setQuickQueue } = quickApi
-
   /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
   const {
     commitBatchItems,
@@ -746,50 +585,86 @@ export default function ReaderApp() {
     flash,
   })
 
-  /** 仿写训练（逻辑在 hooks/useWriting）。 */
-  const writingApi = useWriting({
+  /** 会话服务层（背词 / 考试 / 听力 / 快刷 / 听写 / 仿写 + 选词计时 + 错题重练）。 */
+  const {
+    studyApi,
+    studyQueue,
+    studyUnflushed,
+    startStudy,
+    quizApi,
+    quizSetupOpen,
+    quizQueue,
+    quizIndex,
+    quizArticleKinds,
+    startArticleQuiz,
+    startQuizDrill,
+    startQuizArticleDrill,
+    listenApi,
+    listenQuiz,
+    setListenQuiz,
+    listenOpen,
+    setListenOpen,
+    listenCount,
+    setListenCount,
+    openListening,
+    listenReadMode,
+    setListenReadMode,
+    openListeningMode,
+    openSpeedRead,
+    quickApi,
+    quickQueue,
+    writingApi,
+    writingOpen,
+    writingModel,
+    writingTask,
+    setWritingTask,
+    writingText,
+    setWritingFeedback,
+    writingHistory,
+    setWritingHistory,
+    openWriting,
+    vocabMode,
+    vocabSeconds,
+    toggleVocabMode,
+    sessionPickedRef,
+    retryMistakeVocab,
+    retryMistakeListen,
+    retryMistakeDict,
+    startSiege,
+    dictApi,
+  } = useSessionServices({
+    library,
+    articleIdentity,
+    docLemmas,
     doc,
     selectedId,
+    speak,
     flash,
+    persist,
+    markStudied,
+    recordActivity,
+    recordPractice,
+    addMistake,
+    dropMistake,
+    studyFlush,
+    newLimit,
+    newToday,
+    bumpNewToday,
+    mergeKindStats,
     setLastTask,
     askedWordsRef,
     askedIdsRef,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      quickApiRef.current?.close()
-      dictApiRef.current?.close()
-      setListenOpen(false)
-    },
+    setSessions,
+    mistakes,
+    setIntensiveOpen,
+    setSpeedReadOpen,
+    warmTexts,
+    warmTimings,
+    mergeBatch,
+    batchItemsFromWords,
   })
-  const {
-    open: writingOpen,
-    setOpen: setWritingOpen,
-    model: writingModel,
-    task: writingTask,
-    setTask: setWritingTask,
-    text: writingText,
-    setFeedback: setWritingFeedback,
-    history: writingHistory,
-    setHistory: setWritingHistory,
-    start: openWriting,
-  } = writingApi
 
-  // 听力理解题 / 仿写：Esc 退出
-  useHotkeys(
-    (e) => {
-      if (e.key === 'Escape') {
-        setListenOpen(false)
-        setWritingOpen(false)
-      }
-    },
-    listenOpen || writingOpen,
-    20,
-  )
-
-  /** 选词模式（开关 / 计时 / 切走暂停 / 关闭记会话）；逻辑在 hooks/useVocabMode。 */
-  const { vocabMode, vocabSeconds, toggleVocabMode, sessionPickedRef } = useVocabMode({ setSessions })
+  const { queue: dictQueue, index: dictIndex } = dictApi
 
   // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：
   // 纯派生无副作用，状态仍由各自 hook 持有 —— 逻辑与记忆化都在 useReaderDerived。
@@ -824,30 +699,6 @@ export default function ReaderApp() {
     libraryLemmas,
   })
 
-  /** 听写会话（队列 / 判分 / 自动下一句 / 错题重练）；逻辑在 hooks/useDictation。 */
-  const dictApi = useDictation({
-    doc,
-    libraryLemmas,
-    speak,
-    warmTexts,
-    warmTimings,
-    flash,
-    mergeBatch,
-    batchItemsFromWords,
-    recordActivity,
-    recordPractice,
-    addMistake,
-    dropMistake,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      setQuickQueue(null)
-    },
-  })
-  // 供定义在 hook 之前的少数回调（打开听力/仿写、错题重练）通过 ref 调用
-  dictApiRef.current = dictApi
-  const { queue: dictQueue, index: dictIndex } = dictApi
 
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useHotkeys(
