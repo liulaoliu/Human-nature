@@ -1,37 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import { useHotkeys } from '../useHotkeys'
-import { inStudyDeck, isStudyable, type StudyDeck } from '../../core/entryKind'
-import {
-  buildLearnQueue,
-  buildReviewQueue,
-  editItem,
-  isDue,
-  removeItem,
-  reviewItem,
-  sortItems,
-  type ReviewGrade,
-  type StudyMode,
-} from '../../core/vocab'
+import { inStudyDeck, type StudyDeck } from '../../core/entryKind'
+import { buildLearnQueue, buildReviewQueue, reviewItem, sortItems, type ReviewGrade, type StudyMode } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fmtInterval } from '../format'
-import { useLocalStorageState, persistentBool, persistentEnum, persistentNumber } from './useLocalStorageState'
+import { useStudyCardEdit } from './useStudyCardEdit'
+import { useStudyPool, type StudyScope } from './useStudyPool'
+import { useStudyTimers } from './useStudyTimers'
 
-/** 背单词范围。 */
-export type StudyScope = 'all' | 'article' | 'unmastered' | 'lapses'
-
-/** 卡内编辑草稿。 */
-export interface StudyDraft {
-  word: string
-  phonetic: string
-  partOfSpeech: string
-  meaning: string
-  definition: string
-  usage: string
-  phrases: string
-  idioms: string
-  grammarMarks: string
-}
+export type { StudyScope }
 
 export interface UseStudySessionParams {
   library: VocabLibrary
@@ -72,25 +50,23 @@ export function useStudySession(params: UseStudySessionParams) {
     onBumpNewToday,
   } = params
 
-  const [scope, setScope] = useLocalStorageState<StudyScope>(
-    'reader:studyScope',
-    'unmastered',
-    persistentEnum(['all', 'article', 'unmastered', 'lapses'] as const, 'unmastered'),
-  )
-  const [spelling, setSpelling] = useLocalStorageState('reader:studySpelling', false, persistentBool)
-  /** 单卡停留超过多少秒进入「强制锤炼」（0=关）。时间越长说明越难记。 */
-  const [drillAfter, setDrillAfter] = useLocalStorageState('reader:studyDrillAfter', 60, persistentNumber)
-  const [mode, setMode] = useLocalStorageState<StudyMode>(
-    'reader:studyMode',
-    'learn',
-    persistentEnum(['learn', 'review'] as const, 'learn'),
-  )
-  /** 背单词 / 背搭配（词组·习语）。词组不再混在「背单词」里。 */
-  const [deck, setDeck] = useLocalStorageState<StudyDeck>(
-    'reader:studyDeck',
-    'word',
-    persistentEnum(['word', 'collocation'] as const, 'word'),
-  )
+  /** 范围 / 牌组 / 新学或复习 / 拼写 / 锤炼阈值 + 候选池。 */
+  const {
+    scope,
+    setScope,
+    spelling,
+    setSpelling,
+    drillAfter,
+    setDrillAfter,
+    mode,
+    setMode,
+    deck,
+    setDeck,
+    pool,
+    poolFor,
+    dueCount,
+    newCount,
+  } = useStudyPool({ library, articleIdentity, docLemmas })
 
   const [queue, setQueue] = useState<VocabItem[] | null>(null)
   const [index, setIndex] = useState(0)
@@ -98,15 +74,7 @@ export function useStudySession(params: UseStudySessionParams) {
   const [input, setInput] = useState('')
   const [checked, setChecked] = useState(false)
   const [counts, setCounts] = useState({ know: 0, fuzzy: 0, forgot: 0 })
-  const [live, setLive] = useState(0)
-  const liveRef = useRef(0)
-  const flushedRef = useRef(0)
-  const [cardSeconds, setCardSeconds] = useState(0)
   const [gradeInfo, setGradeInfo] = useState('')
-  /** 卡内编辑（改词形/音标/释义/用法）与两步删除 */
-  const [editOpen, setEditOpen] = useState(false)
-  const [draft, setDraft] = useState<StudyDraft | null>(null)
-  const [delArmed, setDelArmed] = useState(false)
   /** 每个词本轮被「忘记/模糊」重排的次数（防死循环） */
   const requeueRef = useRef<Map<string, number>>(new Map())
   /** 本轮点过「忘记了」的词 id，用于收尾重练 */
@@ -122,34 +90,42 @@ export function useStudySession(params: UseStudySessionParams) {
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
 
-  // ---- 候选池 ----
-  /** 可背的：按当前牌组过滤；用法笔记（中文说明）不进卡片 */
-  const studyable = useMemo(
-    () => library.items.filter((it) => isStudyable(it) && inStudyDeck(it, deck)),
-    [library.items, deck],
-  )
-  const poolFor = useCallback(
-    (s: StudyScope, d: StudyDeck = deck) => {
-      const base = d === deck ? studyable : library.items.filter((it) => inStudyDeck(it, d))
-      if (s === 'all') return base
-      if (s === 'lapses') return base.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (s === 'unmastered') return base.filter((it) => it.status !== 'mastered')
-      // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
-      return base.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
-    },
-    [studyable, deck, articleIdentity, docLemmas],
-  )
-  const pool = useMemo(() => poolFor(scope), [poolFor, scope])
-  const dueCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length, [pool])
-  const newCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions === 0).length, [pool])
-
   /** 当前卡：优先取词库最新（评分/编辑后立刻反映），队列快照兜底。 */
   const card =
     queue && index < queue.length ? (library.items.find((it) => it.id === queue[index].id) ?? queue[index]) : null
 
+  /** 单卡计时 + 本轮总时长（每 15s / 退出时落盘）。 */
+  const { liveSeconds, cardSeconds, unflushedSeconds } = useStudyTimers({ queue, index, addStudyTime })
+
   /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
   const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
   const clearDrill = useCallback(() => setDrillCleared(true), [])
+
+  /** 卡内编辑 / 两步删除（队列与进度仍由本 hook 推进）。 */
+  const {
+    editOpen,
+    setEditOpen,
+    draft,
+    setDraft,
+    delArmed,
+    setDelArmed,
+    openEdit,
+    saveEdit,
+    removeCard,
+  } = useStudyCardEdit({
+    card,
+    library,
+    queue,
+    index,
+    persist,
+    flash,
+    setQueue,
+    setRoundTotal,
+    setIndex,
+    setRevealed,
+    setInput,
+    setChecked,
+  })
 
   /** 换卡时重置卡片 UI 状态。 */
   const resetCardUi = useCallback(() => {
@@ -332,71 +308,6 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex((i) => i + 1)
   }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])
 
-  /** 打开卡内编辑，带出当前值。 */
-  const openEdit = useCallback(() => {
-    if (!card) return
-    setDraft({
-      word: card.word,
-      phonetic: card.phonetic ?? '',
-      partOfSpeech: card.partOfSpeech ?? '',
-      meaning: card.meaning ?? '',
-      definition: card.definition ?? '',
-      usage: card.usage.join('；'),
-      phrases: (card.phrases ?? []).join('；'),
-      idioms: (card.idioms ?? []).join('；'),
-      grammarMarks: (card.grammarMarks ?? []).join('；'),
-    })
-    setEditOpen(true)
-    setDelArmed(false)
-  }, [card])
-
-  /** 保存卡内编辑（持久化；状态置 edited，之后查词不会再覆盖）。 */
-  const saveEdit = useCallback(() => {
-    if (!card || !draft) return
-    const split = (s: string) =>
-      s
-        .split(/[;；\n]/)
-        .map((x) => x.trim())
-        .filter(Boolean)
-    persist(
-      editItem(library, card.id, {
-        word: draft.word.trim() || card.word,
-        phonetic: draft.phonetic.trim() || null,
-        partOfSpeech: draft.partOfSpeech.trim() || null,
-        meaning: draft.meaning.trim() || null,
-        definition: draft.definition.trim() || null,
-        usage: split(draft.usage),
-        phrases: split(draft.phrases),
-        idioms: split(draft.idioms),
-        grammarMarks: split(draft.grammarMarks),
-      }),
-    )
-    setEditOpen(false)
-    setDraft(null)
-    flash('已保存修改')
-  }, [card, draft, library, persist, flash])
-
-  /** 卡内删除（两步确认），并从本轮队列里移除。 */
-  const removeCard = useCallback(() => {
-    if (!card) return
-    if (!delArmed) {
-      setDelArmed(true)
-      window.setTimeout(() => setDelArmed(false), 3000)
-      return
-    }
-    persist(removeItem(library, card.id))
-    const removedBefore = queue ? queue.slice(0, index).filter((it) => it.id === card.id).length : 0
-    setQueue((q) => (q ? q.filter((it) => it.id !== card.id) : q))
-    setRoundTotal((t) => Math.max(0, t - 1))
-    setIndex((i) => Math.max(0, i - removedBefore))
-    setDelArmed(false)
-    setEditOpen(false)
-    setRevealed(false)
-    setInput('')
-    setChecked(false)
-    flash('已删除')
-  }, [card, delArmed, library, persist, queue, index, flash])
-
   /** 收尾重练本轮点过「忘记了」的词。 */
   const retryForgot = useCallback(() => {
     const ids = new Set(forgotRef.current)
@@ -413,39 +324,6 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex(0)
     resetCardUi()
   }, [library.items, resetCardUi])
-
-  // 单卡计时：换卡归零，每秒 +1（催你快点，别墨迹）
-  useEffect(() => {
-    if (!queue) return
-    setCardSeconds(0)
-    const id = window.setInterval(() => setCardSeconds((s) => s + 1), 1000)
-    return () => window.clearInterval(id)
-  }, [queue, index])
-
-  // 本轮总时长：进场清零，每秒 +1；每 15s 落盘一次，退出时补落盘
-  useEffect(() => {
-    if (!queue) return
-    liveRef.current = 0
-    flushedRef.current = 0
-    setLive(0)
-    const id = window.setInterval(() => {
-      liveRef.current += 1
-      setLive(liveRef.current)
-      const unflushed = liveRef.current - flushedRef.current
-      if (unflushed >= 15) {
-        addStudyTime(unflushed, 0)
-        flushedRef.current = liveRef.current
-      }
-    }, 1000)
-    return () => {
-      window.clearInterval(id)
-      const unflushed = liveRef.current - flushedRef.current
-      if (unflushed > 0) {
-        addStudyTime(unflushed, 0)
-        flushedRef.current = liveRef.current
-      }
-    }
-  }, [queue, addStudyTime])
 
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
   useHotkeys(
@@ -508,7 +386,7 @@ export function useStudySession(params: UseStudySessionParams) {
     editOpen,
     setEditOpen,
     counts,
-    liveSeconds: live,
+    liveSeconds,
     cardSeconds,
     gradeInfo,
     pool,
@@ -526,7 +404,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setDrillAfter,
     clearDrill,
     /** 本轮尚未落盘的秒数（用于「累计时长」显示）。 */
-    unflushedSeconds: Math.max(0, live - flushedRef.current),
+    unflushedSeconds,
     start,
     switchMode,
     switchScope,
