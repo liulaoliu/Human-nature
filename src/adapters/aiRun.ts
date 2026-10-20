@@ -6,6 +6,7 @@
  */
 
 import type { AiResultEntry } from '../core/aiPackage'
+import { normalizeAiResults } from '../core/aiPackage'
 
 type FetchLike = typeof fetch
 
@@ -24,6 +25,8 @@ export interface AiRunFailed {
 export interface AiRunOutcome {
   results: AiResultEntry[]
   failed: AiRunFailed[]
+  /** 服务端返回但结构不合法、已被丢弃的条数 */
+  dropped: number
 }
 
 /** 用户点「取消」时抛的消息（调用方据此不当错误显示）。 */
@@ -72,6 +75,19 @@ export async function fetchAiStatus(fetchImpl?: FetchLike): Promise<boolean> {
   }
 }
 
+/** 只保留 `{id,error}` 形状的失败项；坏数据不让它把后续报告带崩。 */
+function normalizeAiFailed(raw: unknown): AiRunFailed[] {
+  if (!Array.isArray(raw)) return []
+  const out: AiRunFailed[] = []
+  for (const it of raw) {
+    if (!it || typeof it !== 'object') continue
+    const rec = it as Record<string, unknown>
+    if (typeof rec.id !== 'string') continue
+    out.push({ id: rec.id, error: typeof rec.error === 'string' ? rec.error : '未知错误' })
+  }
+  return out
+}
+
 /**
  * 把一批任务发给服务端跑，轮询到结束为止。
  *
@@ -111,8 +127,8 @@ export async function runAiBatch(
     let p: {
       state?: string
       done?: number
-      results?: AiResultEntry[]
-      failed?: AiRunFailed[]
+      results?: unknown
+      failed?: unknown
       error?: string
     } | null = null
     try {
@@ -128,7 +144,14 @@ export async function runAiBatch(
     misses = 0
     if (!p) continue
     onProgress?.(p.done ?? 0)
-    if (p.state === 'done') return { results: p.results ?? [], failed: p.failed ?? [] }
+    if (p.state === 'done') {
+      const normalized = normalizeAiResults(p.results)
+      return {
+        results: normalized.results,
+        failed: normalizeAiFailed(p.failed),
+        dropped: normalized.dropped,
+      }
+    }
     if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
   }
 }

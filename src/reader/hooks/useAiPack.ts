@@ -412,11 +412,12 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         setLocalDone(0)
         setLocalTotal(todo.length)
 
-        const { results, failed } = await runBatchOnServer(todo, (d) => setLocalDone(d), ctrl.signal)
+        const { results, failed, dropped } = await runBatchOnServer(todo, (d) => setLocalDone(d), ctrl.signal)
 
         const { okCount, failCount, lines, appliedIds } = applyResultsRef.current(results, all)
         setDoneIds((prev) => [...new Set([...prev, ...appliedIds])])
         const report = [`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)]
+        if (dropped) report.push(`⚠️ 丢弃了 ${dropped} 条结构不完整的 AI 结果（缺 raw / 不是对象）`)
         if (failed.length) {
           const byId = new Map(all.map((j) => [j.id, j]))
           report.push(`⚠️ 有 ${failed.length} 项没跑成功（会一直显示为待办，可点「跳过」）：`)

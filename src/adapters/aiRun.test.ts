@@ -60,6 +60,24 @@ describe('runAiBatch：轮询到结束', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('服务端 results 混入坏条目：过滤并报告丢弃数，不把 raw.trim 留到应用层才炸', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = stubFetch(async () =>
+      json({
+        state: 'done',
+        done: 3,
+        results: [null, { id: 'a', raw: 'x' }, { id: 'b', raw: 3 }],
+        failed: [{ id: 'c', error: '429' }, null],
+      }),
+    )
+    const p = runAiBatch(jobs, { signal: new AbortController().signal, fetchImpl })
+    await vi.advanceTimersByTimeAsync(1500)
+    const out = await p
+    expect(out.results).toEqual([{ id: 'a', raw: 'x' }])
+    expect(out.dropped).toBe(2)
+    expect(out.failed).toEqual([{ id: 'c', error: '429' }])
+  })
+
   it('服务端报错 → 抛「跑批出错」并清定时器', async () => {
     vi.useFakeTimers()
     const fetchImpl = stubFetch(async () => json({ state: 'error', error: '模型 429' }))

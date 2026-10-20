@@ -102,6 +102,45 @@ export interface AiResultEntry {
 
 export const AI_JOB_PACK_VERSION = 1
 
+/**
+ * 运行时校验一批 AI 结果：服务端版本漂移 / 代理返回异常时，
+ * 不能让 `results` 直接进 `applyTaskResult`（那里第一行就是 `raw.trim()`）。
+ * 返回能用的条目 + 丢弃数；非数组整体丢弃（缺省 = 0 条）。
+ */
+export function normalizeAiResults(raw: unknown): { results: AiResultEntry[]; dropped: number } {
+  if (!Array.isArray(raw)) return { results: [], dropped: raw == null ? 0 : 1 }
+  const results: AiResultEntry[] = []
+  let dropped = 0
+  for (const it of raw) {
+    if (!it || typeof it !== 'object') {
+      dropped++
+      continue
+    }
+    const rec = it as Record<string, unknown>
+    const rawText =
+      typeof rec.raw === 'string'
+        ? rec.raw
+        : typeof rec.text === 'string'
+          ? rec.text
+          : typeof rec.content === 'string'
+            ? rec.content
+            : ''
+    if (!rawText.trim()) {
+      dropped++
+      continue
+    }
+    const entry: AiResultEntry = {
+      id: typeof rec.id === 'string' ? rec.id : '',
+      raw: rawText,
+    }
+    if (isAiJobTask(rec.task)) entry.task = rec.task
+    if (Array.isArray(rec.askedWords)) entry.askedWords = rec.askedWords.filter((w): w is string => typeof w === 'string')
+    if (Array.isArray(rec.askedIds)) entry.askedIds = rec.askedIds.filter((w): w is string => typeof w === 'string')
+    results.push(entry)
+  }
+  return { results, dropped }
+}
+
 /** 稳定短哈希（FNV-1a → base36），用于由内容生成任务 id。 */
 function fnv1a(s: string): string {
   let h = 2166136261
@@ -180,28 +219,7 @@ export function parseAiResultPack(text: string): { results: AiResultEntry[]; err
   }
   if (!arr) return { results: [], error: '缺少 results 数组' }
 
-  const results: AiResultEntry[] = []
-  for (const it of arr) {
-    if (!it || typeof it !== 'object') continue
-    const rec = it as Record<string, unknown>
-    const raw =
-      typeof rec.raw === 'string'
-        ? rec.raw
-        : typeof rec.text === 'string'
-          ? rec.text
-          : typeof rec.content === 'string'
-            ? rec.content
-            : ''
-    if (!raw.trim()) continue
-    const entry: AiResultEntry = {
-      id: typeof rec.id === 'string' ? rec.id : '',
-      raw,
-    }
-    if (isAiJobTask(rec.task)) entry.task = rec.task
-    if (Array.isArray(rec.askedWords)) entry.askedWords = rec.askedWords.filter((w): w is string => typeof w === 'string')
-    if (Array.isArray(rec.askedIds)) entry.askedIds = rec.askedIds.filter((w): w is string => typeof w === 'string')
-    results.push(entry)
-  }
+  const { results } = normalizeAiResults(arr)
   if (!results.length) return { results: [], error: '没有有效的 raw 文本' }
   return { results, error: '' }
 }

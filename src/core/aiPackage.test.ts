@@ -9,6 +9,7 @@ import {
   jobPhaseLabel,
   makeJobId,
   missingJobIds,
+  normalizeAiResults,
   parseAiResultPack,
   parseJobPack,
   parseWebPackResults,
@@ -160,6 +161,30 @@ describe('parseAiResultPack', () => {
     expect(parseAiResultPack('nope').error).toBe('不是合法 JSON')
     expect(parseAiResultPack('{}').error).toBe('缺少 results 数组')
     expect(parseAiResultPack('{"results":[]}').error).toBe('没有有效的 raw 文本')
+  })
+})
+
+describe('normalizeAiResults', () => {
+  it('服务端响应不是数组 → 0 条，不抛', () => {
+    expect(normalizeAiResults(undefined)).toEqual({ results: [], dropped: 0 })
+    expect(normalizeAiResults('nope')).toEqual({ results: [], dropped: 1 })
+    expect(normalizeAiResults({ results: [] })).toEqual({ results: [], dropped: 1 })
+  })
+
+  it('元素不是对象 / 缺 raw / raw 为空 → 丢弃并计数，好的照常返回', () => {
+    const out = normalizeAiResults([
+      null,
+      'x',
+      { id: 'a' },
+      { id: 'b', raw: '   ' },
+      { id: 'c', raw: 'ok' },
+      { id: 'd', text: 'alias' },
+    ])
+    expect(out.results).toEqual([
+      { id: 'c', raw: 'ok' },
+      { id: 'd', raw: 'alias' },
+    ])
+    expect(out.dropped).toBe(4)
   })
 })
 
