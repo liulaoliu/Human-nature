@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { DEFAULT_TTS_VOICE, isOfflineTtsVoice } from '../../core/ttsVoices'
-import { alignTimings, type WordTiming } from '../../core/ttsTiming'
+import type { WordTiming } from '../../core/ttsTiming'
+import { fetchTimings, prefetchAudio, timingKey } from '../../adapters/ttsCache'
 
 export type { WordTiming }
 
@@ -183,7 +184,7 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       stopMedia()
       curTextRef.current = t
       setTtsState('loading')
-      const tkey = `${voiceRef.current}\n${t}`
+      const tkey = timingKey(voiceRef.current, t)
       const cachedTimings = timingsCacheRef.current.get(tkey)
       // 有缓存时间戳：直接把「起 / 止」换算成毫秒；没有则等取回后按词下标换算。
       let effSeek = seekMs
@@ -282,15 +283,10 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       }
       // 逐词时间戳（服务端随音频一起生成）：有缓存直接用；没有才请求。离线引擎无时间戳，跳过。
       if (!cachedTimings && !isOfflineTtsVoice(voiceRef.current)) {
-        fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => {
-            // 空数组 = Edge 这次降级到了本地引擎；不缓存，等 Edge 恢复后还能取到真时间戳。
-            if (Array.isArray(j) && j.length) onTimings(alignTimings(t, j))
-          })
-          .catch(() => {
-            // 忽略：拿不到时间戳就不高亮
-          })
+        // 空数组 / 失败 = 这次没拿到（Edge 可能降级到了本地引擎）；不缓存，之后还能再取。
+        void fetchTimings(voiceRef.current, t).then((timings) => {
+          if (timings) onTimings(timings)
+        })
       }
       try {
         a.pause()
@@ -376,7 +372,7 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       setReadingAll(false)
       const t = text.trim()
       if (!t) return
-      const cached = timingsCacheRef.current.get(`${voiceRef.current}\n${t}`)
+      const cached = timingsCacheRef.current.get(timingKey(voiceRef.current, t))
       if (cached) {
         playText(t, undefined, 1, cached[wordIndex]?.start ?? 0)
       } else {
@@ -416,18 +412,14 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
         // 服务端在 Edge 降级期：先不预热，队列留着，恢复后自动继续；离线引擎不受影响
         if (!isOfflineTtsVoice(voiceRef.current) && !canUseServer()) break
         const t = prefetchQueueRef.current.shift()!
-        const k = `${voiceRef.current}\n${t}`
+        const k = timingKey(voiceRef.current, t)
         if (prefetchDoneRef.current.has(k)) {
           prefetchQueuedRef.current.delete(k)
           continue
         }
         try {
-          await fetch(`/api/tts?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`, {
-            method: 'HEAD',
-          })
-          prefetchDoneRef.current.add(k)
-        } catch {
-          // 失败：不标完成，允许之后重试
+          // 失败（网络层）不标完成，允许之后重试；服务端有响应就记完成。
+          if (await prefetchAudio(voiceRef.current, t)) prefetchDoneRef.current.add(k)
         } finally {
           prefetchQueuedRef.current.delete(k)
         }
@@ -441,7 +433,7 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
     (texts: string[]) => {
       let added = false
       for (const t of texts) {
-        const k = `${voiceRef.current}\n${t}`
+        const k = timingKey(voiceRef.current, t)
         if (prefetchQueuedRef.current.has(k) || prefetchDoneRef.current.has(k)) continue
         prefetchQueuedRef.current.add(k)
         prefetchQueueRef.current.push(t)
@@ -466,19 +458,15 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
     (texts: string[]) => {
       const uniq = [...new Set(texts.map((t) => t.trim()).filter(Boolean))]
       for (const t of uniq) {
-        const key = `${voiceRef.current}\n${t}`
+        const key = timingKey(voiceRef.current, t)
         if (timingsCacheRef.current.has(key)) continue
         if (isOfflineTtsVoice(voiceRef.current)) continue
         if (!canUseServer()) return
         if (warmTimingsQueuedRef.current.has(key)) continue
         warmTimingsQueuedRef.current.add(key)
-        void fetch(`/api/tts/words?voice=${encodeURIComponent(voiceRef.current)}&text=${encodeURIComponent(t)}`)
-          .then((r) => (r.ok ? r.json() : null))
-          .then((j) => {
-            if (Array.isArray(j) && j.length) timingsCacheRef.current.set(key, alignTimings(t, j))
-          })
-          .catch(() => {
-            // 忽略
+        void fetchTimings(voiceRef.current, t)
+          .then((timings) => {
+            if (timings) timingsCacheRef.current.set(key, timings)
           })
           .finally(() => {
             warmTimingsQueuedRef.current.delete(key)
@@ -495,7 +483,7 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       setReadingAll(false)
       const t = text.trim()
       if (!t) return
-      const cached = timingsCacheRef.current.get(`${voiceRef.current}\n${t}`)
+      const cached = timingsCacheRef.current.get(timingKey(voiceRef.current, t))
       if (cached) {
         const s = cached[startWord]?.start ?? 0
         const e = endWord != null ? cached[endWord]?.end : undefined
