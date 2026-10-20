@@ -130,6 +130,22 @@ describe('useSelection：加入待选 / 直接入库', () => {
     expect(params.addToBatch).toHaveBeenCalledWith(['run'], 'Run fast.', 's1')
   })
 
+  it('选词模式下没有精确选区也屏蔽原生菜单，但不加待选', () => {
+    const { result, params } = setup({ vocabMode: true, exact: '   ' })
+    const preventDefault = vi.fn()
+    result.current.onContextMenu({ preventDefault } as never)
+    expect(preventDefault).toHaveBeenCalled()
+    expect(params.addToBatch).not.toHaveBeenCalled()
+  })
+
+  it('没开选词模式 → 不拦截原生右键菜单', () => {
+    const { result, params } = setup({ vocabMode: false, exact: 'run' })
+    const preventDefault = vi.fn()
+    result.current.onContextMenu({ preventDefault } as never)
+    expect(preventDefault).not.toHaveBeenCalled()
+    expect(params.addToBatch).not.toHaveBeenCalled()
+  })
+
   it('mark：没选区只提示；有选区走唯一写入口 persist', () => {
     const empty = setup()
     empty.result.current.mark()

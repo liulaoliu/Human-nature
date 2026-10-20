@@ -427,12 +427,13 @@ export function useSelection({
     flash(`已加入待选：${word}`)
   }, [exact, batch, addToBatch, sentence, flash, sessionPickedRef, setLastPicked, setSelSid, setSelIndices])
 
-  // 选词模式下有精确选区时，右键 = 「加入待选」（不再弹浏览器菜单）
+  // 选词模式下右键 = 「加入待选」（屏蔽浏览器菜单，有精确选区才加入）
   const onContextMenu = useCallback(
     (e: MouseEvent<HTMLElement>) => {
       rightDownRef.current = false
-      if (!vocabMode || !exact.trim()) return
+      if (!vocabMode) return
       e.preventDefault()
+      if (!exact.trim()) return
       addSelectionToBatch()
     },
     [vocabMode, exact, addSelectionToBatch, rightDownRef],
