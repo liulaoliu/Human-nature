@@ -287,6 +287,8 @@ export default function ReaderSidebarHost({
         onRerunAutoVocab: ai.rerunAutoVocab,
         onExportAiJobs: ai.exportJobs,
         dictReady,
+        onRunAll: dictTools.runAll,
+        dictBusy: dictTools.busy,
         onPickFromDict: dictTools.pickFromDict,
         onEnrichFromDict: dictTools.enrichFromDict,
         onEnrichExamples: tatoeba.enrichExamples,

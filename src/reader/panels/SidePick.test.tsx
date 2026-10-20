@@ -41,6 +41,8 @@ function props(over: Partial<SidePickProps> = {}): SidePickProps {
     onRerunAutoVocab: noop,
     onExportAiJobs: noop,
     dictReady: true,
+    onRunAll: noop,
+    dictBusy: false,
     onPickFromDict: noop,
     onEnrichFromDict: noop,
     onFixLemmasFromDict: noop,

@@ -500,6 +500,7 @@ export default function ReaderApp() {
     setConfirmDel,
     confirmTimerRef,
     library,
+    libraryRef,
     persist,
     speak,
     speakRange,
@@ -514,6 +515,7 @@ export default function ReaderApp() {
     articleIdentity,
     lookupTatoeba,
   })
+  const { enrichExamplesFromTatoeba } = ui
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
   const exporter = useExport({
@@ -618,14 +620,15 @@ export default function ReaderApp() {
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
-
     library,
+    libraryRef,
     persist,
     doc,
     level: vocabLevel,
     mergeBatch,
     batchItemsFromWords,
     flash,
+    enrichExamples: enrichExamplesFromTatoeba,
   })
 
   const allList = sortItems(library.items, vocabSort)

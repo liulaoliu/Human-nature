@@ -135,6 +135,8 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
       enrichFromDict: fn(),
       fixLemmasFromDict: fn(),
       confuseFromDict: fn(),
+      runAll: fn(),
+      busy: false,
     } as never,
     dictReady: true,
     tatoeba: { ready: true, enrichExamples: fn() },
@@ -243,6 +245,8 @@ describe('ReaderSidebarHost：AI / 工具 / 导出整包映射', () => {
     expect(sidebar.vocab.onExportAnki).toBe(exports.doExportAnki)
     expect(sidebar.vocab.onPrint).toBe(exports.doPrint)
     expect(sidebar.vocab.onExportAll).toBe(exports.exportAll)
+    expect(sidebar.pick.onRunAll).toBe(dictTools.runAll)
+    expect(sidebar.pick.dictBusy).toBe(dictTools.busy)
     expect(sidebar.pick.onEnrichFromDict).toBe(dictTools.enrichFromDict)
     expect(sidebar.pick.onPickFromDict).toBe(dictTools.pickFromDict)
     expect(sidebar.pick.onFixLemmasFromDict).toBe(dictTools.fixLemmasFromDict)

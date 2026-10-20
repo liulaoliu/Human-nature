@@ -70,6 +70,8 @@ export default function SidePick({
   onRerunAutoVocab,
   onExportAiJobs,
   dictReady,
+  onRunAll,
+  dictBusy,
   onPickFromDict,
   onEnrichFromDict,
   onFixLemmasFromDict,
@@ -170,6 +172,8 @@ export default function SidePick({
 
       <SidePickDictTools
         dictReady={dictReady}
+        onRunAll={onRunAll}
+        dictBusy={dictBusy}
         onPickFromDict={onPickFromDict}
         onEnrichFromDict={onEnrichFromDict}
         onFixLemmasFromDict={onFixLemmasFromDict}

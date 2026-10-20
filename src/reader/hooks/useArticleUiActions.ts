@@ -13,6 +13,8 @@ export interface UseArticleUiActionsParams {
   setConfirmDel: (id: string | null) => void
   confirmTimerRef: MutableRefObject<number | null>
   library: VocabLibrary
+  /** 最新词库；一键词典流程里前面步骤刚 persist 过，补例句不能再拿旧快照覆盖。 */
+  libraryRef?: MutableRefObject<VocabLibrary>
   persist: (library: VocabLibrary) => void
   speak: (text: string) => void
   speakRange: (text: string, start: number, end: number) => void
@@ -41,6 +43,7 @@ export function useArticleUiActions({
   setConfirmDel,
   confirmTimerRef,
   library,
+  libraryRef,
   persist,
   speak,
   speakRange,
@@ -169,9 +172,9 @@ export function useArticleUiActions({
       flash(`离线例句库里有 ${missing} 个都查不到（可让 AI 补例句）`)
       return
     }
-    persist(applyExamples(library, rows, new Date(), 'tatoeba'))
+    persist(applyExamples(libraryRef?.current ?? library, rows, new Date(), 'tatoeba'))
     flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
-  }, [articleWords, library, persist, flash, lookupTatoeba])
+  }, [articleWords, library, libraryRef, persist, flash, lookupTatoeba])
 
   return {
     karaoke,

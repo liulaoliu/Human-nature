@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 import { setDictionary } from '../../adapters/dictionary'
 import type { Ecdict, EcdictEntry } from '../../core/ecdict'
 import { vocabItem } from '../../core/testFixtures'
@@ -177,6 +177,54 @@ describe('useDictTools：按水平挑超纲词', () => {
     easy.result.current.pickFromDict()
     expect(easy.p.flash).toHaveBeenCalledWith('词典没挑出超纲词')
     expect(easy.p.mergeBatch).not.toHaveBeenCalled()
+  })
+})
+
+describe('useDictTools：一键处理', () => {
+  it('按顺序跑，且每步读取上一步 persist 的最新库', async () => {
+    setDictionary(dict)
+    const calls: string[] = []
+    const ref = {
+      current: library([
+        vocabItem({ id: 'v1', word: 'run', lemma: 'run' }),
+        vocabItem({ id: 'v2', word: 'running', lemma: 'running' }),
+      ]),
+    }
+    let round = 0
+    const persist = vi.fn((next: VocabLibrary) => {
+      ref.current = next
+      calls.push(`persist:${++round}`)
+    })
+    const enrichExamples = vi.fn(async () => {
+      calls.push('examples')
+    })
+    const mergeBatch = vi.fn(() => calls.push('pick'))
+    const batchItemsFromWords = vi.fn((words: string[]) =>
+      words.map((w) => ({ word: w, sentence: '', sentenceId: null })),
+    )
+    const p: UseDictToolsParams = {
+      library: ref.current,
+      libraryRef: ref,
+      persist,
+      doc: { sentences: [{ id: 's1', text: 'Running is ubiquitous.' }] },
+      level: 'cet4',
+      mergeBatch,
+      batchItemsFromWords,
+      flash: vi.fn(),
+      enrichExamples,
+      stepDelayMs: 0,
+    }
+    const { result } = renderHook(() => useDictTools(p))
+    await act(async () => {
+      await result.current.runAll()
+    })
+
+    expect(calls).toEqual(['pick', 'persist:1', 'examples', 'persist:2', 'persist:3'])
+    expect(ref.current.items.some((it) => it.lemma === 'run' && it.meaning)).toBe(true)
+    expect(ref.current.items.find((it) => it.lemma === 'run')?.confusables).toHaveLength(3)
+    expect(vi.mocked(p.flash).mock.calls.map((c) => c[0]).at(-1)).toBe(
+      '一键处理完成（挑词 / 补齐 / 补例句 / 校正 / 混淆）',
+    )
   })
 })
 
