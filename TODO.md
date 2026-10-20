@@ -13,7 +13,7 @@
       （`ReaderShell` 布局 + slot、`ReaderArticle` 正文、`panels/ReaderSidebar` 侧栏；新增 7 条组件测试）
 - [x] **ReaderApp 拆分 ②**：各练习面板路由抽成 `SessionHost`（背词/考试/听写/听力/速读/仿写）
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
-- [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
+- [x] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
       当前 **1040 行**（已达标 ≤1200）。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
