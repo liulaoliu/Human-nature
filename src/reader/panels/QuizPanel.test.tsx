@@ -15,7 +15,9 @@ function question(over: Partial<QuizQuestion> = {}): QuizQuestion {
     prompt: '跑',
     meaning: '跑',
     partOfSpeech: null,
+    phonetic: null,
     answer: 'run',
+    accept: ['run'],
     ...over,
   }
 }
