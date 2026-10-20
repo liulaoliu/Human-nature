@@ -13,9 +13,18 @@ import {
   saveTakeBoost,
   saveViewMode,
 } from './shadowingPrefs'
+import { installFakeStorage } from '../reader/testStorage'
 
-beforeEach(() => localStorage.clear())
-afterEach(() => vi.restoreAllMocks())
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  localStorage.clear()
+})
+afterEach(() => {
+  restoreStorage()
+  vi.restoreAllMocks()
+})
 
 describe('跟读模块的本机偏好', () => {
   it('没存过时全是默认值', () => {
@@ -67,7 +76,7 @@ describe('跟读模块的本机偏好', () => {
   })
 
   it('localStorage 抛异常（隐私模式）时读回默认值，不炸', () => {
-    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
       throw new Error('denied')
     })
     expect(readViewMode()).toBe('full')
@@ -77,7 +86,7 @@ describe('跟读模块的本机偏好', () => {
   })
 
   it('localStorage 写不进去时也不炸', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')
     })
     expect(() => saveViewMode('focus')).not.toThrow()

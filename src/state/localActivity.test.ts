@@ -1,9 +1,19 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { ACTIVITY_KEY, LOCAL_STATE_EVENT, recordLocalActivity } from './localActivity'
 import { dayKeyLocal } from '../core/activity'
+import { installFakeStorage } from '../reader/testStorage'
 
-beforeEach(() => localStorage.clear())
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  localStorage.clear()
+})
+
+afterEach(() => {
+  restoreStorage()
+})
 
 describe('recordLocalActivity（跟读记一笔「说」）', () => {
   it('写进 reader:activity（与精读页同一个键）', () => {

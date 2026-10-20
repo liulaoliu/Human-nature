@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { clearScrollMemory, readScroll, saveScroll } from '../../state/scrollPrefs'
 import { SCROLL_SAVE_DELAY_MS, useReadingScroll } from './useReadingScroll'
+import { installFakeStorage } from '../testStorage'
 
 /**
  * 滚动进度持久化：恢复到位、滚动节流落盘、换篇结清、卸载结清。
@@ -34,7 +35,10 @@ function fakeEl(scrollHeight = 1000, clientHeight = 500) {
   }
 }
 
+let restoreStorage: () => void = () => {}
+
 beforeEach(() => {
+  restoreStorage = installFakeStorage()
   localStorage.clear()
   clearScrollMemory()
   vi.useFakeTimers()
@@ -43,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers()
   vi.restoreAllMocks()
+  restoreStorage()
 })
 
 describe('useReadingScroll：恢复', () => {

@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { readFishPos, readFishSize, saveFishLayout } from './fishPrefs'
 import { FISH_POS_DEFAULT, FISH_SIZE_DEFAULT } from '../core/fishLayout'
+import { installFakeStorage } from '../reader/testStorage'
 
-beforeEach(() => localStorage.clear())
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  localStorage.clear()
+})
+
+afterEach(() => {
+  restoreStorage()
+  vi.restoreAllMocks()
+})
 
 describe('装饰鱼的本机布局', () => {
   it('没存过时用默认大小与位置', () => {
@@ -39,7 +50,7 @@ describe('装饰鱼的本机布局', () => {
   })
 
   it('存储写失败不抛（隐私模式）', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')
     })
     expect(() => saveFishLayout('reader', 120, { right: 1, bottom: 2 })).not.toThrow()

@@ -1,10 +1,20 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { useReaderPrefs } from './useReaderPrefs'
 import { dayKeyLocal } from '../../core/activity'
+import { installFakeStorage } from '../testStorage'
 
-beforeEach(() => localStorage.clear())
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  localStorage.clear()
+})
+
+afterEach(() => {
+  restoreStorage()
+})
 
 describe('useReaderPrefs（阅读页本机偏好）', () => {
   it('没存过时给默认值', () => {

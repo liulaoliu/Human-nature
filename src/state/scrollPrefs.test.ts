@@ -1,14 +1,23 @@
 // @vitest-environment jsdom
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { clearScrollMemory, forgetScroll, readScroll, saveScroll } from './scrollPrefs'
+import { installFakeStorage } from '../reader/testStorage'
 
 /**
  * 阅读页滚动进度：内存优先、localStorage 兜底、按文章分开。
  * 像素 ↔ 比例的口径在 `core/scrollProgress.test.ts`。
  */
+let restoreStorage: () => void = () => {}
+
 beforeEach(() => {
+  restoreStorage = installFakeStorage()
   localStorage.clear()
   clearScrollMemory()
+})
+
+afterEach(() => {
+  restoreStorage()
+  vi.restoreAllMocks()
 })
 
 /** 模拟「页面重新打开」：内存没了，只剩 localStorage。 */
@@ -75,7 +84,7 @@ describe('滚动进度：脏值与边界', () => {
   })
 
   it('存储写失败不抛（隐私模式）', () => {
-    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
       throw new Error('quota')
     })
     expect(() => saveScroll('doc:1', 0.5)).not.toThrow()
