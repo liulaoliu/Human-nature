@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
-  applyExamples,
   articleWordsOf,
   displayMeaning,
-  hasOwnExamples,
   lemmaOf,
-  removeItem,
   sortItems,
   type VocabSortBy,
 } from '../core/vocab'
@@ -14,7 +11,6 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { hasSentenceLanguage } from '../core/language'
-import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
   type PracticeKind,
@@ -25,7 +21,6 @@ import {
   upsertMistake,
   type MistakeEntry,
 } from '../core/mistakes'
-import { type AiJobsInput } from '../core/aiPackage'
 import { addActivity, dayKeyLocal, type ActivityCat } from '../core/activity'
 import { type DrillKind } from './panels/IntensivePanel'
 import Composer from './panels/Composer'
@@ -38,7 +33,6 @@ import SessionHost from './SessionHost'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
-import { useAiPack } from './hooks/useAiPack'
 import { useLearningData } from './hooks/useLearningData'
 import { useHotkeys } from './useHotkeys'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
@@ -48,20 +42,18 @@ import { useArticleDerived } from './hooks/useArticleDerived'
 import { useArticleWorkspace } from './hooks/useArticleWorkspace'
 import { useReaderViewData } from './hooks/useReaderViewData'
 import { useSessionServices } from './hooks/useSessionServices'
+import { useAiServices } from './hooks/useAiServices'
+import { useArticleUiActions } from './hooks/useArticleUiActions'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
 import { usePregenerate } from './hooks/usePregenerate'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
 import { articleNumbering } from '../core/articleNums'
-import { useAiTasks } from './hooks/useAiTasks'
-import { useApplyTaskResult } from './hooks/useApplyTaskResult'
-import { usePasteApply } from './hooks/usePasteApply'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
-import { loadTatoeba, tatoebaExamples } from '../adapters/tatoeba'
 import { dictionary } from '../adapters/dictionary'
 import { type IntensiveStageKey } from '../core/intensive'
 import {
@@ -237,22 +229,6 @@ export default function ReaderApp() {
     voice: ttsVoice,
   })
 
-  /** 逐词高亮：当前朗读句 + 正读到的词下标。 */
-  const karaoke = useMemo(() => {
-    const np = nowPlaying
-    if (!np || !doc) return null
-    const s = doc.sentences.find((x) => x.text.trim() === np.text)
-    if (!s) return null
-    let activeIndex: number | null = null
-    for (let i = 0; i < np.wordTimings.length; i++) {
-      const wt = np.wordTimings[i]
-      if (np.ms >= wt.start && np.ms < wt.end) {
-        activeIndex = i
-        break
-      }
-    }
-    return { sid: s.id, activeIndex }
-  }, [nowPlaying, doc])
   /**
    * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）由 useLearningData 统一管理。
    */
@@ -442,19 +418,6 @@ export default function ReaderApp() {
     document.documentElement.dataset.theme = eye ? 'green' : 'dark'
   }, [eye])
 
-  /** 按住 Alt 点句子：把文本复制到剪贴板（方便拿去翻译）。 */
-  const altCopyText = useCallback(
-    (text: string) => {
-      const t = (text ?? '').trim()
-      if (!t) return
-      navigator.clipboard?.writeText(t).then(
-        () => flash('已复制（Alt 点击）'),
-        () => flash('复制失败：可按住 Alt 拖选后按 Ctrl+C'),
-      )
-    },
-    [flash],
-  )
-
   /**
    * 词库自动补全的**唯一写入口**（语言点收藏 + 离线例句 + 词典词形归并）。
    * 纯计划与幂等保证在 core/libraryAutoFill.ts；接线与「不写第二个 effect」的约定在同名 hook 里。
@@ -469,22 +432,6 @@ export default function ReaderApp() {
     persist,
     dict: dictReady ? dictionary() : null,
   })
-
-  /** 删除词条：两步确认（第一次点变红「确认删除」，3 秒内再点才真删）。 */
-  const askDelete = useCallback(
-    (id: string) => {
-      if (confirmDel === id) {
-        persist(removeItem(library, id))
-        setConfirmDel(null)
-        if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
-        return
-      }
-      setConfirmDel(id)
-      if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
-      confirmTimerRef.current = window.setTimeout(() => setConfirmDel(null), 3000)
-    },
-    [confirmDel, library, persist],
-  )
 
   /** 记录今天新引入了一个词（用于每日配额）。 */
   const bumpNewToday = useCallback(() => {
@@ -866,96 +813,33 @@ export default function ReaderApp() {
     flash,
   })
 
-  /** 点正文生词：先切到「生词本」Tab（默认在「总览」时词表是 display:none），再滚到对应词条。 */
-  const revealVocabWord = useCallback(
-    (word: string) => {
-      setSideTab('vocab')
-      focusEntry(word)
-    },
-    [focusEntry, setSideTab],
-  )
-
-  /**
-   * 听写播放：整句模式复用整句音频 + 逐词 seek（零额外合成）；填空并段没有源句，直接播该块。
-   */
-  const playDictItem = useCallback(
-    (item: { text: string; src?: string; sw?: number; ew?: number }) => {
-      if (item.src && item.sw != null && item.ew != null) speakRange(item.src, item.sw, item.ew)
-      else speak(item.text)
-    },
-    [speak, speakRange],
-  )
-
-  /**
-   * 点句子：选中；开了「选中朗读」就在**点击手势里**直接读新句。
-   * 不放在 useEffect 里，避免被「先 mouseup 选中、再 click 当成重点同句停掉」的时序问题打断。
-   */
-  const selectSentenceAndRead = useCallback(
-    (sid: string) => {
-      const wasSelected = selectedId === sid
-      const s = doc?.sentences.find((x) => x.id === sid)
-      selectSentence(sid)
-      if (!wasSelected && autoSpeak && s && s.text.trim()) speak(s.text)
-    },
-    [selectedId, doc, selectSentence, autoSpeak, speak],
-  )
-
-  /** 各类「复制提示词给 AI」的动作（逻辑在 hooks/useAiTasks）。 */
-  const aiTasksApi = useAiTasks({
-    exact,
-    useExact,
-    sentence,
-    visibleBatch,
-    library,
-    persist,
-    articleIdentity,
-    articleTitle,
-    articleKey,
-    doc,
-    vocabLevel,
-    confusableBatch,
-    confusableTodo,
-    lemmaCandidates,
-    posCandidates,
+  /** 正文小动作：Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 生词定位 / 听写播放 / 离线例句。 */
+  const {
+    karaoke,
+    altCopyText,
+    askDelete,
+    revealVocabWord,
+    playDictItem,
+    selectSentenceAndRead,
+    enrichExamplesFromTatoeba,
+  } = useArticleUiActions({
     flash,
-    setLastTask,
-    setBatch,
-    askedWordsRef,
-    askedIdsRef,
-    pasteMissing,
-  })
-
-  const { copyTranslateAll, copyAutoVocab, copyLanguagePrompt, copyMissingAgain } = aiTasksApi
-
-  /** 应用一份 AI 结果（按任务分派）；逻辑在 hooks/useApplyTaskResult。 */
-  const applyTaskResult = useApplyTaskResult({
+    confirmDel,
+    setConfirmDel,
+    confirmTimerRef,
     library,
-    libraryRef,
-    sentence,
     persist,
-    mergeBatch,
-    batchItemsFromWords,
-    autoVocabDirect,
-    commitBatchItems,
-    articleTitle,
-    articleKey,
-    articleIdentity,
-    writingModel,
-    writingText,
-    writingTask,
-    recordActivity,
-    ecdictLevel: vocabLevel,
-    articleText: (doc?.sentences ?? []).map((s) => s.text).join(' '),
-    sentenceForWord: (word) => {
-      const it = batchItemsFromWords([word])[0]
-      return { sentence: it?.sentence ?? '', sentenceId: it?.sentenceId ?? null }
-    },
-    setDoc,
-    setPendingSave,
-    setListenQuiz,
-    setWritingTask,
-    setWritingFeedback,
-    setWritingHistory,
+    speak,
+    speakRange,
+    speakNowPlaying: nowPlaying,
+    doc,
+    selectedId,
+    selectSentence,
+    autoSpeak,
+    setSideTab,
+    focusEntry,
+    articleWords,
+    lookupTatoeba,
   })
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
@@ -974,34 +858,6 @@ export default function ReaderApp() {
   })
 
   const { download, doExportAnki, exportWordList, doExportWrong, doPrint } = exporter
-
-  /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
-  const aiJobsInput = useMemo<AiJobsInput>(
-    () => ({
-      batch: visibleBatch.map((b) => ({ word: b.word, sentence: b.sentence })),
-      items: library.items,
-      articleWords,
-      scope: aiPackScope,
-      confusableBatchSize,
-      articleId: articleIdentity,
-      sentences: doc?.sentences ?? [],
-      vocabLevel,
-      hasListenQuiz: !!listenQuiz,
-      listenCount,
-    }),
-    [
-      visibleBatch,
-      library,
-      articleWords,
-      aiPackScope,
-      confusableBatchSize,
-      articleIdentity,
-      doc,
-      vocabLevel,
-      listenQuiz,
-      listenCount,
-    ],
-  )
 
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
   const { articleMastery, intensiveSkimmed, intensivePlan, myRetells, outputBoard } = useArticleDerived({
@@ -1042,65 +898,70 @@ export default function ReaderApp() {
     journalDay,
   })
 
-  /** 一键：给「还没有自己例句」的本篇生词，批量补离线例句（Tatoeba）。 */
-  const enrichExamplesFromTatoeba = useCallback(async () => {
-    const ok = await loadTatoeba()
-    if (!ok) {
-      flash('离线例句未安装：先跑 `node tools/build-tatoeba.mjs <sentences.tsv> <links.tsv> cmn --en-only` 生成 public/tatoeba-en.tsv')
-      return
-    }
-    const targets = articleWords.filter((it) => !hasOwnExamples(it))
-    if (!targets.length) {
-      flash('本篇生词都已经有例句了（只有「来源句」的会算缺）')
-      return
-    }
-    let missing = 0
-    for (const it of targets) if (!tatoebaExamples(it.word, it.lemma).length) missing++
-    const rows = collectOfflineExampleRows(targets, lookupTatoeba)
-    if (!rows.length) {
-      flash(`离线例句库里有 ${missing} 个都查不到（可让 AI 补例句）`)
-      return
-    }
-    persist(applyExamples(library, rows, new Date(), 'tatoeba'))
-    flash(`已给 ${rows.length} 个词补上离线例句（Tatoeba）${missing ? `；${missing} 个库里没有` : ''}`)
-  }, [articleWords, library, persist, flash])
-
-  /** 正文标记（Sentence.vocab）→ 统计 + 自动/一键重建（丢词时最准的数据源） */
-
-  /** AI 工作包：导出待办 / 导入结果（agent）+ 网页版提示词 / 应用 / 重问缺项。 */
-  const aiPack = useAiPack({
-    jobsInput: aiJobsInput,
-    applyTaskResult,
-    download,
-    flash,
-    onReport: setPasteReport,
-  })
-
+  /** AI 服务：复制提示词 / 应用结果 / 工作包 / 粘回路由；逻辑在 hooks/useAiServices。 */
   const {
-    applyWeb: applyAiWeb,
-    webPending: aiWebPending,
-    localRunning: aiLocalRunning,
-    localDone: aiLocalDone,
-    localTotal: aiLocalTotal,
-    localRound: aiLocalRound,
-    localPhase: aiLocalPhase,
-    localError: aiLocalError,
-    runLocal: runAiLocal,
-  } = aiPack
-
-  /** 应用结果 / 工作包解析（逻辑在 hooks/usePasteApply）。 */
-  const { applyAnyPaste } = usePasteApply({
+    aiTasksApi,
+    aiPack,
+    aiWebPending,
+    aiLocalRunning,
+    aiLocalDone,
+    aiLocalTotal,
+    aiLocalRound,
+    aiLocalPhase,
+    aiLocalError,
+    runAiLocal,
+    applyAnyPaste,
+  } = useAiServices({
+    exact,
+    useExact,
+    sentence,
+    visibleBatch,
+    library,
+    libraryRef,
+    persist,
+    articleIdentity,
+    articleTitle,
+    articleKey,
+    doc,
+    vocabLevel,
+    confusableBatch,
+    confusableTodo,
+    lemmaCandidates,
+    posCandidates,
+    articleWords,
+    flash,
+    setLastTask,
+    setBatch,
+    askedWordsRef,
+    askedIdsRef,
+    pasteMissing,
+    mergeBatch,
+    batchItemsFromWords,
+    autoVocabDirect,
+    commitBatchItems,
+    writingModel,
+    writingText,
+    writingTask,
+    recordActivity,
+    setDoc,
+    setPendingSave,
+    setListenQuiz,
+    setWritingTask,
+    setWritingFeedback,
+    setWritingHistory,
+    download,
+    aiPackScope,
+    confusableBatchSize,
+    listenQuiz,
+    listenCount,
     pasted,
     clearPasted: () => setPasted(''),
     lastTask,
-    applyTaskResult,
-    askedWordsRef,
-    askedIdsRef,
     onReport: setPasteReport,
     onMissing: setPasteMissing,
-    applyAiWeb,
-    flash,
   })
+
+  const { copyTranslateAll, copyAutoVocab, copyLanguagePrompt, copyMissingAgain } = aiTasksApi
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
