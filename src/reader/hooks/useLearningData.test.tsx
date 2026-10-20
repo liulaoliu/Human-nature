@@ -136,3 +136,64 @@ describe('useLearningData：复述 / 略读动作', () => {
     expect(result.current.skimmedArticles).toEqual([])
   })
 })
+
+describe('useLearningData（写入动作，原来在 ReaderApp 里 wrap setter）', () => {
+  it('markStudied：同一天同一个词只算一次，studiedTodayIds 跟着变', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.markStudied('v1'))
+    act(() => result.current.markStudied('v1'))
+    act(() => result.current.markStudied('v2'))
+    expect(result.current.studiedTodayIds).toEqual(['v1', 'v2'])
+    expect(result.current.studiedDays).toHaveLength(1)
+  })
+
+  it('studyFlush：同一天累加秒数与张数，0 值不写', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.studyFlush(0, 0))
+    expect(result.current.studyDays).toHaveLength(0)
+    act(() => result.current.studyFlush(30, 2))
+    act(() => result.current.studyFlush(15, 3))
+    expect(result.current.studyDays).toHaveLength(1)
+    expect(result.current.studyDays[0].seconds).toBe(45)
+    expect(result.current.studyDays[0].cards).toBe(5)
+  })
+
+  it('recordActivity：按分类累加，n<=0 不写', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.recordActivity('speak', 0))
+    expect(result.current.activity).toHaveLength(0)
+    act(() => result.current.recordActivity('speak', 2))
+    expect(result.current.activity[0].counts.speak).toBe(2)
+  })
+
+  it('recordPractice：total<=0 不记；记了就落在 reader:practice', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.recordPractice('quiz', 0, 0))
+    expect(result.current.practice).toHaveLength(0)
+    act(() => result.current.recordPractice('quiz', 5, 4))
+    expect(result.current.practice[0]).toMatchObject({ kind: 'quiz', total: 5, correct: 4, articleId: 'a1' })
+    expect(JSON.parse(localStorage.getItem('reader:practice') ?? '[]')).toHaveLength(1)
+  })
+
+  it('mergeKindStats：按题型累加到本篇', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.mergeKindStats([{ kind: 'spell', total: 3, correct: 2 }]))
+    act(() => result.current.mergeKindStats([{ kind: 'spell', total: 2, correct: 1 }]))
+    expect(result.current.kindStats.a1.spell).toEqual({ total: 5, correct: 3 })
+  })
+
+  it('mergeKindStats：没文章身份时不写（键是空的会污染 kindStats）', () => {
+    localStorage.clear()
+    const { result } = renderHook(() => useLearningData({ ...params, articleIdentity: '' }))
+    act(() => result.current.mergeKindStats([{ kind: 'spell', total: 1, correct: 1 }]))
+    expect(result.current.kindStats).toEqual({})
+  })
+
+  it('addMistake / dropMistake：加进去能按 id 删掉', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.addMistake({ id: 'm1', kind: 'spell', word: 'quiet', at: '2026-10-19T00:00:00.000Z' } as never))
+    expect(result.current.mistakes).toHaveLength(1)
+    act(() => result.current.dropMistake('m1'))
+    expect(result.current.mistakes).toHaveLength(0)
+  })
+})

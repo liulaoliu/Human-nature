@@ -1,30 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  articleWordsOf,
-  sortItems,
-  type VocabSortBy,
-} from '../core/vocab'
-import {
-  type AnalysisTask,
-  type VocabLevel,
-} from '../core/analyzer'
-import { hasSentenceLanguage } from '../core/language'
-import {
-  addPracticeRecord,
-  type PracticeKind,
-} from '../core/practice'
+import { sortItems } from '../core/vocab'
+import { type AnalysisTask } from '../core/analyzer'
 import { type ArticleQuizKind } from '../core/quiz'
-import {
-  removeMistake,
-  upsertMistake,
-  type MistakeEntry,
-} from '../core/mistakes'
-import { addActivity, dayKeyLocal, type ActivityCat } from '../core/activity'
-import { type DrillKind } from './panels/IntensivePanel'
+import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
-import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
+import { buildTtsAccents } from '../core/ttsVoices'
 import { useLearningData } from './hooks/useLearningData'
 import { useHotkeys } from './useHotkeys'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
@@ -42,21 +24,18 @@ import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
 import { usePregenerate } from './hooks/usePregenerate'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
-import { articleNumbering } from '../core/articleNums'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
 import { dictionary } from '../adapters/dictionary'
-import { type IntensiveStageKey } from '../core/intensive'
-import {
-  persistentBool,
-  persistentEnum,
-  persistentNumber,
-  persistentString,
-  useLocalStorageState,
-  STORAGE_ERROR_EVENT,
-} from './hooks/useLocalStorageState'
+import { useReaderPrefs } from './hooks/useReaderPrefs'
+import { useModifierKeys } from './hooks/useModifierKeys'
+import { useStorageQuotaToast } from './hooks/useStorageQuotaToast'
+import { useArticleVocabView } from './hooks/useArticleVocabView'
+import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
+import { pickSentence, pickTarget } from '../core/pickTarget'
+import { useIntensiveActions } from './hooks/useIntensiveActions'
 import type { Paragraph, Sentence } from '../types/document'
 import './reader.css'
 interface Doc {
@@ -105,17 +84,7 @@ export default function ReaderApp() {
   const { toast, flash } = useToast()
 
   // 本机存储写失败（配额满 / 隐私模式）：提示一次，别让用户以为已经保存
-  useEffect(() => {
-    let last = 0
-    const onError = () => {
-      const now = Date.now()
-      if (now - last < 5000) return
-      last = now
-      flash('本机存储已满：这次的改动只在本页有效，刷新会丢；请先导出备份')
-    }
-    window.addEventListener(STORAGE_ERROR_EVENT, onError)
-    return () => window.removeEventListener(STORAGE_ERROR_EVENT, onError)
-  }, [flash])
+  useStorageQuotaToast(flash)
 
   /** 逻辑「今天」的日期键（04:00 结算），多处统计共用一份。 */
   const todayKey = dayKeyLocal(new Date())
@@ -129,56 +98,28 @@ export default function ReaderApp() {
   const [savedId, setSavedId] = useState<string | null>(null)
   /** 「删除保存」文章的两步确认 */
   const [confirmDelSave, setConfirmDelSave] = useState(false)
-  /** 是否按住 Ctrl / ⌘（决定「整句」还是「按词吸附」） */
-  const [ctrlHeld, setCtrlHeld] = useState(false)
-  /** 是否按住 Alt（选词模式下：Alt+拖动选词组，否则只选一个词） */
-  const [altHeld, setAltHeld] = useState(false)
-  /** 阅读字号 / 字重，存本机 */
-  const [fontSize, setFontSize] = useLocalStorageState('reader:size', 'md', persistentString)
-  /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 / 统计 */
-  const [sideTab, setSideTab] = useLocalStorageState<'overview' | 'pick' | 'vocab' | 'stats' | 'mastery'>(
-    'reader:sideTab',
-    'overview',
-    persistentEnum(['overview', 'pick', 'vocab', 'stats', 'mastery'] as const, 'overview'),
-  )
-  const [bold, setBold] = useLocalStorageState('reader:bold', false, persistentBool)
-  const [serif, setSerif] = useLocalStorageState('reader:serif', false, persistentBool)
-  /** 护眼模式：浅色纸感 */
-  const [eye, setEye] = useLocalStorageState('reader:theme', false, {
-    parse: (raw) => raw === 'green',
-    serialize: (v) => (v ? 'green' : 'dark'),
-  })
+  /** 是否按住 Ctrl / ⌘ / Alt（决定「整句 / 按词吸附 / 选词组」）：见 hooks/useModifierKeys */
+  const { ctrlHeld, altHeld } = useModifierKeys()
+  /** 阅读字号 / 字重、主题、译文、音色、词汇标准、面板持久开关… —— 18 个本机偏好全在 hooks/useReaderPrefs */
+  const prefs = useReaderPrefs()
+  const {
+    fontSize, bold, serif, eye, sideTab, translateView, autoSpeak, ttsVoice,
+    vocabLevel, vocabView, vocabSort, dailyGoal, showLanguage, confusableBatchSize,
+    aiPackScope, autoVocabDirect, newLimit, newToday,
+    setFontSize, setBold, setSerif, setEye, setSideTab, setTranslateView, setAutoSpeak,
+    setTtsVoice, setVocabLevel, setVocabView, setVocabSort, setDailyGoal, setShowLanguage,
+    setConfusableBatchSize, setAiPackScope, setAutoVocabDirect, setNewLimit, setNewToday,
+  } = prefs
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
   /** 「全部生词」独立视图（侧栏只显示本篇） */
   const [browseAll, setBrowseAll] = useState(false)
-  /** 译文显示：只看原文 / 原文+译文 / 只看译文 */
-  const [translateView, setTranslateView] = useLocalStorageState<'off' | 'below' | 'only'>(
-    'reader:translateView',
-    'off',
-    persistentEnum(['off', 'below', 'only'] as const, 'off'),
-  )
-  /** 选中句子后自动 TTS 朗读 */
-  const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
-  /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
-  const [ttsVoice, setTtsVoice] = useLocalStorageState('reader:ttsVoice', DEFAULT_TTS_VOICE, persistentString)
+  /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
   const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
-  /** 自动标词的词汇标准 */
-  const [vocabLevel, setVocabLevel] = useLocalStorageState<VocabLevel>(
-    'reader:vocabLevel',
-    'cet6',
-    persistentEnum(['cet4', 'cet6', 'kaoyan', 'ielts', 'ielts65'] as const, 'cet6'),
-  )
   /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
   const [peekSid, setPeekSid] = useState<string | null>(null)
-  /** 生词本视图：卡片 / 密排表格 */
-  const [vocabView, setVocabView] = useLocalStorageState<'card' | 'table'>(
-    'reader:vocabView',
-    'card',
-    persistentEnum(['card', 'table'] as const, 'card'),
-  )
   /** 生词本里被高亮/滚到的词条（点正文生词时用） */
   const [focusLemma, setFocusLemma] = useState<string | null>(null)
   /** 待确认删除的词条 id（两步防误触） */
@@ -216,38 +157,8 @@ export default function ReaderApp() {
 
   /**
    * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）由 useLearningData 统一管理。
+   * 每日目标 / 是否显示语言点 / 混淆项批量 / 工作包范围 / 直入生词本 / 新词上限：见 useReaderPrefs。
    */
-  /** 每日目标（个不同单词，0=不设目标） */
-  const [dailyGoal, setDailyGoal] = useLocalStorageState('reader:dailyGoal', 20, persistentNumber)
-  /** 是否在正文里显示语言点 */
-  const [showLanguage, setShowLanguage] = useLocalStorageState('reader:showLanguage', false, persistentBool)
-  /** 每次生成混淆项的批量大小（0=全部） */
-  const [confusableBatchSize, setConfusableBatchSize] = useLocalStorageState(
-    'reader:confusableBatch',
-    60,
-    persistentNumber,
-  )
-  /** AI 工作包范围：只处理本篇 / 整个词库 */
-  const [aiPackScope, setAiPackScope] = useLocalStorageState<'article' | 'all'>(
-    'reader:aiPackScope',
-    'article',
-    persistentEnum(['article', 'all'] as const, 'article'),
-  )
-  /** 自动标词是否**直接**写进生词本（跳过「待选」，省一步人工入库）。 */
-  const [autoVocabDirect, setAutoVocabDirect] = useLocalStorageState('reader:autoVocabDirect', true, persistentBool)
-  /** 每天引入新词的上限（0=不限）与今天已引入 */
-  const [newLimit, setNewLimit] = useLocalStorageState('reader:newLimit', 20, persistentNumber)
-  const [newToday, setNewToday] = useLocalStorageState('reader:newToday', 0, {
-    parse: (raw) => {
-      try {
-        const obj = JSON.parse(raw) as { day?: string; count?: number } | null
-        return obj && obj.day === dayKeyLocal() && typeof obj.count === 'number' ? obj.count : 0
-      } catch {
-        return 0
-      }
-    },
-    serialize: (count) => JSON.stringify({ day: dayKeyLocal(), count }),
-  })
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
@@ -269,40 +180,28 @@ export default function ReaderApp() {
   const learning = useLearningData({ articleIdentity, articleTitle, articleKey, todayKey, flash })
   const {
     studyDays,
-    setStudyDays,
     studiedDays,
-    setStudiedDays,
     activity,
-    setActivity,
     practice,
-    setPractice,
     mistakes,
-    setMistakes,
     kindStats,
-    setKindStats,
     recordAnswer,
     retells,
     sessions,
     setSessions,
     skimmedArticles,
+    // 写入动作也在这里（原来在本文件 wrap 一遍 setter）
+    markStudied,
+    studyFlush,
+    studiedTodayIds,
+    recordActivity,
+    recordPractice,
+    mergeKindStats,
+    addMistake,
+    dropMistake,
     data: learningData,
     setters: learningSetters,
   } = learning
-  /** 一轮考完 → 按题型累加到本篇（每次练习都算，产出看板据此算正确率）。 */
-  const mergeKindStats = useCallback(
-    (rows: { kind: string; total: number; correct: number }[]) => {
-      if (!articleIdentity) return
-      setKindStats((prev) => {
-        const forArticle = { ...(prev[articleIdentity] ?? {}) }
-        for (const r of rows) {
-          const cur = forArticle[r.kind] ?? { total: 0, correct: 0 }
-          forArticle[r.kind] = { total: cur.total + r.total, correct: cur.correct + r.correct }
-        }
-        return { ...prev, [articleIdentity]: forArticle }
-      })
-    },
-    [articleIdentity, setKindStats],
-  )
 
   /** 正文里哪些词算生词（每句 lemma / 全文 lemma / 未掌握词 / 有生词的句子）—— 见 hooks/useDocVocabSets */
   const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
@@ -311,78 +210,28 @@ export default function ReaderApp() {
     batchSentenceIds,
   })
 
-  /**
-   * 本篇生词：**来源是本文**，或**本文正文里出现过**该词。
-   * 后者很关键：`markWord` 去重时沿用旧来源，从别的文章带过来的同一词来源留在那边，
-   * 只按 source 过滤的话「本篇生词」会一直不涨。
-   */
-  const articleWords = useMemo(
-    () => articleWordsOf(library, articleIdentity, docLemmas),
-    [library, articleIdentity, docLemmas],
-  )
-
-  /** 生词本已有原形集合（速读里标记「已收录」）。 */
-  const knownLemmas = useMemo(() => new Set(library.items.map((it) => it.lemma)), [library.items])
-  /** 本篇已有语言点的句子数（侧栏显示用）。 */
-  const languageSentCount = useMemo(
-    () => (doc?.sentences ?? []).filter((s) => hasSentenceLanguage(s)).length,
-    [doc],
-  )
-  /** 某一句来源的词条（含短语），给速读的「本句已在生词本」用。 */
-  const wordsInSentence = useCallback(
-    (sid: string) =>
-      library.items
-        .filter((it) => it.source?.fileName === articleIdentity && it.source.sentenceId === sid)
-        .map((it) => it.word),
-    [library.items, articleIdentity],
-  )
-  /** 本篇生词编号（规则在 core/articleNums，已单测） */
-  const { nums: articleNums, firstOccurrence: articleFirst } = useMemo(
-    () => articleNumbering(doc?.sentences, articleWords),
-    [doc, articleWords],
-  )
-
-  /** 本篇打印情况：最近打印时间 + 是否全部打印过（用于「不重复打印」提示）。 */
-  const articlePrintedAt = useMemo(() => {
-    let latest: string | null = null
-    for (const it of articleWords) {
-      if (it.lastPrintedAt && (!latest || it.lastPrintedAt > latest)) latest = it.lastPrintedAt
-    }
-    return latest
-  }, [articleWords])
-  const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
+  /** 本篇生词 / 编号 / 语言点句数 / 打印情况：口径都在 hooks/useArticleVocabView */
+  const {
+    articleWords,
+    knownLemmas,
+    languageSentCount,
+    wordsInSentence,
+    articleNums,
+    articleFirst,
+    articlePrintedAt,
+    articleAllPrinted,
+  } = useArticleVocabView({
+    library,
+    articleIdentity,
+    docLemmas,
+    sentences: doc?.sentences ?? null,
+  })
   const applyingDom = useRef(false)
   const articleRef = useRef<HTMLElement | null>(null)
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
   /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
   const rightDownRef = useRef(false)
-
-  // 跟踪 Ctrl / ⌘ 按住状态（选择逻辑靠它切换「整句 / 按词吸附」）
-  useHotkeys(
-    (e) => {
-      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(true)
-      if (e.key === 'Alt') setAltHeld(true)
-    },
-    true,
-    10,
-  )
-  useEffect(() => {
-    const up = (e: KeyboardEvent) => {
-      if (e.key === 'Control' || e.key === 'Meta') setCtrlHeld(false)
-      if (e.key === 'Alt') setAltHeld(false)
-    }
-    const blur = () => {
-      setCtrlHeld(false)
-      setAltHeld(false)
-    }
-    window.addEventListener('keyup', up)
-    window.addEventListener('blur', blur)
-    return () => {
-      window.removeEventListener('keyup', up)
-      window.removeEventListener('blur', blur)
-    }
-  }, [])
 
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
   const toggleVocabRef = useRef<() => void>(() => {})
@@ -408,68 +257,8 @@ export default function ReaderApp() {
     dict: dictReady ? dictionary() : null,
   })
 
-  /** 记录今天新引入了一个词（用于每日配额）。 */
-  const bumpNewToday = useCallback(() => {
-    // newToday 已由 useLocalStorageState 落盘（自动带上当天日期）
-    setNewToday((prev) => prev + 1)
-  }, [setNewToday])
-
-  /** 把背单词时长 / 评分次数累加到「今天」（落盘供统计）。 */
-  const studyFlush = useCallback((seconds: number, cards: number) => {
-    if (seconds <= 0 && cards <= 0) return
-    setStudyDays((prev) => {
-      const day = dayKeyLocal()
-      const i = prev.findIndex((d) => d.day === day)
-      if (i < 0) return [...prev, { day, seconds, cards }]
-      const next = [...prev]
-      next[i] = { day, seconds: next[i].seconds + seconds, cards: next[i].cards + cards }
-      return next
-    })
-  }, [])
-
-  /** 今天学过的不同单词 id（每日目标进度）。 */
-  const studiedTodayIds = useMemo(() => {
-    const t = dayKeyLocal()
-    return studiedDays.find((d) => d.day === t)?.ids ?? []
-  }, [studiedDays])
-
-  /** 记「今天学过这个词」（每日目标按不同单词计数）。 */
-  const markStudied = useCallback((itemId: string) => {
-    setStudiedDays((prev) => {
-      const day = dayKeyLocal()
-      const cur = prev.find((d) => d.day === day)
-      if (cur) {
-        if (cur.ids.includes(itemId)) return prev
-        return prev.map((d) => (d.day === day ? { ...d, ids: [...d.ids, itemId] } : d))
-      }
-      // 只留最近 200 天，免得无限长
-      return [...prev, { day, ids: [itemId] }].slice(-200)
-    })
-  }, [])
-
-  /** 记一笔学习活动（按天 / 分类累计，落盘）。 */
-  const recordActivity = useCallback((cat: ActivityCat, n = 1) => {
-    if (n <= 0) return
-    setActivity((prev) => addActivity(prev, dayKeyLocal(new Date()), cat, n))
-  }, [])
-
-  /** 记一次练习成绩（考试 / 听写 / 听力理解）。 */
-  const recordPractice = useCallback(
-    (kind: PracticeKind, total: number, correct: number) => {
-      if (total <= 0) return
-      setPractice((prev) =>
-        addPracticeRecord(prev, { at: new Date().toISOString(), kind, total, correct, articleId: articleIdentity || undefined }),
-      )
-    },
-    [articleIdentity],
-  )
-
-  const addMistake = useCallback((entry: MistakeEntry) => {
-    setMistakes((prev) => upsertMistake(prev, entry))
-  }, [])
-  const dropMistake = useCallback((id: string) => {
-    setMistakes((prev) => removeMistake(prev, id))
-  }, [])
+  /** 记录今天新引入了一个词（用于每日配额；跨天由 useReaderPrefs 的 serialize 归零）。 */
+  const bumpNewToday = useCallback(() => setNewToday((prev) => prev + 1), [setNewToday])
 
   /** 逐句速读。 */
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
@@ -485,13 +274,7 @@ export default function ReaderApp() {
   const [exportOpen, setExportOpen] = useState(false)
   /** 目标备忘面板 + 今日读文目标 + 自由备忘（状态在 useLearningData）。 */
   const [goalOpen, setGoalOpen] = useState(false)
-  /** 生词本排序方式。 */
-  const [vocabSort, setVocabSort] = useLocalStorageState<VocabSortBy>(
-    'reader:vocabSort',
-    'updatedAt',
-    persistentEnum(['word', 'createdAt', 'updatedAt', 'due'] as const, 'updatedAt'),
-  )
-  /** 快刷：按到期优先排序，只看单词+音标，一键过卡。 */
+  /** 生词本排序方式：见 useReaderPrefs.vocabSort */
   /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
   const vocabEdits = useVocabEdits({
     libraryRef,
@@ -608,18 +391,8 @@ export default function ReaderApp() {
     10,
   )
 
-  // 考试听力题出现时自动朗读（句子 / 单词）
-  useEffect(() => {
-    if (!quizQueue) return
-    const q = quizQueue[quizIndex]
-    if ((q?.kind === 'listen' || q?.kind === 'ear') && q.audioText) speak(q.audioText)
-  }, [quizQueue, quizIndex, speak])
-
-  // 听写：每换一句自动播放
-  useEffect(() => {
-    if (!dictQueue || dictIndex >= dictQueue.length) return
-    speak(dictQueue[dictIndex].text)
-  }, [dictQueue, dictIndex, speak])
+  // 考试听力题 / 听写逐句：一换就出声（两条接线在 hooks/useQueueAutoSpeak）
+  useQueueAutoSpeak({ quizQueue, quizIndex, dictQueue, dictIndex, speak })
 
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
   toggleVocabRef.current = toggleVocabMode
@@ -665,19 +438,9 @@ export default function ReaderApp() {
     setPendingSave,
   } = workspace
 
-  /** 选区所在的句子 —— 默认的操作对象。 */
-  const sentence = useMemo(() => {
-    if (!doc) return null
-    if (selectedId) {
-      const s = doc.sentences.find((x) => x.id === selectedId)
-      if (s) return s
-    }
-    if (exact) return doc.sentences.find((x) => x.text.includes(exact)) ?? null
-    return null
-  }, [doc, selectedId, exact])
-
-  /** 实际用于提示词/复制的文本：默认整句；有精确选区时用选区。 */
-  const target = useExact && exact ? exact : sentence?.text || exact
+  /** 选区所在的句子（默认操作对象）与真正拿去用的文本：规则在 core/pickTarget */
+  const sentence = useMemo(() => pickSentence(doc?.sentences, selectedId, exact), [doc, selectedId, exact])
+  const target = useMemo(() => pickTarget(exact, useExact, sentence), [exact, useExact, sentence])
 
   /** 选区/划词（逻辑在 hooks/useSelection）。 */
   const selection = useSelection({
@@ -864,34 +627,16 @@ export default function ReaderApp() {
   })
 
   const allList = sortItems(library.items, vocabSort)
-  /** 精读工作流：某一步「跳到对应工具」。 */
-  const openIntensiveStage = useCallback(
-    (key: IntensiveStageKey) => {
-      setIntensiveOpen(false)
-      if (key === 'skim') openSpeedRead()
-      else if (key === 'recall') startStudy()
-      else if (key === 'produce') openWriting()
-      // vocab / chunks / comprehend / grammar：一键跑批会把音标·释义·例句·词组·习语·
-      // 语法标记·翻译·语言点一次补齐
-      else void runAiLocal()
-    },
-    [openSpeedRead, startStudy, openWriting, runAiLocal],
-  )
-
-  /** 精读工作流：快捷「拷打」（只针对本篇）。 */
-  const startIntensiveDrill = useCallback(
-    (kind: DrillKind) => {
-      setIntensiveOpen(false)
-      if (kind === 'memory') startQuizDrill(['spell', 'meaning', 'choice'], 'article')
-      else if (kind === 'chunk') startQuizDrill(['usage', 'cloze', 'collocation', 'prep', 'idiom'], 'article')
-      else if (kind === 'deep') startQuizDrill(['define', 'defineChoice'], 'article')
-      else if (kind === 'mark') startQuizDrill(['mark'], 'article')
-      else if (kind === 'grammar')
-        startQuizArticleDrill(['grammar', 'phraseBlank', 'translate2', 'functionWord', 'ordering'])
-      else if (kind === 'listen') startQuizDrill(['listen'], 'article')
-    },
-    [startQuizDrill, startQuizArticleDrill],
-  )
+  /** 精读工作流的两个入口动作（阶段→工具、拷打→题型两张表都在同名 hook） */
+  const { openIntensiveStage, startIntensiveDrill } = useIntensiveActions({
+    setIntensiveOpen,
+    openSpeedRead,
+    startStudy,
+    openWriting,
+    runAiLocal,
+    startQuizDrill,
+    startQuizArticleDrill,
+  })
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen

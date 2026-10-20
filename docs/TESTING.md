@@ -167,7 +167,7 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
-- **hooks 46 / 46 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
+- **hooks 53 / 53 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
   `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
   `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动；
   速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（7 条），
@@ -175,6 +175,10 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘，3 条）+
   `useStudyCardEdit`（卡内编辑/两步删除，3 条）；`StudyPanel` 再拆 `StudyToolbar` / `StudyEditForm` / `StudyRoundDone`
   （512 → 369 行，子组件 3 + 2 + 2 条）。
+- **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（5：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
+  `newToday` 跨天归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
+  `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
+  `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
 - **panels 35 / 35 有测试**：本轮补齐 `SpeedReadPanel` / `SidePick` / `StudyPanel` / `DictPanel` / `QuizPanel` /
   `IntensivePanel` / `GoalPanel` / `JournalPanel` / `ListeningPanel` / `WritingPanel` / `LanguageEditor` /
   `QuickPanel` / `QuizSetupPanel` / `StatsPanel` / `PlanPanel` / `Composer` / `SideOverview` / `SideMastery` /

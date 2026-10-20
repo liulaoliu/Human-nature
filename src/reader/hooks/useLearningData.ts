@@ -1,11 +1,11 @@
 import { useCallback, useMemo } from 'react'
-import { addActivity, dayKeyLocal, type DayActivity } from '../../core/activity'
+import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
 import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
 import { addAnswerEvent, createAnswerEvent, normalizeAnswerEvents } from '../../core/answerEvents'
 import type { ReadDone } from '../../core/goals'
-import type { MistakeEntry } from '../../core/mistakes'
-import type { PracticeRecord } from '../../core/practice'
+import { removeMistake, upsertMistake, type MistakeEntry } from '../../core/mistakes'
+import { addPracticeRecord, type PracticeKind, type PracticeRecord } from '../../core/practice'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import { useLocalStorageState } from './useLocalStorageState'
 import { useReadDone } from './useReadDone'
@@ -236,6 +236,91 @@ export function useLearningData(params: UseLearningDataParams) {
   /** 重建派生 + 对账：属于学习记录域（读的是这份记录），所以挂在这个收口里，别在视图再开一个。 */
   const rebuild = useLearningRebuild({ flash: params.flash })
 
+  // ---- 写入动作（原来在 ReaderApp 里 wrap 一遍 setter，现在跟着数据一起住这儿）----
+
+  /**
+   * 一轮考完 → 按题型累加到**本篇**（每次练习都算，产出看板据此算正确率）。
+   * 归属键就是本 hook 的 `articleIdentity`，别再让调用方传一遍。
+   */
+  const mergeKindStats = useCallback(
+    (rows: { kind: string; total: number; correct: number }[]) => {
+      const id = params.articleIdentity
+      if (!id) return
+      setKindStats((prev) => {
+        const forArticle = { ...(prev[id] ?? {}) }
+        for (const r of rows) {
+          const cur = forArticle[r.kind] ?? { total: 0, correct: 0 }
+          forArticle[r.kind] = { total: cur.total + r.total, correct: cur.correct + r.correct }
+        }
+        return { ...prev, [id]: forArticle }
+      })
+    },
+    [params.articleIdentity, setKindStats],
+  )
+
+  /** 记「今天学过这个词」（每日目标按不同单词计数）：重复点不重复算，只留最近 200 天。 */
+  const markStudied = useCallback((itemId: string) => {
+    setStudiedDays((prev) => {
+      const day = dayKeyLocal()
+      const cur = prev.find((d) => d.day === day)
+      if (cur) {
+        if (cur.ids.includes(itemId)) return prev
+        return prev.map((d) => (d.day === day ? { ...d, ids: [...d.ids, itemId] } : d))
+      }
+      return [...prev, { day, ids: [itemId] }].slice(-200)
+    })
+  }, [])
+
+  /** 把背单词时长 / 评分次数累加到「今天」（落盘供统计）。 */
+  const studyFlush = useCallback((seconds: number, cards: number) => {
+    if (seconds <= 0 && cards <= 0) return
+    setStudyDays((prev) => {
+      const day = dayKeyLocal()
+      const i = prev.findIndex((d) => d.day === day)
+      if (i < 0) return [...prev, { day, seconds, cards }]
+      const next = [...prev]
+      next[i] = { day, seconds: next[i].seconds + seconds, cards: next[i].cards + cards }
+      return next
+    })
+  }, [])
+
+  /** 今天学过的不同单词 id（每日目标进度）。 */
+  const studiedTodayIds = useMemo(() => {
+    const t = dayKeyLocal()
+    return studiedDays.find((d) => d.day === t)?.ids ?? []
+  }, [studiedDays])
+
+  /** 记一笔学习活动（按天 / 分类累计，落盘）。 */
+  const recordActivity = useCallback((cat: ActivityCat, n = 1) => {
+    if (n <= 0) return
+    setActivity((prev) => addActivity(prev, dayKeyLocal(new Date()), cat, n))
+  }, [])
+
+  /** 记一次练习成绩（考试 / 听写 / 听力理解）。 */
+  const recordPractice = useCallback(
+    (kind: PracticeKind, total: number, correct: number) => {
+      if (total <= 0) return
+      setPractice((prev) =>
+        addPracticeRecord(prev, {
+          at: new Date().toISOString(),
+          kind,
+          total,
+          correct,
+          articleId: params.articleIdentity || undefined,
+        }),
+      )
+    },
+    [params.articleIdentity],
+  )
+
+  const addMistake = useCallback((entry: MistakeEntry) => {
+    setMistakes((prev) => upsertMistake(prev, entry))
+  }, [])
+
+  const dropMistake = useCallback((id: string) => {
+    setMistakes((prev) => removeMistake(prev, id))
+  }, [])
+
   return {
     // 扁平字段：界面沿用旧名字，减少一次性改动面
     studyDays,
@@ -278,5 +363,14 @@ export function useLearningData(params: UseLearningDataParams) {
     setters,
     // 统计页「重建并核对」：服务端用答题事件重算派生，再与本地对账（只读，不写本地）
     rebuild,
+    // 写入动作：界面直接调这些，别再自己 wrap setter
+    markStudied,
+    studyFlush,
+    studiedTodayIds,
+    recordActivity,
+    recordPractice,
+    mergeKindStats,
+    addMistake,
+    dropMistake,
   }
 }

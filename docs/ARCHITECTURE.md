@@ -123,13 +123,14 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 已降到 1036 行；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：`ReaderApp` 已登记在 `tool/check_god_file.mjs` 的基线里，
-  **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
+- **`ReaderApp.tsx` 已降到 781 行（出基线了，不再是大文件）；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：
+  它现在只做装配：状态声明、hook 接线、把结果拍平成 `ReaderScreen` 的 props。**两种"分叉"要警惕**：
+  同一份数据两个写入方、同一套规则两处实现 —— 都拆到下面列出的 hook / core 里。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
   练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
   `screen/ReaderToolbarZone` / `ReaderSidebarZone` / `ReaderBodyZone` 只做「props → host」映射（不读存储），
   学习记录「重建并核对」在 `hooks/useLearningRebuild`（挂进 `hooks/useLearningData` 一起返回，避免再多一个装配点），
-  派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningData`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/useAiTasks`，粘贴应用在 `hooks/usePasteApply`，
-  目标是 ≤1200 行。
+  派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningData`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/useAiTasks`，粘贴应用在 `hooks/usePasteApply`，本机偏好（18 个小开关）在 `hooks/useReaderPrefs`，本篇生词口径在 `hooks/useArticleVocabView`，精读工作流的阶段→工具 / 拷打→题型两张表在 `hooks/useIntensiveActions`，修饰键与队列自动朗读在 `hooks/useModifierKeys` / `hooks/useQueueAutoSpeak`，
+  软上限 800 行（上帝文件门禁的线）。
 - **展示层已经不再直接读写 localStorage**：`ui/App` 的偏好搬去 `state/shadowingPrefs`、
   `ui/FishLayer` 的布局搬去 `state/fishPrefs`（规则在 `core/fishLayout`）。R3 的存量豁免
   现在只剩 `core/stateBackup` 那条 R6（备份文件名里的 UTC 日期，故意的）。
