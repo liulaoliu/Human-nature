@@ -6,6 +6,7 @@ import {
   chunk,
   countAiJobs,
   isAiJobTask,
+  jobPhaseLabel,
   makeJobId,
   missingJobIds,
   parseAiResultPack,
@@ -463,5 +464,25 @@ describe('buildWebPackPrompt / parseWebPackResults', () => {
     const jobs = [job({ id: 'a-1' }), job({ id: 'b-2' })]
     expect(missingJobIds(jobs, [{ id: 'a-1' }])).toEqual(['b-2'])
     expect(missingJobIds(jobs, [])).toEqual(['a-1', 'b-2'])
+  })
+})
+
+describe('jobPhaseLabel：本批任务名（去重 + 首次出现顺序）', () => {
+  const job = (task: AiJob['task']): AiJob => ({
+    id: task,
+    task,
+    label: task,
+    askedWords: [],
+    askedIds: [],
+    prompt: '',
+  })
+
+  it('同类型只出现一次，顺序按首次出现', () => {
+    const label = jobPhaseLabel([job('lookup'), job('auto_vocab'), job('lookup')])
+    expect(label).toBe('查词/补齐、自动标词')
+  })
+
+  it('空批 → 空串', () => {
+    expect(jobPhaseLabel([])).toBe('')
   })
 })

@@ -6,6 +6,7 @@ import {
   buildWebPackPrompt,
   countAiJobs,
   isAiJobTask,
+  jobPhaseLabel,
   missingJobIds,
   parseAiResultPack,
   parseJobPack,
@@ -13,6 +14,7 @@ import {
 } from '../../core/aiPackage'
 import type { AiJob, AiJobTask, AiJobsInput, AiResultEntry } from '../../core/aiPackage'
 import { dayKeyLocal } from '../../core/activity'
+import { CANCEL_MESSAGE, fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 import { useLocalStorageState } from './useLocalStorageState'
 
 export interface UseAiPackParams {
@@ -36,39 +38,6 @@ export interface UseAiPackParams {
  *  - 网页版（DeepSeek 等）：复制一条「工作包提示词」去网页贴 → 整段回复贴回 → 应用；
  *    网页端可能截断/漏答，所以按「待处理」分批复制、跟踪进度（完成/缺项），并支持刷新。
  */
-/** 一批任务包含的任务类型（去重，用于「第 N 轮 · 查词/补齐」这种提示）。 */
-function phaseLabelOf(jobs: AiJob[]): string {
-  const seen: AiJobTask[] = []
-  for (const j of jobs) if (!seen.includes(j.task)) seen.push(j.task)
-  return seen.map((t) => AI_TASK_LABEL[t] ?? t).join('、')
-}
-
-/** 轮询间隔；上限 40 分钟（正常一篇的跑批远到不了）。 */
-const POLL_INTERVAL_MS = 1500
-const MAX_POLL_MS = 40 * 60 * 1000
-/** 连续取不到进度（服务端失联）的容忍次数，约 30 秒。 */
-const MAX_POLL_MISSES = 20
-const CANCEL_MESSAGE = '已取消跑批'
-
-/** 可被 abort 打断的 sleep：取消时立刻返回，不把定时器留在后台。 */
-function sleep(ms: number, signal: AbortSignal): Promise<void> {
-  return new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new Error(CANCEL_MESSAGE))
-      return
-    }
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort)
-      resolve()
-    }, ms)
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(new Error(CANCEL_MESSAGE))
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-  })
-}
-
 export function useAiPack({ jobsInput, applyTaskResult, download, flash, onReport }: UseAiPackParams) {
   const packRef = useRef<string>('')
   const fileRef = useRef<HTMLInputElement | null>(null)
@@ -99,10 +68,9 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   /** 问一次服务端：key 配没配（接口只回布尔，不回 key）。 */
   useEffect(() => {
     let alive = true
-    fetch('/api/ai/status')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => alive && setLocalConfigured(!!(d && d.configured)))
-      .catch(() => alive && setLocalConfigured(false))
+    void fetchAiStatus().then((configured) => {
+      if (alive) setLocalConfigured(configured)
+    })
     return () => {
       alive = false
     }
@@ -384,58 +352,8 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   /** 把一个批次发给服务端跑，轮询进度；onDone(本批已完成数) 用于进度显示。 */
   const runBatchOnServer = useCallback(
-    async (
-      jobs: AiJob[],
-      onDone: (done: number) => void,
-      signal: AbortSignal,
-    ): Promise<{ results: AiResultEntry[]; failed: { id: string; error: string }[] }> => {
-      const res = await fetch('/api/ai/run', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ jobs: jobs.map((j) => ({ id: j.id, task: j.task, prompt: j.prompt })) }),
-        signal,
-      })
-      if (!res.ok) {
-        const info = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-        throw new Error(
-          info.error === 'no-key'
-            ? '服务端未配置 key：把 key 填进 config.local.json 的 ai.apiKey'
-            : '启动失败：' + (info.message || res.status),
-        )
-      }
-      const { runId } = (await res.json()) as { runId: string }
-      // 轮询有界：40 分钟上限 + 连续 20 次取不到进度即判失联，别让服务挂了还无限空转
-      const startedAt = Date.now()
-      let misses = 0
-      for (;;) {
-        await sleep(POLL_INTERVAL_MS, signal)
-        if (Date.now() - startedAt > MAX_POLL_MS) {
-          throw new Error('跑批超时（40 分钟没有结果）：请稍后重试，或改用网页版工作包')
-        }
-        let p: {
-          state?: string
-          done?: number
-          results?: AiResultEntry[]
-          failed?: { id: string; error: string }[]
-          error?: string
-        } | null = null
-        try {
-          p = await (await fetch('/api/ai/run?id=' + encodeURIComponent(runId), { signal })).json()
-        } catch {
-          if (signal.aborted) throw new Error(CANCEL_MESSAGE)
-          misses += 1
-          if (misses >= MAX_POLL_MISSES) {
-            throw new Error('与服务端失联（约 30 秒取不到进度）：确认服务还在运行后重试')
-          }
-          continue
-        }
-        misses = 0
-        if (!p) continue
-        onDone(p.done ?? 0)
-        if (p.state === 'done') return { results: p.results ?? [], failed: p.failed ?? [] }
-        if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
-      }
-    },
+    (jobs: AiJob[], onDone: (done: number) => void, signal: AbortSignal) =>
+      runAiBatch(jobs, { signal, onProgress: onDone }),
     [],
   )
 
@@ -490,7 +408,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         for (const j of todo) attempted.add(j.id)
         planned += todo.length
         setLocalRound(r + 1)
-        setLocalPhase(phaseLabelOf(todo))
+        setLocalPhase(jobPhaseLabel(todo))
         setLocalDone(0)
         setLocalTotal(todo.length)
 

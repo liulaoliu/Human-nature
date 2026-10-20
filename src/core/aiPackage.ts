@@ -575,3 +575,13 @@ export function countAiJobs(input: AiJobsInput): number {
   if (input.sentences.length && !input.hasListenQuiz) n++
   return n
 }
+
+/**
+ * 「第 N 轮 · 查词/补齐」里那一串任务名：本批任务类型去重后按首次出现顺序拼起来。
+ * 只用于提示文案，不影响出题与导入。
+ */
+export function jobPhaseLabel(jobs: AiJob[]): string {
+  const seen: AiJobTask[] = []
+  for (const j of jobs) if (!seen.includes(j.task)) seen.push(j.task)
+  return seen.map((t) => AI_TASK_LABEL[t] ?? t).join('、')
+}
