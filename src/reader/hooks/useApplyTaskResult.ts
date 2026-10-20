@@ -1,34 +1,28 @@
 import { useCallback, type Dispatch, type MutableRefObject, type SetStateAction } from 'react'
-import {
-  applyToSentence,
-  cleanVocabWord,
-  parseAnalysis,
-  parseConfusables,
-  parseExampleTable,
-  parseGrammarMarkTable,
-  parseLemmaTable,
-  parsePhraseTable,
-  parsePosTable,
-  type AnalysisTask,
-} from '../../core/analyzer'
+import { applyToSentence, cleanVocabWord, parseAnalysis, type AnalysisTask } from '../../core/analyzer'
 import { applyLanguage, parseLanguage } from '../../core/language'
 import { parseListeningQuiz, type ListeningQuiz } from '../../core/listening'
-import { addWritingRecord, parseImitationTask, parseWritingFeedback, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
 import {
-  applyConfusables,
-  applyExamples,
-  applyGrammarMarks,
-  applyLemmaMap,
-  applyPhrases,
-  applyPosAnalysis,
-  applyWordAnalysis,
-  dedupeLibrary,
-  lemmaOf,
-  normalizeWord,
-} from '../../core/vocab'
+  addWritingRecord,
+  parseImitationTask,
+  parseWritingFeedback,
+  type ImitationTask,
+  type WritingFeedback,
+  type WritingRecord,
+} from '../../core/writing'
+import { applyWordAnalysis, dedupeLibrary, lemmaOf } from '../../core/vocab'
+import { applyTableTask, missingWords, type ApplyTableTask } from '../../core/aiApply'
+import type { MissingTask } from '../missingPrompts'
 import type { Sentence, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import { dictLemmaOf, firstLine, levelVerdict, pickAboveLevelWords, resolveWord, type EcdictLevel } from '../../core/ecdict'
+import {
+  dictLemmaOf,
+  firstLine,
+  levelVerdict,
+  pickAboveLevelWords,
+  resolveWord,
+  type EcdictLevel,
+} from '../../core/ecdict'
 import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
@@ -37,9 +31,8 @@ type BatchItemLike = { word: string; sentence: string; sentenceId: string | null
 
 export interface ApplyOutcome {
   report: string[]
-  missing:
-    | { task: 'confusable' | 'lookup' | 'lemma' | 'pos' | 'phrase' | 'grammar_mark'; words: string[] }
-    | null
+  /** 缺失任务 + 缺的词；类型跟「复制未返回的」提示词共用一份（reader/missingPrompts） */
+  missing: { task: MissingTask; words: string[] } | null
   ok: boolean
 }
 
@@ -76,10 +69,17 @@ export interface UseApplyTaskResultParams {
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
 }
 
-/** 请求的词里，AI 没返回的（按 lemma 比较）。 */
-function missingWords(requested: string[], returned: string[]): string[] {
-  const got = new Set(returned.map((w) => lemmaOf(w)))
-  return requested.filter((w) => !got.has(lemmaOf(w)))
+/**
+ * 「解析表格 → 写库」那类任务：规则全在 `core/aiApply`（那边有逐条测试），
+ * 这里只做分派 + 落库，不再各写一份 report。
+ */
+const TABLE_TASKS: Partial<Record<AiTaskKey, ApplyTableTask>> = {
+  confusable: 'confusable',
+  example: 'example',
+  phrase: 'phrase',
+  grammar_mark: 'grammar_mark',
+  lemma: 'lemma',
+  pos: 'pos',
 }
 
 /**
@@ -125,6 +125,14 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       const commit = (next: VocabLibrary) => {
         libraryRef.current = next
         persist(next)
+      }
+
+      // 表格型任务：解析 / 校验 / 回执都在 core/aiApply，这里只落库
+      const tableTask = task ? TABLE_TASKS[task] : undefined
+      if (tableTask) {
+        const out = applyTableTask(tableTask, text, lib, askedWords)
+        if (out.next) commit(out.next)
+        return { report: out.report, missing: out.missing, ok: out.ok }
       }
 
       // 一种任务 = 一个处理器（注册表）；新增 AI 任务只在这里加一条，不再改 if 链
@@ -209,112 +217,6 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
           missing: null,
           ok: true,
         }
-      }
-
-      // 混淆项：写到对应词条，供选择题当干扰项。先校验再落库。
-      handlers.confusable = () => {
-        const parsed = parseConfusables(text)
-        if (!parsed.length)
-          return { report: ['没解析出混淆项（格式：原词 | 词:释义 ; 词:释义）'], missing: null, ok: false }
-        const libLemmas = new Set(lib.items.map((it) => it.lemma))
-        const valid = parsed
-          .map((r) => ({
-            ...r,
-            confusables: r.confusables.filter((c) => c.word.trim() && lemmaOf(c.word) !== lemmaOf(r.word)),
-          }))
-          .filter((r) => r.confusables.length > 0)
-        const applied = valid.filter((r) => libLemmas.has(lemmaOf(r.word)))
-        const unknown = valid.filter((r) => !libLemmas.has(lemmaOf(r.word))).map((r) => r.word)
-        const empty = parsed
-          .filter((r) => r.confusables.every((c) => !c.word.trim() || lemmaOf(c.word) === lemmaOf(r.word)))
-          .map((r) => r.word)
-        const missing = missingWords(askedWords, valid.map((r) => r.word))
-
-        const report: string[] = []
-        if (applied.length) commit(applyConfusables(lib, applied))
-        report.push(`成功写入 ${applied.length} 个词的混淆项`)
-        if (missing.length) {
-          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        }
-        if (empty.length) report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${empty.slice(0, 10).join('、')}`)
-        if (unknown.length) report.push(`词库里没有 ${unknown.length} 个：${unknown.slice(0, 10).join('、')}`)
-        return { report, missing: missing.length ? { task: 'confusable', words: missing } : null, ok: true }
-      }
-
-      // 用法示例：按中文含义给词补例句（英+中）
-      handlers.example = () => {
-        const rows = parseExampleTable(text)
-        if (!rows.length) return { report: ['没解析出例句（格式：单词 | 英 | 中 | 英 | 中）'], missing: null, ok: false }
-        commit(applyExamples(lib, rows))
-        return { report: [`已加入 ${rows.length} 个词的例句`], missing: null, ok: true }
-      }
-
-      // 词组 / 习语：给词补「词组」「习语」两块（与用法、例句分开）
-      handlers.phrase = () => {
-        const rows = parsePhraseTable(text)
-        if (!rows.length)
-          return { report: ['没解析出词组/习语（格式：单词 | 词组1；词组2 | 习语1；习语2）'], missing: null, ok: false }
-        commit(applyPhrases(lib, rows))
-        const missing = missingWords(askedWords, rows.map((r) => r.word))
-        const report = [`已写入 ${rows.length} 个词组的词组/习语`]
-        if (missing.length) {
-          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        }
-        return { report, missing: missing.length ? { task: 'phrase', words: missing } : null, ok: true }
-      }
-
-      // 语法标记：给名词/动词/形容词标「可数性 / 及物性」等
-      handlers.grammar_mark = () => {
-        const rows = parseGrammarMarkTable(text)
-        if (!rows.length)
-          return { report: ['没解析出语法标记（格式：单词 | 标记1；标记2，标记取可数/不可数/及物/不及物…）'], missing: null, ok: false }
-        commit(applyGrammarMarks(lib, rows))
-        const missing = missingWords(askedWords, rows.map((r) => r.word))
-        const report = [`已标注 ${rows.length} 个词的语法标记`]
-        if (missing.length) {
-          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        }
-        return { report, missing: missing.length ? { task: 'grammar_mark', words: missing } : null, ok: true }
-      }
-
-      // 原形校正：改 word/lemma，再合并重复
-      handlers.lemma = () => {
-        const pairs = parseLemmaTable(text)
-        if (!pairs.length) return { report: ['没解析出原形（格式：原词形 | 原形）'], missing: null, ok: false }
-        const before = lib.items.length
-        const next = dedupeLibrary(applyLemmaMap(lib, pairs))
-        commit(next)
-        const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
-        const merged = before - next.items.length
-        const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
-        if (merged > 0) report.push(`合并去重 ${merged} 个`)
-        const missing = missingWords(askedWords, pairs.map((p) => p.from))
-        if (missing.length) {
-          report.push(`AI 未返回 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        }
-        return { report, missing: missing.length ? { task: 'lemma', words: missing } : null, ok: true }
-      }
-
-      // -ing/-ed 语法辨析：写回原形 / 词性 / 笔记
-      handlers.pos = () => {
-        const rows = parsePosTable(text)
-        if (!rows.length)
-          return { report: ['没解析出辨析结果（应为 8 列：原形 | 当前形式 | … | 最准确词性标注）'], missing: null, ok: false }
-        const before = lib.items.length
-        const next = dedupeLibrary(applyPosAnalysis(lib, rows))
-        commit(next)
-        const merged = before - next.items.length
-        const surfaces = rows.map((r) => normalizeWord(r.surface)).filter(Boolean)
-        const missing = askedWords.filter((w) => {
-          const nw = normalizeWord(w)
-          return !surfaces.some((s) => nw === s || nw.split(' ').includes(s))
-        })
-        const report: string[] = [`已写回 ${rows.length} 条辨析`]
-        if (merged > 0) report.push(`合并去重 ${merged} 个`)
-        if (missing.length) {
-          report.push(`AI 未覆盖 ${missing.length} 个：${missing.slice(0, 20).join('、')}${missing.length > 20 ? '…' : ''}`)
-        }
-        return { report, missing: missing.length ? { task: 'pos', words: missing } : null, ok: true }
       }
 
       // 听力理解题：解析严格 JSON 并存起来
@@ -497,6 +399,8 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       writingTask,
       recordActivity,
       ecdictLevel,
+      articleText,
+      sentenceForWord,
       setDoc,
       setPendingSave,
       setListenQuiz,

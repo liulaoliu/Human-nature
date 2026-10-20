@@ -18,6 +18,7 @@ import { useReaderViewData } from './hooks/useReaderViewData'
 import { useSessionServices } from './hooks/useSessionServices'
 import ReaderScreen from './ReaderScreen'
 import { useAiServices } from './hooks/useAiServices'
+import type { ApplyOutcome } from './hooks/useApplyTaskResult'
 import { useArticleUiActions } from './hooks/useArticleUiActions'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
@@ -62,11 +63,8 @@ export default function ReaderApp() {
   const askedIdsRef = useRef<string[]>([])
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
-  /** 上次回执里缺失的词（用于「一键复制未返回的」重试） */
-  const [pasteMissing, setPasteMissing] = useState<{
-    task: 'confusable' | 'lookup' | 'lemma' | 'pos' | 'phrase' | 'grammar_mark'
-    words: string[]
-  } | null>(null)
+  /** 上次回执里缺失的词（用于「一键复制未返回的」重试）；类型跟着 hook 走，别再抄一份联合 */
+  const [pasteMissing, setPasteMissing] = useState<ApplyOutcome['missing']>(null)
   const [lastTask, setLastTask] = useState<
     | AnalysisTask
     | 'confusable'
