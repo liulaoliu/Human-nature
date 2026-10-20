@@ -55,6 +55,7 @@ import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
+import { useVocabMode } from './hooks/useVocabMode'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
@@ -327,10 +328,6 @@ export default function ReaderApp() {
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
-  /** 选词模式计时（秒） */
-  const [vocabSeconds, setVocabSeconds] = useState(0)
-  /** 选词模式：点/划直接选生词，攒一批后一键导出 */
-  const [vocabMode, setVocabMode] = useState(false)
   /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
   const articleIdentity = articleKey ?? savedId ?? articleTitle
   // 「待选」清单：状态 + 按文章持久化 + 去重（IO 收口在 useBatchQueue）
@@ -442,9 +439,6 @@ export default function ReaderApp() {
   }, [articleWords])
   const articleAllPrinted = articleWords.length > 0 && articleWords.every((it) => !!it.lastPrintedAt)
   const applyingDom = useRef(false)
-  const vocabStartRef = useRef<number | null>(null)
-  const vocabAccumRef = useRef(0)
-  const sessionPickedRef = useRef(0)
   const articleRef = useRef<HTMLElement | null>(null)
   const sideRef = useRef<HTMLElement | null>(null)
   const confirmTimerRef = useRef<number | null>(null)
@@ -821,56 +815,8 @@ export default function ReaderApp() {
     20,
   )
 
-  /** 记一次选词模式会话（sessions 由 useLocalStorageState 落盘，最多留 500 条）。 */
-  const recordSession = useCallback((seconds: number, picked: number) => {
-    if (seconds < 1 && picked === 0) return
-    setSessions((prev) => [...prev, { at: new Date().toISOString(), seconds, picked }].slice(-500))
-  }, [setSessions])
-
-  /** 开关选词模式：开时开始计时，关时记一次会话。 */
-  const toggleVocabMode = useCallback(() => {
-    if (vocabMode) {
-      const start = vocabStartRef.current
-      const seconds = Math.round(vocabAccumRef.current + (start ? (Date.now() - start) / 1000 : 0))
-      recordSession(seconds, sessionPickedRef.current)
-      vocabStartRef.current = null
-      vocabAccumRef.current = 0
-      setVocabMode(false)
-    } else {
-      vocabStartRef.current = Date.now()
-      vocabAccumRef.current = 0
-      sessionPickedRef.current = 0
-      setVocabSeconds(0)
-      setVocabMode(true)
-    }
-  }, [vocabMode, recordSession])
-
-  // 计时：选词模式打开时每秒刷新
-  useEffect(() => {
-    if (!vocabMode) return
-    const id = window.setInterval(() => {
-      const start = vocabStartRef.current
-      setVocabSeconds(Math.round(vocabAccumRef.current + (start ? (Date.now() - start) / 1000 : 0)))
-    }, 1000)
-    return () => window.clearInterval(id)
-  }, [vocabMode])
-
-  // 切走标签页就暂停计时（只算真正盯着读的时间）
-  useEffect(() => {
-    if (!vocabMode) return
-    const onVis = () => {
-      if (document.hidden) {
-        if (vocabStartRef.current) {
-          vocabAccumRef.current += (Date.now() - vocabStartRef.current) / 1000
-          vocabStartRef.current = null
-        }
-      } else if (!vocabStartRef.current) {
-        vocabStartRef.current = Date.now()
-      }
-    }
-    document.addEventListener('visibilitychange', onVis)
-    return () => document.removeEventListener('visibilitychange', onVis)
-  }, [vocabMode])
+  /** 选词模式（开关 / 计时 / 切走暂停 / 关闭记会话）；逻辑在 hooks/useVocabMode。 */
+  const { vocabMode, vocabSeconds, toggleVocabMode, sessionPickedRef } = useVocabMode({ setSessions })
 
   // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：
   // 纯派生无副作用，状态仍由各自 hook 持有 —— 逻辑与记忆化都在 useReaderDerived。
