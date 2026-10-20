@@ -5,6 +5,7 @@ import {
   buildQuizQuestions,
   countQuestions,
   formatAnswerInput,
+  isArticleKind,
   isCorrect,
   makeDictationQuestion,
   makeQuestion,
@@ -399,5 +400,19 @@ describe('连字符 / 撇号宽容', () => {
     expect(formatAnswerInput("dont", "don't")).toBe("don't")
     expect(formatAnswerInput('xyz', 'bad-temperedly')).toBe('xyz')
     expect(formatAnswerInput('', 'bad-temperedly')).toBe('')
+  })
+})
+
+describe('isArticleKind：分「文章级」与「词级」题型', () => {
+  it('文章级题型认出来', () => {
+    for (const k of ['translate', 'translate2', 'functionWord', 'ordering', 'grammar', 'phraseBlank'] as const) {
+      expect(isArticleKind(k)).toBe(true)
+    }
+  })
+
+  it('词级题型不算（含听力/拼写/搭配）', () => {
+    for (const k of ['spell', 'cloze', 'usage', 'listen', 'ear', 'meaning', 'idiom'] as const) {
+      expect(isArticleKind(k)).toBe(false)
+    }
   })
 })

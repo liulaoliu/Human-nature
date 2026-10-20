@@ -1,30 +1,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import {
-  ARTICLE_KINDS,
-  buildQuizQuestions,
-  countQuestions,
-  isCorrect,
-  isQuizKind,
-  makeQuestion,
-  shuffleQuiz,
-  type ArticleQuizKind,
-  type QuizKind,
-  type QuizQuestion,
-} from '../../core/quiz'
+import { countQuestions, isCorrect, shuffleQuiz, type QuizKind, type QuizQuestion } from '../../core/quiz'
 import { buildArticleQuestions } from '../../core/articleQuiz'
-import { isDue, nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
-import { isStudyable } from '../../core/entryKind'
-import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+import { nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
+import { buildQuizSet, poolFor, poolSizes, studyableItems, type QuizScope } from '../../core/quizPool'
+import { isArticleKind } from '../../core/quiz'
+import type { Sentence, VocabLibrary } from '../../types/document'
 
-const DEFAULT_ARTICLE_KINDS: QuizKind[] = ['translate', 'translate2', 'functionWord', 'ordering', 'phraseBlank']
 /** 「反复鞭打」最多自动重练几轮（防死循环）。 */
 const MAX_DRILL_ROUNDS = 5
-const isArticleKind = (k: QuizKind): k is ArticleQuizKind => (ARTICLE_KINDS as readonly string[]).includes(k)
+
 import { vocabMistake, type MistakeEntry } from '../../core/mistakes'
 import type { ActivityCat } from '../../core/activity'
 import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
-import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
+import { useQuizSettings } from './useQuizSettings'
 import { useHotkeys } from '../useHotkeys'
 import {
   parseQuizSessionSnapshot,
@@ -33,9 +22,7 @@ import {
 } from '../../core/sessionSnapshots'
 
 export type { QuizResultRow } from '../../core/sessionSnapshots'
-
-/** 考试范围。 */
-export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
+export type { QuizScope } from '../../core/quizPool'
 
 const QUIZ_SESSION_KEY = 'reader:quizSession'
 
@@ -70,8 +57,10 @@ export interface UseQuizSessionParams {
 }
 
 /**
- * 考试会话：设置（题型/范围/题量/选项）、出卷、判分、自动下一题、错题重做、快捷键。
+ * 考试会话：出卷、判分、自动下一题、错题重做、快捷键。
  * 对 → SRS good，错 → SRS again（记 lapse），并同步错题本。
+ *
+ * 设置（题型/范围/题量…）在 `useQuizSettings`；候选池与出题集在 `core/quizPool`。
  */
 export function useQuizSession(params: UseQuizSessionParams) {
   const {
@@ -92,49 +81,13 @@ export function useQuizSession(params: UseQuizSessionParams) {
     onKinds,
   } = params
 
-  // ---- 设置（持久化） ----
-  const [kinds, setKinds] = useLocalStorageState<QuizKind[]>('reader:quizKinds', ['spell', 'cloze', 'usage'], {
-    parse: (raw) => {
-      try {
-        const arr = JSON.parse(raw)
-        if (Array.isArray(arr)) {
-          const valid = arr.filter(isQuizKind)
-          if (valid.length) return valid
-        }
-      } catch {
-        // 忽略
-      }
-      return ['spell', 'cloze', 'usage']
-    },
-  })
-  const [scope, setScope] = useLocalStorageState<QuizScope>(
-    'reader:quizScope',
-    'article',
-    persistentEnum(['all', 'article', 'unmastered', 'due', 'lapses'] as const, 'article'),
-  )
-  const [limit, setLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
-  const [auto, setAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
-  const [unique, setUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
-  const [speakAfter, setSpeakAfter] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
-  /** 文章级测验题型（英译中 / 中译英 / 功能词填空 / 句子排序 / 结构语法）。 */
-  const [articleKinds, setArticleKinds] = useLocalStorageState<QuizKind[]>('reader:quizArticleKinds', DEFAULT_ARTICLE_KINDS, {
-    parse: (raw) => {
-      try {
-        const arr = JSON.parse(raw)
-        if (Array.isArray(arr)) {
-          const valid = arr.filter((k) => isQuizKind(k) && isArticleKind(k))
-          if (valid.length) return valid
-        }
-      } catch {
-        // 忽略
-      }
-      return DEFAULT_ARTICLE_KINDS
-    },
-  })
+  // ---- 设置（持久化，逻辑在 useQuizSettings） ----
+  const settings = useQuizSettings()
+  const { kinds, setKinds, scope, setScope, limit, auto, unique, speakAfter, articleKinds, setArticleKinds, loopWrong } =
+    settings
+
   /** 本轮是不是「文章测验」（决定面板标题、且不写 SRS）。 */
   const [articleRun, setArticleRun] = useState(false)
-  /** 反复鞭打：一轮没全对就自动重练错题（最多 MAX_DRILL_ROUNDS 轮）。 */
-  const [loopWrong, setLoopWrong] = useLocalStorageState('reader:quizLoopWrong', false, persistentBool)
   const [drillRound, setDrillRound] = useState(0)
   const drillRoundRef = useRef(0)
   /** 鞭打轮的定时器（换轮/关闭时清掉）。 */
@@ -172,49 +125,13 @@ export function useQuizSession(params: UseQuizSessionParams) {
     }
   }, [queue, index, input, checked, result, results, autoRun])
 
-  // ---- 候选池与题量 ----
+  // ---- 候选池与题量（规则在 core/quizPool） ----
   /** 可考的：用法笔记（中文说明）不出题 */
-  const studyable = useMemo(() => library.items.filter(isStudyable), [library.items])
-  /** 按范围取候选词（考试 / 拷打共用）。 */
-  const poolFor = useCallback(
-    (s: QuizScope): VocabItem[] => {
-      if (s === 'all') return studyable
-      if (s === 'due') return studyable.filter((it) => isDue(it))
-      if (s === 'lapses') return studyable.filter((it) => (it.reviewState.lapses ?? 0) > 0)
-      if (s === 'unmastered') return studyable.filter((it) => it.status !== 'mastered')
-      return studyable.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
-    },
-    [studyable, articleIdentity, docLemmas],
-  )
-  const pool = useMemo(() => poolFor(scope), [poolFor, scope])
-  const poolSizes = useMemo(() => {
-    const count = (items: VocabItem[]) => countQuestions(items, kinds)
-    return {
-      all: count(studyable),
-      due: count(studyable.filter((it) => isDue(it))),
-      unmastered: count(studyable.filter((it) => it.status !== 'mastered')),
-    }
-  }, [studyable, kinds])
+  const studyable = useMemo(() => studyableItems(library.items), [library.items])
+  const poolCtx = useMemo(() => ({ articleIdentity, docLemmas }), [articleIdentity, docLemmas])
+  const pool = useMemo(() => poolFor(studyable, scope, poolCtx), [studyable, scope, poolCtx])
+  const poolSizesNow = useMemo(() => poolSizes(studyable, kinds), [studyable, kinds])
   const availableCount = useMemo(() => countQuestions(pool, kinds), [pool, kinds])
-
-  /** 出题：默认每个单词只考一次、题型随机；可关掉以允许同一词多题型。 */
-  const buildSetWith = useCallback(
-    (items: VocabItem[], ks: QuizKind[]): QuizQuestion[] => {
-      if (!unique) return buildQuizQuestions(items, ks)
-      return shuffleQuiz(items)
-        .map((it) => {
-          for (const k of shuffleQuiz(ks)) {
-            const q = makeQuestion(it, k, items)
-            if (q) return q
-          }
-          return null
-        })
-        .filter((q): q is QuizQuestion => q !== null)
-    },
-    [unique],
-  )
-
-  const buildSet = useCallback((items: VocabItem[]): QuizQuestion[] => buildSetWith(items, kinds), [buildSetWith, kinds])
 
   const clearAdvance = useCallback(() => {
     if (advanceRef.current) {
@@ -260,8 +177,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
   /** 文章级测验：按当前文章出题（英译中/中译英/功能词填空/句子排序/结构语法）。 */
   const startArticle = useCallback(() => {
     const sents = doc?.sentences ?? []
-    const kinds = articleKinds.filter(isArticleKind)
-    const qs = buildArticleQuestions(sents, { kinds })
+    const ks = articleKinds.filter(isArticleKind)
+    const qs = buildArticleQuestions(sents, { kinds: ks })
     if (!qs.length) {
       flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
       return
@@ -271,19 +188,19 @@ export function useQuizSession(params: UseQuizSessionParams) {
 
   /** 用当前设置出一份考卷（洗牌 + 限量）。 */
   const start = useCallback(() => {
-    const qs = buildSet(pool)
+    const qs = buildQuizSet(pool, kinds, unique)
     if (!qs.length) {
       flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
       return
     }
     begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
-  }, [buildSet, pool, limit, begin, flash])
+  }, [pool, kinds, unique, limit, begin, flash])
 
   /** 从指定词条开一轮考试（错题本「重练词汇」/ 错题包围战 用）。可指定题型。 */
   const startItems = useCallback(
     (ids: string[], kindsArg?: QuizKind[]) => {
       const items = library.items.filter((it) => ids.includes(it.id))
-      const qs = buildSetWith(items, kindsArg ?? kinds)
+      const qs = buildQuizSet(items, kindsArg ?? kinds, unique)
       if (!qs.length) {
         flash('这些词暂时出不了题（缺释义 / 例句）')
         return
@@ -291,14 +208,14 @@ export function useQuizSession(params: UseQuizSessionParams) {
       if (kindsArg) setKinds(kindsArg)
       begin(qs)
     },
-    [library.items, buildSetWith, kinds, begin, flash, setKinds],
+    [library.items, kinds, unique, begin, flash, setKinds],
   )
 
   /** 精读工作流：用指定题型 / 范围直接开一轮「拷打」。 */
   const startDrill = useCallback(
     (ks: QuizKind[], scopeArg: QuizScope = 'article') => {
       const vocabKinds = ks.filter((k) => !isArticleKind(k))
-      const qs = buildSetWith(poolFor(scopeArg), vocabKinds)
+      const qs = buildQuizSet(poolFor(studyable, scopeArg, poolCtx), vocabKinds, unique)
       if (!qs.length) {
         flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
         return
@@ -307,7 +224,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setScope(scopeArg)
       begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
     },
-    [poolFor, buildSetWith, limit, begin, flash, setKinds, setScope],
+    [studyable, poolCtx, unique, limit, begin, flash, setKinds, setScope],
   )
 
   /** 精读工作流：用指定文章级题型开一轮（结构/语法、中译英、功能词、排序）。 */
@@ -486,24 +403,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
   )
 
   return {
-    // 设置
-    kinds,
-    setKinds,
-    scope,
-    setScope,
-    limit,
-    setLimit,
-    auto,
-    setAuto,
-    unique,
-    setUnique,
-    speakAfter,
-    setSpeakAfter,
-    articleKinds,
-    setArticleKinds,
+    // 设置（原样转发 useQuizSettings 的那一批）
+    ...settings,
     articleRun,
-    loopWrong,
-    setLoopWrong,
     drillRound,
     // 会话
     setupOpen,
@@ -519,7 +421,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setResults,
     seconds,
     // 派生
-    poolSizes,
+    poolSizes: poolSizesNow,
     availableCount,
     // 动作
     start,

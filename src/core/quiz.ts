@@ -86,6 +86,11 @@ export function isQuizKind(v: unknown): v is QuizKind {
   return typeof v === 'string' && (ALL_KINDS as string[]).includes(v)
 }
 
+/** 是不是「文章级」题型（英译中 / 排序 / 结构语法…）。词级考试要把它筛掉。 */
+export function isArticleKind(k: QuizKind): k is ArticleQuizKind {
+  return (ARTICLE_KINDS as readonly string[]).includes(k)
+}
+
 export interface QuizQuestion {
   /** 题目唯一 id（词条 + 题型） */
   id: string
