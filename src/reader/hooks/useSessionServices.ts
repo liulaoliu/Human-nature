@@ -106,6 +106,7 @@ export function useSessionServices({
     markStudied,
     recordActivity,
     addStudyTime: studyFlush,
+    speak,
     newLimit,
     newToday,
     onBumpNewToday: bumpNewToday,

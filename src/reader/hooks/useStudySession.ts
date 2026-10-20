@@ -23,6 +23,8 @@ export interface UseStudySessionParams {
   recordActivity: (cat: ActivityCat, n?: number) => void
   /** 把背单词时长 / 评分次数累加到「今天」（落盘供统计）。 */
   addStudyTime: (seconds: number, cards: number) => void
+  /** 朗读单词（与卡片右侧 🔊 同一个入口）。 */
+  speak: (text: string) => void
   /** 每天最多引入多少新词（0=不限）与今天已引入数。 */
   newLimit: number
   newToday: number
@@ -45,6 +47,7 @@ export function useStudySession(params: UseStudySessionParams) {
     markStudied,
     recordActivity,
     addStudyTime,
+    speak,
     newLimit,
     newToday,
     onBumpNewToday,
@@ -354,6 +357,12 @@ export function useStudySession(params: UseStudySessionParams) {
         grade('good')
       } else if (gradeKeys[e.key]) {
         if (canGrade) grade(gradeKeys[e.key])
+      } else if (key === 'r') {
+        const cur = queue[index]
+        // 拼写模式判卷前读出来就剧透了（自动朗读也为此关掉）
+        if (!cur || (spelling && !checked)) return
+        e.preventDefault()
+        if (!e.repeat) speak(cur.word)
       } else if (key === 'q') {
         e.preventDefault()
         back()

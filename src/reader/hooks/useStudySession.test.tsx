@@ -17,7 +17,13 @@ const flash = vi.fn()
 const noop = vi.fn()
 const docLemmas = new Set<string>()
 
-function Harness({ library }: { library: VocabLibrary }) {
+function Harness({
+  library,
+  speak = noop,
+}: {
+  library: VocabLibrary
+  speak?: (text: string) => void
+}) {
   api = useStudySession({
     library,
     articleIdentity: 'A',
@@ -28,6 +34,7 @@ function Harness({ library }: { library: VocabLibrary }) {
     markStudied: noop,
     recordActivity: noop,
     addStudyTime: noop,
+    speak,
     newLimit: 0,
     newToday: 0,
     onBumpNewToday: noop,
@@ -80,8 +87,7 @@ describe('useStudySession：单词之间切换', () => {
   })
 })
 
-describe('useStudySession：背单词 / 背搭配分牌组', () => {
-  it('背单词只组单词，切到背搭配只组词组/习语', () => {
+describe('useStudySession：背单词 / 背搭配分牌组', () => {  it('背单词只组单词，切到背搭配只组词组/习语', () => {
     const { unmount } = render(
       <Harness
         library={lib([
@@ -96,6 +102,37 @@ describe('useStudySession：背单词 / 背搭配分牌组', () => {
     act(() => api!.switchDeck('collocation'))
     expect(api!.deck).toBe('collocation')
     expect(api!.queue?.map((it) => it.id)).toEqual(['p1'])
+    unmount()
+  })
+})
+
+describe('useStudySession：R 朗读当前单词', () => {
+  it('R 和卡片右侧按钮走同一个朗读入口', () => {
+    const speak = vi.fn()
+    const { unmount } = render(
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} speak={speak} />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).toHaveBeenCalledWith('one')
+    unmount()
+  })
+
+  it('拼写模式判卷前不朗读（防剧透），判卷后可读', () => {
+    const speak = vi.fn()
+    const { unmount } = render(
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} speak={speak} />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.setSpelling(true))
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).not.toHaveBeenCalled()
+
+    act(() => api!.setChecked(true))
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).toHaveBeenCalledWith('one')
     unmount()
   })
 })
