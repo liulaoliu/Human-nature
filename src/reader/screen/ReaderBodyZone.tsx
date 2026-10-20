@@ -1,4 +1,4 @@
-import { displayMeaning, lemmaOf } from '../../core/vocab'
+import { lemmaOf } from '../../core/vocab'
 import SessionHost from '../SessionHost'
 import ReaderOverlaysHost from '../ReaderOverlaysHost'
 import Composer from '../panels/Composer'
@@ -37,6 +37,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     libraryLemmas,
     articleNums,
     articleFirst,
+    meaningOf,
     showLanguage,
     lastPicked,
     bubblePos,
@@ -136,15 +137,10 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
   const { journalAllDays, journalData, journalSummaryRows, journalHeat, exportArticles } = props.viewData
   const { intensivePlan, intensiveSkimmed, myRetells, outputBoard } = props.articleDerived
   const { todayReadDone, readDone, readGoal, setReadGoal, goalMemo, setGoalMemo, articleReadDay, markReadDone, undoReadDone, saveRetell, deleteRetell, toggleSkimmed } = props.learning
-  const { doExportAnki, exportWordList, doPrint, doExportWrong } = props.exporter
+  const { doExportAnki, exportWordList, doPrint, doPrintRows, doExportWrong } = props.exporter
 
-  /** 已在本词库的词 → 显示释义（速读和正文悬浮提示共用）。 */
-  const wordMeaning = (w: string) => {
-    const it = library.items.find(
-      (x) => x.lemma === lemmaOf(w) || x.word.toLowerCase() === w.toLowerCase(),
-    )
-    return it ? displayMeaning(it) || it.meaning || null : null
-  }
+  /** 本篇语境释义（速读和正文悬浮提示共用；不再全库扫） */
+  const wordMeaning = (w: string, sid?: string | null) => meaningOf(w, sid)
 
   return (
     <>
@@ -266,9 +262,12 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           libraryItems: library.items,
           articleTitle,
           articleWords,
+          articleId: articleIdentity,
+          articleEntries: library.articleEntries,
           articles: exportArticles,
           todayKey,
           onPrint: doPrint,
+          onPrintRows: doPrintRows,
           onExportAnki: doExportAnki,
           onExportWordList: exportWordList,
         }}

@@ -8,9 +8,10 @@
  *   3. 组件越来越胖。
  * 现在面板只负责「收集用户选择 + 渲染」，判断全在这里，单测覆盖。
  */
-import type { VocabItem } from '../types/document'
+import type { ArticleVocabEntry, VocabItem } from '../types/document'
 import { filterByKind, kindOf } from './entryKind'
 import { dayKeyLocal } from './activity'
+import { resolveArticleMeaning } from './articleMeaning'
 import type { VocabKind } from '../types/document'
 
 /** 分组方式（与打印模板一致）。 */
@@ -46,8 +47,22 @@ export function contentKinds(c: PrintContent): VocabKind[] | null {
 export interface PrintArticleRef {
   id: string
   title: string
-  /** 这篇正文里出现过的 lemma（用来把「词库里的词」归到这篇） */
-  lemmas: Set<string>
+  /** 同一篇文章的其他键（如保存 id / 书内 key），按篇条目可能用其中之一 */
+  aliases?: string[]
+  /** 老字段：正文里出现过的 lemma；没有按篇条目时兜底用 */
+  lemmas?: Set<string>
+}
+
+/** 打印/导出的一行：同一词条在不同篇可以有不同编号，所以不能再只传 VocabItem。 */
+export interface PrintRow {
+  item: VocabItem
+  /** 这一行属于哪篇（全局范围可能为空） */
+  articleId: string
+  articleTitle: string
+  /** 本篇编号（全局范围 / 语言点为空） */
+  number: number | null
+  /** 这一篇语境下的释义（没有则用 item.meaning） */
+  meaning?: string | null
 }
 
 export interface PrintPlanInput {
@@ -55,6 +70,10 @@ export interface PrintPlanInput {
   libraryItems: VocabItem[]
   /** 当前这篇的条目 */
   articleItems: VocabItem[]
+  /** 当前这篇的稳定标识 */
+  articleId?: string
+  /** 按篇收录表（不传 = 老测试兼容，按 source/lemmas 兜底） */
+  articleEntries?: ArticleVocabEntry[]
   /** 当前这篇的标题（空则用兜底名） */
   articleTitle: string
   articles: PrintArticleRef[]
@@ -72,6 +91,8 @@ export interface PrintPlan {
   articlePool: VocabItem[]
   /** 最终要处理的条目 */
   items: VocabItem[]
+  /** 最终要处理的「行」：带篇名与篇内编号，按文章范围时允许跨篇重复 */
+  rows: PrintRow[]
   title: string
   /** 有内容的日期（倒序，带条数）——热力图与日期列表用 */
   dates: [string, number][]
@@ -100,7 +121,8 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
   }
   const pool = filterByKind(input.libraryItems, kinds)
   const articlePool = filterByKind(input.articleItems, kinds)
-  const scope: PrintScope = input.scope === 'article' && !articlePool.length ? 'all' : input.scope
+  // 本篇就是本篇：没词就空着，绝不降级成「全库」（否则新文章会白捡总词库的词）。
+  const scope: PrintScope = input.scope
 
   const dates = new Map<string, number>()
   for (const it of pool) {
@@ -110,32 +132,95 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
   const datesSorted: [string, number][] = [...dates.entries()].sort((a, b) => b[0].localeCompare(a[0]))
 
   const unprinted = pool.filter((it) => !it.lastPrintedAt)
-  const articleCount = new Map(
-    input.articles.map((a) => [
-      a.id,
-      pool.filter((it) => it.source?.fileName === a.id || a.lemmas.has(it.lemma)).length,
-    ]),
-  )
+  const byLemma = new Map(input.libraryItems.map((it) => [it.lemma, it]))
+  const articleTitleById = new Map<string, string>()
+  for (const a of input.articles) {
+    articleTitleById.set(a.id, a.title)
+    for (const alias of a.aliases ?? []) articleTitleById.set(alias, a.title)
+  }
 
-  let items: VocabItem[]
-  if (scope === 'article') items = articlePool
-  else if (scope === 'byArticle') {
-    const picked = input.articles.filter((a) => input.pickedArticles.has(a.id))
-    const out: VocabItem[] = []
+  /** 某篇的行：按篇条目顺序、篇内 1..n；同一词在别的篇可以再出现一次。 */
+  const rowsForArticle = (a: PrintArticleRef): PrintRow[] => {
+    const ids = new Set([a.id, ...(a.aliases ?? [])])
+    const rows: PrintRow[] = []
     const seen = new Set<string>()
-    for (const a of picked) {
-      for (const it of pool) {
-        if (seen.has(it.id)) continue
-        if (it.source?.fileName === a.id || a.lemmas.has(it.lemma)) {
-          seen.add(it.id)
-          out.push(it)
-        }
+    let wordNo = 0
+    if (input.articleEntries !== undefined) {
+      for (const e of input.articleEntries) {
+        if (!ids.has(e.articleId) || seen.has(e.lemma)) continue
+        const item = byLemma.get(e.lemma)
+        if (!item || item.status === 'mastered') continue
+        if (kinds && !kinds.includes(kindOf(item))) continue
+        seen.add(e.lemma)
+        const resolved = resolveArticleMeaning(item, e, e.articleId, e.sentenceId)
+        const isWord = kindOf(item) === 'word'
+        if (isWord) wordNo += 1
+        rows.push({
+          item,
+          articleId: e.articleId,
+          articleTitle: a.title,
+          number: isWord ? wordNo : null,
+          meaning: resolved?.text ?? null,
+        })
+      }
+      return rows
+    }
+    // 老测试 / 老调用方：没有按篇表时退回 source + 正文 lemma
+    for (const item of pool) {
+      if (seen.has(item.lemma)) continue
+      if (item.source?.fileName === a.id || a.lemmas?.has(item.lemma)) {
+        seen.add(item.lemma)
+        const isWord = kindOf(item) === 'word'
+        if (isWord) wordNo += 1
+        rows.push({ item, articleId: a.id, articleTitle: a.title, number: isWord ? wordNo : null })
       }
     }
-    items = out
-  } else if (scope === 'date') items = pool.filter((it) => input.pickedDates.has(dayOf(it)))
-  else if (scope === 'unprinted') items = unprinted
-  else items = pool
+    return rows
+  }
+
+  const rowsForItems = (items: VocabItem[]): PrintRow[] =>
+    items.map((item) => {
+      const articleId = item.source?.fileName ?? ''
+      return {
+        item,
+        articleId,
+        articleTitle: articleTitleById.get(articleId) ?? (articleId || input.articleTitle || '未分类'),
+        number: null,
+      }
+    })
+
+  let rows: PrintRow[]
+  if (scope === 'article') {
+    const articleId = input.articleId ?? ''
+    const currentEntries = new Map(
+      (input.articleEntries ?? [])
+        .filter((e) => !articleId || e.articleId === articleId)
+        .map((e) => [e.lemma, e]),
+    )
+    rows = articlePool.map((item) => {
+      const entry = currentEntries.get(item.lemma)
+      const resolved = entry ? resolveArticleMeaning(item, entry, entry.articleId, entry.sentenceId) : null
+      return {
+        item,
+        articleId,
+        articleTitle: input.articleTitle || '本篇',
+        number: null,
+        meaning: resolved?.text ?? null,
+      }
+    })
+    let wordNo = 0
+    for (const row of rows) {
+      if (kindOf(row.item) === 'word') row.number = ++wordNo
+    }
+  } else if (scope === 'byArticle') {
+    const picked = input.articles.filter((a) => input.pickedArticles.has(a.id))
+    rows = picked.flatMap((a) => rowsForArticle(a))
+  } else if (scope === 'date') rows = rowsForItems(pool.filter((it) => input.pickedDates.has(dayOf(it))))
+  else if (scope === 'unprinted') rows = rowsForItems(unprinted)
+  else rows = rowsForItems(pool)
+
+  const items = rows.map((r) => r.item)
+  const articleCount = new Map(input.articles.map((a) => [a.id, rowsForArticle(a).length]))
 
   const base = input.content === 'phrases' ? '词组习语表' : input.content === 'usage' ? '用法笔记' : '词表'
   let title: string
@@ -154,11 +239,12 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
     pool,
     articlePool,
     items,
+    rows,
     title,
     dates: datesSorted,
     articleCount,
     unprinted,
-    isArticleOrder: scope === 'article',
-    canAct: items.length > 0,
+    isArticleOrder: scope === 'article' || scope === 'byArticle',
+    canAct: rows.length > 0,
   }
 }

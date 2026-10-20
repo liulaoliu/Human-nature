@@ -49,10 +49,12 @@ describe('planPrint：范围', () => {
     expect(p.isArticleOrder).toBe(true)
   })
 
-  it('本篇过滤后为空 → 自动降级到全部（不卡在空范围）', () => {
+  it('本篇过滤后为空 → 保持空，不降级到全部（新文章不能继承总词库）', () => {
     const p = planPrint({ ...base, scope: 'article', content: 'usage', articleItems: [] })
-    expect(p.items).toHaveLength(1)
-    expect(p.isArticleOrder).toBe(false)
+    expect(p.items).toEqual([])
+    expect(p.rows).toEqual([])
+    expect(p.isArticleOrder).toBe(true)
+    expect(p.canAct).toBe(false)
   })
 
   it('按文章：多选多篇，同一条只算一次', () => {
@@ -72,6 +74,47 @@ describe('planPrint：范围', () => {
     const p = planPrint({ ...base, scope: 'unprinted' })
     expect(p.items.map((it) => it.word)).toEqual(['run', 'fall back on', '注意 run 的用法'])
     expect(p.unprinted).toHaveLength(3)
+  })
+})
+
+describe('planPrint：按篇条目 / 行', () => {
+  const entries = [
+    { articleId: 'A', lemma: 'run', origin: 'manual' as const, addedAt: '2026-10-01T00:00:00.000Z' },
+    { articleId: 'A', lemma: 'fall back on', origin: 'manual' as const, addedAt: '2026-10-01T00:00:01.000Z' },
+    { articleId: 'B', lemma: 'run', origin: 'auto' as const, addedAt: '2026-10-01T00:00:02.000Z' },
+  ]
+
+  it('按文章：同一词在两篇各一行、各用自己的编号，不再跨篇去重', () => {
+    const p = planPrint({
+      ...base,
+      articleId: 'A',
+      articleEntries: entries,
+      scope: 'byArticle',
+      pickedArticles: new Set(['A', 'B']),
+    })
+    expect(p.rows.map((r) => `${r.articleId}:${r.item.lemma}:${r.number}`)).toEqual([
+      'A:run:1',
+      'A:fall back on:null',
+      'B:run:1',
+    ])
+    expect(p.items.map((it) => it.lemma)).toEqual(['run', 'fall back on', 'run'])
+    expect(p.articleCount.get('A')).toBe(2)
+    expect(p.articleCount.get('B')).toBe(1)
+  })
+
+  it('本篇：单词行按本篇顺序编号，语言点行不编号', () => {
+    const p = planPrint({ ...base, articleId: 'A', articleEntries: entries, scope: 'article' })
+    expect(p.rows.map((r) => `${r.item.lemma}:${r.number}`)).toEqual([
+      'run:1',
+      'fall back on:null',
+      '注意 run 的用法:null',
+    ])
+  })
+
+  it('已有按篇表时不再用正文 lemma 兜底（新文章不继承总词库）', () => {
+    const p = planPrint({ ...base, articleId: 'A', articleEntries: [], scope: 'byArticle', pickedArticles: new Set(['A']) })
+    expect(p.rows).toEqual([])
+    expect(p.articleCount.get('A')).toBe(0)
   })
 })
 

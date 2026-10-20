@@ -1,6 +1,7 @@
 import type { EconomistDocument, VocabItem, VocabLibrary } from '../types/document'
 import { SCHEMA_VERSION } from '../types/document'
 import { KIND_LABEL, kindOf } from './entryKind'
+import type { PrintRow } from './printPlan'
 import type { VocabGroup } from './vocab'
 
 /**
@@ -82,7 +83,11 @@ export function importLibraryJSON(raw: string): VocabLibrary {
   if (!value || typeof value !== 'object' || !Array.isArray(value.items)) {
     throw new Error('词库 JSON 结构不对：缺少 items 数组')
   }
-  return { schemaVersion: value.schemaVersion ?? SCHEMA_VERSION, items: value.items }
+  return {
+    schemaVersion: value.schemaVersion ?? SCHEMA_VERSION,
+    items: value.items,
+    ...(Array.isArray(value.articleEntries) ? { articleEntries: value.articleEntries } : {}),
+  }
 }
 
 /** 导出文档 JSON，供外部音频模块直接消费。 */
@@ -107,49 +112,67 @@ export function importDocumentJSON(raw: string): EconomistDocument {
  */
 export function renderPrintHTML(input: {
   title: string
+  /** 普通分组（全库 / 按日期等；同一 lemma 跨组只打一次） */
   groups: VocabGroup[]
+  /**
+   * 按篇的行（`scope = article / byArticle`）。给了它就不再跨组去重：
+   * 同一个词出现在两篇里，两篇各自按自己的编号输出一次。
+   */
+  rowGroups?: { key: string; rows: PrintRow[] }[]
   /** 标题下的一行小字（日期 / 数量等） */
   subtitle?: string
   /** 序号；不传或返回 null 就不编号（全库打印不编号） */
   numberOf?: (item: VocabItem) => number | null
 }): string {
-  const seen = new Set<string>()
   let count = 0
-  const body = input.groups
-    .map((g) => {
-      const items = g.items
-        .filter((it) => {
-          if (seen.has(it.lemma)) return false
-          seen.add(it.lemma)
-          count += 1
-          return true
-        })
-        .map((it) => {
-          const n = input.numberOf ? input.numberOf(it) : null
-          const no = n != null ? `<span class="no">${n}</span>` : ''
-          const kind = kindOf(it)
-          const kindTag = kind === 'word' ? '' : ` <span class="kind">${KIND_LABEL[kind]}</span>`
-          const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
-          const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
-          const marks = it.grammarMarks?.length
-            ? ` <span class="marks">${it.grammarMarks.map(escapeHtml).join('·')}</span>`
-            : ''
-          const meaning = it.meaning ? ` <span class="meaning">${escapeHtml(it.meaning)}</span>` : ''
-          const usage = it.usage.length
-            ? ` <span class="usage">· ${it.usage.map(escapeHtml).join('；')}</span>`
-            : ''
-          const phrases = it.phrases?.length
-            ? ` <span class="usage">词组：${it.phrases.map(escapeHtml).join('；')}</span>`
-            : ''
-          const idioms = it.idioms?.length
-            ? ` <span class="usage">习语：${it.idioms.map(escapeHtml).join('；')}</span>`
-            : ''
-          return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${kindTag}${phonetic}${pos}${marks}${meaning}${usage}${phrases}${idioms}</div>`
-        })
-        .join('')
-      return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
-    })
-    .join('')
+  const renderItem = (it: VocabItem, n: number | null, meaningOverride?: string | null) => {
+    count += 1
+    const no = n != null ? `<span class="no">${n}</span>` : ''
+    const kind = kindOf(it)
+    const kindTag = kind === 'word' ? '' : ` <span class="kind">${KIND_LABEL[kind]}</span>`
+    const phonetic = it.phonetic ? ` <span class="phon">${escapeHtml(it.phonetic)}</span>` : ''
+    const pos = it.partOfSpeech ? ` <span class="pos">${escapeHtml(it.partOfSpeech)}</span>` : ''
+    const marks = it.grammarMarks?.length
+      ? ` <span class="marks">${it.grammarMarks.map(escapeHtml).join('·')}</span>`
+      : ''
+    const shownMeaning = meaningOverride ?? it.meaning
+    const meaning = shownMeaning ? ` <span class="meaning">${escapeHtml(shownMeaning)}</span>` : ''
+    const usage = it.usage.length
+      ? ` <span class="usage">· ${it.usage.map(escapeHtml).join('；')}</span>`
+      : ''
+    const phrases = it.phrases?.length
+      ? ` <span class="usage">词组：${it.phrases.map(escapeHtml).join('；')}</span>`
+      : ''
+    const idioms = it.idioms?.length
+      ? ` <span class="usage">习语：${it.idioms.map(escapeHtml).join('；')}</span>`
+      : ''
+    return `<div class="item">${no}<span class="word">${escapeHtml(it.word)}</span>${kindTag}${phonetic}${pos}${marks}${meaning}${usage}${phrases}${idioms}</div>`
+  }
+
+  let body: string
+  if (input.rowGroups) {
+    body = input.rowGroups
+      .map((g) => {
+        const items = g.rows.map((r) => renderItem(r.item, r.number, r.meaning)).join('')
+        return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
+      })
+      .join('')
+  } else {
+    const seen = new Set<string>()
+    body = input.groups
+      .map((g) => {
+        const items = g.items
+          .filter((it) => {
+            if (seen.has(it.lemma)) return false
+            seen.add(it.lemma)
+            return true
+          })
+          .map((it) => renderItem(it, input.numberOf ? input.numberOf(it) : null))
+          .join('')
+        return items ? `${g.key ? `<h2>${escapeHtml(g.key)}</h2>` : ''}${items}` : ''
+      })
+      .join('')
+  }
 
   const meta = input.subtitle ?? `${count} 词`
   return `<!doctype html>

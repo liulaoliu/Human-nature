@@ -63,7 +63,16 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         libraryRef.current = fixed
         setLibrary(fixed)
         setLibraryLoad('ok')
-        const dirty = fixed.items.length !== raw.items.length || fixed.items.some((it, i) => it !== raw.items[i])
+        const rawEntries = raw.articleEntries
+        const fixedEntries = fixed.articleEntries ?? []
+        const entriesDirty = Array.isArray(rawEntries)
+          ? fixedEntries !== rawEntries
+          : fixedEntries.length > 0
+        const dirty =
+          !raw ||
+          fixed.items.length !== raw.items.length ||
+          fixed.items.some((it, i) => it !== raw.items[i]) ||
+          entriesDirty
         if (dirty) {
           r.save(fixed).catch((e) => {
             // 迁移结果没写回去不影响本次使用，但要让用户知道下次打开可能还要再修一遍

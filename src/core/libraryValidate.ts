@@ -59,6 +59,26 @@ export function validateLibrary(library: unknown): LibraryIssue[] {
   const seenIds = new Set<string>()
   const seenLemmas = new Set<string>()
   for (const it of o.items) checkItem(it as VocabItem, seenIds, seenLemmas, out)
+  if (o.articleEntries !== undefined) {
+    if (!Array.isArray(o.articleEntries)) out.push({ level: 'error', message: 'articleEntries 不是数组' })
+    else {
+      const seen = new Set<string>()
+      for (const e of o.articleEntries) {
+        if (!e || typeof e !== 'object') {
+          out.push({ level: 'error', message: 'articleEntries 有非对象条目' })
+          continue
+        }
+        if (!e.articleId?.trim()) out.push({ level: 'error', message: 'articleEntries 有条目缺 articleId' })
+        if (!e.lemma?.trim()) out.push({ level: 'error', message: 'articleEntries 有条目缺 lemma' })
+        else if (!seenLemmas.has(e.lemma)) out.push({ level: 'error', message: `articleEntries 指向不存在的词：${e.lemma}` })
+        const k = `${e.articleId}\u0000${e.lemma}`
+        if (seen.has(k)) out.push({ level: 'error', message: `articleEntries 重复：${e.articleId} / ${e.lemma}` })
+        seen.add(k)
+        if (e.origin !== 'auto' && e.origin !== 'manual') out.push({ level: 'error', message: `articleEntries origin 非法：${String(e.origin)}` })
+        if (!e.addedAt || Number.isNaN(Date.parse(e.addedAt))) out.push({ level: 'error', message: 'articleEntries addedAt 不是 ISO' })
+      }
+    }
+  }
   return out
 }
 

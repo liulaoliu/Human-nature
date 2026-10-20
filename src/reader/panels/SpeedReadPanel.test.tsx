@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { sentenceFixture } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
+import { articleKey } from '../../core/docSignature'
 import SpeedReadPanel, { type SpeedReadPanelProps } from './SpeedReadPanel'
 
 const sentences = [
@@ -146,7 +147,7 @@ describe('SpeedReadPanel：加词与移出', () => {
     ])
     expect(screen.getByText(/已加入：Run/)).toBeTruthy()
     expect(screen.getByText('本页加入（1）')).toBeTruthy()
-    const saved = JSON.parse(localStorage.getItem('reader:speedCollected:doc:1') ?? '[]')
+    const saved = JSON.parse(localStorage.getItem(`reader:speedCollected:${articleKey('doc:1', sentences)}`) ?? '[]')
     expect(saved).toHaveLength(1)
     expect(saved[0].word).toBe('Run')
   })
@@ -186,7 +187,7 @@ describe('SpeedReadPanel：加词与移出', () => {
 
   it('本页清单里的误加词：两步删除并同步移出生词本', () => {
     localStorage.setItem(
-      'reader:speedCollected:doc:1',
+      `reader:speedCollected:${articleKey('doc:1', sentences)}`,
       JSON.stringify([{ word: 'typo', sentenceId: 's0', sentenceText: 'Typo here.' }]),
     )
     const onRemoveWord = vi.fn()

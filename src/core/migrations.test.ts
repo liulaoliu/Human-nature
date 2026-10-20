@@ -73,6 +73,86 @@ describe('migrateLibrary：宽容解析', () => {
   })
 })
 
+describe('migrateLibrary：按篇收录表', () => {
+  it('老数据没有 articleEntries：只从 source / contexts 推导，不按正文出现猜', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          {
+            word: 'run',
+            lemma: 'run',
+            createdAt: '2026-08-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
+            source: { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'I run.' },
+            contexts: [
+              { articleId: 'B', fileName: 'B', sentenceId: 's2', sentenceText: 'Run!', meaning: '跑', at: '2026-09-01T00:00:00.000Z' },
+            ],
+          },
+          { word: 'done', lemma: 'done', status: 'mastered', source: { articleId: 'C', fileName: 'C', sentenceId: 's3', sentenceText: 'x' } },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.articleEntries?.map((e) => `${e.articleId}:${e.lemma}:${e.origin}`)).toEqual([
+      'A:run:manual',
+      'B:run:manual',
+    ])
+    expect(out.articleEntries?.find((e) => e.articleId === 'B')?.meaning).toBe('跑')
+    // 已掌握词不补成本篇生词
+    expect(out.articleEntries?.some((e) => e.lemma === 'done')).toBe(false)
+  })
+
+  it('老数据的语言点也推导按篇条目（侧栏语言点页签靠它）', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          {
+            word: 'fall back on',
+            lemma: 'fall back on',
+            kind: 'phrase',
+            createdAt: '2026-08-01T00:00:00.000Z',
+            updatedAt: '2026-08-01T00:00:00.000Z',
+            source: { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'We fall back on it.' },
+          },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.articleEntries?.map((e) => `${e.articleId}:${e.lemma}`)).toEqual(['A:fall back on'])
+    expect(libraryErrors(out)).toEqual([])
+  })
+
+  it('已有 articleEntries：保留合法顺序，丢掉孤儿 / 重复 / 非法条目', () => {
+    const out = migrateLibrary(
+      {
+        items: [{ word: 'run', lemma: 'run' }],
+        articleEntries: [
+          { articleId: 'A', lemma: 'run', origin: 'auto', addedAt: '2026-10-01T00:00:00.000Z' },
+          { articleId: 'A', lemma: 'run', origin: 'manual', addedAt: '2026-10-01T00:00:01.000Z' },
+          { articleId: 'A', lemma: 'missing', origin: 'manual', addedAt: '2026-10-01T00:00:02.000Z' },
+          { articleId: '', lemma: 'run', origin: 'manual', addedAt: '2026-10-01T00:00:03.000Z' },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.articleEntries).toHaveLength(1)
+    expect(out.articleEntries?.[0]).toMatchObject({
+      articleId: 'A',
+      lemma: 'run',
+      origin: 'auto',
+      addedAt: '2026-10-01T00:00:00.000Z',
+    })
+    expect(libraryErrors(out)).toEqual([])
+  })
+
+  it('幂等：已是当前结构时 articleEntries 引用复用', () => {
+    const entries = [{ articleId: 'A', lemma: 'run', origin: 'auto' as const, addedAt: '2026-10-01T00:00:00.000Z' }]
+    const first = migrateLibrary({ items: [{ word: 'run', lemma: 'run' }], articleEntries: entries }, TEST_NOW)
+    const second = migrateLibrary(first, TEST_NOW)
+    expect(second.articleEntries).toBe(first.articleEntries)
+  })
+})
+
 describe('migrateToCurrent', () => {
   it('已是当前版本 → 原样返回', () => {
     const lib = createLibrary()

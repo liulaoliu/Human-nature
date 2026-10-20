@@ -1,15 +1,15 @@
 /**
  * 正文里的「生词编号」规则（纯函数）。
  *
- * 规则（原样保留历史行为，现在有测试钉住）：
- *   1. 按**手动标记顺序**（`createdAt` 升序）编号 —— 先标的在前；
- *   2. 同一时刻批量加入的（如「自动标词」一次入库）`createdAt` 相同，则退回到**正文出现顺序**；
- *   3. 再不行按 lemma 字母序兜底（保证稳定，不随词库顺序抖动）；
- *   4. 编号**按篇独立**，跨篇重置；
- *   5. `firstOccurrence` 给出「某个词在正文首次出现的位置」（`句子id:词序号`），
- *      正文只在这一处显示上标编号。
+ * 规则：
+ *   1. 编号只看本篇的收录条目，**按加入顺序**从 1 开始（自动标词一批按正文顺序加入）；
+ *   2. 编号按篇独立，跨篇重置；
+ *   3. 删除条目后由调用方传入的条目顺序自动重排，不留空号；
+ *   4. `firstOccurrence` 给出「某个词在正文首次出现的位置」（`句子id:词序号`），
+ *      正文只在这一处显示上标编号；
+ *   5. 正文里已找不到的条目仍有编号（它还在本篇词表里），只是没有上标位置。
  */
-import type { Sentence, VocabItem } from '../types/document'
+import type { ArticleVocabEntry, Sentence } from '../types/document'
 import { lemmaOf } from './vocab'
 import { wordSpans } from './wordSelect'
 
@@ -22,33 +22,27 @@ export interface ArticleNumbering {
 
 export function articleNumbering(
   sentences: Pick<Sentence, 'id' | 'text'>[] | null | undefined,
-  items: VocabItem[],
+  entries: Pick<ArticleVocabEntry, 'lemma'>[] | null | undefined,
 ): ArticleNumbering {
   const nums = new Map<string, number>()
   const firstOccurrence = new Set<string>()
-  if (!sentences?.length) return { nums, firstOccurrence }
 
-  const byLemma = new Map<string, VocabItem>()
-  for (const it of items) byLemma.set(it.lemma, it)
+  // 条目顺序就是加入顺序；重复 lemma 只认第一次（防历史脏数据）
+  for (const e of entries ?? []) {
+    if (!e.lemma || nums.has(e.lemma)) continue
+    nums.set(e.lemma, nums.size + 1)
+  }
+  if (!sentences?.length || !nums.size) return { nums, firstOccurrence }
 
-  // 每个 lemma 在正文的首次出现位置与出现顺序
-  const docOrder = new Map<string, number>()
+  // 每个有编号的 lemma 只在正文第一次出现的位置打标
+  const seen = new Set<string>()
   for (const s of sentences) {
     wordSpans(s.text).forEach((w, i) => {
       const lem = lemmaOf(w.text)
-      if (byLemma.has(lem) && !docOrder.has(lem)) {
-        docOrder.set(lem, docOrder.size)
-        firstOccurrence.add(`${s.id}:${i}`)
-      }
+      if (!nums.has(lem) || seen.has(lem)) return
+      seen.add(lem)
+      firstOccurrence.add(`${s.id}:${i}`)
     })
   }
-
-  const ordered = [...items].sort(
-    (a, b) =>
-      a.createdAt.localeCompare(b.createdAt) ||
-      (docOrder.get(a.lemma) ?? 1e9) - (docOrder.get(b.lemma) ?? 1e9) ||
-      a.lemma.localeCompare(b.lemma),
-  )
-  ordered.forEach((it, i) => nums.set(it.lemma, i + 1))
   return { nums, firstOccurrence }
 }

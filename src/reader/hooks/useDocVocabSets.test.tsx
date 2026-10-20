@@ -24,7 +24,7 @@ describe('useDocVocabSets', () => {
       vocabItem({ id: 'v3', word: 'quiet', lemma: 'quiet', status: 'mastered' }),
     ]
     const batch = new Set(['s2'])
-    const { result } = renderHook(() => useDocVocabSets({ sentences, items, batchSentenceIds: batch }))
+    const { result } = renderHook(() => useDocVocabSets({ sentences, articleItems: items, batchSentenceIds: batch }))
 
     const lemmas = sentenceLemmaSets(sentences)
     expect(result.current.sentenceLemmas).toEqual(lemmas)
@@ -39,7 +39,7 @@ describe('useDocVocabSets', () => {
 
   it('没有文章时返回空集合，不报错', () => {
     const { result } = renderHook(() =>
-      useDocVocabSets({ sentences: null, items: [], batchSentenceIds: new Set() }),
+      useDocVocabSets({ sentences: null, articleItems: [], batchSentenceIds: new Set() }),
     )
     expect(result.current.sentenceLemmas.size).toBe(0)
     expect(result.current.docLemmas.size).toBe(0)
@@ -52,7 +52,7 @@ describe('useDocVocabSets', () => {
     const { result } = renderHook(() =>
       useDocVocabSets({
         sentences: [sentenceFixture('s1', 'A quick run.')],
-        items,
+        articleItems: items,
         batchSentenceIds: new Set(),
       }),
     )

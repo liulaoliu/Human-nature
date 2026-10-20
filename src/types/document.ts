@@ -255,10 +255,43 @@ export interface VocabItem {
   updatedAt: string
 }
 
+/** 这个词是通过自动标词还是手动加入收进本篇的。 */
+export type VocabOrigin = 'auto' | 'manual'
+
+/** 本篇语境释义的来源（界面可据此标注，AI 结果不覆盖手改）。 */
+export type VocabMeaningSource = 'manual' | 'context' | 'library' | 'dict' | 'ai'
+
+/**
+ * 「这篇文章收了这个词」的独立记录。
+ *
+ * 全库 `VocabItem` 按 lemma 只有一条（复习一次），但同一词可以在多篇里各收一次：
+ * 每篇的序号、加入方式、语境释义、打印状态都互不影响。
+ */
+export interface ArticleVocabEntry {
+  /** 文章稳定标识（与 `source.fileName` / `articleIdentity` 同一套） */
+  articleId: string
+  /** 词条原形（对应 `VocabItem.lemma`） */
+  lemma: string
+  /** 自动标词 / 手动加入 */
+  origin: VocabOrigin
+  /** 加入时间 ISO（合并备份时排序用；篇内编号按数组顺序） */
+  addedAt: string
+  /** 收录时所在的句子（速读「本句已收录」/语境释义用） */
+  sentenceId?: string | null
+  sentenceText?: string
+  /** 这一篇里该词的语境释义（可选；没有就回退到全库主释义） */
+  meaning?: string | null
+  meaningSource?: VocabMeaningSource
+  /** 这一篇打印过该词的时间（按篇独立） */
+  printedAt?: string | null
+}
+
 /** 词库。跨文章累积，独立于任何单篇文档。 */
 export interface VocabLibrary {
   schemaVersion: number
   items: VocabItem[]
+  /** 按篇收录表；老数据没有该字段，迁移时从来源/语境补出来 */
+  articleEntries?: ArticleVocabEntry[]
 }
 
 /**

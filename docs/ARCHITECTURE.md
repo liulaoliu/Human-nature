@@ -89,11 +89,24 @@ types ← core ← adapters ← reader
 ### 2) 谁是「事实来源」谁负责算
 
 - 词条类型：`core/entryKind.ts`（`KIND_LABEL` / `KIND_ORDER`）。
+- 按篇收录 / 编号 / 语境释义：`core/articleVocab.ts`（`ArticleVocabEntry` 唯一 SSOT）、
+  `core/articleNums.ts`、`core/articleMeaning.ts`。视图里不许再过一遍「正文 ∩ 词库」。
 - 打印范围/内容/分组：`core/printPlan.ts`（同时是文案来源 `PRINT_*_LABEL`）。
 - 日期：`core/activity.ts`。
 - 语言点的键与签名：`core/langPoints.ts`。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
+
+### 2.5) 每篇生词独立：全局一条，按篇一层
+
+- `VocabItem`（`library.items`）仍是**复习 / 词义主数据**：一个 lemma 一条，背单词只背一次。
+- `ArticleVocabEntry`（`library.articleEntries`）记**这一篇收了哪些词**：`articleId + lemma + origin +
+  addedAt + 语境释义 + printedAt`。本篇列表、编号、正文高亮、按篇打印都只读这一层。
+- **新文章不继承总词库**：不许再用「正文里出现过 + 词库里有」判断本篇归属；只有自动标词 / 手动加入
+  / 语言点自动收藏会写条目。词组 / 习语 / 用法也收进本篇（侧栏语言点页签），但 `articleNums` 只给单词编号。
+- 编号 = 本篇条目数组的下标 + 1（加入顺序），删除后自然重排；自动 / 手动共用同一套编号，用 `origin` 标来源。
+- 打印是「按篇行」：`core/printPlan.ts` 产出 `PrintRow { item, articleId, number, meaning }`，
+  同一词在不同篇各有一行、各用本篇编号，不再按 lemma 跨篇去重。
 
 ## 三·五、数据安全（事故之后立的规矩）
 

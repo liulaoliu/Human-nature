@@ -63,6 +63,26 @@ describe('mergeLibraries', () => {
     mergeLibraries(current, { schemaVersion: 1, items: [libItem({ id: 'b', lemma: 'b' })] })
     expect(current.items).toHaveLength(1)
   })
+
+  it('按篇条目取并集：同篇同 lemma 保留当前，别篇追加', () => {
+    const current = {
+      schemaVersion: 1,
+      items: [libItem({ id: 'vocab:a', lemma: 'a' })],
+      articleEntries: [{ articleId: 'A', lemma: 'a', origin: 'manual' as const, addedAt: '2026-10-01T00:00:00.000Z' }],
+    }
+    const incoming = {
+      schemaVersion: 1,
+      items: [libItem({ id: 'vocab:a2', lemma: 'a' })],
+      articleEntries: [
+        { articleId: 'A', lemma: 'a', origin: 'auto' as const, addedAt: '2026-09-01T00:00:00.000Z' },
+        { articleId: 'B', lemma: 'a', origin: 'auto' as const, addedAt: '2026-09-02T00:00:00.000Z' },
+      ],
+    }
+    const merged = mergeLibraries(current, incoming)
+    expect(merged.articleEntries).toHaveLength(2)
+    expect(merged.articleEntries?.[0].origin).toBe('manual')
+    expect(merged.articleEntries?.[1].articleId).toBe('B')
+  })
 })
 
 describe('mergeSessions', () => {

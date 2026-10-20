@@ -10,7 +10,14 @@
  *   - 迁移必须**幂等**（跑两遍结果一样）；
  *   - 破坏性变更要升 `SCHEMA_VERSION`，在老版本上先补一个 `migrateVnToVn+1`。
  */
-import type { VocabItem, VocabKind, VocabLibrary } from '../types/document'
+import type {
+  ArticleVocabEntry,
+  VocabItem,
+  VocabKind,
+  VocabLibrary,
+  VocabMeaningSource,
+  VocabOrigin,
+} from '../types/document'
 import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import { KIND_ORDER } from './entryKind'
 import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
@@ -159,12 +166,150 @@ function migrateItem(raw: unknown, now: string): VocabItem | null {
 }
 
 /**
+ * 逐条清洗「按篇收录表」。显式存在的条目保留引用（都合法时），
+ * 只丢掉找不到词条 / 重复的脏记录；语言点条目保留（它们不参与编号）。
+ */
+function looksCurrentEntry(o: Record<string, unknown>): boolean {
+  return (
+    typeof o.articleId === 'string' &&
+    !!o.articleId.trim() &&
+    typeof o.lemma === 'string' &&
+    !!o.lemma.trim() &&
+    (o.origin === 'auto' || o.origin === 'manual') &&
+    typeof o.addedAt === 'string' &&
+    ISO_ISH.test(o.addedAt) &&
+    (o.sentenceId === undefined || o.sentenceId === null || typeof o.sentenceId === 'string') &&
+    (o.sentenceText === undefined || typeof o.sentenceText === 'string') &&
+    (o.meaning === undefined || o.meaning === null || typeof o.meaning === 'string') &&
+    (o.meaningSource === undefined ||
+      ['manual', 'context', 'library', 'dict', 'ai'].includes(String(o.meaningSource))) &&
+    (o.printedAt === undefined || o.printedAt === null || typeof o.printedAt === 'string')
+  )
+}
+
+function migrateEntry(raw: unknown, items: Map<string, VocabItem>, now: string): ArticleVocabEntry | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const articleId = str(o.articleId).trim()
+  const lemma = str(o.lemma).trim()
+  if (!articleId || !lemma) return null
+  const item = items.get(lemma)
+  if (!item) return null
+  const origin: VocabOrigin = o.origin === 'auto' ? 'auto' : 'manual'
+  const meaningSource = ['manual', 'context', 'library', 'dict', 'ai'].includes(String(o.meaningSource))
+    ? (o.meaningSource as VocabMeaningSource)
+    : undefined
+  return {
+    articleId,
+    lemma,
+    origin,
+    addedAt: iso(o.addedAt, now),
+    sentenceId: strOrNull(o.sentenceId),
+    sentenceText: str(o.sentenceText),
+    meaning: strOrNull(o.meaning),
+    meaningSource,
+    printedAt: strOrNull(o.printedAt),
+  }
+}
+
+/** 老数据没有按篇表：只从能证明「在这一篇标过」的来源/语境补，绝不按正文出现推。 */
+function deriveLegacyEntries(items: VocabItem[], now: string): ArticleVocabEntry[] {
+  const derived: ArticleVocabEntry[] = []
+  for (const it of items) {
+    if (it.status === 'mastered') continue
+    const byArticle = new Map<string, ArticleVocabEntry>()
+
+    const sourceArticle = it.source?.fileName?.trim()
+    if (sourceArticle) {
+      byArticle.set(sourceArticle, {
+        articleId: sourceArticle,
+        lemma: it.lemma,
+        origin: 'manual',
+        addedAt: it.createdAt || now,
+        sentenceId: it.source?.sentenceId ?? null,
+        sentenceText: it.source?.sentenceText ?? '',
+        meaning: null,
+        meaningSource: undefined,
+        printedAt: it.lastPrintedAt ?? null,
+      })
+    }
+
+    for (const c of it.contexts ?? []) {
+      const articleId = c.fileName?.trim()
+      if (!articleId) continue
+      const prev = byArticle.get(articleId)
+      if (prev) {
+        if (!prev.sentenceId && c.sentenceId) prev.sentenceId = c.sentenceId
+        if (!prev.sentenceText && c.sentenceText) prev.sentenceText = c.sentenceText
+        if (!prev.meaning && c.meaning?.trim()) {
+          prev.meaning = c.meaning.trim()
+          prev.meaningSource = 'context'
+        }
+        continue
+      }
+      byArticle.set(articleId, {
+        articleId,
+        lemma: it.lemma,
+        origin: 'manual',
+        addedAt: iso(c.at, now),
+        sentenceId: c.sentenceId,
+        sentenceText: c.sentenceText,
+        meaning: strOrNull(c.meaning),
+        meaningSource: c.meaning?.trim() ? 'context' : undefined,
+        printedAt: it.lastPrintedAt ?? null,
+      })
+    }
+
+    derived.push(...byArticle.values())
+  }
+  // 加入时间升序；同一时刻按词条顺序稳定
+  return derived
+    .map((e, i) => ({ e, i }))
+    .sort((a, b) => a.e.addedAt.localeCompare(b.e.addedAt) || a.i - b.i)
+    .map((x) => x.e)
+}
+
+function migrateArticleEntries(
+  raw: unknown,
+  items: VocabItem[],
+  now: string,
+): ArticleVocabEntry[] {
+  const byLemma = new Map(items.map((it) => [it.lemma, it]))
+  if (!Array.isArray(raw)) return deriveLegacyEntries(items, now)
+
+  // 已经全是合法条目 → 保住原数组引用，避免每次加载都白写一次库
+  const allCurrent = raw.every((e) => e && typeof e === 'object' && looksCurrentEntry(e as Record<string, unknown>))
+  const migrated = raw.flatMap((e) => {
+    const m = migrateEntry(e, byLemma, now)
+    return m ? [m] : []
+  })
+  if (allCurrent && migrated.length === raw.length) {
+    const seen = new Set<string>()
+    let dup = false
+    for (const e of migrated) {
+      const k = `${e.articleId}\u0000${e.lemma}`
+      if (seen.has(k)) dup = true
+      seen.add(k)
+    }
+    if (!dup) return raw as ArticleVocabEntry[]
+  }
+
+  const seen = new Set<string>()
+  return migrated.filter((e) => {
+    const k = `${e.articleId}\u0000${e.lemma}`
+    if (seen.has(k)) return false
+    seen.add(k)
+    return true
+  })
+}
+
+/**
  * 把任意（老版本的 / 手改过的 / 半坏的）词库迁成当前结构：
  * 逐条洗 → 早先版本误标的类型修正 → 按词性过滤语法标记 → 按 lemma 去重。
  * **幂等**：已经是当前结构的库，跑完内容和原样一致（引用都会尽量复用）。
  */
 export function migrateLibrary(raw: unknown, now: Date = new Date()): VocabLibrary {
-  if (!raw || typeof raw !== 'object') return { schemaVersion: SCHEMA_VERSION, items: [] }
+  if (!raw || typeof raw !== 'object') return { schemaVersion: SCHEMA_VERSION, items: [], articleEntries: [] }
   const o = raw as Record<string, unknown>
   const list = Array.isArray(o.items) ? o.items : []
   const at = now.toISOString()
@@ -172,7 +317,8 @@ export function migrateLibrary(raw: unknown, now: Date = new Date()): VocabLibra
     const migrated = migrateItem(it, at)
     return migrated ? [migrated] : []
   })
-  const library: VocabLibrary = { schemaVersion: SCHEMA_VERSION, items }
+  const articleEntries = migrateArticleEntries(o.articleEntries, items, at)
+  const library: VocabLibrary = { schemaVersion: SCHEMA_VERSION, items, articleEntries }
   return normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(library)))
 }
 

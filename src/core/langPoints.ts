@@ -13,6 +13,7 @@
 import type { Sentence, VocabContext, VocabExample, VocabItem, VocabKind, VocabLibrary, VocabSource } from '../types/document'
 import { defaultReviewState } from '../types/document'
 import { kindOf } from './entryKind'
+import { addArticleEntry } from './articleVocab'
 import { betterSource, contextFromSource, lemmaOf, normalizeWord, upsertContext } from './vocab'
 import { getSentenceLanguages } from './language'
 
@@ -169,6 +170,7 @@ export function upsertLanguagePoints(
   })
   const items = [...library.items]
   let changed = false
+  const collectedPoints: { point: LanguagePoint; key: string; gloss: string | null }[] = []
 
   for (const p of points) {
     const word = p.word.trim()
@@ -177,6 +179,7 @@ export function upsertLanguagePoints(
     if (!key) continue
     const pointId = langPointIdOf(p)
     const gloss = p.gloss?.trim() || null
+    collectedPoints.push({ point: p, key, gloss })
     const { context, example } = pointContextAndExample(p, word, gloss, iso)
     const at = byId.get(pointId) ?? byLemma.get(key)
 
@@ -241,7 +244,27 @@ export function upsertLanguagePoints(
     changed = true
   }
 
-  return changed ? { ...library, items } : library
+  let out = changed ? { ...library, items } : library
+  // 语言点也要有「按篇归属」：否则侧栏语言点页签 / 按篇打印看不到它们。
+  // 它们照常不参与正文编号（`articleNums` 只看单词）。
+  for (const { point, key, gloss } of collectedPoints) {
+    const articleId = point.source?.fileName?.trim() || point.source?.articleId?.trim() || ''
+    if (!articleId) continue
+    out = addArticleEntry(
+      out,
+      {
+        articleId,
+        lemma: key,
+        origin: 'auto',
+        sentenceId: point.source?.sentenceId ?? null,
+        sentenceText: point.source?.sentenceText ?? '',
+        meaning: gloss,
+        meaningSource: gloss ? 'context' : undefined,
+      },
+      now,
+    )
+  }
+  return out
 }
 
 /**

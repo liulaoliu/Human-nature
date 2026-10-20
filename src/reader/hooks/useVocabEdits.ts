@@ -2,6 +2,7 @@ import { useCallback } from 'react'
 import type { MutableRefObject } from 'react'
 import type { Sentence, VocabLibrary } from '../../types/document'
 import { editItem, lemmaOf, markWord, removeItem, reviewItem, type ReviewGrade } from '../../core/vocab'
+import { removeArticleEntry } from '../../core/articleVocab'
 import { splitGlossText } from '../../core/langPoints'
 import type { BatchItem } from '../panels/SidePick'
 
@@ -24,6 +25,8 @@ export interface UseVocabEditsResult {
   addPhrases: (items: string[], sentence: Sentence | null) => void
   /** 把误加的词从生词本移出（两步确认在面板里做）。 */
   removeWord: (word: string) => void
+  /** 只把词从当前这篇移出（不动全库，也不影响别的篇）。 */
+  removeArticleWord: (word: string) => void
   /** 复习评分（again/hard/good/easy）。 */
   reviewWord: (id: string, grade: ReviewGrade) => void
   /** 手动编辑词条。 */
@@ -52,6 +55,7 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
           fileName,
           sentenceId: it.sentenceId,
           sentenceText: it.sentence,
+          origin: 'auto',
         }).library
       }
       persist(lib)
@@ -127,6 +131,16 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
     [libraryRef, persist, flash],
   )
 
+  const removeArticleWord = useCallback(
+    (word: string) => {
+      const lem = lemmaOf(word)
+      const lib = removeArticleEntry(libraryRef.current, fileName, lem)
+      persist(lib)
+      flash(`已从本篇移出：${word}（全库仍保留，可在「全部生词」查看）`)
+    },
+    [libraryRef, persist, flash, fileName],
+  )
+
   const reviewWord = useCallback(
     (id: string, grade: ReviewGrade) => {
       persist(reviewItem(libraryRef.current, id, grade))
@@ -136,10 +150,34 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
 
   const editWord = useCallback(
     (id: string, patch: Parameters<typeof editItem>[2]) => {
-      persist(editItem(libraryRef.current, id, patch))
+      let lib = libraryRef.current
+      const before = lib.items.find((it) => it.id === id)
+      const nextLemma = patch.word ? lemmaOf(patch.word) || before?.lemma : before?.lemma
+      lib = editItem(lib, id, patch)
+      if (before && nextLemma && nextLemma !== before.lemma) {
+        lib = { ...lib, items: lib.items.map((it) => (it.id === id ? { ...it, lemma: nextLemma } : it)) }
+      }
+      // 从「本篇」改的释义 / 拼写写回本篇条目：否则按篇条目里的旧释义会一直盖住新改的。
+      if (before && nextLemma && (patch.meaning !== undefined || nextLemma !== before.lemma)) {
+        lib = {
+          ...lib,
+          articleEntries: (lib.articleEntries ?? []).map((e) =>
+            e.articleId === fileName && e.lemma === before.lemma
+              ? {
+                  ...e,
+                  lemma: nextLemma,
+                  ...(patch.meaning !== undefined
+                    ? { meaning: patch.meaning, meaningSource: patch.meaning ? ('manual' as const) : undefined }
+                    : {}),
+                }
+              : e,
+          ),
+        }
+      }
+      persist(lib)
     },
-    [libraryRef, persist],
+    [libraryRef, persist, fileName],
   )
 
-  return { commitBatchItems, addItems, addPhrases, removeWord, reviewWord, editWord }
+  return { commitBatchItems, addItems, addPhrases, removeWord, removeArticleWord, reviewWord, editWord }
 }

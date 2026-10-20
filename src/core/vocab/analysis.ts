@@ -4,11 +4,13 @@ import type {
   VocabItem,
   VocabKind,
   VocabLibrary,
+  VocabOrigin,
   VocabSource,
   WordAnalysis,
 } from '../../types/document'
 import { defaultReviewState } from '../../types/document'
 import type { PosRow } from '../analyzer'
+import { addArticleEntry } from '../articleVocab'
 import { lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
 import {
   betterSource,
@@ -43,6 +45,8 @@ export interface MarkInput {
   meaning?: string
   /** 词条类型（词组 / 习语 / 用法笔记；不传 = 普通单词） */
   kind?: VocabKind
+  /** 收录方式：自动标词 / 手动加入（默认手动；只影响按篇条目的标签） */
+  origin?: VocabOrigin
 }
 
 export interface MarkResult {
@@ -52,10 +56,38 @@ export interface MarkResult {
   created: boolean
 }
 
+/** 把已入库的单词收进当前篇；词组/习语/用法和多词条目不进正文编号。 */
+function collectToArticle(
+  library: VocabLibrary,
+  input: MarkInput,
+  item: VocabItem,
+  iso: string,
+): VocabLibrary {
+  if (input.kind && input.kind !== 'word') return library
+  if (/\s/.test(input.word.trim())) return library
+  const articleId = input.fileName?.trim() || input.articleId?.trim() || ''
+  if (!articleId) return library
+  return addArticleEntry(
+    library,
+    {
+      articleId,
+      lemma: item.lemma,
+      origin: input.origin ?? 'manual',
+      sentenceId: input.sentenceId ?? null,
+      sentenceText: input.sentenceText ?? '',
+      meaning: input.meaning?.trim() || null,
+      meaningSource: input.meaning?.trim() ? 'manual' : undefined,
+    },
+    new Date(iso),
+  )
+}
+
 /**
  * 标记一个词。按 lemma 去重：
  *   - 已有 → 只追加来源/例句、更新时间，不新建
  *   - 没有 → 建新词条，status = unqueried
+ *
+ * 同时把它收进**当前篇**的按篇条目（只收普通单词；词组/习语/用法不参与正文编号）。
  */
 export function markWord(
   library: VocabLibrary,
@@ -93,7 +125,11 @@ export function markWord(
       meaning: existing.meaning ?? given,
       updatedAt: iso,
     }
-    return { library: replaceItem(library, merged), item: merged, created: false }
+    return {
+      library: collectToArticle(replaceItem(library, merged), input, merged, iso),
+      item: merged,
+      created: false,
+    }
   }
 
   const item: VocabItem = {
@@ -116,7 +152,11 @@ export function markWord(
     createdAt: iso,
     updatedAt: iso,
   }
-  return { library: { ...library, items: [...library.items, item] }, item, created: true }
+  return {
+    library: collectToArticle({ ...library, items: [...library.items, item] }, input, item, iso),
+    item,
+    created: true,
+  }
 }
 
 /**

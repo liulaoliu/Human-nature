@@ -81,31 +81,35 @@ describe('筛选 / 分组 / 排序', () => {
   })
 })
 describe('articleWordsOf（本篇生词归属）', () => {
-  it('来源是本文 → 算本篇；来源在别处但正文出现过 → 也算本篇', () => {
+  it('只认显式收进本篇的条目；总词库里别的词不继承', () => {
     const lib = {
       schemaVersion: 1,
       items: [
-        item({ id: 'vocab:a', lemma: 'estrange', word: 'estrange', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' } }),
-        item({ id: 'vocab:b', lemma: 'bungle', word: 'bungle', source: null }),
-        item({ id: 'vocab:c', lemma: 'unrelated', word: 'unrelated', source: null }),
+        item({ id: 'vocab:a', lemma: 'estrange', word: 'estrange' }),
+        item({ id: 'vocab:b', lemma: 'bungle', word: 'bungle' }),
+        item({ id: 'vocab:c', lemma: 'unrelated', word: 'unrelated' }),
+      ],
+      articleEntries: [
+        { articleId: 'art-A', lemma: 'estrange', origin: 'manual' as const, addedAt: '2026-01-01T00:00:00.000Z' },
+        { articleId: 'art-A', lemma: 'bungle', origin: 'auto' as const, addedAt: '2026-01-01T00:00:01.000Z' },
       ],
     }
-    const docLemmas = new Set(['bungle']) // 本文正文里出现了 bungle
-    const words = articleWordsOf(lib, 'art-A', docLemmas).map((it) => it.lemma).sort()
-    expect(words).toEqual(['bungle', 'estrange'])
+    const words = articleWordsOf(lib, 'art-A').map((it) => it.lemma)
+    expect(words).toEqual(['estrange', 'bungle'])
+    expect(articleWordsOf(lib, 'art-B')).toEqual([])
   })
 
-  it('markWord 去重：有句子的来源优先，多篇则都进 contexts（回归）', () => {
+  it('markWord 去重：有句子的来源优先，多篇则都进 contexts 和各自条目（回归）', () => {
     let lib = markWord(createLibrary(), { word: 'mitigate', articleId: 'art-A', fileName: 'art-A', sentenceText: 'A sentence.' }, NOW).library
     lib = markWord(lib, { word: 'Mitigating', articleId: 'art-B', fileName: 'art-B', sentenceText: 'B sentence.' }, NOW).library
     expect(lib.items).toHaveLength(1)
+    expect(lib.articleEntries).toHaveLength(2)
     // 有句子的来源保留 A（先来的），B 篇的语境另存 —— 不丢信息
     expect(lib.items[0].source?.fileName).toBe('art-A')
     expect(lib.items[0].contexts?.map((c) => c.fileName).sort()).toEqual(['art-A', 'art-B'])
-    // 旧逻辑（只看 source）：art-B 本篇 0 个
-    expect(lib.items.filter((it) => it.source?.fileName === 'art-B')).toHaveLength(0)
-    // 新逻辑（正文出现过）：art-B 本篇 1 个
-    expect(articleWordsOf(lib, 'art-B', new Set(['mitigate']))).toHaveLength(1)
+    // 按篇条目：两篇各一条，互相独立
+    expect(articleWordsOf(lib, 'art-B')).toHaveLength(1)
+    expect(articleWordsOf(lib, 'art-A')).toHaveLength(1)
   })
 
   it('来源为空时用新的（不管手动还是自动选词，来源都要带上）', () => {

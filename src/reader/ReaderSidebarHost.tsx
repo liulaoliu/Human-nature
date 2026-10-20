@@ -66,6 +66,7 @@ export interface ReaderSidebarHostProps {
     posCount: number
     articleWords: VocabItem[]
     articleNums: Map<string, number>
+    articleOrigins?: Map<string, 'auto' | 'manual'>
     articleAllPrinted: boolean
     articlePrintedAt: string | null
     languageCount: number
@@ -137,6 +138,8 @@ export interface ReaderSidebarHostProps {
     onOpenPlan: () => void
     onBrowseAll: () => void
     printTitle: string
+    articleIdentity?: string
+    meaningOf?: SideVocabProps['meaningOf']
     onOpenExport: () => void
     onToggleStats: () => void
     statsOpen: boolean
@@ -147,6 +150,7 @@ export interface ReaderSidebarHostProps {
     confirmDel: string | null
     onConfirmDelChange: (id: string | null) => void
     onDelete: SideVocabProps['onDelete']
+    onDeleteArticle?: SideVocabProps['onDeleteArticle']
     onEdit: SideVocabProps['onEdit']
     onReview: SideVocabProps['onReview']
   }
@@ -374,6 +378,9 @@ export default function ReaderSidebarHost({
         onBrowseAll: vocab.onBrowseAll,
         onExportAnki: exporter.doExportAnki,
         onPrint: exporter.doPrint,
+        onPrintRows: exporter.doPrintRows,
+        articleIdentity: vocab.articleIdentity,
+        meaningOf: vocab.meaningOf,
         onOpenExport: vocab.onOpenExport,
         printTitle: vocab.printTitle,
         onExportJson: exporter.exportJson,
@@ -400,6 +407,7 @@ export default function ReaderSidebarHost({
         },
         onDailyGoalChange: vocab.onDailyGoalChange,
         articleNums: derived.articleNums,
+        articleOrigins: derived.articleOrigins,
         articleAllPrinted: derived.articleAllPrinted,
         articlePrintedAt: derived.articlePrintedAt,
         focusLemma: vocab.focusLemma,
@@ -407,6 +415,7 @@ export default function ReaderSidebarHost({
         onJumpSource: selection.jumpToSource,
         onSpeak: speech,
         onDelete: vocab.onDelete,
+        onDeleteArticle: vocab.onDeleteArticle,
         onReview: vocab.onReview,
         onEdit: vocab.onEdit,
       }}

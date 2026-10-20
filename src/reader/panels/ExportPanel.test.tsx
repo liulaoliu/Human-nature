@@ -17,6 +17,7 @@ const lib = [
 
 function setup(over: Partial<Parameters<typeof ExportPanel>[0]> = {}) {
   const onPrint = vi.fn()
+  const onPrintRows = vi.fn()
   const onExportAnki = vi.fn()
   const onExportWordList = vi.fn()
   render(
@@ -25,6 +26,12 @@ function setup(over: Partial<Parameters<typeof ExportPanel>[0]> = {}) {
       libraryItems={lib}
       articleTitle="A 篇"
       articleWords={lib}
+      articleEntries={[
+        { articleId: 'A', lemma: 'run', origin: 'manual', addedAt: '2026-10-01T10:00:00.000Z' },
+        { articleId: 'A', lemma: 'fall back on', origin: 'auto', addedAt: '2026-10-02T10:00:00.000Z' },
+        { articleId: 'A', lemma: '注意 run 的用法', origin: 'auto', addedAt: '2026-10-03T10:00:00.000Z' },
+      ]}
+      articleId="A"
       articles={[{ id: 'A', title: 'A 篇', lemmas: new Set<string>() }]}
       todayKey="2026-10-02"
       onPrint={onPrint}
@@ -33,7 +40,7 @@ function setup(over: Partial<Parameters<typeof ExportPanel>[0]> = {}) {
       {...over}
     />,
   )
-  return { onPrint, onExportAnki, onExportWordList }
+  return { onPrint, onPrintRows, onExportAnki, onExportWordList }
 }
 
 const pick = (label: string | RegExp) => fireEvent.click(screen.getByLabelText(label))
@@ -79,6 +86,28 @@ describe('ExportPanel：内容口径', () => {
 })
 
 describe('ExportPanel：范围与动作', () => {
+  it('本篇 A4：交给按行打印，单词编号按加入顺序，语言点不编号', () => {
+    const rowsSpy = vi.fn()
+    const { onPrint } = setup({ onPrintRows: rowsSpy })
+    fireEvent.click(screen.getByRole('button', { name: /A4 打印/ }))
+    expect(onPrint).not.toHaveBeenCalled()
+    const [rows, title] = rowsSpy.mock.calls[0]
+    expect(title).toBe('A 篇')
+    expect(rows.map((r: { item: { word: string }; number: number | null }) => `${r.item.word}:${r.number}`)).toEqual([
+      'run:1',
+      'fall back on:null',
+      '注意 run 的用法:null',
+    ])
+  })
+
+  it('新文章一个词都没有：默认仍停在本篇，不把全库交出去', () => {
+    const { onPrint } = setup({ articleWords: [], articleEntries: [] })
+    expect(header()).toContain('0 条')
+    expect(header()).toContain('本篇')
+    fireEvent.click(screen.getByRole('button', { name: /A4 打印/ }))
+    expect(onPrint).not.toHaveBeenCalled()
+  })
+
   it('按日期：清空后只选一天，就把那天的条目交出去', () => {
     const { onPrint } = setup()
     pick('按日期（可多选）')

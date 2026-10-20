@@ -1,7 +1,9 @@
 import type { RefObject } from 'react'
 import { exportLibraryJSON, renderPrintHTML, toAnkiCSV, toWordListTXT, toWordsCSV, toWrongWordsCSV } from '../../core/exports'
 import { groupItems, markPrinted, sortItems } from '../../core/vocab'
+import { markArticlePrinted } from '../../core/articleVocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
+import type { PrintRow } from '../../core/printPlan'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 import { dayKeyLocal } from '../../core/activity'
 import { writeJson, readRaw, writeRaw } from '../storage'
@@ -250,5 +252,62 @@ export function useExport({
     }
   }
 
-  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint }
+  /**
+   * 按「行」打印（每行自带篇 / 篇内编号）。同一词在不同篇各打一次，
+   * 打印时间也记回各自的按篇条目，不再拿全库 lastPrintedAt 统一刷。
+   */
+  const doPrintRows = (rows: PrintRow[], title: string, opts?: { mark?: boolean }) => {
+    if (!rows.length) {
+      flash('没有可打印的词')
+      return
+    }
+    // 同一篇的行放一组（篇内编号已由 planPrint 算好）；只有一篇时不加小标题
+    const distinct = new Set(rows.map((r) => r.articleId).filter(Boolean))
+    const rowGroups: { key: string; rows: PrintRow[] }[] = []
+    if (distinct.size <= 1) rowGroups.push({ key: '', rows })
+    else {
+      const byArticle = new Map<string, PrintRow[]>()
+      for (const row of rows) {
+        const key = row.articleId || ''
+        const list = byArticle.get(key)
+        if (list) list.push(row)
+        else byArticle.set(key, [row])
+      }
+      for (const list of byArticle.values()) rowGroups.push({ key: list[0]?.articleTitle ?? '', rows: list })
+    }
+
+    const day = dayKeyLocal()
+    const html = renderPrintHTML({
+      title,
+      groups: [],
+      rowGroups,
+      subtitle: `${day} · ${rows.length} 词`,
+    })
+    const win = window.open('', '_blank')
+    if (!win) {
+      flash('弹窗被拦截，允许后重试')
+      return
+    }
+    win.document.write(html)
+    win.document.close()
+    if (opts?.mark !== false) {
+      let lib = library
+      const globalIds: string[] = []
+      const byArticle = new Map<string, string[]>()
+      for (const row of rows) {
+        if (row.articleId) {
+          const list = byArticle.get(row.articleId)
+          if (list) list.push(row.item.lemma)
+          else byArticle.set(row.articleId, [row.item.lemma])
+        } else {
+          globalIds.push(row.item.id)
+        }
+      }
+      for (const [articleId, lemmas] of byArticle) lib = markArticlePrinted(lib, articleId, lemmas)
+      if (globalIds.length) lib = markPrinted(lib, globalIds)
+      persist(lib)
+    }
+  }
+
+  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint, doPrintRows }
 }

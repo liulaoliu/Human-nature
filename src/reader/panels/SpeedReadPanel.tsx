@@ -18,7 +18,7 @@ export interface SpeedReadPanelProps {
   /** 该词是否已在生词本（用于标记 / 禁用快捷词）。 */
   isKnown: (word: string) => boolean
   /** 已在生词本里的词的「含义」（速读时悬浮显示；返回 null 表示没有） */
-  wordMeaning?: (word: string) => string | null
+  wordMeaning?: (word: string, sentenceId?: string | null) => string | null
   /** 这篇过完时回调一次（「读完」目标记一笔）。 */
   onFinishRead?: () => void
   /** 把语言点里的词组 / 习语一键加入生词本（`英文 — 中文` 会拆成词条 + 释义）。 */
@@ -122,7 +122,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       if (w.start > pos) nodes.push(text.slice(pos, w.start))
       const known = isKnown(w.text)
       const sel = isSel(i)
-      const meaning = known ? wordMeaning?.(w.text) ?? null : null
+      const meaning = known ? wordMeaning?.(w.text, sentence.id) ?? null : null
       const hint = pickMode
         ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
         : '选词模式未开（勾上顶栏「选词模式」才能点选 / 右键入库）'

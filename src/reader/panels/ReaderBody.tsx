@@ -17,7 +17,7 @@ function sentenceNodes(
   nums?: Map<string, number> | null,
   firstNums?: Set<string> | null,
   kara?: { activeIndex: number | null; onSeek: (i: number) => void } | null,
-  wordMeaning?: (word: string) => string | null,
+  wordMeaning?: (word: string, sentenceId?: string | null) => string | null,
 ): ReactNode[] {
   const spans = wordSpans(text)
   const out: ReactNode[] = []
@@ -30,7 +30,7 @@ function sentenceNodes(
     const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
     const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
     // 生词悬浮显示释义（与速读面板同口径：含义：… + 原来的操作提示）
-    const meaning = isVocab ? wordMeaning?.(w.text) ?? null : null
+    const meaning = isVocab ? wordMeaning?.(w.text, sid) ?? null : null
     if (kara) {
       out.push(
         <span
@@ -86,7 +86,7 @@ export interface ReaderBodyProps {
   selIndices: number[]
   libraryLemmas: Set<string>
   /** 生词 → 释义（悬浮提示用）；返回 null 表示没有可显示的释义。 */
-  wordMeaning?: (word: string) => string | null
+  wordMeaning?: (word: string, sentenceId?: string | null) => string | null
   /** 本篇生词编号（lemma → 序号）与「序号首次出现的 句子:词位」集合。 */
   articleNums: Map<string, number>
   articleFirst: Set<string>

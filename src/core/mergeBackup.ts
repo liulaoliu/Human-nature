@@ -12,6 +12,7 @@
  */
 import type { VocabLibrary } from '../types/document'
 import { dedupeLibrary } from './vocab'
+import { mergeArticleEntries } from './articleVocab'
 import type { PickSession, StudyDay } from './vocabStats'
 import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
 import type { WritingRecord } from './writing'
@@ -20,11 +21,12 @@ import type { MistakeEntry } from './mistakes'
 import type { KindStats, RetellRecord, StudiedDay } from './learning'
 import type { AnswerEvent } from './answerEvents'
 
-/** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段。 */
+/** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段；按篇条目取并集。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
   return dedupeLibrary({
     schemaVersion: current.schemaVersion,
     items: [...current.items, ...incoming.items],
+    articleEntries: mergeArticleEntries(current.articleEntries ?? [], incoming.articleEntries ?? []),
   })
 }
 

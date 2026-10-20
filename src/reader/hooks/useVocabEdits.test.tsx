@@ -142,6 +142,22 @@ describe('useVocabEdits：复习评分 / 手动编辑', () => {
     expect(item.word).toBe('run')
   })
 
+  it('在本篇改释义 / 拼写：按篇条目同步，不会让旧语境释义盖住新改的', () => {
+    const initial: VocabLibrary = {
+      ...createLibrary(),
+      items: [vocabItem({ id: 'x', word: 'run', lemma: 'run' })],
+      articleEntries: [
+        { articleId: 'a1', lemma: 'run', origin: 'manual', addedAt: '2026-01-01T00:00:00.000Z', meaning: '跑（旧）' },
+      ],
+    }
+    const { result, persist } = setup(initial)
+    act(() => result.current.editWord('x', { word: 'running', meaning: '奔跑' }))
+    const saved = persist.mock.calls[0][0]
+    expect(saved.items[0].word).toBe('running')
+    expect(saved.items[0].lemma).toBe('run')
+    expect(saved.articleEntries?.[0]).toMatchObject({ lemma: 'run', meaning: '奔跑', meaningSource: 'manual' })
+  })
+
   it('id 不存在时仍只写一次（内容不变，不抛错）', () => {
     const initial = { ...createLibrary(), items: [vocabItem({ id: 'x', word: 'run', lemma: 'run' })] }
     const { result, persist } = setup(initial)

@@ -173,6 +173,21 @@ describe('输出去重', () => {
     })
     expect(html.match(/class="word">run/g)?.length).toBe(1)
   })
+  it('按篇行不去重：同词在不同篇各输出一次，各自编号', () => {
+    const html = renderPrintHTML({
+      title: 'x',
+      groups: [],
+      rowGroups: [
+        { key: 'A 篇', rows: [{ item: vocab(), articleId: 'A', articleTitle: 'A 篇', number: 1 }] },
+        { key: 'B 篇', rows: [{ item: vocab(), articleId: 'B', articleTitle: 'B 篇', number: 2 }] },
+      ],
+    })
+    expect(html.match(/class="word">run/g)?.length).toBe(2)
+    expect(html).toContain('<span class="no">1</span>')
+    expect(html).toContain('<span class="no">2</span>')
+    expect(html).toContain('<h2>A 篇</h2>')
+    expect(html).toContain('<h2>B 篇</h2>')
+  })
 })
 
 describe('toWrongWordsCSV', () => {

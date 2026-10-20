@@ -90,6 +90,9 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 
 - `payload` 保存完整的 `VocabLibrary` / `SavedArticle`，**事实来源**是它；
   整库回滚、导出、旧版本兼容、换 DB 时的 JSON 导入都靠它。
+- 词库 payload 里有两层：`items`（全库 `VocabItem`，一个 lemma 一条，复习用）和
+  `articleEntries`（每篇收录的 `ArticleVocabEntry`：序号 / 自动手动 / 语境释义 / 按篇打印时间）。
+  派生表 `words` 只展开 `items`；按篇收录目前只存在 JSON 里（不做单独的派生表，避免两份编号口径）。
 - 词库备份语义与 IndexedDB 实现一致：覆盖前留「上一版」，且**只留更大的那一份**；
   缩水事故（读失败/误清）时，备份里是事故前那一版。
 - 文章每次覆盖/删除前把当前版本留到 `article_prev`；`GET /api/store/articles/:id/prev`

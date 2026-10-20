@@ -22,7 +22,7 @@ export interface UseReaderViewDataParams {
   listenQuiz: ListeningQuiz | null
   quizArticleKinds: ArticleQuizKind[]
   studiedDays: StudiedDay[]
-  saved: { id: string; title: string; sentences: Sentence[] }[]
+  saved: { id: string; title: string; sourceKey?: string | null; sentences: Sentence[] }[]
   activity: DayActivity[]
   practice: PracticeRecord[]
   /** 学习日志当前选中的日期 */
@@ -104,13 +104,14 @@ export function useReaderViewData({
     return buildHeatmap(counts, 13)
   }, [activity])
 
-  /** 打印面板：已保存文章 + 每篇正文里的 lemma（用于「按篇」）。 */
+  /** 打印面板：已保存文章 + 每篇正文里的 lemma（老数据兜底；新数据走按篇条目）。 */
   const exportArticles = useMemo(
     () =>
       saved.map((a) => {
         const lemmas = new Set<string>()
         for (const s of a.sentences) for (const w of wordSpans(s.text)) lemmas.add(lemmaOf(w.text))
-        return { id: a.id, title: a.title, lemmas }
+        const aliases = [a.sourceKey, a.title].filter((x): x is string => !!x && x !== a.id)
+        return { id: a.id, title: a.title, aliases, lemmas }
       }),
     [saved],
   )

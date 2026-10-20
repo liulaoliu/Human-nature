@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react'
-import type { VocabItem } from '../../types/document'
+import type { ArticleVocabEntry, VocabItem } from '../../types/document'
 import { buildHeatmap } from '../../core/activity'
 import {
   PRINT_CONTENT_LABEL,
@@ -8,6 +8,7 @@ import {
   planPrint,
   type PrintContent,
   type PrintGroupBy,
+  type PrintRow,
   type PrintScope,
 } from '../../core/printPlan'
 
@@ -24,7 +25,9 @@ const SCOPE_LABEL: Record<PrintScope, string> = {
 export interface ExportArticleRef {
   id: string
   title: string
-  /** 这篇正文里出现过的 lemma（用来把「词库里的词」归到这篇） */
+  /** 同一篇的别名（saved.id / sourceKey / 标题），按篇条目可能用其中之一 */
+  aliases?: string[]
+  /** 这篇正文里出现过的 lemma（老数据兜底） */
   lemmas: Set<string>
 }
 
@@ -35,6 +38,10 @@ export interface ExportPanelProps {
   /** 当前打开的文章 */
   articleTitle: string
   articleWords: VocabItem[]
+  /** 当前篇稳定标识（按篇打印 / 编号用） */
+  articleId?: string
+  /** 按篇收录音表（有则按篇只读它，不再按正文出现推） */
+  articleEntries?: ArticleVocabEntry[]
   /** 已保存文章（按篇导出用） */
   articles: ExportArticleRef[]
   /** 今天的日期键 YYYY-MM-DD */
@@ -45,6 +52,8 @@ export interface ExportPanelProps {
     numberOf?: (it: VocabItem) => number | null,
     opts?: { groupBy?: PrintGroupBy },
   ) => void
+  /** 按行打印（本篇 / 按文章；保留每篇自己的编号） */
+  onPrintRows?: (rows: PrintRow[], title: string) => void
   onExportAnki: (items: VocabItem[], name?: string) => void
   onExportWordList: (items: VocabItem[], name?: string, opts?: { includePhrases?: boolean }) => void
 }
@@ -58,13 +67,16 @@ export default function ExportPanel({
   libraryItems,
   articleTitle,
   articleWords,
+  articleId,
+  articleEntries,
   articles,
   todayKey,
   onPrint,
+  onPrintRows,
   onExportAnki,
   onExportWordList,
 }: ExportPanelProps) {
-  const [scope, setScope] = useState<PrintScope>(articleWords.length ? 'article' : 'all')
+  const [scope, setScope] = useState<PrintScope>('article')
   const [content, setContent] = useState<PrintContent>('all')
   const [pickedArticles, setPickedArticles] = useState<Set<string>>(() => new Set(articles.map((a) => a.id)))
   const [pickedDates, setPickedDates] = useState<Set<string>>(() => new Set([todayKey]))
@@ -76,6 +88,8 @@ export default function ExportPanel({
       planPrint({
         libraryItems,
         articleItems: articleWords,
+        articleId,
+        articleEntries,
         articleTitle,
         articles,
         pickedArticles,
@@ -83,10 +97,10 @@ export default function ExportPanel({
         content,
         scope,
       }),
-    [libraryItems, articleWords, articleTitle, articles, pickedArticles, pickedDates, content, scope],
+    [libraryItems, articleWords, articleId, articleEntries, articleTitle, articles, pickedArticles, pickedDates, content, scope],
   )
-  const { contentCounts, pool, articlePool, items, title, dates, articleCount, unprinted, isArticleOrder, canAct } = plan
-  const effectiveScope: PrintScope = scope === 'article' && !articlePool.length ? 'all' : scope
+  const { contentCounts, pool, articlePool, items, rows, title, dates, articleCount, unprinted, isArticleOrder, canAct } = plan
+  const effectiveScope: PrintScope = scope
 
   /** 新增生词的热力图（近 13 周；只用于按日期选范围） */
   const dateCount = useMemo(() => new Map(dates), [dates])
@@ -110,7 +124,7 @@ export default function ExportPanel({
         <div className="bar plan-head">
           <b>🖨 打印 / 导出</b>
           <span className="muted">
-            将处理 {items.length} 条（{SCOPE_LABEL[effectiveScope]}）
+            将处理 {rows.length} 条（{SCOPE_LABEL[effectiveScope]}）
           </span>
           <button onClick={onClose}>关闭</button>
         </div>
@@ -275,7 +289,7 @@ export default function ExportPanel({
           <b>分组</b>
           <div className="exrow">
             {isArticleOrder ? (
-              <span className="muted">本篇按正文出现顺序编号（不分组）</span>
+              <span className="muted">按本篇加入顺序编号（语言点不编号，不分组）</span>
             ) : (
               <select value={group} onChange={(e) => setGroup(e.target.value as PrintGroupBy)}>
                 {(Object.keys(PRINT_GROUP_LABEL) as PrintGroupBy[]).map((g) => (
@@ -294,8 +308,11 @@ export default function ExportPanel({
             <button
               className="primary"
               disabled={!canAct}
-              onClick={() => onPrint(items, title, undefined, { groupBy: isArticleOrder ? undefined : group })}
-              title={isArticleOrder ? '按正文顺序打印 A4' : '按所选分组打印 A4'}
+              onClick={() => {
+                if (isArticleOrder && onPrintRows) onPrintRows(rows, title)
+                else onPrint(items, title, undefined, { groupBy: isArticleOrder ? undefined : group })
+              }}
+              title={isArticleOrder ? '按本篇加入顺序打印 A4' : '按所选分组打印 A4'}
             >
               🖨 A4 打印
             </button>
@@ -318,8 +335,8 @@ export default function ExportPanel({
             打印 / 导出标题：<b>{title}</b>
           </div>
           <div className="muted extip">
-            按文章/日期可**勾选多个**（同一条只算一次）。打印后会记「已打印」，选「未打印」可只打新的。
-            词组/习语/用法是语言点里**自动收藏**进来的，跟生词一起进词库{dateKinds ? '（当前内容口径）' : ''}。
+            按文章 / 日期可**勾选多个**；同一词在不同篇各算一条（各打各的编号）。打印后会按篇记「已打印」，选「未打印」可只打新的。
+            词组 / 习语 / 用法是语言点里**自动收藏**进来的，跟生词一起进词库{dateKinds ? '（当前内容口径）' : ''}。
           </div>
         </div>
       </div>

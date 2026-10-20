@@ -81,6 +81,7 @@ export interface ReaderScreenProps {
   batchCount: number
   articleWords: VocabItem[]
   articleNums: Map<string, number>
+  articleOrigins: Map<string, 'auto' | 'manual'>
   articleFirst: ArticleP['articleFirst']
   articleAllPrinted: boolean
   articlePrintedAt: string | null
@@ -89,6 +90,8 @@ export interface ReaderScreenProps {
   libraryLemmas: Set<string>
   vocabSidSet: Set<string>
   wordsInSentence: (sid: string) => string[]
+  /** 本篇语境释义（悬浮提示；`sentenceId` 用于优先同句语境） */
+  meaningOf: (word: string, sentenceId?: string | null) => string | null
   allList: VocabItem[]
   studiedTodayIds: string[]
 

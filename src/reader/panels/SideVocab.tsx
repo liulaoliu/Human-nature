@@ -2,6 +2,7 @@
 import { useMemo, useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
 import type { VocabItem } from '../../types/document'
+import type { PrintRow } from '../../core/printPlan'
 import { sortItems, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
 import { langEntries, wordEntries } from '../../core/entryKind'
 import LangPointList from './LangPointList'
@@ -65,6 +66,12 @@ export interface SideVocabProps {
     numberOf?: (item: VocabItem) => number | null,
     opts?: { groupBy?: 'alphabet' | 'article' | 'date' | 'status' },
   ) => void
+  /** 按篇行打印（带篇/编号；不传则退回 onPrint） */
+  onPrintRows?: (rows: PrintRow[], title: string) => void
+  /** 当前篇稳定标识（按篇打印记录打印时间用） */
+  articleIdentity?: string
+  /** 本篇语境释义（打印行用） */
+  meaningOf?: (word: string, sentenceId?: string | null) => string | null
   /** 打开「打印 / 导出」面板（按篇 / 按日期 / 未打印 / 全部）。 */
   onOpenExport: () => void
   printTitle: string
@@ -86,6 +93,8 @@ export interface SideVocabProps {
 
   // 生词列表
   articleNums: Map<string, number>
+  /** 本篇收录方式：lemma → auto/manual（列表标签用） */
+  articleOrigins?: Map<string, 'auto' | 'manual'>
   /** 本篇是否已全部打印（用于「已打印」标记，避免重复打印）。 */
   articleAllPrinted: boolean
   /** 本篇最近一次打印时间（ISO），没打印过为 null。 */
@@ -94,7 +103,10 @@ export interface SideVocabProps {
   confirmDel: string | null
   onJumpSource?: (item: VocabItem) => void
   onSpeak: (word: string) => void
+  /** 全库删除（语言点页签用） */
   onDelete: (id: string) => void
+  /** 只从本篇移出（生词页签用；不传则退回全库删除） */
+  onDeleteArticle?: (id: string) => void
   onReview: (id: string, grade: ReviewGrade) => void
   onEdit: (id: string, patch: VocabEditPatch) => void
 }
@@ -130,6 +142,9 @@ export default function SideVocab({
   onBrowseAll,
   onExportAnki,
   onPrint,
+  onPrintRows,
+  articleIdentity,
+  meaningOf,
   onOpenExport,
   printTitle,
   onExportJson,
@@ -145,6 +160,7 @@ export default function SideVocab({
   stats,
   onDailyGoalChange,
   articleNums,
+  articleOrigins,
   articleAllPrinted,
   articlePrintedAt,
   focusLemma,
@@ -152,6 +168,7 @@ export default function SideVocab({
   onJumpSource,
   onSpeak,
   onDelete,
+  onDeleteArticle,
   onReview,
   onEdit,
 }: SideVocabProps) {
@@ -159,8 +176,22 @@ export default function SideVocab({
   const printedDate = articlePrintedAt ? calendarDayKey(new Date(articlePrintedAt)) : ''
   /** 生词 / 语言点 两个页签：两类数据形状不同（单词 vs 词组·习语·用法说明），混在一列很难读 */
   const [tab, setTab] = useState<'word' | 'lang'>('word')
-  const words = useMemo(() => wordEntries(articleWords), [articleWords])
-  const langs = useMemo(() => langEntries(articleWords), [articleWords])
+  const words = useMemo(
+    () =>
+      wordEntries(articleWords).map((it) => {
+        const m = meaningOf?.(it.word)
+        return m && m !== it.meaning ? { ...it, meaning: m } : it
+      }),
+    [articleWords, meaningOf],
+  )
+  const langs = useMemo(
+    () =>
+      langEntries(articleWords).map((it) => {
+        const m = meaningOf?.(it.word)
+        return m && m !== it.meaning ? { ...it, meaning: m } : it
+      }),
+    [articleWords, meaningOf],
+  )
   /** 当前页签下要展示 / 打印的条目 */
   const shown = tab === 'word' ? words : langs
   const shownPrintTitle = tab === 'word' ? printTitle : printTitle + '·语言点'
@@ -305,7 +336,17 @@ export default function SideVocab({
           Anki（本篇）
         </button>
         <button
-          onClick={() => onPrint(shown, shownPrintTitle, (it) => articleNums.get(it.lemma) ?? null)}
+          onClick={() => {
+            const rows: PrintRow[] = shown.map((item) => ({
+              item,
+              articleId: articleIdentity ?? '',
+              articleTitle: printTitle,
+              number: articleNums.get(item.lemma) ?? null,
+              meaning: meaningOf?.(item.word) ?? null,
+            }))
+            if (onPrintRows && articleIdentity) onPrintRows(rows, shownPrintTitle)
+            else onPrint(shown, shownPrintTitle, (it) => articleNums.get(it.lemma) ?? null)
+          }}
           disabled={!shown.length}
           title={
             articleAllPrinted
@@ -477,7 +518,7 @@ export default function SideVocab({
           <LangPointList
           items={sortItems(langs, sortBy)}
           onSpeak={onSpeak}
-          onDelete={onDelete}
+          onDelete={onDeleteArticle ?? onDelete}
           onEdit={(it) => onEdit(it.id, {})}
           confirmDel={confirmDel}
           />
@@ -490,10 +531,11 @@ export default function SideVocab({
           confirmDel={confirmDel}
           onJump={onJumpSource}
           onSpeak={onSpeak}
-          onDelete={onDelete}
+          onDelete={onDeleteArticle ?? onDelete}
           onReview={onReview}
           onEdit={onEdit}
           numberOf={(it) => articleNums.get(it.lemma) ?? null}
+          originOf={(it) => articleOrigins?.get(it.lemma)}
         />
       ) : (
         <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>

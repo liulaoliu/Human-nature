@@ -1,50 +1,60 @@
 import { describe, it, expect } from 'vitest'
 import { articleNumbering } from './articleNums'
-import { vocabItem } from './testFixtures'
+import type { ArticleVocabEntry } from '../types/document'
 
 /**
- * 正文生词编号：手动标记顺序优先 → 同批（createdAt 相同）按正文出现顺序 → 字母序兜底。
- * 这条规则牵涉「自动标词后编号是不是文中顺序」这个用户体验，值得钉住。
+ * 正文生词编号：只按**本篇条目加入顺序**从 1 开始。
+ * 自动标词一批由调用方按正文顺序加入；删除条目后数组自然重排，不留空号。
  */
 const sentences = [
   { id: 's1', text: 'The cat sat on the mat.' },
   { id: 's2', text: 'A dog barked at the cat.' },
 ]
-const item = (word: string, createdAt: string) => vocabItem({ id: `vocab:${word}`, word, lemma: word, createdAt })
+const entry = (lemma: string): ArticleVocabEntry => ({
+  articleId: 'art-A',
+  lemma,
+  origin: 'manual',
+  addedAt: '2026-10-01T10:00:00Z',
+})
 
-describe('articleNumbering', () => {
-  it('手动标记顺序优先（createdAt 升序）', () => {
-    const { nums } = articleNumbering(sentences, [item('dog', '2026-10-02T10:00:00Z'), item('cat', '2026-10-01T10:00:00Z')])
-    expect(nums.get('cat')).toBe(1)
-    expect(nums.get('dog')).toBe(2)
+describe('articleNumbering（按篇条目顺序）', () => {
+  it('按条目加入顺序编号，与 createdAt / 字母序无关', () => {
+    const { nums } = articleNumbering(sentences, [entry('dog'), entry('cat')])
+    expect(nums.get('dog')).toBe(1)
+    expect(nums.get('cat')).toBe(2)
   })
 
-  it('同一批（时间相同，如自动标词）按正文出现顺序编号', () => {
-    const { nums } = articleNumbering(sentences, [
-      item('dog', '2026-10-02T10:00:00Z'),
-      item('cat', '2026-10-02T10:00:00Z'),
+  it('删除中间条目后紧凑重排', () => {
+    const { nums } = articleNumbering(sentences, [entry('cat'), entry('dog')])
+    expect([...nums.entries()]).toEqual([
+      ['cat', 1],
+      ['dog', 2],
     ])
-    expect(nums.get('cat')).toBe(1) // cat 在 s1 先出现
-    expect(nums.get('dog')).toBe(2)
   })
 
-  it('正文里没出现的词排最后（按字母序稳定）', () => {
-    const { nums } = articleNumbering(sentences, [
-      item('zebra', '2026-10-02T10:00:00Z'),
-      item('apple', '2026-10-02T10:00:00Z'),
-      item('cat', '2026-10-02T10:00:00Z'),
-    ])
-    expect(nums.get('cat')).toBe(1)
-    expect([nums.get('apple'), nums.get('zebra')]).toEqual([2, 3])
+  it('正文里没出现的词仍占编号（它还在本篇词表里），只是没有上标位置', () => {
+    const { nums, firstOccurrence } = articleNumbering(sentences, [entry('zebra'), entry('cat')])
+    expect(nums.get('zebra')).toBe(1)
+    expect(nums.get('cat')).toBe(2)
+    expect([...firstOccurrence]).toEqual(['s1:1'])
   })
 
   it('firstOccurrence：只在正文首次出现处打标（含词的位置）', () => {
-    const { firstOccurrence } = articleNumbering(sentences, [item('cat', '2026-10-01T10:00:00Z')])
+    const { firstOccurrence } = articleNumbering(sentences, [entry('cat')])
     expect([...firstOccurrence]).toEqual(['s1:1']) // s1 的第 2 个词（0 基）是 cat
   })
 
+  it('重复 lemma 只认第一次，不产生两个编号', () => {
+    const { nums } = articleNumbering(sentences, [entry('cat'), entry('cat'), entry('dog')])
+    expect([...nums.entries()]).toEqual([
+      ['cat', 1],
+      ['dog', 2],
+    ])
+  })
+
   it('空输入不炸', () => {
-    expect(articleNumbering(null, [item('cat', '2026-10-01T10:00:00Z')]).nums.size).toBe(0)
+    expect(articleNumbering(null, [entry('cat')]).nums.size).toBe(1)
+    expect(articleNumbering(null, []).nums.size).toBe(0)
     expect(articleNumbering([], []).firstOccurrence.size).toBe(0)
   })
 })

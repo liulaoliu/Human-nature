@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
 import { applyExamples, hasOwnExamples, removeItem } from '../../core/vocab'
+import { removeArticleEntry } from '../../core/articleVocab'
 import { collectOfflineExampleRows } from '../../core/libraryAutoFill'
 import { loadTatoeba, tatoebaExamples } from '../../adapters/tatoeba'
 
@@ -23,6 +24,7 @@ export interface UseArticleUiActionsParams {
   setSideTab: (tab: 'overview' | 'pick' | 'vocab' | 'stats' | 'mastery') => void
   focusEntry: (word: string) => void
   articleWords: VocabItem[]
+  articleIdentity: string
   lookupTatoeba: (item: { word: string; lemma: string }) => { text: string; translation?: string }[]
 }
 
@@ -50,6 +52,7 @@ export function useArticleUiActions({
   setSideTab,
   focusEntry,
   articleWords,
+  articleIdentity,
   lookupTatoeba,
 }: UseArticleUiActionsParams) {
   /** 逐词高亮：当前朗读句 + 正读到的词下标。 */
@@ -96,6 +99,26 @@ export function useArticleUiActions({
       confirmTimerRef.current = window.setTimeout(() => setConfirmDel(null), 3000)
     },
     [confirmDel, library, persist, setConfirmDel, confirmTimerRef],
+  )
+
+  /** 从本篇移出：只删这一篇的收录，全库词条与别的篇不受影响。 */
+  const askDeleteArticle = useCallback(
+    (id: string) => {
+      if (confirmDel === id) {
+        const item = library.items.find((it) => it.id === id)
+        if (item) {
+          persist(removeArticleEntry(library, articleIdentity, item.lemma))
+          flash(`已从本篇移出：${item.word}（全库仍保留）`)
+        }
+        setConfirmDel(null)
+        if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
+        return
+      }
+      setConfirmDel(id)
+      if (confirmTimerRef.current) window.clearTimeout(confirmTimerRef.current)
+      confirmTimerRef.current = window.setTimeout(() => setConfirmDel(null), 3000)
+    },
+    [confirmDel, library, articleIdentity, persist, flash, setConfirmDel, confirmTimerRef],
   )
 
   /** 点正文生词：先切到「生词本」Tab，再滚到对应词条。 */
@@ -154,6 +177,7 @@ export function useArticleUiActions({
     karaoke,
     altCopyText,
     askDelete,
+    askDeleteArticle,
     revealVocabWord,
     playDictItem,
     selectSentenceAndRead,

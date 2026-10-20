@@ -201,28 +201,30 @@ export default function ReaderApp() {
     setters: learningSetters,
   } = learning
 
-  /** 正文里哪些词算生词（每句 lemma / 全文 lemma / 未掌握词 / 有生词的句子）—— 见 hooks/useDocVocabSets */
-  const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
-    sentences: doc?.sentences ?? null,
-    items: library.items,
-    batchSentenceIds,
-  })
-
   /** 本篇生词 / 编号 / 语言点句数 / 打印情况：口径都在 hooks/useArticleVocabView */
   const {
     articleWords,
+    articleWordItems,
     knownLemmas,
+    articleOrigins,
     languageSentCount,
     wordsInSentence,
     articleNums,
     articleFirst,
+    meaningOf,
     articlePrintedAt,
     articleAllPrinted,
   } = useArticleVocabView({
     library,
     articleIdentity,
-    docLemmas,
     sentences: doc?.sentences ?? null,
+  })
+
+  /** 正文里哪些词算生词（本篇条目；不拿整库去标新文章）—— 见 hooks/useDocVocabSets */
+  const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
+    sentences: doc?.sentences ?? null,
+    articleItems: articleWordItems,
+    batchSentenceIds,
   })
   const applyingDom = useRef(false)
   const articleRef = useRef<HTMLElement | null>(null)
@@ -508,6 +510,7 @@ export default function ReaderApp() {
     setSideTab,
     focusEntry,
     articleWords,
+    articleIdentity,
     lookupTatoeba,
   })
 
@@ -682,6 +685,7 @@ export default function ReaderApp() {
       batchCount={batch.length}
       articleWords={articleWords}
       articleNums={articleNums}
+      articleOrigins={articleOrigins}
       articleFirst={articleFirst}
       articleAllPrinted={articleAllPrinted}
       articlePrintedAt={articlePrintedAt}
@@ -690,6 +694,7 @@ export default function ReaderApp() {
       libraryLemmas={libraryLemmas}
       vocabSidSet={vocabSidSet}
       wordsInSentence={wordsInSentence}
+      meaningOf={meaningOf}
       allList={allList}
       studiedTodayIds={studiedTodayIds}
       pasted={pasted}

@@ -12,8 +12,10 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
     studiedTodayIds,
     articleWords,
     articleNums,
+    articleOrigins,
     articleAllPrinted,
     articlePrintedAt,
+    meaningOf,
     languageSentCount,
     library,
     restorePrevLibrary,
@@ -49,6 +51,7 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
     setBrowseAll,
     articleTitle,
     articleKey,
+    articleIdentity,
     setExportOpen,
     setStatsOpen,
     statsOpen,
@@ -75,7 +78,7 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
   const { addSelectionToBatch, mark, jumpToSource } = props.selection
   const { addToBatch, setBatch } = batchQueue
   const { editWord: handleEdit, reviewWord: handleReview } = vocabEdits
-  const { askDelete, enrichExamplesFromTatoeba } = ui
+  const { askDelete, askDeleteArticle, enrichExamplesFromTatoeba } = ui
   const { openLangFor } = props.workspace
 
   return (
@@ -119,6 +122,7 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
         posCount: posCandidates.length,
         articleWords,
         articleNums,
+        articleOrigins,
         articleAllPrinted,
         articlePrintedAt,
         languageCount: languageSentCount,
@@ -181,6 +185,8 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
         onOpenPlan: () => setPlanOpen(true),
         onBrowseAll: () => setBrowseAll(true),
         printTitle: articleTitle || articleKey || '本篇生词',
+        articleIdentity,
+        meaningOf,
         onOpenExport: () => setExportOpen(true),
         onToggleStats: () => setStatsOpen((v) => !v),
         statsOpen,
@@ -191,6 +197,7 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
         confirmDel,
         onConfirmDelChange: setConfirmDel,
         onDelete: askDelete,
+        onDeleteArticle: askDeleteArticle,
         onEdit: handleEdit,
         onReview: handleReview,
       }}

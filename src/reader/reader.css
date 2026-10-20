@@ -1982,6 +1982,23 @@ button.danger {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+.origin-badge {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 1px;
+  background: rgba(120, 200, 140, 0.18);
+  color: #57b26a;
+  white-space: nowrap;
+}
+.origin-badge.o-auto {
+  background: rgba(232, 168, 56, 0.2);
+  color: #d99a2b;
+}
 
 /* 生词本就地编辑 */
 .edit-inline {

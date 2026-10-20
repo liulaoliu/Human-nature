@@ -33,6 +33,8 @@ interface Props {
   showSource?: boolean
   /** 词条序号（与正文对应）；返回 null 则不显示 */
   numberOf?: (item: VocabItem) => number | null
+  /** 本篇收录方式（自动 / 手动）；不传则不显示标签 */
+  originOf?: (item: VocabItem) => 'auto' | 'manual' | undefined
 }
 
 interface Draft {
@@ -59,6 +61,7 @@ export default function VocabList({
   onEdit,
   showSource = false,
   numberOf,
+  originOf,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -201,6 +204,11 @@ export default function VocabList({
                   title="点读发音"
                 >
                   {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
+                  {originOf?.(it) && (
+                    <span className={'origin-badge o-' + originOf(it)} title={originOf(it) === 'auto' ? '自动标词收录' : '手动加入'}>
+                      {originOf(it) === 'auto' ? '自动' : '手动'}
+                    </span>
+                  )}
                   {it.word}
                   {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                   {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
@@ -284,6 +292,11 @@ export default function VocabList({
                 title="点读发音"
               >
                 {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
+                {originOf?.(it) && (
+                  <span className={'origin-badge o-' + originOf(it)} title={originOf(it) === 'auto' ? '自动标词收录' : '手动加入'}>
+                    {originOf(it) === 'auto' ? '自动' : '手动'}
+                  </span>
+                )}
                 {it.word}{' '}
                 {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                 {it.phonetic && <span className="ph">{it.phonetic}</span>}

@@ -95,6 +95,10 @@
 16. **空 `catch` 要分类**。用户资产（词库 / 学习记录 / 备份 / 待选）写失败必须
     `reportStorageFailure()`（log + 广播 `reader:storage-error`）或 `flash` 可见提示；
     可选能力（TTS、剪贴板、持久存储申请）可以保留空 catch，但要写明「失败可降级」的理由。
+17. **本篇生词别再用「正文 ∩ 词库」算**。那会把总词库里恰好出现的 the / is / are
+    自动算进新文章、带编号，用户根本没在这篇标过。规矩：本篇只认 `library.articleEntries`
+    （SSOT 在 `core/articleVocab.ts`）；编号走 `core/articleNums.ts`，语境释义走
+    `core/articleMeaning.ts`。语言点也收进按篇条目，但只有普通单词参与正文编号。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -112,6 +116,9 @@
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
 | SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
 | 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次：第二次按文件指纹直接跳过并提示（不同备份仍按天累加学习时长/活动） |
+| 每篇生词独立 | 词库里先有几篇生词 → 新建/打开一篇没标过词的文章 | 侧栏「生词本 · 本篇」为空、正文没有编号/高亮；总词库里有的 the / is / are 不自动进来 |
+| 按篇编号 / 删除 | 同一篇依次加 3 个词→删中间一个→重新打开 | 编号按加入顺序 1..n，删除后紧凑重排；删词只从本篇消失，全库/别的篇仍保留 |
+| 按篇打印 | 两个不同篇都收同一个词 → 分别 A4（本篇） | 各自打印自己的清单与编号；打印后只影响当前篇的「已打印」状态 |
 | 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
 | 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |

@@ -50,6 +50,12 @@ describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () =>
     expect(phrase.meaning).toBe('转而依靠')
     expect(phrase.status).toBe('queried') // 语言点直接带释义收进来，没有「待查」
     expect(phrase.contexts).toHaveLength(1)
+    // 语言点也要有本篇归属：侧栏语言点页签 / 按篇打印靠它
+    expect(lib.articleEntries?.map((e) => `${e.articleId}:${e.lemma}:${e.origin}`)).toEqual([
+      'A:fall back on:auto',
+      'A:take its toll:auto',
+      'A:' + textKey('注意 subject to 是形容词') + ':auto',
+    ])
     const usage = lib.items.find((it) => it.kind === 'usage')!
     expect(usage.word).toBe('注意 subject to 是形容词')
     expect(usage.meaning).toBeNull()

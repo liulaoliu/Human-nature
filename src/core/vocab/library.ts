@@ -1,6 +1,7 @@
 import type { VocabItem, VocabLibrary, VocabStatus } from '../../types/document'
 import { SCHEMA_VERSION } from '../../types/document'
 import { dayKeyLocal } from '../activity'
+import { articleItemsOf } from '../articleVocab'
 import { lemmaOf } from './word'
 
 /**
@@ -12,7 +13,7 @@ import { lemmaOf } from './word'
 
 /** 空词库。 */
 export function createLibrary(): VocabLibrary {
-  return { schemaVersion: SCHEMA_VERSION, items: [] }
+  return { schemaVersion: SCHEMA_VERSION, items: [], articleEntries: [] }
 }
 
 /** 手动编辑一个词条，默认把状态置为 edited（不会被后续查询覆盖）。 */
@@ -45,7 +46,10 @@ export function setStatus(
 }
 
 export function removeItem(library: VocabLibrary, id: string): VocabLibrary {
-  return { ...library, items: library.items.filter((it) => it.id !== id) }
+  const target = library.items.find((it) => it.id === id)
+  const items = library.items.filter((it) => it.id !== id)
+  const entries = target ? (library.articleEntries ?? []).filter((e) => e.lemma !== target.lemma) : library.articleEntries
+  return { ...library, items, articleEntries: entries }
 }
 
 /**
@@ -96,26 +100,24 @@ export function isPriority(item: VocabItem, now: Date = new Date()): boolean {
 }
 
 /**
- * 某篇文章的「本篇生词」：来源是本文，**或本文正文里出现过该词**。
+ * 某一篇的「本篇生词」：只认**显式收进这一篇**的条目（见 `core/articleVocab`）。
  *
- * 为什么不能只看 `source`：`markWord` 按 lemma 去重时沿用**旧来源**
- * （`source: existing.source ?? source`），所以从别的文章带过来的同一个词，
- * 来源会留在旧文章 —— 只按 source 过滤，「本篇生词」会一直不涨。
+ * 不能再用「来源是本文 或 正文里出现过该词」：那会让新文章继承总词库里
+ * 恰好出现的 the / is / are，用户并没有在这篇标过它们。迁移时会把老数据里
+ * `source.fileName` / `contexts` 能证明的篇归属补成条目。
  */
-export function articleWordsOf(
-  library: VocabLibrary,
-  articleIdentity: string,
-  docLemmas: Set<string>,
-): VocabItem[] {
-  return library.items.filter(
-    (it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma),
-  )
+export function articleWordsOf(library: VocabLibrary, articleIdentity: string): VocabItem[] {
+  return articleItemsOf(library, articleIdentity)
 }
 
 /** 按词形（lemma）删除。 */
 export function removeByLemma(library: VocabLibrary, word: string): VocabLibrary {
   const lemma = lemmaOf(word)
-  return { ...library, items: library.items.filter((it) => it.lemma !== lemma) }
+  return {
+    ...library,
+    items: library.items.filter((it) => it.lemma !== lemma),
+    articleEntries: (library.articleEntries ?? []).filter((e) => e.lemma !== lemma),
+  }
 }
 
 export interface VocabFilter {
