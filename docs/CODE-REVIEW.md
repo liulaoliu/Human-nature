@@ -57,7 +57,7 @@
 
 - 默认**只报不改**，用户说「修」才动；修的时候先补测试。
 - P0/P1 优先；一个主题一个 commit；代码 + 测试 + 文档同批。
-- 每批修完跑：定向测试 → `npm run gates` → 触碰数据层再跑 `node --test server/*.test.js`。
+- 每批修完跑：定向测试 → `npm run gates`（已含 `server/*.test.js`，它们是 vitest 用例；别再跑 `node --test`）。
 - 修「双写」类问题：先合并成**唯一写入口 + 纯计划函数**，不要在两个 effect 之间加锁/加顺序依赖。
 - 修「导入/外部 JSON」类问题：先补运行时守卫，再谈字段映射。
 - 文档同步：结构变化改 `ARCHITECTURE.md`；测试踩坑改 `TESTING.md` §3；本流程本身变化改本文。
