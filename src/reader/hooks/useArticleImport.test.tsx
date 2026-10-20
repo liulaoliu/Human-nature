@@ -24,7 +24,7 @@ function fileList(files: File[]): FileList {
 
 function setup(over: Partial<UseArticleImportParams> = {}) {
   const saved: SavedArticle[] = [
-    { id: 'saved:1', title: '旧文', text: 'old', paragraphs: [], sentences: [], updatedAt: '' },
+    { id: 'saved:1', title: '旧文', sourceKey: null, text: 'old', paragraphs: [], sentences: [], updatedAt: '' },
   ]
   const repo = {
     save: vi.fn().mockResolvedValue(undefined),
