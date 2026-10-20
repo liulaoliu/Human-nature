@@ -2,21 +2,17 @@
 
 > **2026-10-20 最新交接（换电脑先看这段）**
 >
-> - 分支 `main`，最后提交 `6a13c8d`；工作树干净，已 push 到 `origin/main`。
-> - schema **v7**；`npm run gates` 全绿：173 个测试文件，**1555 passed / 5 skipped**。
+> - 分支 `main`，最后提交 `12df501`；工作树干净。
+> - schema **v7**；`npm run gates` 全绿：176 个测试文件，**1586 passed / 5 skipped**。
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - 本轮已完成：词库逻辑拆分（`core/vocab/*`）、TTS/侧栏/速读/背单词继续拆分、
->   **答题事件表 v7**（append-only + 历史聚合基线 + 可重建统计）。
+>   **答题事件表 v7**（append-only + 历史聚合基线 + 可重建统计）、
+>   **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）、
+>   **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）。
 > - 下一步优先级：
->   1. [x] 统计/设置面板加「重建并核对」按钮，调用 `POST /api/store/learning/rebuild-derived`（可选）。
->          （已做：`core/learningCheck.ts` 对账 + `hooks/useLearningRebuild` + 统计面板底部按钮；
->          只比对不改本地——本地可能有还没同步的改动，替用户自动覆盖风险更大）
->   2. [x] 无障碍收尾：面板内纯文本按钮补 `aria-label`（审查 #9，低风险）。
->          （已做：列表内重复动作按钮带条目名——生词本 重来/记得/简单/编辑/删除、
->          语言点 改/删、速读清单 移出；toast 加 `role=status` + `aria-live`）
->   3. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS。
->   4. [ ] 存量大文件（低优先，只准变小）：`src/state/session.ts` 1185、`src/ui/App.tsx` 1191。
->   5. [ ] 记录分页（P2）：数据量还没到，先不做。
+>   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS，以及「重建并核对」。（**用户自己做**）
+>   2. [ ] 存量大文件（低优先，只准变小）：`src/state/session.ts` 1185、`src/ui/App.tsx` 1191。
+>   3. [ ] 记录分页（P2）：数据量还没到，先不做。
 >
 > 下面「Review 重构待办（2026-10-19）」保留为历史记录，里面的事项均已完成；
 > 更早的录音 / PDF 抽取待办仍然有效，但别把旧状态当成最新状态。
