@@ -146,6 +146,7 @@
 `useSessionServices`（会话转发 / 启动互斥 / 错题重练 / 选词计时）、
 `useAiServices`（AI 待办推导 / 工作包 / 粘回路由）、
 `useArticleUiActions`（Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 离线例句）。
+视图层 `ReaderScreen` 不单测，由 `ReaderApp.integration.test.tsx` 覆盖条件渲染。
 组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
