@@ -3,6 +3,7 @@ import {
   buildListeningQuizPrompt,
   gradeListening,
   isListeningCorrect,
+  parseListeningQuiz,
   type ListeningQuestion,
   type ListeningQuiz,
   type ListeningResult,
@@ -141,12 +142,10 @@ export function useListening({
 
   // 换文章时载入该篇已生成的听力理解题，并重置作答
   useEffect(() => {
-    try {
-      const raw = localStorage.getItem('reader:listening:' + articleIdentity)
-      setQuiz(raw ? (JSON.parse(raw) as ListeningQuiz) : null)
-    } catch {
-      setQuiz(null)
-    }
+    const raw = localStorage.getItem('reader:listening:' + articleIdentity)
+    // 旧数据/手改过的 localStorage 不可信：走 core 的严格解析，坏题直接丢弃
+    const parsed = raw ? parseListeningQuiz(raw) : null
+    setQuiz(parsed && parsed.questions.length ? parsed : null)
     setOpen(false)
     setAnswers({})
     setSubmitted(false)
