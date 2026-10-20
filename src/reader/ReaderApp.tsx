@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { wordSpans } from '../core/wordSelect'
 import {
   applyExamples,
   articleWordsOf,
   displayMeaning,
   hasOwnExamples,
-  isDue,
   lemmaOf,
   removeItem,
   sortItems,
@@ -21,16 +19,14 @@ import {
   addPracticeRecord,
   type PracticeKind,
 } from '../core/practice'
-import { buildArticleQuestions } from '../core/articleQuiz'
 import { type ArticleQuizKind } from '../core/quiz'
 import {
   removeMistake,
   upsertMistake,
   type MistakeEntry,
 } from '../core/mistakes'
-import { buildReadiness } from '../core/readiness'
 import { type AiJobsInput } from '../core/aiPackage'
-import { addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
+import { addActivity, dayKeyLocal, type ActivityCat } from '../core/activity'
 import { type DrillKind } from './panels/IntensivePanel'
 import Composer from './panels/Composer'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -54,6 +50,7 @@ import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
 import { useVocabMode } from './hooks/useVocabMode'
 import { useArticleDerived } from './hooks/useArticleDerived'
+import { useReaderViewData } from './hooks/useReaderViewData'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
@@ -75,8 +72,6 @@ import { useQuickSession } from './hooks/useQuickSession'
 import { useListening } from './hooks/useListening'
 import { useWriting } from './hooks/useWriting'
 import { type IntensiveStageKey } from '../core/intensive'
-import { buildJournalDay, journalDays, journalSummary } from '../core/journal'
-import { buildHeatmap } from '../core/activity'
 import {
   persistentBool,
   persistentEnum,
@@ -1216,6 +1211,31 @@ export default function ReaderApp() {
     skimmedArticles,
   })
 
+  /** 就绪清单 / 学习日志 / 打印索引 / 测验数（逻辑在 hooks/useReaderViewData）。 */
+  const {
+    readyRows,
+    journalAllDays,
+    journalData,
+    journalSummaryRows,
+    journalHeat,
+    exportArticles,
+    articleQuizCount,
+  } = useReaderViewData({
+    doc,
+    libraryItems: library.items,
+    batchCount: batch.length,
+    confusableTodoCount: confusableTodo.length,
+    lemmaCandidatesCount: lemmaCandidates.length,
+    writingHistoryCount: writingHistory.length,
+    listenQuiz,
+    quizArticleKinds: quizArticleKinds as ArticleQuizKind[],
+    studiedDays,
+    saved,
+    activity,
+    practice,
+    journalDay,
+  })
+
   /** 一键：给「还没有自己例句」的本篇生词，批量补离线例句（Tatoeba）。 */
   const enrichExamplesFromTatoeba = useCallback(async () => {
     const ok = await loadTatoeba()
@@ -1240,43 +1260,6 @@ export default function ReaderApp() {
   }, [articleWords, library, persist, flash])
 
   /** 正文标记（Sentence.vocab）→ 统计 + 自动/一键重建（丢词时最准的数据源） */
-
-  /** 学习日志：按天回顾。 */
-  const journalInput = useMemo(
-    () => ({
-      studied: studiedDays,
-      items: library.items,
-      articles: saved.map((a) => ({ id: a.id, title: a.title, sentences: a.sentences })),
-      activity,
-      practice,
-    }),
-    [studiedDays, library.items, saved, activity, practice],
-  )
-  const journalAllDays = useMemo(() => journalDays(journalInput), [journalInput])
-  const journalData = useMemo(() => buildJournalDay(journalInput, journalDay), [journalInput, journalDay])
-  const journalSummaryRows = useMemo(() => journalSummary(journalInput), [journalInput])
-  const journalHeat = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const a of activity) counts[a.day] = dayTotal(a)
-    return buildHeatmap(counts, 13)
-  }, [activity])
-
-  /** 打印面板：已保存文章 + 每篇正文里的 lemma（用于「按篇」）。 */
-  const exportArticles = useMemo(
-    () =>
-      saved.map((a) => {
-        const lemmas = new Set<string>()
-        for (const s of a.sentences) for (const w of wordSpans(s.text)) lemmas.add(lemmaOf(w.text))
-        return { id: a.id, title: a.title, lemmas }
-      }),
-    [saved],
-  )
-
-  /** 文章测验可出题数（设置面板提示用）。 */
-  const articleQuizCount = useMemo(
-    () => buildArticleQuestions(doc?.sentences ?? [], { kinds: quizArticleKinds as ArticleQuizKind[] }).length,
-    [doc, quizArticleKinds],
-  )
 
   /** AI 工作包：导出待办 / 导入结果（agent）+ 网页版提示词 / 应用 / 重问缺项。 */
   const aiPack = useAiPack({
@@ -1326,32 +1309,6 @@ export default function ReaderApp() {
   })
 
   const allList = sortItems(library.items, vocabSort)
-  /** 仪表盘：各能力当前可用性 */
-  const readyRows = useMemo(
-    () =>
-      buildReadiness({
-        hasDoc: !!doc,
-        sentences: doc?.sentences.length ?? 0,
-        translated: doc?.sentences.filter((s) => s.translation).length ?? 0,
-        language: doc?.sentences.filter((s) => hasSentenceLanguage(s)).length ?? 0,
-        listenQuiz: listenQuiz?.questions.length ?? 0,
-        vocab: library.items.length,
-        batch: batch.length,
-        unqueried: library.items.filter((it) => it.status === 'unqueried').length,
-        noMeaning: library.items.filter((it) => !it.meaning).length,
-        noExampleUsage: library.items.filter(
-          (it) => !hasOwnExamples(it) || (it.usage.length === 0 && !it.phrases?.length),
-        ).length,
-        noPhonetic: library.items.filter((it) => !it.phonetic).length,
-        confusableMissing: confusableTodo.length,
-        lemmaCandidates: lemmaCandidates.length,
-        due: library.items.filter((it) => isDue(it)).length,
-        newWords: library.items.filter((it) => it.reviewState.repetitions === 0).length,
-        writingHistory: writingHistory.length,
-      }),
-    [doc, listenQuiz, library.items, batch, confusableTodo, lemmaCandidates, writingHistory],
-  )
-
   /** 精读工作流：某一步「跳到对应工具」。 */
   const openIntensiveStage = useCallback(
     (key: IntensiveStageKey) => {
