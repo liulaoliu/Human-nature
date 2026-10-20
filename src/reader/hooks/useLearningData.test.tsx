@@ -60,3 +60,50 @@ describe('useLearningData（学习记录唯一收口）', () => {
     expect(result.current.data.readGoal).toBe(5)
   })
 })
+
+describe('useLearningData：复述 / 略读动作', () => {
+  it('saveRetell：去空白、记字数、写复述并记一次 write 活动', () => {
+    const flash = vi.fn()
+    const { result } = renderHook(() => useLearningData({ ...params, flash }))
+    act(() => result.current.saveRetell('  hello brave new world  '))
+    expect(result.current.retells).toHaveLength(1)
+    expect(result.current.retells[0]).toMatchObject({
+      articleId: 'a1',
+      text: 'hello brave new world',
+      words: 4,
+    })
+    expect(result.current.activity).toHaveLength(1)
+    expect(result.current.activity[0].counts.write).toBe(1)
+    expect(flash).toHaveBeenCalledWith('已记录复述 ✅')
+  })
+
+  it('saveRetell：空文本或没文章时不动', () => {
+    const flash = vi.fn()
+    const { result } = renderHook(() => useLearningData({ ...params, articleIdentity: null, flash }))
+    act(() => result.current.saveRetell('hello'))
+    expect(result.current.retells).toHaveLength(0)
+    act(() => result.current.saveRetell('   '))
+    expect(result.current.retells).toHaveLength(0)
+    expect(flash).not.toHaveBeenCalled()
+  })
+
+  it('deleteRetell 只删指定时间那一条', () => {
+    let t = 1_700_000_000_000
+    const { result } = renderHook(() =>
+      useLearningData({ ...params, now: () => new Date((t += 1000)) }),
+    )
+    act(() => result.current.saveRetell('first try'))
+    const at = result.current.retells[0].at
+    act(() => result.current.saveRetell('second try'))
+    act(() => result.current.deleteRetell(at))
+    expect(result.current.retells.map((r) => r.text)).toEqual(['second try'])
+  })
+
+  it('toggleSkimmed：同一篇来回切，只影响当前文章', () => {
+    const { result } = renderHook(() => useLearningData(params))
+    act(() => result.current.toggleSkimmed())
+    expect(result.current.skimmedArticles).toEqual(['a1'])
+    act(() => result.current.toggleSkimmed())
+    expect(result.current.skimmedArticles).toEqual([])
+  })
+})

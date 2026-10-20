@@ -1,5 +1,5 @@
-import { useMemo } from 'react'
-import type { DayActivity } from '../../core/activity'
+import { useCallback, useMemo } from 'react'
+import { addActivity, dayKeyLocal, type DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
 import type { ReadDone } from '../../core/goals'
 import type { MistakeEntry } from '../../core/mistakes'
@@ -25,6 +25,8 @@ export interface UseLearningDataParams {
   articleKey: string | null
   todayKey: string
   flash: (msg: string) => void
+  /** 测试注入固定时间；默认取当前时间 */
+  now?: () => Date
 }
 
 /** 导出/备份用的一份学习记录快照。 */
@@ -102,6 +104,36 @@ export function useLearningData(params: UseLearningDataParams) {
     parse: (raw) => raw,
     serialize: (value) => value,
   })
+
+  const now = params.now
+
+  /** 记一条复述打卡（空文本 / 没打开文章 → 不记）。 */
+  const saveRetell = useCallback(
+    (text: string) => {
+      const t = text.trim()
+      if (!t || !params.articleIdentity) return
+      const at = (now ? now() : new Date()).toISOString()
+      const words = t.split(/\s+/).filter(Boolean).length
+      setRetells((prev) =>
+        [{ at, articleId: params.articleIdentity as string, text: t, words }, ...prev].slice(0, 200),
+      )
+      setActivity((prev) => addActivity(prev, dayKeyLocal(now ? now() : new Date()), 'write', 1))
+      params.flash('已记录复述 ✅')
+    },
+    [params.articleIdentity, params.flash, now, setRetells, setActivity],
+  )
+
+  const deleteRetell = useCallback(
+    (at: string) => setRetells((prev) => prev.filter((r) => r.at !== at)),
+    [setRetells],
+  )
+
+  /** 略读标记：同一篇点一次开、再点关。 */
+  const toggleSkimmed = useCallback(() => {
+    const id = params.articleIdentity
+    if (!id) return
+    setSkimmedArticles((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }, [params.articleIdentity, setSkimmedArticles])
 
   const {
     readDone,
@@ -206,6 +238,9 @@ export function useLearningData(params: UseLearningDataParams) {
     readDays,
     markReadDone,
     undoReadDone,
+    saveRetell,
+    deleteRetell,
+    toggleSkimmed,
     // 导出 / 合并导入用
     data,
     setters,

@@ -366,11 +366,9 @@ export default function ReaderApp() {
     kindStats,
     setKindStats,
     retells,
-    setRetells,
     sessions,
     setSessions,
     skimmedArticles,
-    setSkimmedArticles,
     readGoal,
     setReadGoal,
     goalMemo,
@@ -381,6 +379,9 @@ export default function ReaderApp() {
     readDays,
     markReadDone,
     undoReadDone,
+    saveRetell,
+    deleteRetell,
+    toggleSkimmed,
     data: learningData,
     setters: learningSetters,
   } = useLearningData({ articleIdentity, articleTitle, articleKey, todayKey, flash })
@@ -1461,22 +1462,6 @@ export default function ReaderApp() {
     [saved],
   )
 
-  /** 记一条复述打卡。 */
-  const saveRetell = useCallback(    (text: string) => {
-      const t = text.trim()
-      if (!t || !articleIdentity) return
-      const words = t.split(/\s+/).filter(Boolean).length
-      setRetells((prev) =>
-        [{ at: new Date().toISOString(), articleId: articleIdentity, text: t, words }, ...prev].slice(0, 200),
-      )
-      recordActivity('write', 1)
-      flash('已记录复述 ✅')
-    },
-    [articleIdentity, setRetells, recordActivity, flash],
- )
-
-  const deleteRetell = useCallback((at: string) => setRetells((prev) => prev.filter((r) => r.at !== at)), [setRetells])
-
   /** 文章测验可出题数（设置面板提示用）。 */
   const articleQuizCount = useMemo(
     () => buildArticleQuestions(doc?.sentences ?? [], { kinds: quizArticleKinds as ArticleQuizKind[] }).length,
@@ -1602,12 +1587,6 @@ export default function ReaderApp() {
     )
     flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
   }, [library.items, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash])
-
-  const toggleSkimmed = useCallback(() => {
-    setSkimmedArticles((prev) =>
-      prev.includes(articleIdentity) ? prev.filter((x) => x !== articleIdentity) : [...prev, articleIdentity],
-    )
-  }, [articleIdentity, setSkimmedArticles])
 
   /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
   const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
