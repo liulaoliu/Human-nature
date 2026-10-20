@@ -72,6 +72,7 @@ import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
 import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
+import { usePasteApply } from './hooks/usePasteApply'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
@@ -1240,24 +1241,6 @@ export default function ReaderApp() {
     setWritingHistory,
   })
 
-  const applyPaste = useCallback(() => {
-    const raw = pasted.trim()
-    if (!raw) return
-    // 语言点 JSON 若没先点过「语言点」按钮（lastTask≠language），会被当成翻译空转。
-    // 这里自动识别：含 structure/grammar/idioms/phrases/usage 且没有 translation → 按语言点应用。
-    const looksLikeLang = /"(structure|grammar|idioms|phrases|usage)"\s*:/.test(raw) && !/"translation"\s*:/.test(raw)
-    const task = lastTask === 'language' || looksLikeLang ? 'language' : lastTask
-    const res = applyTaskResult(task, raw, askedWordsRef.current, askedIdsRef.current)
-    setPasteReport(res.report)
-    setPasteMissing(res.missing)
-    if (res.ok) {
-      setPasted('')
-      flash(res.report[0] ?? '已应用')
-    } else {
-      flash(res.report[0] ?? '没解析出内容')
-    }
-  }, [pasted, lastTask, applyTaskResult, flash])
-
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
   const exporter = useExport({
     articles,
@@ -1522,20 +1505,19 @@ export default function ReaderApp() {
     runLocal: runAiLocal,
   } = aiPack
 
-  /**
-   * 统一的「应用结果」：先按网页版工作包（@@@ANSWER / JSON results）解析，
-   * 认得出就应用并清空输入栏；否则退回单任务（lastTask）解析。
-   */
-  const applyAnyPaste = useCallback(() => {
-    const text = pasted.trim()
-    if (!text) return
-    const isPack = text.includes('@@@ANSWER') || /"results"\s*:/.test(text)
-    if (isPack) {
-      if (applyAiWeb(text)) setPasted('')
-      return
-    }
-    applyPaste()
-  }, [pasted, applyAiWeb, applyPaste])
+  /** 应用结果 / 工作包解析（逻辑在 hooks/usePasteApply）。 */
+  const { applyAnyPaste } = usePasteApply({
+    pasted,
+    clearPasted: () => setPasted(''),
+    lastTask,
+    applyTaskResult,
+    askedWordsRef,
+    askedIdsRef,
+    onReport: setPasteReport,
+    onMissing: setPasteMissing,
+    applyAiWeb,
+    flash,
+  })
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({

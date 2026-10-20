@@ -135,7 +135,8 @@
 `usePregenerate`（缓存命中/只补缺/取消/换音色失效）、`useArticleBootstrap`（迁移失败不挡列表/目录失败标记）、
 `useReaderDerived`（派生统计簇：会话/背词/到期/候选/待选过滤，固定 `now` 钉住输出）、
 `useVocabEdits`（批量直入 / 手动加词 / 词组入库 / 移出：坏输入、去重、连续写不覆盖）、
-`useAiTasks`（语言点 / 漏词重问的提示词复制：无文章、剪贴板失败、问过范围）。
+`useAiTasks`（语言点 / 漏词重问的提示词复制：无文章、剪贴板失败、问过范围）、
+`usePasteApply`（单任务应用 / 工作包统一入口：空输入、成功清空、失败保留、语言点自动识别）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
