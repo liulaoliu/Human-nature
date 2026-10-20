@@ -13,6 +13,7 @@ import type { AnswerEventInput } from '../../core/answerEvents'
 import { listenMistake } from '../../core/mistakes'
 import type { MistakeEntry } from '../../core/mistakes'
 import { useLocalStorageState, persistentNumber } from './useLocalStorageState'
+import { readRaw } from '../storage'
 
 export interface UseListeningParams {
   doc: { sentences: { id: string; text: string }[] } | null
@@ -162,7 +163,8 @@ export function useListening({
 
   // 换文章时载入该篇已生成的听力理解题，并重置作答
   useEffect(() => {
-    const raw = localStorage.getItem('reader:listening:' + quizKey)
+    // 隐私模式 / 禁用存储时 getItem 本身就可能抛；readRaw 统一兜底成 null。
+    const raw = readRaw('reader:listening:' + quizKey)
     // 旧数据/手改过的 localStorage 不可信：走 core 的严格解析，坏题直接丢弃
     const parsed = raw ? parseListeningQuiz(raw) : null
     setQuiz(parsed && parsed.questions.length ? parsed : null)

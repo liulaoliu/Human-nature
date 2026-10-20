@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import type { ListeningQuiz } from '../../core/listening'
 import { listenMistake } from '../../core/mistakes'
-import { installFakeStorage } from '../testStorage'
+import { installFakeStorage, makeFakeStorage } from '../testStorage'
 import { useListening, type UseListeningParams } from './useListening'
 import { articleKey } from '../../core/docSignature'
 
@@ -50,6 +50,19 @@ afterEach(() => {
 describe('useListening：载入与开题', () => {
   it('localStorage 里的坏数据走 core 守卫 → 当作没有题', () => {
     localStorage.setItem(KEY, '{not json')
+    const { result } = renderHook(() => useListening(params()))
+    expect(result.current.quiz).toBeNull()
+  })
+
+  it('localStorage 读取本身抛异常（隐私模式）：当作没有题，页面不崩', () => {
+    restore()
+    restore = installFakeStorage(
+      makeFakeStorage({
+        getItem: () => {
+          throw new Error('storage blocked')
+        },
+      }),
+    )
     const { result } = renderHook(() => useListening(params()))
     expect(result.current.quiz).toBeNull()
   })
