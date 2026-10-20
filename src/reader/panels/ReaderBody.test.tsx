@@ -152,7 +152,7 @@ describe('ReaderBody：译文与语言点', () => {
 
     rerender(
       <ReaderBody
-        {...props({ translateView: 'only', sentences: [{ ...s1, translation: undefined }, s2] })}
+        {...props({ translateView: 'only', sentences: [{ ...s1, translation: null }, s2] })}
       />,
     )
     expect(container.querySelector('article')?.className).toContain('tr-only')
