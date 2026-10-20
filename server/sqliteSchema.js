@@ -368,6 +368,10 @@ CREATE TABLE IF NOT EXISTS answer_events (
 );
 CREATE INDEX IF NOT EXISTS idx_answer_events_at ON answer_events(at);
 CREATE INDEX IF NOT EXISTS idx_answer_events_article_kind ON answer_events(article_id, kind);
+-- append-only：同一题重复同步时按内容去重（question_id 可能为 NULL，统一成空串）
+CREATE UNIQUE INDEX IF NOT EXISTS idx_answer_events_key ON answer_events(
+  at, article_id, source, kind, cat, correct, COALESCE(question_id, '')
+);
 
 CREATE TABLE IF NOT EXISTS learning_derived_baseline (
   id INTEGER PRIMARY KEY CHECK (id = 1),

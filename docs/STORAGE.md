@@ -186,6 +186,7 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   **不进这些表**。
 - `reader:activity` / `reader:kindStats` 仍照常写聚合值（兼容现有 UI）；同时每题追加一条
   `answer_events`，字段含 `at / day / articleId / source / kind / cat / correct / questionId`。
+  `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存/旧快照恢复也不会删除已有事件。
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
   历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
   （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」重建

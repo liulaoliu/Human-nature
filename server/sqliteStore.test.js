@@ -435,6 +435,17 @@ describe('sqliteStore：学习记录', () => {
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_records').get().n).toBe(1)
   })
 
+  it('答题事件增量同步幂等：重复 section 不翻倍，也不会被空数组删除', () => {
+    const store = openStore(tempDb())
+    store.saveLearningPartial({ answerEvents: learning.answerEvents })
+    store.saveLearningPartial({ answerEvents: learning.answerEvents })
+    expect(store.loadLearning().answerEvents).toHaveLength(2)
+
+    // 整份保存时旧客户端没带 events（undefined / []）也不能清掉审计日志
+    store.saveLearning({ ...learning, answerEvents: [] })
+    expect(store.loadLearning().answerEvents).toHaveLength(2)
+  })
+
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', () => {
     const store = openStore(tempDb())
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')

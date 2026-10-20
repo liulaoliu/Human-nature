@@ -92,6 +92,8 @@ function assertLearning(data) {
 function clearLearningSections(db, sections) {
   const tables = new Set()
   for (const section of sections) {
+    // 答题事件是 append-only 审计：同步只追加/去重，不因整份保存或旧快照恢复而删除。
+    if (section === 'answerEvents') continue
     for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
   }
   for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()
@@ -238,7 +240,7 @@ function writeKindStats(db, data) {  const insert = db.prepare(
 
 function writeAnswerEvents(db, data) {
   const insert = db.prepare(`
-    INSERT INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
+    INSERT OR IGNORE INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `)
   for (const ev of list(data.answerEvents)) {
