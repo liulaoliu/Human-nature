@@ -319,7 +319,9 @@ export function migrateLibrary(raw: unknown, now: Date = new Date()): VocabLibra
   })
   const articleEntries = migrateArticleEntries(o.articleEntries, items, at)
   const library: VocabLibrary = { schemaVersion: SCHEMA_VERSION, items, articleEntries }
-  return normalizeGrammarMarks(repairLanguageKinds(dedupeLibrary(library)))
+  // 先修类型/旧键，再按 lemma 去重：否则旧 usage 笔记的坏键会和同名真单词合并，
+  // 修完键之后才去重才能把「笔记」和「单词」分开。
+  return normalizeGrammarMarks(dedupeLibrary(repairLanguageKinds(library)))
 }
 
 /** 老版本 → 当前版本要做的破坏性兼容都写在这里（现在只有 v1，占位给未来）。 */

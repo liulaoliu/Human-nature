@@ -151,6 +151,44 @@ describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () =>
     expect(repairLanguageKinds(out)).toBe(out) // 幂等
   })
 
+  it('repairLanguageKinds：旧 usage 笔记占着英文词键 → 改用整条文本键，同名单词能加回来', () => {
+    const note = 'mantra 本义为“曼怛罗、祷文”，引申为反复强调的口头禅。'
+    const legacy = {
+      ...createLibrary(),
+      items: [
+        vocabItem({
+          id: 'vocab:mantra',
+          word: note,
+          lemma: 'mantra',
+          kind: 'usage',
+          status: 'queried',
+        }),
+      ],
+      articleEntries: [
+        {
+          articleId: 'A',
+          lemma: 'mantra',
+          origin: 'manual' as const,
+          addedAt: NOW.toISOString(),
+          sentenceId: 's010',
+          sentenceText: 'Mrs May’s mantra.',
+        },
+      ],
+    }
+    const out = repairLanguageKinds(legacy)
+    const fixed = out.items[0]
+    expect(fixed.lemma).toBe(textKey(note))
+    expect(fixed.id).not.toBe('vocab:mantra')
+    expect(fixed.kind).toBe('usage')
+    expect(out.articleEntries?.[0].lemma).toBe(textKey(note)) // 按篇条目跟着改名
+
+    const added = markWord(out, { word: 'mantra', articleId: 'A', fileName: 'A' }, NOW)
+    expect(added.created).toBe(true)
+    expect(kindOf(added.item)).toBe('word')
+    expect(added.library.items.map((it) => it.word)).toContain('mantra')
+    expect(repairLanguageKinds(out)).toBe(out) // 幂等
+  })
+
   it('类型过滤：filterByKind；词组可背、用法笔记不背', () => {    const lib = upsertLanguagePoints(
       createLibrary(),
       [

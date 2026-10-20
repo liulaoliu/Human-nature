@@ -102,6 +102,35 @@ describe('migrateLibrary：按篇收录表', () => {
     expect(out.articleEntries?.some((e) => e.lemma === 'done')).toBe(false)
   })
 
+  it('旧 usage 笔记的坏键先修好再按 lemma 去重：不会吞掉同名单词', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          { word: 'mantra', lemma: 'mantra', status: 'unqueried' },
+          {
+            id: 'vocab:mantra',
+            word: 'mantra 本义为“曼怛罗、祷文”，引申为反复强调的口头禅。',
+            lemma: 'mantra',
+            kind: 'usage',
+            status: 'queried',
+          },
+        ],
+        articleEntries: [
+          { articleId: 'A', lemma: 'mantra', origin: 'manual', addedAt: TEST_NOW.toISOString() },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.items.filter((it) => it.lemma === 'mantra')).toHaveLength(1)
+    expect(out.items.find((it) => it.lemma === 'mantra')?.kind).toBeUndefined()
+    // 同名单词存在时，按篇条目继续指向单词，不被改名到用法笔记上
+    expect(out.articleEntries?.[0].lemma).toBe('mantra')
+    const note = out.items.find((it) => it.kind === 'usage')!
+    expect(note.id).not.toBe('vocab:mantra')
+    expect(note.lemma).toContain('本义为')
+    expect(libraryErrors(out)).toEqual([])
+  })
+
   it('老数据的语言点也推导按篇条目（侧栏语言点页签靠它）', () => {
     const out = migrateLibrary(
       {

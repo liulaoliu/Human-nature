@@ -276,18 +276,60 @@ export function upsertLanguagePoints(
 export function repairLanguageKinds(library: VocabLibrary): VocabLibrary {
   const hasCJK = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/
   let changed = false
+  /** 旧用法笔记的坏键（`mantra`）→ 修好的整条笔记键；按篇条目也要跟着改名。 */
+  const renames = new Map<string, { key: string; sentenceId: string | null }[]>()
   const items = library.items.map((it) => {
     const k = kindOf(it)
     if (k === 'word' || it.langPointId) return it
     const english = normalizeWord(it.word)
-    const bogus = k === 'usage' ? !hasCJK.test(it.word) : !english.includes(' ')
-    if (!bogus) return it
-    changed = true
-    const next = { ...it }
-    delete next.kind
-    return next
+
+    if (k === 'usage') {
+      // 旧版把「用法笔记」的键取成笔记里的英文单词（如 `mantra`），
+      // 导致同名单词被这条 usage 占住、手动加词永远被合并成「用法」。
+      // 真笔记（含中文）改用整条文本做键；纯英文的伪 usage 才退回单词。
+      if (!hasCJK.test(it.word)) {
+        changed = true
+        const next = { ...it }
+        delete next.kind
+        return next
+      }
+      const key = textKey(it.word)
+      if (key && it.lemma !== key) {
+        changed = true
+        const list = renames.get(it.lemma) ?? []
+        list.push({ key, sentenceId: it.source?.sentenceId ?? null })
+        renames.set(it.lemma, list)
+        return { ...it, id: `vocab:${key}`, lemma: key }
+      }
+      return it
+    }
+
+    if (!english.includes(' ')) {
+      changed = true
+      const next = { ...it }
+      delete next.kind
+      return next
+    }
+    return it
   })
-  return changed ? { ...library, items } : library
+  if (!changed) return library
+
+  let articleEntries = library.articleEntries
+  if (articleEntries?.length && renames.size) {
+    // 同名单词已经存在时，按篇条目更可能指的是那个单词（旧数据无法区分），
+    // 不要把它改挂到用法笔记上；只给「没有同名单词」的笔记改名。
+    const wordKeys = new Set(
+      library.items.filter((it) => kindOf(it) === 'word' || (kindOf(it) !== 'usage' && !normalizeWord(it.word).includes(' '))).map((it) => it.lemma),
+    )
+    articleEntries = articleEntries.map((e) => {
+      if (wordKeys.has(e.lemma)) return e
+      const candidates = renames.get(e.lemma)
+      if (!candidates?.length) return e
+      const hit = candidates.find((c) => c.sentenceId && c.sentenceId === e.sentenceId) ?? candidates[0]
+      return { ...e, lemma: hit.key }
+    })
+  }
+  return { ...library, items, ...(articleEntries ? { articleEntries } : {}) }
 }
 
 /** 视图用：把语言点按「词组 / 习语 / 用法」分好组（空组不返回）。 */

@@ -107,6 +107,10 @@
    `results` 里一个缺 `raw` 的元素会让整批作废。规矩：跨边界先过 `normalizeActivity` /
    `normalizeAiResults` 这类守卫，返回「好数据 + 丢弃数」；`localStorage.getItem` 本身也要走
    `reader/storage.ts` 的 `readRaw`（隐私模式下 getItem 会抛）。
+20. **语言点旧键会「占住」同名单词**。早期 usage 笔记拿笔记里的英文词当 lemma（如 `mantra`），
+   于是同名单词被当成「用法」、手动加词永远合并进去。规矩：`repairLanguageKinds` 先把旧笔记的
+   lemma/id 改成整条文本键（并按句重映射 `articleEntries`），**再去重**；顺序反了会在去重时把
+   「笔记 + 单词」合并掉。迁移测试要同时断言「笔记改名」和「同名单词能新建」。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
