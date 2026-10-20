@@ -219,6 +219,10 @@ a { color: var(--accent); }
 .heat-cell.lv4 { background: var(--green); }
 .heat-legend { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
 .heat-legend .heat-cell { display: inline-block; width: 11px; height: 11px; aspect-ratio: auto; }
+/* 「重建并核对」：结论一行、颜色区分一致 / 有差异 */
+.stat-rebuild { width: 100%; margin-top: 6px; }
+.stat-note { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--dim); }
+.stat-note.bad { color: #d9a12b; }
 
 /* 仪表盘 */
 .board { display: flex; flex-direction: column; gap: 12px; }

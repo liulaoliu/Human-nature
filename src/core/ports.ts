@@ -219,6 +219,11 @@ export interface LearningRepoPort {
   savePartial(data: Partial<LearningData>): Promise<void>
   /** 首次迁移：只往空库写，避免两个标签页/两台机器互相覆盖。 */
   migrate(data: LearningData): Promise<{ migrated: boolean; value: LearningData } | null>
+  /**
+   * 用答题事件重建派生聚合（活动 / 题型统计），返回重建后的整份记录。
+   * 服务端不支持时可以不实现（调用方按「做不到」处理，不报错）。
+   */
+  rebuildDerived?(): Promise<LearningData | null>
 }
 
 export interface VocabRepoPort {

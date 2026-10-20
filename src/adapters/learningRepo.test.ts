@@ -96,3 +96,26 @@ describe('SqliteLearningRepo：正常读写', () => {
     expect(got?.migrated).toBe(false)
   })
 })
+
+describe('SqliteLearningRepo：重建派生聚合', () => {
+  it('rebuildDerived：POST /learning/rebuild-derived 并归一化返回', async () => {
+    health.mockResolvedValue(true)
+    request.mockResolvedValue({ ok: true, value: data })
+    const repo = new SqliteLearningRepo()
+    const got = await repo.rebuildDerived()
+    expect(request).toHaveBeenCalledWith('/learning/rebuild-derived', { method: 'POST' }, undefined, 5000)
+    expect(got?.practice).toHaveLength(1)
+
+    // 服务端返回脏数据：归一化兜住，不把坏形状带给上层
+    request.mockResolvedValue({ ok: true, value: { activity: 'nope' } })
+    const cleaned = await repo.rebuildDerived()
+    expect(cleaned?.activity).toEqual([])
+  })
+
+  it('rebuildDerived：服务不可用返回 null（不抛）', async () => {
+    health.mockResolvedValue(false)
+    const repo = new SqliteLearningRepo()
+    await expect(repo.rebuildDerived()).resolves.toBeNull()
+    expect(request).not.toHaveBeenCalled()
+  })
+})

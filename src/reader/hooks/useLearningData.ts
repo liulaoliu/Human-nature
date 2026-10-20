@@ -9,6 +9,7 @@ import type { PracticeRecord } from '../../core/practice'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import { useLocalStorageState } from './useLocalStorageState'
 import { useReadDone } from './useReadDone'
+import { useLearningRebuild } from './useLearningRebuild'
 
 /**
  * 学习记录状态的**唯一收口**（#2 第①步）：
@@ -232,6 +233,9 @@ export function useLearningData(params: UseLearningDataParams) {
     ],
   )
 
+  /** 重建派生 + 对账：属于学习记录域（读的是这份记录），所以挂在这个收口里，别在视图再开一个。 */
+  const rebuild = useLearningRebuild({ flash: params.flash })
+
   return {
     // 扁平字段：界面沿用旧名字，减少一次性改动面
     studyDays,
@@ -272,5 +276,7 @@ export function useLearningData(params: UseLearningDataParams) {
     // 导出 / 合并导入用
     data,
     setters,
+    // 统计页「重建并核对」：服务端用答题事件重算派生，再与本地对账（只读，不写本地）
+    rebuild,
   }
 }

@@ -8,7 +8,9 @@
 > - 本轮已完成：词库逻辑拆分（`core/vocab/*`）、TTS/侧栏/速读/背单词继续拆分、
 >   **答题事件表 v7**（append-only + 历史聚合基线 + 可重建统计）。
 > - 下一步优先级：
->   1. [ ] 统计/设置面板加「重建并核对」按钮，调用 `POST /api/store/learning/rebuild-derived`（可选）。
+>   1. [x] 统计/设置面板加「重建并核对」按钮，调用 `POST /api/store/learning/rebuild-derived`（可选）。
+>          （已做：`core/learningCheck.ts` 对账 + `hooks/useLearningRebuild` + 统计面板底部按钮；
+>          只比对不改本地——本地可能有还没同步的改动，替用户自动覆盖风险更大）
 >   2. [ ] 无障碍收尾：面板内纯文本按钮补 `aria-label`（审查 #9，低风险）。
 >   3. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS。
 >   4. [ ] 存量大文件（低优先，只准变小）：`src/state/session.ts` 1185、`src/ui/App.tsx` 1191。

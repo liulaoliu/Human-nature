@@ -82,7 +82,18 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
     <ReaderSidebarHost
       sideTab={sideTab}
       onSideTabChange={onSideTabChange}
-      learning={{ mistakes, activity, practice, onClearMistakes: () => setMistakes([]) }}
+      learning={{
+        mistakes,
+        activity,
+        practice,
+        onClearMistakes: () => setMistakes([]),
+        rebuild: {
+          run: () => void learning.rebuild.run(),
+          busy: learning.rebuild.busy,
+          note: learning.rebuild.note,
+          matched: learning.rebuild.matched,
+        },
+      }}
       overview={{
         readyRows,
         onRetryVocab: retryMistakeVocab,

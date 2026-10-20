@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { describe, expect, it } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { dayKeyLocal, type DayActivity } from '../../core/activity'
 import type { PracticeRecord } from '../../core/practice'
 import StatsPanel from './StatsPanel'
@@ -59,5 +59,50 @@ describe('StatsPanel', () => {
     render(<StatsPanel activity={[]} practice={[]} />)
     expect(screen.getByText(/🔥 0 天连续/)).toBeTruthy()
     expect(screen.getAllByText('—').length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('不传 onRebuild 时不显示「重建并核对」入口', () => {
+    render(<StatsPanel activity={activity} practice={practice} />)
+    expect(screen.queryByRole('button', { name: '重建并核对学习记录' })).toBeNull()
+    expect(screen.queryByText('学习记录核对')).toBeNull()
+  })
+
+  it('点「重建并核对」把动作交出去；重建中禁用按钮', () => {
+    const onRebuild = vi.fn()
+    const { rerender } = render(<StatsPanel activity={activity} practice={[]} onRebuild={onRebuild} />)
+    fireEvent.click(screen.getByRole('button', { name: '重建并核对学习记录' }))
+    expect(onRebuild).toHaveBeenCalledTimes(1)
+
+    rerender(<StatsPanel activity={activity} practice={[]} onRebuild={onRebuild} rebuildBusy />)
+    const busy = screen.getByRole('button', { name: '重建并核对学习记录' }) as HTMLButtonElement
+    expect(busy.disabled).toBe(true)
+    expect(busy.textContent).toBe('重建中…')
+    fireEvent.click(busy)
+    expect(onRebuild).toHaveBeenCalledTimes(1)
+  })
+
+  it('核对结果按 role=status 播报，一致 / 有差异用不同样式', () => {
+    const { rerender } = render(
+      <StatsPanel
+        activity={activity}
+        practice={[]}
+        onRebuild={() => {}}
+        rebuildNote="核对一致：活动 8 次 · 答题 0 道"
+        rebuildMatched
+      />,
+    )
+    const ok = screen.getByRole('status')
+    expect(ok.textContent).toBe('核对一致：活动 8 次 · 答题 0 道')
+    expect(ok.className).toBe('stat-note')
+
+    rerender(
+      <StatsPanel
+        activity={activity}
+        practice={[]}
+        onRebuild={() => {}}
+        rebuildNote="核对发现 1 项不一致：活动·词 本地 5 / 服务端 8"
+      />,
+    )
+    expect(screen.getByRole('status').className).toBe('stat-note bad')
   })
 })

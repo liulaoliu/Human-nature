@@ -30,12 +30,19 @@ export interface ReaderSidebarHostProps {
   sideTab: ReaderSideTab
   onSideTabChange: (tab: ReaderSideTab) => void
 
-  /** 学习记录（错题 / 活动 / 练习）+ 清空错题 */
+  /** 学习记录（错题 / 活动 / 练习）+ 清空错题 + 重建核对 */
   learning: {
     mistakes: SideOverviewProps['mistakes']
     activity: ComponentProps<typeof StatsPanel>['activity']
     practice: ComponentProps<typeof StatsPanel>['practice']
     onClearMistakes: () => void
+    /** 统计页底部「重建并核对」：服务端重算 + 与本地对账 */
+    rebuild: {
+      run: () => void
+      busy: boolean
+      note: string | null
+      matched: boolean
+    }
   }
   /** 总览页「体检表」与重练动作 */
   overview: Pick<SideOverviewProps, 'readyRows' | 'onRetryVocab' | 'onSiege' | 'onRetryListen' | 'onRetryDict'>
@@ -235,7 +242,14 @@ export default function ReaderSidebarHost({
         onStartArticle: mastery.onStartArticle,
         onStartVocab: startStudy,
       }}
-      stats={{ activity: learning.activity, practice: learning.practice }}
+      stats={{
+        activity: learning.activity,
+        practice: learning.practice,
+        onRebuild: learning.rebuild.run,
+        rebuildBusy: learning.rebuild.busy,
+        rebuildNote: learning.rebuild.note,
+        rebuildMatched: learning.rebuild.matched,
+      }}
       pick={{
         tasks: TASKS,
         onPrompt: (t) => void tasks.copyPrompt(t),

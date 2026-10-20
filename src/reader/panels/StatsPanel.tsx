@@ -22,13 +22,24 @@ import {
 /**
  * 统计面板（右侧「统计」Tab）：今日/周/月的听说读写词活动量、练习正确率、热力图、最近练习。
  * 纯展示：所有派生都在这里算，外部只给 `activity` 与 `practice` 两份原始数据。
+ *
+ * 底部的「重建并核对」只是把动作与结果接进来：重建在服务端做，文案由 core 给。
  */
 export default function StatsPanel({
   activity,
   practice,
+  onRebuild,
+  rebuildBusy = false,
+  rebuildNote = null,
+  rebuildMatched = false,
 }: {
   activity: DayActivity[]
   practice: PracticeRecord[]
+  /** 重建派生聚合 + 与本地对账；不传则不显示这块 */
+  onRebuild?: () => void
+  rebuildBusy?: boolean
+  rebuildNote?: string | null
+  rebuildMatched?: boolean
 }) {
   const today = new Date()
   const tk = dayKeyLocal(today)
@@ -133,6 +144,29 @@ export default function StatsPanel({
         ))
       ) : (
         <div className="muted">还没有练习记录</div>
+      )}
+
+      {onRebuild && (
+        <>
+          <div className="side-label">学习记录核对</div>
+          <div className="muted">
+            用服务端的答题事件重算活动与题型统计，再和本机这份比一遍；只比对，不改数据。
+          </div>
+          <button
+            type="button"
+            className="stat-rebuild"
+            aria-label="重建并核对学习记录"
+            disabled={rebuildBusy}
+            onClick={onRebuild}
+          >
+            {rebuildBusy ? '重建中…' : '重建并核对'}
+          </button>
+          {rebuildNote && (
+            <div className={'stat-note' + (rebuildMatched ? '' : ' bad')} role="status" aria-live="polite">
+              {rebuildNote}
+            </div>
+          )}
+        </>
       )}
     </>
   )

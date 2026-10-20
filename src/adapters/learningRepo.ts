@@ -60,6 +60,16 @@ export class SqliteLearningRepo implements LearningRepoPort {
     )
     return { migrated: res.migrated === true, value: normalizeLearning(res.value) }
   }
+
+  /**
+   * 用答题事件重建派生聚合（活动 / 题型统计），返回**重建后**的整份记录。
+   * 服务不可用返回 null（调用方按「做不到」处理）。
+   */
+  async rebuildDerived(): Promise<LearningData | null> {
+    if (!(await this.canUse())) return null
+    const res = await storeRequest<LearningResponse>('/learning/rebuild-derived', { method: 'POST' }, undefined, 5000)
+    return normalizeLearning(res.value)
+  }
 }
 
 export const learningRepo = new SqliteLearningRepo()

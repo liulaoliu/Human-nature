@@ -118,6 +118,7 @@
 | schema 迁移备份 | 用旧版本创建的 `data/xueba.db` 启动新版 | 启动日志有「迁移前备份」；`data/backups/xueba-v<旧版本>-*.db` 存在，保留最近 5 份；同次启动还会生成当天 `xueba-daily-*.db`（保留 7 天） |
 | 备份损坏自愈 | 停服务 → 把当天 `data/backups/xueba-daily-*.db` 覆盖成任意文本 → 重启 | 日志出现「当天备份校验失败，重新生成」；备份文件恢复为可 `quick_check` 的正常库 |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
+| 学习记录「重建并核对」 | 侧栏「统计」→ 底部「重建并核对」 | 服务在跑：提示「核对一致」或列出差异项（只读，不改本地）；服务没起：提示重建失败，页面数据不变 |
 
 ## 五、已经就绪的层 / 还差什么
 
@@ -148,7 +149,8 @@
 `useArticleUiActions`（Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 离线例句）、
 `useSelection`（点句 toggle / A-D 循环 / 待选去重计数 / mark 走唯一写入口 / 来源定位回填）、
 `useAiPack` 的跑批轮询（error 立即停 / 失联 30s 判错 / 取消打断 / 卸载清定时器；假计时器）、
-`useToast`（自动消失 / 连续 flash 不被旧 timer 清掉 / 卸载清定时器）。
+`useToast`（自动消失 / 连续 flash 不被旧 timer 清掉 / 卸载清定时器）、
+`useLearningRebuild`（重建一致 / 差异只报不改 / 服务不可用 / 仓储没实现 / 异常后可重试 / 连点只发一次）。
 TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / 多余忽略），服务端时间戳/预热请求在
 `adapters/ttsCache`（URL 编码 / 非 2xx / 空数组 / 坏 JSON 一律降级为不高亮），连字符词典在 `core/dictionary`。
 视图层 `ReaderScreen` 只留外壳，三个槽位在 `screen/*Zone`（纯映射，不单测；由 `ReaderApp.integration.test.tsx` 覆盖条件渲染）。

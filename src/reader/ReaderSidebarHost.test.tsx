@@ -81,7 +81,13 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
   return {
     sideTab: 'overview',
     onSideTabChange: fn(),
-    learning: { mistakes: [], activity: [], practice: [], onClearMistakes: fn() },
+    learning: {
+      mistakes: [],
+      activity: [],
+      practice: [],
+      onClearMistakes: fn(),
+      rebuild: { run: fn(), busy: false, note: null, matched: false },
+    },
     overview: {
       readyRows: [],
       onRetryVocab: fn(),
@@ -248,12 +254,23 @@ describe('ReaderSidebarHost：AI / 工具 / 导出整包映射', () => {
 
   it('统计 / 总览 / 掌握度按分组透传', () => {
     const { props, sidebar } = renderHost()
-    expect(sidebar.stats).toEqual({ activity: props.learning.activity, practice: props.learning.practice })
+    expect(sidebar.stats.activity).toBe(props.learning.activity)
+    expect(sidebar.stats.practice).toBe(props.learning.practice)
     expect(sidebar.overview.mistakes).toBe(props.learning.mistakes)
     expect(sidebar.overview.readyRows).toBe(props.overview.readyRows)
     expect(sidebar.overview.onRetryListen).toBe(props.overview.onRetryListen)
     expect(sidebar.mastery.mastery).toBe(props.mastery.mastery)
     expect(sidebar.mastery.onStartArticle).toBe(props.mastery.onStartArticle)
+  })
+
+  it('统计页「重建并核对」：动作 / 忙碌 / 结论原样接到面板', () => {
+    const props = makeProps()
+    props.learning.rebuild = { run: fn(), busy: true, note: '核对一致：活动 8 次 · 答题 0 道', matched: true }
+    render(<ReaderSidebarHost {...props} />)
+    expect(captured!.stats.onRebuild).toBe(props.learning.rebuild.run)
+    expect(captured!.stats.rebuildBusy).toBe(true)
+    expect(captured!.stats.rebuildNote).toBe('核对一致：活动 8 次 · 答题 0 道')
+    expect(captured!.stats.rebuildMatched).toBe(true)
   })
 })
 
