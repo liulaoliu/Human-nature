@@ -16,8 +16,8 @@ const base = {
 describe('useArticleVocabView（本篇生词口径）', () => {
   it('来源是本文的词算本篇', () => {
     const library = lib([
-      vocabItem({ id: 'v1', word: 'mitigate', lemma: 'mitigate', source: { fileName: 'art-A', sentenceId: 's1' } }),
-      vocabItem({ id: 'v2', word: 'other', lemma: 'other', source: { fileName: 'art-B', sentenceId: 's9' } }),
+      vocabItem({ id: 'v1', word: 'mitigate', lemma: 'mitigate', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' } }),
+      vocabItem({ id: 'v2', word: 'other', lemma: 'other', source: { articleId: 'art-B', fileName: 'art-B', sentenceId: 's9', sentenceText: 'x' } }),
     ])
     const { result } = renderHook(() => useArticleVocabView({ ...base, library }))
     expect(result.current.articleWords.map((it) => it.lemma)).toEqual(['mitigate'])
@@ -25,7 +25,7 @@ describe('useArticleVocabView（本篇生词口径）', () => {
 
   it('正文里出现过的词也算（别的文章带过来、来源还留在那边）', () => {
     const library = lib([
-      vocabItem({ id: 'v2', word: 'quiet', lemma: 'quiet', source: { fileName: 'art-B', sentenceId: 's9' } }),
+      vocabItem({ id: 'v2', word: 'quiet', lemma: 'quiet', source: { articleId: 'art-B', fileName: 'art-B', sentenceId: 's9', sentenceText: 'x' } }),
     ])
     const { result } = renderHook(() =>
       useArticleVocabView({ ...base, library, docLemmas: new Set(['quiet']) }),
@@ -58,9 +58,9 @@ describe('useArticleVocabView（本篇生词口径）', () => {
 
   it('wordsInSentence 只返回本篇 + 该句来源的词', () => {
     const library = lib([
-      vocabItem({ id: 'v1', word: 'run', lemma: 'run', source: { fileName: 'art-A', sentenceId: 's1' } }),
-      vocabItem({ id: 'v2', word: 'fast', lemma: 'fast', source: { fileName: 'art-A', sentenceId: 's2' } }),
-      vocabItem({ id: 'v3', word: 'other', lemma: 'other', source: { fileName: 'art-B', sentenceId: 's1' } }),
+      vocabItem({ id: 'v1', word: 'run', lemma: 'run', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' } }),
+      vocabItem({ id: 'v2', word: 'fast', lemma: 'fast', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's2', sentenceText: 'x' } }),
+      vocabItem({ id: 'v3', word: 'other', lemma: 'other', source: { articleId: 'art-B', fileName: 'art-B', sentenceId: 's1', sentenceText: 'x' } }),
     ])
     const { result } = renderHook(() => useArticleVocabView({ ...base, library }))
     expect(result.current.wordsInSentence('s1')).toEqual(['run'])
@@ -69,8 +69,8 @@ describe('useArticleVocabView（本篇生词口径）', () => {
 
   it('打印口径：最近打印时间 + 是否全部打印过', () => {
     const library = lib([
-      vocabItem({ id: 'v1', lemma: 'alpha', source: { fileName: 'art-A', sentenceId: 's1' }, lastPrintedAt: '2026-10-01T00:00:00.000Z' }),
-      vocabItem({ id: 'v2', lemma: 'beta', source: { fileName: 'art-A', sentenceId: 's2' }, lastPrintedAt: '2026-10-05T00:00:00.000Z' }),
+      vocabItem({ id: 'v1', lemma: 'alpha', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' }, lastPrintedAt: '2026-10-01T00:00:00.000Z' }),
+      vocabItem({ id: 'v2', lemma: 'beta', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's2', sentenceText: 'x' }, lastPrintedAt: '2026-10-05T00:00:00.000Z' }),
     ])
     const { result } = renderHook(() => useArticleVocabView({ ...base, library }))
     expect(result.current.articlePrintedAt).toBe('2026-10-05T00:00:00.000Z')
@@ -79,8 +79,8 @@ describe('useArticleVocabView（本篇生词口径）', () => {
 
   it('有一个没打印过就不算「全部打印过」', () => {
     const library = lib([
-      vocabItem({ id: 'v1', lemma: 'alpha', source: { fileName: 'art-A', sentenceId: 's1' }, lastPrintedAt: '2026-10-01T00:00:00.000Z' }),
-      vocabItem({ id: 'v2', lemma: 'beta', source: { fileName: 'art-A', sentenceId: 's2' } }),
+      vocabItem({ id: 'v1', lemma: 'alpha', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' }, lastPrintedAt: '2026-10-01T00:00:00.000Z' }),
+      vocabItem({ id: 'v2', lemma: 'beta', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's2', sentenceText: 'x' } }),
     ])
     const { result } = renderHook(() => useArticleVocabView({ ...base, library }))
     expect(result.current.articleAllPrinted).toBe(false)
@@ -94,7 +94,7 @@ describe('useArticleVocabView（本篇生词口径）', () => {
 
   it('编号：正文里第一次出现的词标记在 articleFirst 里', () => {
     const sentences = [sentenceFixture('s1', 'The quiet morning came.')]
-    const library = lib([vocabItem({ id: 'v1', lemma: 'quiet', word: 'quiet', source: { fileName: 'art-A', sentenceId: 's1' } })])
+    const library = lib([vocabItem({ id: 'v1', lemma: 'quiet', word: 'quiet', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'x' } })])
     const { result } = renderHook(() =>
       useArticleVocabView({ ...base, library, sentences, docLemmas: new Set(['quiet']) }),
     )
