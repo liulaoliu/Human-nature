@@ -2,24 +2,27 @@
 
 > **2026-10-20 最新交接（换电脑先看这段）**
 >
-> - 分支 `main`，最后提交 `7e94ddb`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：182 个测试文件，**1654 passed / 5 skipped**。
+> - 分支 `main`，最后提交 `b5c8499`；工作树干净。
+> - schema **v7**；`npm run gates` 全绿：197 个测试文件，**1747 passed / 5 skipped**。
+>   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
-> - 本轮已完成：词库逻辑拆分（`core/vocab/*`）、TTS/侧栏/速读/背单词继续拆分、
->   **答题事件表 v7**（append-only + 历史聚合基线 + 可重建统计）、
->   **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）、
->   **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）、
->   **跟读模块瘦身**（`state/session` 1185 → 943、`ui/App` 1191 → 624；纯规则进
->   `core/recording|scriptAlign|anchorEdits|takeChunk`，账本进 `state/calibrationLedger`，
->   偏好进 `state/shadowingPrefs`，顺带销掉 `ui/App.tsx` 的 R3 豁免）。
+> - 本轮已完成：
+>   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
+>   - **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）
+>   - **跟读模块瘦身**：`state/session` 1185 → **732**、`ui/App` 1191 → **624**、
+>     `reader/ReaderApp` 1036 → **781**；`state/session.test.ts` 1057 → 拆成四个按主题的测试
+>   - **上帝文件 BASELINE 清空**（`tool/check_god_file.mjs` 里已经没有存量），新文件超 800 行一律拆
+>   - **架构门禁豁免只剩 1 条**：`core/stateBackup` 的 R6（备份文件名里的 UTC 日期，故意不动）；
+>     `ui/App` / `ui/ChunkSplitter` / `ui/FishLayer` 的 R3 债全部销账
+>   - 顺手修的：`state/localActivity` 遇到坏的 `reader:activity` 不再把这笔记录丢掉（当空库继续记）
 > - 下一步优先级：
->   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS、跟读页（录音/撕块/选字锚定）、
->      以及「重建并核对」。（**用户自己做**）
->   2. [ ] 存量大文件（低优先，只准变小）：`src/state/session.test.ts` 1058、
->      `src/reader/ReaderApp.tsx` 1037、`src/state/session.ts` 943、`src/state/script.test.ts` 803。
->      （`ui/App.tsx` 已降到 624，出基线）
->   3. [ ] 跟读模块剩下的两处 R3 债：`ui/ChunkSplitter` / `ui/FishLayer` 的 localStorage 读写，
->      可照 `state/shadowingPrefs` 的路子搬走。
+>   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS、跟读页（录音 / 撕块 / 选字锚定）、
+>      以及「统计 → 重建并核对」。（**用户自己做**）
+>   2. [ ] 观察项（不修，已钉测试）：跟读「合并 → 撕开 → 再合并」，最后一刀会被当成「撤销撕开」，
+>      块又按 VAD 边界裂开。要修得让 store 知道「这条边界是不是 VAD 本来就有的」，
+>      得动 `applyChunkEdits` 的口径，收益不值当。见 `core/chunkEditLog.ts` 注释。
+>   3. [ ] 可读性瘦身（都在 800 线下，不是门禁问题）：`hooks/useAiPack` 587、
+>      `hooks/useQuizSession` 535、`hooks/useApplyTaskResult` 508。
 >   4. [ ] 记录分页（P2）：数据量还没到，先不做。
 >
 > 下面「Review 重构待办（2026-10-19）」保留为历史记录，里面的事项均已完成；
