@@ -141,7 +141,8 @@
 `useMistakeActions`（三类错题重练 + 包围战：空错题提示、按类型过滤、40 词上限）、
 `useVocabMode`（选词模式：计时、切走暂停、关闭记会话、卸载清计时器；假计时器）、
 `useArticleDerived`（本篇归属 / 略读 / 掌握度 / 工作流 / 产出看板：只算当前文章）、
-`useReaderViewData`（就绪清单 / 学习日志 / 打印 lemma 索引 / 文章测验数）。
+`useReaderViewData`（就绪清单 / 学习日志 / 打印 lemma 索引 / 文章测验数）、
+`useArticleWorkspace`（文档动作组装 / 新建导入态 / 语言点编辑写回）。
 组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：

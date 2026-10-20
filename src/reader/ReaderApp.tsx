@@ -44,12 +44,12 @@ import { useQuizSession } from './hooks/useQuizSession'
 import { useStudySession } from './hooks/useStudySession'
 import { useLearningData } from './hooks/useLearningData'
 import { useHotkeys } from './useHotkeys'
-import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
 import { useVocabMode } from './hooks/useVocabMode'
 import { useArticleDerived } from './hooks/useArticleDerived'
+import { useArticleWorkspace } from './hooks/useArticleWorkspace'
 import { useReaderViewData } from './hooks/useReaderViewData'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
@@ -58,7 +58,6 @@ import { usePregenerate } from './hooks/usePregenerate'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
 import { articleNumbering } from '../core/articleNums'
 import { useAiTasks } from './hooks/useAiTasks'
-import { useReaderDoc } from './hooks/useReaderDoc'
 import { useApplyTaskResult } from './hooks/useApplyTaskResult'
 import { usePasteApply } from './hooks/usePasteApply'
 import { useMistakeActions } from './hooks/useMistakeActions'
@@ -80,7 +79,7 @@ import {
   useLocalStorageState,
   STORAGE_ERROR_EVENT,
 } from './hooks/useLocalStorageState'
-import type { Paragraph, Sentence, SentenceLanguage, } from '../types/document'
+import type { Paragraph, Sentence } from '../types/document'
 import './reader.css'
 interface Doc {
   paragraphs: Paragraph[]
@@ -89,7 +88,6 @@ interface Doc {
 
 export default function ReaderApp() {
   const [articleKey, setArticleKey] = useState<string | null>(null)
-  const [manual, setManual] = useState('')
   const [doc, setDoc] = useState<Doc | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   /** 鼠标精确选中的片段（划选 / 双击选词），可能为空 */
@@ -156,12 +154,8 @@ export default function ReaderApp() {
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [savedId, setSavedId] = useState<string | null>(null)
-  const [edition, setEdition] = useState('全部')
-  /** 有内容改动、需要（首次则建立记录）自动保存 */
-  const [pendingSave, setPendingSave] = useState(false)
-  const [sourceText, setSourceText] = useState('')
-  const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
+  /** 「删除保存」文章的两步确认 */
+  const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 是否按住 Ctrl / ⌘（决定「整句」还是「按词吸附」） */
   const [ctrlHeld, setCtrlHeld] = useState(false)
   /** 是否按住 Alt（选词模式下：Alt+拖动选词组，否则只选一个词） */
@@ -181,12 +175,6 @@ export default function ReaderApp() {
     parse: (raw) => raw === 'green',
     serialize: (v) => (v ? 'green' : 'dark'),
   })
-  const [composing, setComposing] = useState(false)
-  const [newTitle, setNewTitle] = useState('')
-  /** 新建/导入时可选的书名（epub 自动用文件名） */
-  const [newBook, setNewBook] = useState('')
-  /** 当前打开文章所属的书 */
-  const [articleBook, setArticleBook] = useState('')
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
   /** 「全部生词」独立视图（侧栏只显示本篇） */
@@ -197,8 +185,6 @@ export default function ReaderApp() {
     'off',
     persistentEnum(['off', 'below', 'only'] as const, 'off'),
   )
-  const [pdfRange, setPdfRange] = useState('')
-  const [importing, setImporting] = useState('')
   /** 选中句子后自动 TTS 朗读 */
   const [autoSpeak, setAutoSpeak] = useLocalStorageState('reader:autoSpeak', false, persistentBool)
   /** 朗读音色（Edge TTS 口音）——改口音就是改它。 */
@@ -224,8 +210,6 @@ export default function ReaderApp() {
   const [focusLemma, setFocusLemma] = useState<string | null>(null)
   /** 待确认删除的词条 id（两步防误触） */
   const [confirmDel, setConfirmDel] = useState<string | null>(null)
-  /** 「删除保存」文章的两步确认 */
-  const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
   const {
     speak,
@@ -680,10 +664,6 @@ export default function ReaderApp() {
 
   /** 逐句速读。 */
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
-  /** 手动加/改语言点。 */
-  const [langOpen, setLangOpen] = useState(false)
-  /** 语言点编辑的目标句（阅读页选中的句 / 速读当前句）。 */
-  const [langTarget, setLangTarget] = useState<Sentence | null>(null)
   /** 今日计划。
    */
   const [planOpen, setPlanOpen] = useState(false)
@@ -915,8 +895,39 @@ export default function ReaderApp() {
     setSelIndices([])
   }, [])
 
-  /** 文章文档管理（加载/保存/删除/改名/编辑/自动存/恢复）；逻辑在 hooks/useReaderDoc。 */
-  const readerDocApi = useReaderDoc({
+  /** 文章工作区（文档动作 + 新建/导入 + 语言点编辑）；状态在 hooks/useArticleWorkspace。 */
+  const {
+    docApi: readerDocApi,
+    renameArticle,
+    edition,
+    setEdition,
+    currentValue,
+    editing,
+    draft,
+    setDraft,
+    composing,
+    setComposing,
+    manual,
+    setManual,
+    newTitle,
+    setNewTitle,
+    newBook,
+    setNewBook,
+    pdfRange,
+    setPdfRange,
+    importing,
+    langOpen,
+    setLangOpen,
+    langTarget,
+    openLangFor,
+    saveLanguage,
+    copyCleanupPrompt,
+    createArticle,
+    onImportFiles,
+    onPickPdf,
+    onPickEpub,
+    setPendingSave,
+  } = useArticleWorkspace({
     articles,
     batchMapRef,
     setBatch,
@@ -925,49 +936,18 @@ export default function ReaderApp() {
     book,
     articleKey,
     setArticleKey,
-    doc,
-    setDoc,
     articleTitle,
     setArticleTitle,
+    savedId,
+    setSavedId,
+    confirmDelSave,
+    setConfirmDelSave,
+    doc,
+    setDoc,
     saved,
     setSaved,
     savedLoaded,
-    savedId,
-    setSavedId,
-    pendingSave,
-    setPendingSave,
-    sourceText,
-    setSourceText,
-    setEditing,
-    draft,
-    setDraft,
-    articleBook,
-    setArticleBook,
-    confirmDelSave,
-    setConfirmDelSave,
-    edition,
   })
-
-  const { loadSaved, renameArticle } = readerDocApi
-
-  /** 新建/导入文章（含 PDF/EPUB 与清洗提示词）。 */
-  const { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub } = useArticleImport({
-    repo: articles,
-    setSaved,
-    loadSaved,
-    newBook,
-    pdfRange,
-    manual,
-    newTitle,
-    setManual,
-    setNewTitle,
-    setNewBook,
-    setComposing,
-    setImporting,
-    flash,
-  })
-
-  const currentValue = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
 
   /** 选区所在的句子 —— 默认的操作对象。 */
   const sentence = useMemo(() => {
@@ -979,31 +959,6 @@ export default function ReaderApp() {
     if (exact) return doc.sentences.find((x) => x.text.includes(exact)) ?? null
     return null
   }, [doc, selectedId, exact])
-
-  /** 打开语言点编辑（针对指定句子）。 */
-  const openLangFor = useCallback((s: Sentence | null) => {
-    if (!s) return
-    setLangTarget(s)
-    setLangOpen(true)
-  }, [])
-
-  /** 手动保存语言点列表（写回目标句的 languages）。 */
-  const saveLanguage = useCallback(
-    (langs: SentenceLanguage[]) => {
-      const target = langTarget
-      if (!target) return
-      const sid = target.id
-      setDoc((d) =>
-        d
-          ? { ...d, sentences: d.sentences.map((s) => (s.id === sid ? { ...s, languages: langs, language: undefined } : s)) }
-          : d,
-      )
-      setPendingSave(true)
-      setLangOpen(false)
-      flash(langs.length ? `已保存语言点（${langs.length} 条）` : '已清空该句语言点')
-    },
-    [langTarget, setDoc, setPendingSave, flash],
-  )
 
   /** 实际用于提示词/复制的文本：默认整句；有精确选区时用选区。 */
   const target = useExact && exact ? exact : sentence?.text || exact
