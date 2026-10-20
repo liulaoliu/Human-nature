@@ -78,8 +78,9 @@ types ← core ← adapters ← reader
 
 用户的词库是**唯一资产**，任何重构都不许让它的丢法变多。四条铁律：
 
-1. **单写入口**：词库只由 `hooks/useVocabLibrary.persist` 写；自动补全只由
-   `core/libraryAutoFill` 这一个 effect 写。新需求加「自动补全」→ 往计划函数里加一格。
+1. **单写入口**：词库只由 `hooks/useVocabLibrary.persist` 写；增删动作统一走
+   `hooks/useVocabEdits`（只经 `persist`，且以 `libraryRef` 为基准避免连续写互相覆盖）；
+   自动补全只由 `core/libraryAutoFill` 这一个 effect 写。新需求加「自动补全」→ 往计划函数里加一格。
 2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示恢复。
 3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 8 版 + 历史最大的一版永久保留），
    提供 `listSnapshots / loadSnapshot`；侧栏有「恢复上一版词库」（误清/误导入一键退回）。
@@ -109,10 +110,10 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 偏大（2190 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 偏大（2115 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
   练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
-  派生统计簇在 `hooks/useReaderDerived`，
+  派生统计簇在 `hooks/useReaderDerived`，词库增删在 `hooks/useVocabEdits`，
   目标是 ≤1200 行。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；

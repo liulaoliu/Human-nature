@@ -8,7 +8,6 @@ import {
   hasOwnExamples,
   isDue,
   lemmaOf,
-  markWord,
   removeItem,
   reviewItem,
   sortItems,
@@ -22,7 +21,6 @@ import {
 import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
 import { buildMissingPrompt } from './missingPrompts'
-import { splitGlossText } from '../core/langPoints'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
@@ -47,7 +45,6 @@ import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
 import PlanPanel from './panels/PlanPanel'
 import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
-import { type BatchItem } from './panels/SidePick'
 import Composer from './panels/Composer'
 import ReaderToolbarHost from './ReaderToolbarHost'
 import ReaderShell from './ReaderShell'
@@ -66,6 +63,7 @@ import { useHotkeys } from './useHotkeys'
 import { useArticleImport } from './hooks/useArticleImport'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
+import { useVocabEdits } from './hooks/useVocabEdits'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
@@ -796,91 +794,18 @@ export default function ReaderApp() {
   quickApiRef.current = quickApi
   const { queue: quickQueue, setQueue: setQuickQueue } = quickApi
 
-  /** 把词条**直接**加进生词本（跳过「待选」）。用于「自动标词」直入模式。 */
-  const commitBatchItems = useCallback(
-    (items: BatchItem[]) => {
-      const valid = items.filter((it) => it.word.trim())
-      if (!valid.length) return
-      let lib = libraryRef.current
-      for (const it of valid) {
-        lib = markWord(lib, {
-          word: it.word,
-          articleId: articleTitle || articleKey || '手动粘贴',
-          fileName: articleIdentity,
-          sentenceId: it.sentenceId,
-          sentenceText: it.sentence,
-        }).library
-      }
-      persist(lib)
-    },
-    [persist, articleTitle, articleKey, articleIdentity],
-  )
-
-  /** 速读里手动加生词/词组（可一次多个；针对自动标词漏掉的）。 */
-  const addItemsToVocab = useCallback(
-    (items: { word: string; sentenceId: string | null; sentenceText: string }[]) => {
-      const list = items.map((it) => ({ ...it, word: it.word.trim() })).filter((it) => it.word)
-      if (!list.length) return
-      let lib = library
-      let created = 0
-      for (const it of list) {
-        const r = markWord(lib, {
-          word: it.word,
-          articleId: articleTitle || articleKey || '手动粘贴',
-          fileName: articleIdentity,
-          sentenceId: it.sentenceId,
-          sentenceText: it.sentenceText,
-        })
-        lib = r.library
-        if (r.created) created++
-      }
-      persist(lib)
-      const names = list.map((it) => it.word).join('、')
-      flash(created ? `已加入 ${created} 个生词：${names}` : `已在生词本：${names}`)
-    },
-    [library, articleIdentity, articleTitle, articleKey, persist, flash],
-  )
-
-  /** 把语言点里的词组 / 习语一键加入生词本：`英文 — 中文` 拆成 词条 + 释义。 */
-  const addPhrasesToVocab = useCallback(
-    (items: string[], sentence: Sentence | null) => {
-      if (!items.length) return
-      let lib = library
-      let created = 0
-      for (const raw of items) {
-        const { word, gloss } = splitGlossText(raw)
-        if (!word) continue
-        const r = markWord(lib, {
-          word,
-          articleId: articleTitle || articleKey || '手动粘贴',
-          fileName: articleIdentity,
-          sentenceId: sentence?.id ?? null,
-          sentenceText: sentence?.text ?? '',
-          meaning: gloss,
-        })
-        lib = r.library
-        if (r.created) created++
-      }
-      persist(lib)
-      flash(created ? `已加入 ${created} 个词组 / 习语${created < items.length ? '（其余已在生词本）' : ''}` : '这些词组 / 习语都已在生词本里（语言点会自动收藏）')
-    },
-    [library, articleTitle, articleKey, articleIdentity, persist, flash],
-  )
-
-  /** 速读里把误加的词从生词本移出（两步确认在面板里做）。 */
-  const removeWordFromVocab = useCallback(
-    (word: string) => {
-      const lem = lemmaOf(word)
-      const item = library.items.find((it) => it.lemma === lem)
-      if (!item) {
-        flash(`不在生词本：${word}`)
-        return
-      }
-      persist(removeItem(library, item.id))
-      flash(`已移出生词本：${item.word}`)
-    },
-    [library, persist, flash],
-  )
+  /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
+  const {
+    commitBatchItems,
+    addItems: addItemsToVocab,
+    addPhrases: addPhrasesToVocab,
+    removeWord: removeWordFromVocab,
+  } = useVocabEdits({
+    libraryRef,
+    persist,
+    article: { identity: articleIdentity, title: articleTitle, key: articleKey },
+    flash,
+  })
 
   /** 复制听力理解题出题提示词。 */
   const copyLanguagePrompt = useCallback(async () => {
