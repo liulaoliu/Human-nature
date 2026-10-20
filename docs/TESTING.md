@@ -163,8 +163,9 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
-- **hooks 39 / 39 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
-  `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`。
+- **hooks 41 / 41 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
+  `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
+  `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动。
 - **panels 29 / 29 有测试**：本轮补齐 `SpeedReadPanel` / `SidePick` / `StudyPanel` / `DictPanel` / `QuizPanel` /
   `IntensivePanel` / `GoalPanel` / `JournalPanel` / `ListeningPanel` / `WritingPanel` / `LanguageEditor` /
   `QuickPanel` / `QuizSetupPanel` / `StatsPanel` / `PlanPanel` / `Composer` / `SideOverview` / `SideMastery` /
