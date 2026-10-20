@@ -171,10 +171,11 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `QuickPanel` / `QuizSetupPanel` / `StatsPanel` / `PlanPanel` / `Composer` / `SideOverview` / `SideMastery` /
   `LangPhrases` / `VocabBlocks` / `ReaderBody` / `ReaderSidebar` / `ReaderToolbar`（薄容器 `ReaderSidebar`
   用 stub 子面板只测页签接线）。
-- **adapters 9 / 16 有同名测试，其余按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `learningRepo` /
+- **adapters 10 / 16 有同名测试，其余按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` /
   `stateBackup` / `hybridMode` / `vocabRepo` / `sqliteRepo` / `audioPick`；`articleRepo` / `storeApi` 由
-  `server/*.test.js` 间接覆盖；`browserAudio` 与三个脚本/跟读仓储依赖真实浏览器/IndexedDB，走 §4 人工用例
-  （R7 只要求 `core/`，adapters 不强制同名测试）。
+  `server/*.test.js` 间接覆盖；三个脚本/跟读仓储依赖真实浏览器/IndexedDB，走 §4 人工用例
+  （R7 只要求 `core/`，adapters 不强制同名测试）。`browserAudio` 的测试用假 `Audio` / 假 `AudioContext`
+  钉解码、区间播放、录音归一化缓存与 `release` 回收，真实播放/麦克风仍走 §4。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
