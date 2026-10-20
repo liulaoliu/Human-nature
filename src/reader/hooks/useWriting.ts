@@ -1,18 +1,27 @@
 import { useCallback, useEffect, useState } from 'react'
-import { buildImitationTaskPrompt, buildWritingFeedbackPrompt, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import { buildImitationTaskPrompt, buildWritingFeedbackPrompt, parseImitationTask, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
 import { getSentenceLanguages } from '../../core/language'
 import { useLocalStorageState } from './useLocalStorageState'
 
 /** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
 function loadWritingDraft(): { model: string; text: string; task: ImitationTask | null } {
+  const empty = { model: '', text: '', task: null as ImitationTask | null }
   try {
     const raw = localStorage.getItem('reader:writingDraft')
-    const v = raw ? (JSON.parse(raw) as { model?: string; text?: string; task?: ImitationTask | null }) : null
-    if (v && typeof v === 'object') return { model: v.model ?? '', text: v.text ?? '', task: v.task ?? null }
+    if (!raw) return empty
+    const v: unknown = JSON.parse(raw)
+    if (!v || typeof v !== 'object') return empty
+    const o = v as Record<string, unknown>
+    // task 用 core 的严格解析重验一遍（手改/旧版本残留的形状不可信）
+    const task = o.task ? parseImitationTask(JSON.stringify(o.task)) : null
+    return {
+      model: typeof o.model === 'string' ? o.model : '',
+      text: typeof o.text === 'string' ? o.text : '',
+      task,
+    }
   } catch {
-    // 忽略
+    return empty
   }
-  return { model: '', text: '', task: null }
 }
 
 export interface UseWritingParams {
