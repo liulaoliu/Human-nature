@@ -24,6 +24,8 @@ export interface ReaderArticleProps {
   selSid: string | null
   selIndices: number[]
   libraryLemmas: Set<string>
+  /** 生词 → 释义（正文悬浮提示用）。 */
+  wordMeaning?: (word: string) => string | null
   /** 本篇生词编号（lemma → 序号）与「序号首次出现的 句子:词位」集合。 */
   articleNums: Map<string, number>
   articleFirst: Set<string>
@@ -56,6 +58,7 @@ export default function ReaderArticle({
   selSid,
   selIndices,
   libraryLemmas,
+  wordMeaning,
   articleNums,
   articleFirst,
   showLanguage,
@@ -102,6 +105,7 @@ export default function ReaderArticle({
             selSid={selSid}
             selIndices={selIndices}
             libraryLemmas={libraryLemmas}
+            wordMeaning={wordMeaning}
             articleNums={articleNums}
             articleFirst={articleFirst}
             showLanguage={showLanguage}

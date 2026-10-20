@@ -138,6 +138,14 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
   const { todayReadDone, readDone, readGoal, setReadGoal, goalMemo, setGoalMemo, articleReadDay, markReadDone, undoReadDone, saveRetell, deleteRetell, toggleSkimmed } = props.learning
   const { doExportAnki, exportWordList, doPrint, doExportWrong } = props.exporter
 
+  /** 已在本词库的词 → 显示释义（速读和正文悬浮提示共用）。 */
+  const wordMeaning = (w: string) => {
+    const it = library.items.find(
+      (x) => x.lemma === lemmaOf(w) || x.word.toLowerCase() === w.toLowerCase(),
+    )
+    return it ? displayMeaning(it) || it.meaning || null : null
+  }
+
   return (
     <>
       {bookError && !book && (
@@ -179,12 +187,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           ttsState,
           onAddItems: addItemsToVocab,
           isKnown: (w) => knownLemmas.has(lemmaOf(w)),
-          wordMeaning: (w) => {
-            const it = library.items.find(
-              (x) => x.lemma === lemmaOf(w) || x.word.toLowerCase() === w.toLowerCase(),
-            )
-            return it ? displayMeaning(it) || it.meaning || null : null
-          },
+          wordMeaning,
           onFinishRead: markReadDone,
           onAddPhrases: addPhrasesToVocab,
           onHint: flash,
@@ -336,6 +339,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           selSid={selSid}
           selIndices={selIndices}
           libraryLemmas={libraryLemmas}
+          wordMeaning={wordMeaning}
           articleNums={articleNums}
           articleFirst={articleFirst}
           showLanguage={showLanguage}

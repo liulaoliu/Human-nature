@@ -17,6 +17,7 @@ function sentenceNodes(
   nums?: Map<string, number> | null,
   firstNums?: Set<string> | null,
   kara?: { activeIndex: number | null; onSeek: (i: number) => void } | null,
+  wordMeaning?: (word: string) => string | null,
 ): ReactNode[] {
   const spans = wordSpans(text)
   const out: ReactNode[] = []
@@ -28,6 +29,8 @@ function sentenceNodes(
     const isVocab = lemmas.has(key) || lemmas.has(lemmaOf(key))
     const num = nums ? (nums.get(lemmaOf(key)) ?? nums.get(key)) : undefined
     const showNum = num != null && !!firstNums?.has(`${sid}:${i}`)
+    // 生词悬浮显示释义（与速读面板同口径：含义：… + 原来的操作提示）
+    const meaning = isVocab ? wordMeaning?.(w.text) ?? null : null
     if (kara) {
       out.push(
         <span
@@ -37,7 +40,7 @@ function sentenceNodes(
             e.stopPropagation()
             kara.onSeek(i)
           }}
-          title="从这个词开始朗读"
+          title={meaning ? `含义：${meaning}\n从这个词开始朗读` : '从这个词开始朗读'}
         >
           {w.text}
           {showNum && <sup className="wnum">{num}</sup>}
@@ -51,7 +54,12 @@ function sentenceNodes(
       )
     } else if (isVocab) {
       out.push(
-        <span key={`w${i}`} className="vw" onClick={() => onWord(w.text)} title="在生词本里查看">
+        <span
+          key={`w${i}`}
+          className="vw"
+          onClick={() => onWord(w.text)}
+          title={meaning ? `含义：${meaning}\n在生词本里查看` : '在生词本里查看'}
+        >
           {w.text}
           {showNum && <sup className="wnum">{num}</sup>}
         </span>,
@@ -77,6 +85,8 @@ export interface ReaderBodyProps {
   selSid: string | null
   selIndices: number[]
   libraryLemmas: Set<string>
+  /** 生词 → 释义（悬浮提示用）；返回 null 表示没有可显示的释义。 */
+  wordMeaning?: (word: string) => string | null
   /** 本篇生词编号（lemma → 序号）与「序号首次出现的 句子:词位」集合。 */
   articleNums: Map<string, number>
   articleFirst: Set<string>
@@ -109,6 +119,7 @@ export default function ReaderBody({
   selSid,
   selIndices,
   libraryLemmas,
+  wordMeaning,
   articleNums,
   articleFirst,
   showLanguage,
@@ -180,6 +191,7 @@ export default function ReaderBody({
                     karaoke && karaoke.sid === sid
                       ? { activeIndex: karaoke.activeIndex, onSeek: (i) => onWordSeek(sid, i) }
                       : null,
+                    wordMeaning,
                   )}{' '}
                 </span>
                 {translateView !== 'off' && (s.translation || translateView === 'only') && (

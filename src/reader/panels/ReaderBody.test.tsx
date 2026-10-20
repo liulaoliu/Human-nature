@@ -99,6 +99,28 @@ describe('ReaderBody：生词与选词', () => {
     expect(onFocusEntry).toHaveBeenCalledWith('Run')
   })
 
+  it('有释义时悬浮提示含义（生词与朗读词都显示）', () => {
+    const wordMeaning = (w: string) => (w.toLowerCase() === 'run' ? '跑' : null)
+    const { rerender } = render(
+      <ReaderBody {...props({ libraryLemmas: new Set(['run']), wordMeaning })} />,
+    )
+    const vw = document.querySelector('.vw') as HTMLElement
+    expect(vw.title).toBe('含义：跑\n在生词本里查看')
+
+    rerender(
+      <ReaderBody
+        {...props({
+          libraryLemmas: new Set(['run']),
+          karaoke: { sid: 's1', activeIndex: 0 },
+          wordMeaning,
+        })}
+      />,
+    )
+    const words = document.querySelectorAll('.sent')[0].querySelectorAll('.kara')
+    expect((words[0] as HTMLElement).title).toBe('含义：跑\n从这个词开始朗读')
+    expect((words[1] as HTMLElement).title).toBe('从这个词开始朗读')
+  })
+
   it('精确选区高亮 .hl；点选不触发生词跳转', () => {
     render(
       <ReaderBody
