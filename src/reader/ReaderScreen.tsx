@@ -605,6 +605,7 @@ export default function ReaderScreen(props: ReaderScreenProps) {
           onToggleSkimmed: toggleSkimmed,
           onRunBatch: () => void runAiLocal(),
           batchRunning: aiLocalRunning,
+          onCancelBatch: aiPack.cancelLocal,
           batchRound: aiLocalRound,
           batchPhase: aiLocalPhase,
           batchDone: aiLocalDone,

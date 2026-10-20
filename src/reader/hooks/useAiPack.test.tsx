@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, waitFor } from '@testing-library/react'
+import { act, cleanup, render, waitFor } from '@testing-library/react'
 import type { ChangeEvent } from 'react'
 import { useAiPack, type UseAiPackParams } from './useAiPack'
 import { installFakeStorage } from '../testStorage'
@@ -115,5 +115,103 @@ describe('useAiPack：导出与导入', () => {
     expect(ok).toBe(false)
     expect(flash).toHaveBeenCalledWith('没解析出结果')
     expect(onReport).toHaveBeenCalledWith([expect.stringContaining('没解析出结果')])
+  })
+})
+
+describe('useAiPack：一键跑批的轮询有界 / 可取消', () => {
+  const json = (body: unknown, ok = true): Response => ({ ok, json: async () => body }) as unknown as Response
+
+  /** POST 启动成功；GET 轮询的行为由各用例决定。 */
+  function stubRun(poll: (url: string) => Promise<Response>) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url === '/api/ai/status') return json({ configured: true })
+        if (url.startsWith('/api/ai/run?id=')) return poll(url)
+        return json({ runId: 'r1' })
+      }),
+    )
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('服务端返回 error → 立即停止并报错（不无限空转）', async () => {
+    stubRun(async () => json({ state: 'error', error: '模型 429' }))
+    await mount(input({ batch: [{ word: 'alpha', sentence: 'A.' }] }))
+
+    await act(async () => {
+      const running = api!.runLocal()
+      await vi.advanceTimersByTimeAsync(1500)
+      await running
+    })
+
+    expect(flash).toHaveBeenCalledWith('跑批出错：模型 429')
+    expect(api!.localRunning).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('连续取不到进度（约 30 秒）→ 判失联并停下', async () => {
+    stubRun(async () => {
+      throw new Error('network down')
+    })
+    await mount(input({ batch: [{ word: 'alpha', sentence: 'A.' }] }))
+
+    await act(async () => {
+      const running = api!.runLocal()
+      // 20 次失联 × 1.5s；多给一点，确保最后一次进入 catch
+      await vi.advanceTimersByTimeAsync(20 * 1500 + 100)
+      await running
+    })
+
+    expect(api!.localError).toContain('与服务端失联')
+    expect(api!.localRunning).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('点「取消」→ 打断轮询，不再继续请求', async () => {
+    let polls = 0
+    stubRun(async () => {
+      polls += 1
+      return json({ state: 'running', done: 1 })
+    })
+    await mount(input({ batch: [{ word: 'alpha', sentence: 'A.' }] }))
+
+    let running: Promise<void> = Promise.resolve()
+    await act(async () => {
+      running = api!.runLocal()
+      await vi.advanceTimersByTimeAsync(1500) // 第一次轮询（state=running）
+    })
+    await act(async () => {
+      api!.cancelLocal()
+      await running
+    })
+
+    expect(polls).toBe(1)
+    expect(flash).toHaveBeenCalledWith('已取消跑批')
+    expect(api!.localRunning).toBe(false)
+    expect(vi.getTimerCount()).toBe(0)
+  })
+
+  it('卸载后不留轮询定时器', async () => {
+    stubRun(async () => json({ state: 'running', done: 0 }))
+    await mount(input({ batch: [{ word: 'alpha', sentence: 'A.' }] }))
+
+    await act(async () => {
+      void api!.runLocal()
+      await vi.advanceTimersByTimeAsync(1500)
+    })
+    // 卸载 Hook（触发轮询 abort 清理）
+    act(() => cleanup())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

@@ -16,6 +16,8 @@ export interface IntensivePanelProps {
   onRunBatch: () => void
   /** 一键跑批进行中：进度（第几轮 / 阶段 / done/total）与错误。 */
   batchRunning: boolean
+  /** 取消正在跑的轮询（服务端已发出的请求不撤回）。 */
+  onCancelBatch: () => void
   batchRound: number
   batchPhase: string
   batchDone: number
@@ -50,6 +52,7 @@ export default function IntensivePanel({
   onToggleSkimmed,
   onRunBatch,
   batchRunning,
+  onCancelBatch,
   batchRound,
   batchPhase,
   batchDone,
@@ -83,6 +86,9 @@ export default function IntensivePanel({
           <div className="intensive-run" title="正在跑，请等这一步结束；重复点击不会再启动一轮">
             {batchLabel}
             <span className="muted">（跑批中：按钮已锁，重复点击不会重跑）</span>
+            <button onClick={onCancelBatch} title="停止等待结果（服务端已发出的请求不会撤回）">
+              取消
+            </button>
           </div>
         )}
         {batchError && !busy && <div className="intensive-err">跑批出错：{batchError}</div>}
