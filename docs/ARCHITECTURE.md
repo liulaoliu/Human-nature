@@ -110,7 +110,7 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 已降到 1040 行；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：`ReaderApp` 已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 已降到 1036 行；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：`ReaderApp` 已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
   练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
   `screen/ReaderToolbarZone` / `ReaderSidebarZone` / `ReaderBodyZone` 只做「props → host」映射（不读存储），

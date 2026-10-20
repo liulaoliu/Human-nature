@@ -23,6 +23,7 @@ import { addActivity, dayKeyLocal, type ActivityCat } from '../core/activity'
 import { type DrillKind } from './panels/IntensivePanel'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
+import { useToast } from './hooks/useToast'
 import { DEFAULT_TTS_VOICE, buildTtsAccents } from '../core/ttsVoices'
 import { useLearningData } from './hooks/useLearningData'
 import { useHotkeys } from './useHotkeys'
@@ -101,12 +102,7 @@ export default function ReaderApp() {
     | 'feedback'
     | null
   >(null)
-  const [toast, setToast] = useState('')
-
-  const flash = useCallback((message: string) => {
-    setToast(message)
-    window.setTimeout(() => setToast(''), 1900)
-  }, [])
+  const { toast, flash } = useToast()
 
   // 本机存储写失败（配额满 / 隐私模式）：提示一次，别让用户以为已经保存
   useEffect(() => {
