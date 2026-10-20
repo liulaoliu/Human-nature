@@ -24,6 +24,8 @@ export interface UseSpeedReadSessionOptions {
   onClose: () => void
   /** 这篇过完（推到结尾）时回调一次（「读完」目标记一笔）。 */
   onFinishRead?: () => void
+  /** 朗读一句（R 键，与面板里的「读本句」共用）。 */
+  onSpeak?: (text: string) => void
   /** 语言点编辑器打开时不抢键盘。 */
   langEditorOpen: boolean
 }
@@ -37,6 +39,7 @@ export function useSpeedReadSession({
   docKey,
   onClose,
   onFinishRead,
+  onSpeak,
   langEditorOpen,
 }: UseSpeedReadSessionOptions) {
   const n = sentences.length
@@ -246,6 +249,11 @@ export function useSpeedReadSession({
         return
       }
       const k = e.key.toLowerCase()
+      if (k === 'r' && sentence && onSpeak) {
+        e.preventDefault()
+        onSpeak(sentence.text)
+        return
+      }
       if (k === 'w' || k === 'a') {
         e.preventDefault()
         go(-1)

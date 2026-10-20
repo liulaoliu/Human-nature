@@ -79,7 +79,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
 
               {phase === 'read' && (
                 <div className="speed-hint muted">
-                  先自己读一遍 → 按 <kbd>空格</kbd> 看释义与语言点
+                  先自己读一遍 → 按 <kbd>R</kbd> 朗读，<kbd>空格</kbd> 看释义与语言点
                 </div>
               )}
 
@@ -197,7 +197,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
             )}
 
             <div className="bar study-actions">
-              <button onClick={() => onSpeak(sentence.text)} title="朗读本句（已缓存则秒播）">
+              <button onClick={() => onSpeak(sentence.text)} title="朗读本句（R；已缓存则秒播）">
                 {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
               </button>
               {phase === 'read' && (

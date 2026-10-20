@@ -202,9 +202,13 @@ describe('SpeedReadPanel：加词与移出', () => {
 })
 
 describe('SpeedReadPanel：键盘与空数据', () => {
-  it('←/→/w/a/d/Esc 快捷键；输入框内不抢键', () => {
+  it('←/→/w/a/d/R/Esc 快捷键；输入框内不抢键', () => {
     const onClose = vi.fn()
-    render(<SpeedReadPanel {...props({ onClose })} />)
+    const onSpeak = vi.fn()
+    render(<SpeedReadPanel {...props({ onClose, onSpeak })} />)
+
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(onSpeak).toHaveBeenCalledWith('Run fast.')
 
     fireEvent.keyDown(window, { key: 'ArrowRight' })
     expect(screen.getByText('第 2 / 2 句')).toBeTruthy()
@@ -217,7 +221,9 @@ describe('SpeedReadPanel：键盘与空数据', () => {
 
     const input = screen.getByPlaceholderText('也可手打词 / 词组，回车加入')
     fireEvent.keyDown(input, { key: 'ArrowRight' })
+    fireEvent.keyDown(input, { key: 'r' })
     expect(screen.getByText('第 1 / 2 句')).toBeTruthy()
+    expect(onSpeak).toHaveBeenCalledTimes(1)
 
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(onClose).toHaveBeenCalled()

@@ -73,7 +73,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     chooseDrill,
     restart,
     close,
-  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, langEditorOpen })
+  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, onSpeak, langEditorOpen })
 
   /** 选词模式：开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点。 */
   const [pickMode, setPickMode] = useLocalStorageState('reader:speedPickMode', false, persistentBool)
