@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { articleKey } from '../../core/docSignature'
 import {
   buildListeningQuizPrompt,
   gradeListening,
@@ -54,6 +55,12 @@ export function useListening({
   const [submitted, setSubmitted] = useState(false)
   const [result, setResult] = useState<ListeningResult | null>(null)
   const [count, setCount] = useLocalStorageState('reader:listenCount', 8, persistentNumber)
+
+  /** 本机缓存键：标识 + 正文签名；空标题/同名文章不会共用题目。 */
+  const quizKey = useMemo(
+    () => articleKey(articleIdentity, doc?.sentences ?? []),
+    [articleIdentity, doc],
+  )
 
   /** 当前要作答的题（「重做错题」时只含错题）。 */
   const questions = useMemo(() => {
@@ -155,7 +162,7 @@ export function useListening({
 
   // 换文章时载入该篇已生成的听力理解题，并重置作答
   useEffect(() => {
-    const raw = localStorage.getItem('reader:listening:' + articleIdentity)
+    const raw = localStorage.getItem('reader:listening:' + quizKey)
     // 旧数据/手改过的 localStorage 不可信：走 core 的严格解析，坏题直接丢弃
     const parsed = raw ? parseListeningQuiz(raw) : null
     setQuiz(parsed && parsed.questions.length ? parsed : null)
@@ -163,7 +170,7 @@ export function useListening({
     setAnswers({})
     setSubmitted(false)
     setResult(null)
-  }, [articleIdentity])
+  }, [quizKey])
 
   return {
     quiz,

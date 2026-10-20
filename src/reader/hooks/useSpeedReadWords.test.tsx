@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { installFakeStorage } from '../testStorage'
 import { sentenceFixture } from '../../core/testFixtures'
+import { articleKey } from '../../core/docSignature'
 import { useSpeedReadWords, type UseSpeedReadWordsOptions } from './useSpeedReadWords'
 
 /**
@@ -108,6 +109,23 @@ describe('useSpeedReadWords：本页清单', () => {
 
     const again = renderHook(() => useSpeedReadWords(options())).result
     expect(again.current.collected.map((x) => x.word)).toEqual(['run'])
+  })
+
+  it('换篇时重读新文章清单，旧清单不会写到新键上', () => {
+    const a = articleKey('doc-1', [sentenceFixture('s1', 'A text.')])
+    const b = articleKey('doc-1', [sentenceFixture('s1', 'B text.')])
+    const { result, rerender } = renderHook((p: UseSpeedReadWordsOptions) => useSpeedReadWords(p), {
+      initialProps: options({ docKey: a }),
+    })
+    act(() => result.current.addCustom('run'))
+    expect(result.current.collected.map((x) => x.word)).toEqual(['run'])
+
+    rerender(options({ docKey: b }))
+    expect(result.current.collected).toEqual([])
+
+    // 换回 A：它自己的清单还在，没被 B 的清空覆盖
+    rerender(options({ docKey: a }))
+    expect(result.current.collected.map((x) => x.word)).toEqual(['run'])
   })
 
   it('两步确认删除：第一次只标记，第二次才移出生词本', () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { docSignature } from './docSignature'
+import { articleKey, docSignature } from './docSignature'
 import type { Sentence } from '../types/document'
 
 const S = (text: string): Sentence => ({
@@ -39,5 +39,22 @@ describe('docSignature', () => {
 
   it('长短文都落在 36 进制小写字母数字里（别出现负号）', () => {
     expect(docSignature([S('The quick brown fox jumps over the lazy dog.')])).toMatch(/^[0-9a-z]+$/)
+  })
+})
+
+describe('articleKey：按文章存的本机键', () => {
+  it('标识 + 正文签名；同标识不同正文不串篇', () => {
+    const a = articleKey('', [S('Run fast.')])
+    const b = articleKey('', [S('Walk slow.')])
+    expect(a).not.toBe(b)
+    expect(a.startsWith('@')).toBe(true)
+  })
+
+  it('同标识同正文稳定（重开能续上）', () => {
+    expect(articleKey('file:a.md', [S('Run fast.')])).toBe(articleKey('file:a.md', [S('Run fast.')]))
+  })
+
+  it('正文相同但标识不同也分开（两篇同名/复制文章各有自己的状态）', () => {
+    expect(articleKey('file:a.md', [S('Run fast.')])).not.toBe(articleKey('file:b.md', [S('Run fast.')]))
   })
 })

@@ -24,6 +24,7 @@ import {
   type DictItemData,
   type DictSessionSnapshot,
 } from '../../core/sessionSnapshots'
+import { articleKey } from '../../core/docSignature'
 
 /** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
@@ -31,15 +32,8 @@ type BatchItemLike = { word: string; sentence: string; sentenceId: string | null
 /** 听写预热窗口：当前题往后预合成几题；太大时「不限题数」会让整篇排队。 */
 const DICT_WARM_AHEAD = 6
 
-/** 文章指纹（用于记住「上次做到哪」）。 */
-function docKeyOf(doc: { sentences: Sentence[] } | null): string {
-  if (!doc || !doc.sentences.length) return 'none'
-  const s = doc.sentences.map((x) => x.id).join('|')
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return (h >>> 0).toString(36)
-}
-const cursorKey = (docKey: string, mode: 'full' | 'cloze') => `reader:dictCursor:${mode}:${docKey}`
+const cursorKey = (articleKeyOf: string, mode: 'full' | 'cloze') =>
+  `reader:dictCursor:${mode}:${articleKeyOf}`
 function readCursor(k: string): number {
   try {
     const v = localStorage.getItem(k)
@@ -279,7 +273,7 @@ export function useDictation(params: UseDictationParams) {
         return
       }
       // 每轮限题：从断点取一段，做完下次接着来（走到末尾自动回到开头）
-      const key = cursorKey(docKeyOf(doc), nextMode)
+      const key = cursorKey(articleKey(articleIdentity ?? '', doc?.sentences ?? []), nextMode)
       const { items: round, next: nextCursor, offset } = takeRound(items, readCursor(key), maxQ)
       writeCursor(key, nextCursor)
       setMode(nextMode)
@@ -297,6 +291,7 @@ export function useDictation(params: UseDictationParams) {
     },
     [
       doc,
+      articleIdentity,
       mode,
       words,
       blankCount,

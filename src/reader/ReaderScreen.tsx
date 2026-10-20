@@ -1,5 +1,5 @@
 import { useMemo, type ComponentProps } from 'react'
-import { docSignature } from '../core/docSignature'
+import { articleKey } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
 import type { Sentence, VocabItem, VocabLibrary } from '../types/document'
@@ -200,7 +200,7 @@ export default function ReaderScreen(props: ReaderScreenProps) {
    * 只按标识存会让另一篇同标识的文章继承这里的滚动位置。
    */
   const scrollKey = useMemo(
-    () => `${props.articleIdentity}@${docSignature(props.doc?.sentences ?? [])}`,
+    () => articleKey(props.articleIdentity, props.doc?.sentences ?? []),
     [props.articleIdentity, props.doc],
   )
 

@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 import type { MutableRefObject } from 'react'
 import type { AiJobsInput } from '../../core/aiPackage'
+import { articleKey as articleKeyOf } from '../../core/docSignature'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
@@ -155,6 +156,7 @@ export function useAiServices({
     articleTitle,
     articleKey,
     articleIdentity,
+    listeningKey: articleKeyOf(articleIdentity, doc?.sentences ?? []),
     writingModel,
     writingText,
     writingTask,

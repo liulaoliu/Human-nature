@@ -7,9 +7,7 @@
  *
  * 顺带的好处：正文改过签名就变，旧进度自然作废（改过正文再按老位置续读本来就没意义）。
  */
-import type { Sentence } from '../types/document'
-
-export function docSignature(sentences: Sentence[]): string {
+export function docSignature(sentences: ReadonlyArray<{ text: string }>): string {
   let h = 5381
   for (const s of sentences) {
     const t = s.text
@@ -17,4 +15,14 @@ export function docSignature(sentences: Sentence[]): string {
     h = ((h << 5) + h + 10) | 0 // 句间分隔，避免「ab|c」与「a|bc」撞签名
   }
   return (h >>> 0).toString(36)
+}
+
+/**
+ * 文章键：本机「按文章存」的键统一用它，格式 `标识@正文签名`。
+ *
+ * 只带标识会串篇（空标题 / 同名 / 「未命名」），只带签名会在正文相同的两篇文章间串。
+ * 滚动进度、速读游标/本页清单、听写游标、听力题缓存都走这里，别再各拼各的。
+ */
+export function articleKey(identity: string, sentences: ReadonlyArray<{ text: string }>): string {
+  return `${identity}@${docSignature(sentences)}`
 }

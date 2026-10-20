@@ -19,6 +19,7 @@ import type { SpeedReadPhase as Phase } from '../panels/SpeedReadSentence'
 
 export interface UseSpeedReadSessionOptions {
   sentences: Sentence[]
+  /** 文章键（`core/docSignature.articleKey`：标识 + 正文签名），由面板算好传入。 */
   docKey: string
   onClose: () => void
   /** 这篇过完（推到结尾）时回调一次（「读完」目标记一笔）。 */
@@ -42,10 +43,10 @@ export function useSpeedReadSession({
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
   /**
-   * 游标键 = 文章标识 + 正文签名：标识相同的两篇文章（空标题 / 同名 / 「未命名」）
+   * 游标键 = articleKey（标识 + 正文签名）：标识相同的两篇文章（空标题 / 同名 / 「未命名」）
    * 也不会共用进度，正文改过就从第一句重来。
    */
-  const key = useMemo(() => speedCursorKey(docKey, sentences), [docKey, sentences])
+  const key = useMemo(() => speedCursorKey(docKey), [docKey])
   const [index, setIndex] = useState(() => Math.min(readNum(key, 0), Math.max(0, n - 1)))
   const [phase, setPhase] = useState<Phase>('read')
   const [elapsed, setElapsed] = useState(0)

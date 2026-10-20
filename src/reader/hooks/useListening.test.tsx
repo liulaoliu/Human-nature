@@ -5,8 +5,10 @@ import type { ListeningQuiz } from '../../core/listening'
 import { listenMistake } from '../../core/mistakes'
 import { installFakeStorage } from '../testStorage'
 import { useListening, type UseListeningParams } from './useListening'
+import { articleKey } from '../../core/docSignature'
 
-const KEY = 'reader:listening:file:a.md'
+const DOC = { sentences: [{ id: 's1', text: 'Hello there.' }] }
+const KEY = 'reader:listening:' + articleKey('file:a.md', DOC.sentences)
 
 const quiz: ListeningQuiz = {
   questions: [
@@ -17,7 +19,7 @@ const quiz: ListeningQuiz = {
 
 function params(over: Partial<UseListeningParams> = {}): UseListeningParams {
   return {
-    doc: { sentences: [{ id: 's1', text: 'Hello there.' }] },
+    doc: DOC,
     articleIdentity: 'file:a.md',
     flash: vi.fn(),
     setLastTask: vi.fn(),
@@ -62,6 +64,13 @@ describe('useListening：载入与开题', () => {
     localStorage.setItem(KEY, JSON.stringify(quiz))
     const { result } = renderHook(() => useListening(params()))
     expect(result.current.quiz?.questions).toHaveLength(2)
+  })
+
+  it('标识相同但正文不同 → 不串用另一篇的听力题', () => {
+    localStorage.setItem(KEY, JSON.stringify(quiz))
+    const other = { sentences: [{ id: 's1', text: 'Different text.' }] }
+    const { result } = renderHook(() => useListening(params({ doc: other })))
+    expect(result.current.quiz).toBeNull()
   })
 
   it('没有题时 start 复制提示词；有题时直接打开', async () => {

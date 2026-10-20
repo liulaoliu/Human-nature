@@ -4,6 +4,7 @@ import { act, fireEvent, renderHook } from '@testing-library/react'
 import { installFakeStorage } from '../testStorage'
 import { sentenceFixture } from '../../core/testFixtures'
 import { speedCursorKey } from '../../core/speedRead'
+import { articleKey } from '../../core/docSignature'
 import { resetHotkeysForTest } from '../hotkeys'
 import { useSpeedReadSession, type UseSpeedReadSessionOptions } from './useSpeedReadSession'
 
@@ -12,13 +13,14 @@ import { useSpeedReadSession, type UseSpeedReadSessionOptions } from './useSpeed
  * 渲染/快捷键在 `SpeedReadPanel.test.tsx`，这里只钉状态推进与持久化。
  */
 const sentences = [sentenceFixture('s1', 'Run fast.'), sentenceFixture('s2', 'Walk slow.')]
+const keyFor = (ss = sentences) => articleKey('doc:1', ss)
 
 let restoreStorage: () => void = () => {}
 
 function options(over: Partial<UseSpeedReadSessionOptions> = {}): UseSpeedReadSessionOptions {
   return {
     sentences,
-    docKey: 'doc:1',
+    docKey: keyFor(),
     onClose: vi.fn(),
     onFinishRead: vi.fn(),
     langEditorOpen: false,
@@ -26,9 +28,9 @@ function options(over: Partial<UseSpeedReadSessionOptions> = {}): UseSpeedReadSe
   }
 }
 
-/** 游标键 = 文章标识 + 正文签名（见 core/speedRead）：正文不同，键就不同。 */
-const KEY = speedCursorKey('doc:1', sentences)
-const cursor = (ss = sentences) => Number(localStorage.getItem(speedCursorKey('doc:1', ss)))
+/** 游标键 = articleKey（标识 + 正文签名）：正文不同，键就不同。 */
+const KEY = speedCursorKey(keyFor())
+const cursor = (ss = sentences) => Number(localStorage.getItem(speedCursorKey(keyFor(ss))))
 
 beforeEach(() => {
   restoreStorage = installFakeStorage()
@@ -147,7 +149,9 @@ describe('useSpeedReadSession：翻句与重开', () => {
 
   it('空文章：直接 done，advance 不动作', () => {
     const onFinishRead = vi.fn()
-    const { result } = renderHook(() => useSpeedReadSession(options({ sentences: [], onFinishRead })))
+    const { result } = renderHook(() =>
+      useSpeedReadSession(options({ sentences: [], docKey: keyFor([]), onFinishRead })),
+    )
     expect(result.current.done).toBe(true)
     act(() => result.current.advance())
     expect(result.current.index).toBe(0)
@@ -190,7 +194,9 @@ describe('useSpeedReadSession：退出（Esc）与游标清零', () => {
       sentenceFixture('s2', 'Walk slow.'),
       sentenceFixture('s3', 'Jump high.'),
     ]
-    const { result } = renderHook(() => useSpeedReadSession(options({ onClose, sentences: three })))
+    const { result } = renderHook(() =>
+      useSpeedReadSession(options({ onClose, sentences: three, docKey: keyFor(three) })),
+    )
     act(() => result.current.go(1))
     act(() => result.current.close())
     expect(onClose).toHaveBeenCalledTimes(1)
@@ -211,7 +217,7 @@ describe('useSpeedReadSession：换篇不串进度', () => {
 
     // 同一个 docKey、不同正文 = 另一篇
     const other = [sentenceFixture('s1', 'Other text here.'), sentenceFixture('s2', 'Another one.')]
-    rerender(options({ sentences: other }))
+    rerender(options({ sentences: other, docKey: keyFor(other) }))
     expect(result.current.index).toBe(0)
     expect(result.current.summary.count).toBe(0)
   })
@@ -222,7 +228,7 @@ describe('useSpeedReadSession：换篇不串进度', () => {
       initialProps: options(),
     })
     act(() => result.current.go(1))
-    rerender(options({ sentences: other }))
+    rerender(options({ sentences: other, docKey: keyFor(other) }))
     expect(result.current.index).toBe(0)
     rerender(options())
     expect(result.current.index).toBe(1)

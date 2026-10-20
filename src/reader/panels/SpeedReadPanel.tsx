@@ -1,5 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
+import { articleKey } from '../../core/docSignature'
 import { useLocalStorageState, persistentBool } from '../hooks/useLocalStorageState'
 import { useSpeedReadSession } from '../hooks/useSpeedReadSession'
 import { useSpeedReadWords } from '../hooks/useSpeedReadWords'
@@ -43,6 +44,8 @@ export interface SpeedReadPanelProps {
  * 会话状态机在 `useSpeedReadSession`，选词/本页清单在 `useSpeedReadWords`；这里只做渲染装配。
  */
 export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+  /** 本机「按文章」键：标识 + 正文签名，游标与本页清单一处算好、两处共用。 */
+  const articleKeyOf = useMemo(() => articleKey(docKey, sentences), [docKey, sentences])
   /** 读完进度 / 阶段 / 计时 / 拷打 / 快捷键（数据与操作都在 hook，面板只负责渲染）。 */
   const {
     n,
@@ -70,7 +73,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     chooseDrill,
     restart,
     close,
-  } = useSpeedReadSession({ sentences, docKey, onClose, onFinishRead, langEditorOpen })
+  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, langEditorOpen })
 
   /** 选词模式：开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点。 */
   const [pickMode, setPickMode] = useLocalStorageState('reader:speedPickMode', false, persistentBool)
@@ -100,7 +103,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     knownWords,
     tapRemove,
   } = useSpeedReadWords({
-    docKey,
+    docKey: articleKeyOf,
     sentence,
     selectionResetKey: index,
     isKnown,

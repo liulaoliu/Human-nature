@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { wordSpans, toggleIndex, wordsAtIndex } from '../../core/wordSelect'
 import { readJson, writeJson } from '../storage'
@@ -57,8 +57,24 @@ export function useSpeedReadWords({
   /** 当前句按词切分（复用正文同款 wordSpans）。 */
   const spans = useMemo(() => (sentence ? wordSpans(sentence.text) : []), [sentence])
 
+  /** 当前清单属于哪篇文章；换篇那一轮跳过写入，避免把旧清单落到新键上。 */
+  const loadedKeyRef = useRef(docKey)
+  const skipWriteRef = useRef(false)
+
+  // 换篇：重读新文章的清单。必须先于下面的写盘 effect，且跳过同一次提交的写入。
+  useEffect(() => {
+    if (loadedKeyRef.current === docKey) return
+    loadedKeyRef.current = docKey
+    skipWriteRef.current = true
+    setCollected(loadCollected(docKey))
+  }, [docKey])
+
   // 本页加入清单落盘（翻页 / 关掉重开都不丢）
   useEffect(() => {
+    if (skipWriteRef.current) {
+      skipWriteRef.current = false
+      return
+    }
     try {
       writeJson(collectedKey(docKey), collected)
     } catch {

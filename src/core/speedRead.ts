@@ -1,5 +1,4 @@
 import { blankWord, normalizeAnswer, shuffleQuiz } from './quiz'
-import { docSignature } from './docSignature'
 import { lemmaOf } from './vocab'
 import { wordSpans } from './wordSelect'
 import type { Sentence } from '../types/document'
@@ -32,9 +31,9 @@ export function wordCount(text: string): number {
   return text.trim().split(/\s+/).filter(Boolean).length
 }
 
-/** 速读游标的本机键：文章标识 + 正文签名。 */
-export function speedCursorKey(docKey: string, sentences: Sentence[]): string {
-  return `reader:speedCursor:${docKey}@${docSignature(sentences)}`
+/** 速读游标的本机键：`articleKey`（文章标识 + 正文签名）由调用方一次算好。 */
+export function speedCursorKey(articleKey: string): string {
+  return `reader:speedCursor:${articleKey}`
 }
 
 /** 目标阅读时长（毫秒）：词数 / WPM + 思考余量，并给上下限。 */

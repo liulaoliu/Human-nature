@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
 import { useDictation } from './useDictation'
+import { articleKey } from '../../core/docSignature'
 import { sentenceFixture } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
 
@@ -28,9 +29,9 @@ const doc = {
   sentences: [sentenceFixture('s1', 'Hello world.'), sentenceFixture('s2', 'Second sentence.')],
 }
 
-function Harness() {
+function Harness({ doc: docOverride }: { doc?: typeof doc } = {}) {
   api = useDictation({
-    doc,
+    doc: docOverride ?? doc,
     articleIdentity: 'A',
     libraryLemmas: new Set<string>(),
     speak,
@@ -158,5 +159,25 @@ describe('useDictation：判分', () => {
     act(() => api!.check())
     unmount()
     expect(clear).toHaveBeenCalled()
+  })
+})
+
+describe('useDictation：游标按文章内容分开', () => {
+  it('句数/句子 id 相同、正文不同的两篇不共享游标', () => {
+    const a = {
+      sentences: [sentenceFixture('s1', 'Alpha one.'), sentenceFixture('s2', 'Alpha two.')],
+    }
+    const b = {
+      sentences: [sentenceFixture('s1', 'Beta one.'), sentenceFixture('s2', 'Beta two.')],
+    }
+    const { rerender } = render(<Harness doc={a} />)
+    // 每轮 1 题：A 篇做完第 1 题后游标停到 1
+    act(() => api!.start({ mode: 'full', max: 1 }))
+    expect(api!.queue![0].text).toBe('Alpha one.')
+    expect(localStorage.getItem(`reader:dictCursor:full:${articleKey('A', a.sentences)}`)).toBe('1')
+
+    rerender(<Harness doc={b} />)
+    act(() => api!.start({ mode: 'full', max: 1 }))
+    expect(api!.queue![0].text).toBe('Beta one.')
   })
 })

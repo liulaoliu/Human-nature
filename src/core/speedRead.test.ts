@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { targetMs, wordCount, pickDrill, checkDrill, summarize, speedCursorKey } from './speedRead'
+import { articleKey } from './docSignature'
 import type { Sentence } from '../types/document'
 
 const S = (text: string, extra: Partial<Sentence> = {}): Sentence => ({
@@ -66,14 +67,15 @@ describe('speedRead', () => {
 })
 
 describe('speedCursorKey：速读游标不串篇', () => {
-  it('键名 = 文章标识 + 签名：标识相同、正文不同 → 键不同', () => {
-    const a = speedCursorKey('', [S('Run fast.')])
-    const b = speedCursorKey('', [S('Walk slow.')])
+  it('键名 = articleKey：标识相同、正文不同 → 键不同', () => {
+    const a = speedCursorKey(articleKey('', [S('Run fast.')]))
+    const b = speedCursorKey(articleKey('', [S('Walk slow.')]))
     expect(a).not.toBe(b)
     expect(a.startsWith('reader:speedCursor:@')).toBe(true)
   })
 
   it('同一篇（正文一样）→ 键一样，重开能续上', () => {
-    expect(speedCursorKey('doc:1', [S('Run fast.')])).toBe(speedCursorKey('doc:1', [S('Run fast.')]))
+    const k = articleKey('doc:1', [S('Run fast.')])
+    expect(speedCursorKey(k)).toBe(speedCursorKey(k))
   })
 })

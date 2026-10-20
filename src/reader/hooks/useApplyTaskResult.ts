@@ -51,6 +51,8 @@ export interface UseApplyTaskResultParams {
   articleTitle: string
   articleKey: string | null
   articleIdentity: string
+  /** 听力题缓存键（`core/docSignature.articleKey`，与 `useListening` 读取时一致）。 */
+  listeningKey: string
   writingModel: string
   writingText: string
   writingTask: ImitationTask | null
@@ -99,6 +101,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
     articleTitle,
     articleKey,
     articleIdentity,
+    listeningKey,
     writingModel,
     writingText,
     writingTask,
@@ -226,7 +229,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
           return { report: ['没解析出题目（需要严格 JSON：{"questions":[…] }，含 type/stem/answer）'], missing: null, ok: false }
         setListenQuiz(quiz)
         try {
-          localStorage.setItem('reader:listening:' + articleIdentity, JSON.stringify(quiz))
+          localStorage.setItem('reader:listening:' + listeningKey, JSON.stringify(quiz))
         } catch {
           // 忽略
         }
@@ -394,6 +397,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
       articleTitle,
       articleKey,
       articleIdentity,
+      listeningKey,
       writingModel,
       writingText,
       writingTask,

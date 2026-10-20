@@ -56,6 +56,7 @@ function makeParams(lib = baseLibrary()): UseApplyTaskResultParams {
     articleTitle: 'A',
     articleKey: 'a1',
     articleIdentity: 'a1',
+    listeningKey: 'a1@sig',
     writingModel: 'model',
     writingText: 'my text',
     writingTask: null,
