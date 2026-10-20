@@ -145,8 +145,12 @@
 `useArticleWorkspace`（文档动作组装 / 新建导入态 / 语言点编辑写回）、
 `useSessionServices`（会话转发 / 启动互斥 / 错题重练 / 选词计时）、
 `useAiServices`（AI 待办推导 / 工作包 / 粘回路由）、
-`useArticleUiActions`（Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 离线例句）。
-视图层 `ReaderScreen` 不单测，由 `ReaderApp.integration.test.tsx` 覆盖条件渲染。
+`useArticleUiActions`（Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 离线例句）、
+`useSelection`（点句 toggle / A-D 循环 / 待选去重计数 / mark 走唯一写入口 / 来源定位回填）、
+`useAiPack` 的跑批轮询（error 立即停 / 失联 30s 判错 / 取消打断 / 卸载清定时器；假计时器）、
+`useToast`（自动消失 / 连续 flash 不被旧 timer 清掉 / 卸载清定时器）。
+TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / 多余忽略），连字符词典在 `core/dictionary`。
+视图层 `ReaderScreen` 只留外壳，三个槽位在 `screen/*Zone`（纯映射，不单测；由 `ReaderApp.integration.test.tsx` 覆盖条件渲染）。
 组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
@@ -157,8 +161,12 @@
 3. 钩子/面板依赖 IO 时**注入假实现**（`persist` / `libraryRef` / `onPrint` 这类回调），别真的开 IndexedDB、
    别真的调 TTS/打印。
 
-**还差**：
-- **跨模块集成**：挂载 `ReaderApp` + 假仓储，断言「自动补全只写一次 + 导入 AI 结果不重不漏」。
+**还差**（2026-10-20 盘点）：
+- **hooks 9 个无测试**：`useArticleImport` / `useDictionary` / `useDictTools` / `useDocVocabSets` /
+  `useListening` / `useQuickSession` / `useReaderDoc` / `useTtsEngines` / `useWriting`。
+- **panels 23 / 29 无测试**：`SpeedReadPanel`(597) / `SidePick`(582) / `StudyPanel`(512) 优先。
+- **adapters 10 / 14 无同名测试**：`learningRepo` / `browserAudio` / `stateBackup`(adapters) 可直测；
+  `articleRepo` / `storeApi` 由 `server/*.test.js` 间接覆盖，可在 `check_architecture` 登记豁免。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
