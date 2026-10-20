@@ -110,9 +110,10 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 已降到 1040 行；视图在 `ReaderScreen.tsx`**：已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 已降到 1040 行；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：`ReaderApp` 已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
   练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
+  `screen/ReaderToolbarZone` / `ReaderSidebarZone` / `ReaderBodyZone` 只做「props → host」映射（不读存储），
   派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningData`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/useAiTasks`，粘贴应用在 `hooks/usePasteApply`，
   目标是 ≤1200 行。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
