@@ -34,6 +34,25 @@ describe('SessionStore 录音', () => {
     expect(takes).toHaveLength(1)
     expect(takes[0].id).toBe(last)
     expect(repo.map.size).toBe(1) // 库里也只留这一条
+    // 先存新的、再删旧的：save 失败时旧录音不能被提前删掉
+    expect(repo.calls.slice(-2)).toEqual(['save', 'remove'])
+  })
+
+  it('保存失败：旧录音保留、状态有可见错误、stopRecording 不 reject', async () => {
+    const { store, repo } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.toggleRecording()
+    await store.toggleRecording()
+    const oldId = store.getState().takes[0].id
+
+    repo.failSave = true
+    await store.startRecording()
+    await expect(store.stopRecording()).resolves.toBeNull()
+
+    expect(repo.map.has(oldId)).toBe(true)
+    expect(store.getState().takes.map((t) => t.id)).toEqual([oldId])
+    expect(store.getState().recording).toBe(false)
+    expect(store.getState().error).toContain('录音保存失败')
   })
 
   it('加载时每块只留最新一条，清掉老版本堆下来的历史', async () => {

@@ -86,11 +86,25 @@ export class FakeRecorder implements RecorderPort {
   startCount = 0
   stopCount = 0
   shouldFail = false
+  /** 测试注入：让 start() 挂住，模拟「正在等麦克风」 */
+  holdStart = false
+  private releaseStart: (() => void) | null = null
   private levelCb: ((v: number) => void) | null = null
 
   async start() {
     if (this.shouldFail) throw new Error('麦克风被占用')
     this.startCount++
+    if (this.holdStart) {
+      await new Promise<void>((r) => {
+        this.releaseStart = r
+      })
+    }
+  }
+
+  /** 放开挂住的 start() */
+  resumeStart() {
+    this.releaseStart?.()
+    this.releaseStart = null
   }
 
   /** 测试用它模拟「说到 / 停下」 */
@@ -116,8 +130,15 @@ export class FakeRecorder implements RecorderPort {
 
 export class FakeRepo implements TakeRepoPort {
   map = new Map<string, Take>()
+  /** 测试注入：模拟配额满 */
+  failSave = false
+  failRemove = false
+  /** 调用顺序（save / remove），用来确认「先存新的再删旧的」 */
+  calls: string[] = []
 
   async save(t: Take) {
+    if (this.failSave) throw new Error('磁盘满了')
+    this.calls.push('save')
     this.map.set(t.id, t)
   }
   /** 真实现走 fileName 索引，假的也照这个语义筛 */
@@ -125,9 +146,12 @@ export class FakeRepo implements TakeRepoPort {
     return [...this.map.values()].filter((t) => t.fileName === fileName)
   }
   async remove(id: string) {
+    if (this.failRemove) throw new Error('删除失败')
+    this.calls.push('remove')
     this.map.delete(id)
   }
   async clear() {
+    this.calls.push('clear')
     this.map.clear()
   }
 }

@@ -172,6 +172,29 @@ describe('SessionStore 连续跟读', () => {
     expect(store.getState().takes).toHaveLength(0)
   })
 
+  it('开麦尚未返回时中止：start 回来后会立刻停录，不把麦克风留在录音态', async () => {
+    const { store, recorder } = makeStore()
+    await store.load(blob, 'a.mp3')
+    await store.setAutoCycle(true)
+
+    recorder.holdStart = true
+    // 这一轮即使停了也不该保存（模拟刚开麦就被中止）
+    recorder.stop = async () => ({ blob: new Blob(), mimeType: 'audio/webm', durationSec: 0.05 })
+    const running = store.runAutoCycle()
+    await tick(0)
+    await tick(600) // 已经进到 startRecording，但 start() 还挂着
+    expect(store.getState().recording).toBe(false)
+
+    store.abortCycle()
+    recorder.resumeStart()
+    await running
+    await tick(0)
+
+    expect(store.getState().recording).toBe(false)
+    expect(store.getState().cycleStep).toBe('idle')
+    expect(store.getState().takes).toHaveLength(0)
+  })
+
   it('关掉之后空格回到「播放/暂停」，不再跑整圈', async () => {
     const { store, recorder } = makeStore()
     await store.load(blob, 'a.mp3')

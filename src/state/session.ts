@@ -9,6 +9,7 @@ import {
   type Chunk,
   type Granularity,
   type MicOptions,
+  type RecorderPort,
   type Take,
 } from '../core/ports'
 import { CalibrationLedger } from './calibrationLedger'
@@ -621,7 +622,13 @@ export class SessionStore {
     const c = this.chunk()
     this.set({ recording: false, level: 0 })
     this.level.flush(0) // 电平归零 + 清掉可能还挂着的节流定时器
-    const take = await this.deps.recorder.stop()
+    let take: Awaited<ReturnType<RecorderPort['stop']>>
+    try {
+      take = await this.deps.recorder.stop()
+    } catch (e) {
+      this.set({ error: `停止录音失败：${e instanceof Error ? e.message : String(e)}` })
+      return null
+    }
     if (take.durationSec < 0.2) return null // 手滑了
 
     // 峰值太低多半是麦克风增益没调起来：提示去系统里调大（别让它一直又小又难判定）
@@ -639,11 +646,27 @@ export class SessionStore {
       createdAt: Date.now(),
       blob: take.blob,
     }
+    // 先存新的，成功了再删旧的：存储满 / 隐私模式下 save 失败时，旧录音还在。
+    try {
+      await this.deps.repo.save(record)
+    } catch (e) {
+      this.set({
+        error: `录音保存失败（存储空间可能已满）：${e instanceof Error ? e.message : String(e)}。旧录音已保留。`,
+      })
+      return null
+    }
+
     // 旧录音不留：同一块只保留最新的一条，够「复读」用就行，
     // 不然一遍遍练下来会堆一大堆没用的历史。别的块不动。
     const stale = this.state.takes.filter((t) => t.chunkIndex === record.chunkIndex)
-    for (const t of stale) await this.deps.repo.remove(t.id)
-    await this.deps.repo.save(record)
+    for (const t of stale) {
+      try {
+        await this.deps.repo.remove(t.id)
+      } catch (e) {
+        // 新录音已经落盘，删旧失败只是多占空间，不该让整次录音失败。
+        console.warn('[录音] 删除旧 take 失败', e)
+      }
+    }
     recordLocalActivity('speak')
     this.set({
       takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],

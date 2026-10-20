@@ -97,7 +97,14 @@ export class CycleRunner {
     if (gen !== this.generation) return
 
     await this.host.startRecording()
-    if (gen !== this.generation || !this.host.state().recording) {
+    if (gen !== this.generation) {
+      // 开麦是异步的：等待期间用户按了空格 / 换块，abort 看到 recording=false
+      // 不会停录；这里补一刀，避免麦克风留在录音态。
+      if (this.host.state().recording) await this.host.stopRecording()
+      this.host.set({ cycleStep: 'idle' })
+      return
+    }
+    if (!this.host.state().recording) {
       this.host.set({ cycleStep: 'idle' })
       return
     }
