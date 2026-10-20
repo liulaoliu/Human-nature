@@ -146,7 +146,7 @@ describe('ReaderToolbar：阅读操作', () => {
         {...props({ hasDoc: true, onToggleVocab, onTranslateAll, onVocabLevelChange, onAutoVocab })}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: '选词模式' }))
+    fireEvent.click(screen.getByRole('button', { name: '选词模式(1)' }))
     expect(onToggleVocab).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '全文翻译' }))
     expect(onTranslateAll).toHaveBeenCalled()
@@ -156,7 +156,7 @@ describe('ReaderToolbar：阅读操作', () => {
     expect(onVocabLevelChange).toHaveBeenCalledWith('cet6')
 
     rerender(<ReaderToolbar {...props({ hasDoc: true, vocabMode: true })} />)
-    expect((screen.getByRole('button', { name: '选词模式 · 开' }) as HTMLButtonElement).className).toContain('primary')
+    expect((screen.getByRole('button', { name: '选词模式(1) · 开' }) as HTMLButtonElement).className).toContain('primary')
     expect(screen.getByText(/本轮 2 · 今日 5 ·🔥3 · 累计 42 词/)).toBeTruthy()
   })
 

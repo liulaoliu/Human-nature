@@ -135,6 +135,21 @@ describe('ReaderApp 集成', () => {
     expect(vocabState.saved).toHaveLength(1)
   })
 
+  it('数字键 1 与 W 一样切换选词模式', async () => {
+    render(<ReaderApp />)
+    await screen.findByRole('button', { name: '选词模式(1)' }, { timeout: 5000 })
+
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+    await waitFor(() => expect(screen.getByRole('button', { name: '选词模式(1) · 开' })).toBeTruthy(), {
+      timeout: 5000,
+    })
+
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+    await waitFor(() => expect(screen.getByRole('button', { name: '选词模式(1)' })).toBeTruthy(), {
+      timeout: 5000,
+    })
+  })
+
   it('粘回语言点结果：写进词库一次，重复应用不重不漏', async () => {
     render(<ReaderApp />)
     await waitFor(() => expect(vocabState.saved).toHaveLength(1))

@@ -198,7 +198,7 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   - 生成：`node tools/build-tatoeba.mjs data/tatoeba/sentences.tsv data/tatoeba/links.tsv cmn --en-only`。
   - `--en-only` 会给**没有中译例句的词**补纯英文短句（高级词在 Tatoeba 大多只有纯英文句）。来源：Tatoeba（**CC BY 2.0 FR**）。
 
-**选择**：单击 = 整句；拖动 = 按整词吸附；Ctrl 点 = 单个词。顶栏「选词模式」（快捷键 `W`）下点/划直接把词攒进「待选」，可一键**复制查词提示词**或**导出 CSV**。
+**选择**：单击 = 整句；拖动 = 按整词吸附；Ctrl 点 = 单个词。顶栏「选词模式(1)」（快捷键 `W` / 数字 `1`）下点/划直接把词攒进「待选」，可一键**复制查词提示词**或**导出 CSV**。
 
 **想用系统自带的复制**（比如把某句拿去翻译）：按住 **`Alt`** 再拖选（或 **`Alt` 点击某句**直接复制该句），走浏览器原生选区，不会被划词逻辑清掉，`Ctrl/⌘+C` 即可。
 

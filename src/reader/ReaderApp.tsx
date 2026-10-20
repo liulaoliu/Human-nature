@@ -233,7 +233,7 @@ export default function ReaderApp() {
   /** 右键按下中（右键期间跳过 selectionchange 处理，保住 Ctrl 多选的精确选区） */
   const rightDownRef = useRef(false)
 
-  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
+  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
   const toggleVocabRef = useRef<() => void>(() => {})
   const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
 
@@ -373,7 +373,7 @@ export default function ReaderApp() {
   } = derived
 
 
-  // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
+  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useHotkeys(
     (e) => {
       // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
@@ -383,7 +383,8 @@ export default function ReaderApp() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const k = e.key.toLowerCase()
-      if (k === 'w') toggleVocabRef.current()
+      // 只认主键盘区的数字 1（小键盘 1 不抢）；W 照旧
+      if (k === 'w' || e.code === 'Digit1') toggleVocabRef.current()
       else if (k === 'a') navVocabRef.current(-1)
       else if (k === 'd') navVocabRef.current(1)
     },

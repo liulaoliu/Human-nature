@@ -246,9 +246,9 @@ export default function ReaderToolbar({
           <button
             className={'tb-vocab' + (vocabMode ? ' primary' : '')}
             onClick={onToggleVocab}
-            title="选词模式（W）：默认选单个词；按住 Alt / Ctrl 拖动选词组"
+            title="选词模式（W / 1）：默认选单个词；按住 Alt / Ctrl 拖动选词组"
           >
-            选词模式{vocabMode ? ' · 开' : ''}
+            选词模式(1){vocabMode ? ' · 开' : ''}
           </button>
         )}
         {hasDoc && !editing && (
