@@ -196,6 +196,13 @@ describe('ReaderToolbar：阅读操作', () => {
     expect(screen.getByRole('button', { name: '⏹ 停止朗读' })).toBeTruthy()
   })
 
+  it('离线音色提示无逐词高亮（Edge 音色不提示）', () => {
+    const { rerender } = render(<ReaderToolbar {...props({ hasDoc: true })} />)
+    expect(screen.queryByText('无逐词高亮')).toBeNull()
+    rerender(<ReaderToolbar {...props({ hasDoc: true, ttsVoice: 'local:piper-us' })} />)
+    expect(screen.getByText('无逐词高亮')).toBeTruthy()
+  })
+
   it('没有选中句时「读本句」禁用', () => {
     render(<ReaderToolbar {...props({ hasDoc: true })} />)
     expect((screen.getByRole('button', { name: '🔊 读本句' }) as HTMLButtonElement).disabled).toBe(true)

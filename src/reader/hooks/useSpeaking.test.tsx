@@ -31,8 +31,16 @@ class FakeAudio {
   }
 }
 
-function Harness({ selectedId = null, sentences = doc.sentences }: { selectedId?: string | null; sentences?: typeof doc.sentences }) {
-  api = useSpeaking({ doc: { sentences }, selectedId, onFallback })
+function Harness({
+  selectedId = null,
+  sentences = doc.sentences,
+  voice,
+}: {
+  selectedId?: string | null
+  sentences?: typeof doc.sentences
+  voice?: string
+}) {
+  api = useSpeaking({ doc: { sentences }, selectedId, voice, onFallback })
   return null
 }
 
@@ -120,5 +128,26 @@ describe('useSpeaking：连播与预热', () => {
     const calls = (fetch as unknown as ReturnType<typeof vi.fn>).mock.calls.map((c) => String(c[0]))
     expect(calls.some((u) => u.includes('/api/tts?') && u.includes('A%20sentence.'))).toBe(true)
     expect(calls.some((u) => u.includes('/api/tts/words?'))).toBe(true)
+  })
+
+  it('离线音色：点词从该词起播（截后缀），不请求时间戳', () => {
+    render(<Harness voice="local:piper-us" />)
+    act(() => api!.speakFromWord('Hello world.', 1))
+    const audio = FakeAudio.instances[0]
+    expect(decodeURIComponent(audio.src)).toContain('text=world.')
+    expect(fetch).not.toHaveBeenCalled()
+    act(() => audio.onended?.())
+    expect(api!.ttsState).toBe('idle')
+  })
+
+  it('离线音色：词区间只合成这一段，播完回到 idle（不会整句卡住）', () => {
+    render(<Harness voice="local:piper-us" />)
+    act(() => api!.speakRange('Hello world again.', 1, 1))
+    const audio = FakeAudio.instances[0]
+    expect(decodeURIComponent(audio.src)).toContain('text=world')
+    expect(decodeURIComponent(audio.src)).not.toContain('again')
+    expect(fetch).not.toHaveBeenCalled()
+    act(() => audio.onended?.())
+    expect(api!.ttsState).toBe('idle')
   })
 })

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { DEFAULT_TTS_VOICE, isOfflineTtsVoice } from '../../core/ttsVoices'
+import { wordSpans } from '../../core/wordSelect'
 import type { WordTiming } from '../../core/ttsTiming'
 import { fetchTimings, prefetchAudio, timingKey } from '../../adapters/ttsCache'
 
@@ -375,6 +376,10 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
       const cached = timingsCacheRef.current.get(timingKey(voiceRef.current, t))
       if (cached) {
         playText(t, undefined, 1, cached[wordIndex]?.start ?? 0)
+      } else if (isOfflineTtsVoice(voiceRef.current)) {
+        // 离线引擎没有逐词时间戳：截出「从这个词到句尾」直接合成，至少保证从该词起播
+        const from = wordSpans(t)[wordIndex]?.start ?? 0
+        playText(t.slice(from))
       } else {
         // 没时间戳：先从头播（在手势内，避免被自动播放策略拦），拿到时间戳后在 playText 里 seek
         playText(t, undefined, 1, 0, wordIndex)
@@ -488,6 +493,13 @@ export function useSpeaking({ doc, selectedId, voice = DEFAULT_TTS_VOICE, onFall
         const s = cached[startWord]?.start ?? 0
         const e = endWord != null ? cached[endWord]?.end : undefined
         playText(t, undefined, 1, s, undefined, undefined, e)
+      } else if (isOfflineTtsVoice(voiceRef.current)) {
+        // 离线引擎没有时间戳：截出词区间文本直接合成（只播这一段，不会整句播完）
+        const spans = wordSpans(t)
+        const from = spans[startWord]?.start
+        const to = endWord != null ? spans[endWord]?.end : undefined
+        if (from == null) playText(t)
+        else playText(t.slice(from, to))
       } else {
         // 没时间戳：先从头播（在手势内），时间戳回来后 onTimings 会 seek 并按 stopWordIndex 停
         playText(t, undefined, 1, 0, startWord, endWord)

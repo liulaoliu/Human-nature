@@ -2,7 +2,7 @@ import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../core/ports'
 import type { VocabLevel } from '../../core/analyzer'
-import type { TtsAccent } from '../../core/ttsVoices'
+import { isOfflineTtsVoice, type TtsAccent } from '../../core/ttsVoices'
 import { fmtDur } from '../format'
 
 export interface ReaderToolbarProps {
@@ -265,6 +265,14 @@ export default function ReaderToolbar({
             </optgroup>
           ))}
         </select>
+      )}
+      {hasDoc && !editing && isOfflineTtsVoice(ttsVoice) && (
+        <span
+          className="muted tb-tts-note"
+          title="离线音色没有逐词时间戳：朗读正常，但不能逐词高亮 / 点词跳播"
+        >
+          无逐词高亮
+        </span>
       )}
       {hasDoc && !editing && (
         <button
