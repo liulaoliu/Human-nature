@@ -536,7 +536,7 @@ export function openStore(dbPath) {
       restoreLearningSnapshot(id) {
         return tx(db, () => restoreLearningSnapshot(db, id))
       },
-      /** 用 baseline + 答题事件重建活动/题型聚合（不碰其它学习记录）。 */
+      /** 用 baseline + 答题事件重建题型聚合；活动聚合保留（不碰其它学习记录）。 */
       rebuildLearningDerived() {
         return tx(db, () => rebuildLearningDerived(db))
       },

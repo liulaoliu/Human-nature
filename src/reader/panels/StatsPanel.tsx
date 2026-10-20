@@ -150,7 +150,7 @@ export default function StatsPanel({
         <>
           <div className="side-label">学习记录核对</div>
           <div className="muted">
-            用服务端的答题事件重算活动与题型统计，再和本机这份比一遍；只比对，不改数据。
+            用服务端的答题事件重算题型统计（活动记录按现有聚合保留），再和本机这份比一遍。
           </div>
           <button
             type="button"

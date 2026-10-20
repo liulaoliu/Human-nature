@@ -189,8 +189,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存/旧快照恢复也不会删除已有事件。
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
   历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
-  （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」重建
-  `activity_days` / `kind_stats`，不假装历史能量化到题。纯函数口径在 `core/answerEvents.ts`，
+  （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」只重建
+  `kind_stats`。`activity_days` 保持现有聚合不动：背单词 / 快刷 / 阅读 / 写作 / 跟读只写聚合、
+  不产生 `answer_events`，删表重算会把它们静默抹掉；重建结果只用于和本机对账。纯函数口径在 `core/answerEvents.ts`，
   活动日一律用 `core/activity.dayKeyLocal`（事件写入时已落 `day`，服务端不另算日期）。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
   `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。

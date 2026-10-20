@@ -451,7 +451,7 @@ describe('sqliteStore：学习记录', () => {
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
   })
 
-  it('答题事件可重建活动与题型统计（baseline + events）', () => {
+  it('答题事件只重建题型统计；活动聚合原样保留（含非答题活动）', () => {
     const store = openStore(tempDb())
     // 模拟 v7 迁移时留下的历史聚合基线
     store.db
@@ -465,7 +465,7 @@ describe('sqliteStore：学习记录', () => {
       )
     store.saveLearning({
       ...learning,
-      activity: [],
+      activity: [{ day: '2026-01-01', counts: { vocab: 2, speak: 3 } }],
       kindStats: {},
       answerEvents: [
         { at: '2026-01-05T10:00:00.000Z', day: '2026-01-05', articleId: 'a1', source: 'quiz', kind: 'cloze', cat: 'vocab', correct: true },
@@ -477,10 +477,8 @@ describe('sqliteStore：学习记录', () => {
     store.rebuildLearningDerived()
 
     const got = store.loadLearning()
-    expect(got.activity).toEqual([
-      { day: '2026-01-01', counts: { vocab: 2 } },
-      { day: '2026-01-05', counts: { vocab: 2, listen: 1 } },
-    ])
+    // 活动只写聚合、不产生事件，重建不能把它抹掉，也不能把事件重复加一遍
+    expect(got.activity).toEqual([{ day: '2026-01-01', counts: { speak: 3, vocab: 2 } }])
     expect(got.kindStats).toEqual({ a1: { cloze: { total: 4, correct: 3 } } })
     // 其它学习记录不受影响
     expect(got.practice).toHaveLength(2)
@@ -550,6 +548,35 @@ describe('sqliteStore：学习记录', () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     expect(store.exportAll().learning.practice).toHaveLength(2)
+  })
+})
+
+describe('sqliteStore：重建派生聚合', () => {
+  it('重建只动题型统计，不抹掉背单词/跟读等非答题活动', () => {
+    const store = openStore(tempDb())
+    store.saveLearning({
+      practice: [],
+      mistakes: [],
+      readDone: [],
+      writingHistory: [],
+      retells: [],
+      activity: [
+        { day: '2026-10-19', counts: { vocab: 4, speak: 2 } },
+        { day: '2026-10-20', counts: { read: 1, write: 1 } },
+      ],
+      studyDays: [],
+      sessions: [],
+      studiedDays: [],
+      skimmed: [],
+      kindStats: {},
+      answerEvents: [],
+    })
+
+    const activity = store.rebuildLearningDerived()
+    expect(activity).toEqual([
+      { day: '2026-10-19', counts: { speak: 2, vocab: 4 } },
+      { day: '2026-10-20', counts: { read: 1, write: 1 } },
+    ])
   })
 })
 

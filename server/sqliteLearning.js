@@ -430,27 +430,15 @@ export function loadDerivedBaseline(db) {
 }
 
 /**
- * 用「baseline + 答题事件」重建 activity_days / kind_stats。
+ * 重建 kind_stats：baseline + 答题事件。
  *
- * 只在事件表可信时调用；不碰 practice / 错题等其它学习记录。
- * 返回重建后的聚合，便于测试和排查。
+ * activity_days 是聚合值，而背单词 / 快刷 / 阅读 / 写作 / 跟读只写聚合、不产生
+ * answer_events，无法从事件可信重算，所以**原样保留**（只比对，不删）。
+ * 不碰 practice / 错题等其它学习记录。返回现有活动聚合，便于测试和排查。
  */
 export function rebuildLearningDerived(db) {
   const base = loadDerivedBaseline(db)
   const events = loadLearning(db).answerEvents
-
-  const activity = new Map()
-  const addActivity = (day, cat, n) => {
-    if (!day || !cat || n <= 0) return
-    const counts = activity.get(day) ?? {}
-    counts[cat] = (counts[cat] ?? 0) + n
-    activity.set(day, counts)
-  }
-  for (const day of base.activity) {
-    if (!day || typeof day !== 'object') continue
-    const counts = day.counts && typeof day.counts === 'object' ? day.counts : {}
-    for (const [cat, n] of Object.entries(counts)) addActivity(String(day.day), cat, num(n))
-  }
 
   const kindStats = new Map()
   const addKind = (articleId, kind, correct) => {
@@ -471,14 +459,7 @@ export function rebuildLearningDerived(db) {
   }
   for (const ev of events) {
     if (!ev || typeof ev !== 'object') continue
-    addActivity(ev.day, ev.cat, 1)
     if (ev.source === 'quiz') addKind(ev.articleId, ev.kind, ev.correct)
-  }
-
-  db.prepare('DELETE FROM activity_days').run()
-  const insertActivity = db.prepare('INSERT INTO activity_days (day, cat, count) VALUES (?, ?, ?)')
-  for (const [day, counts] of activity) {
-    for (const [cat, n] of Object.entries(counts)) insertActivity.run(day, cat, n)
   }
 
   db.prepare('DELETE FROM kind_stats').run()
