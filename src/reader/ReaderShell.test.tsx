@@ -23,6 +23,7 @@ describe('ReaderShell', () => {
         serif
         examActive
         studying
+        docKey="doc:1"
         sideTab="vocab"
         sideRef={sideRef}
         onMouseDown={onMouseDown}
@@ -78,6 +79,7 @@ describe('ReaderShell', () => {
         serif={false}
         examActive={false}
         studying={false}
+        docKey="doc:1"
         sideTab="overview"
         sideRef={createRef<HTMLElement>()}
         onMouseDown={vi.fn()}
@@ -102,6 +104,7 @@ describe('ReaderShell', () => {
         serif={false}
         examActive={false}
         studying={false}
+        docKey="doc:1"
         sideTab="overview"
         sideRef={createRef<HTMLElement>()}
         onMouseDown={vi.fn()}

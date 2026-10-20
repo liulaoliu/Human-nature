@@ -196,6 +196,7 @@ export default function ReaderScreen(props: ReaderScreenProps) {
       serif={serif}
       examActive={examActive}
       studying={!!props.services.studyQueue}
+      docKey={props.articleIdentity}
       sideTab={sideTab}
       sideRef={sideRef}
       onMouseDown={onMouseDown}
