@@ -134,7 +134,7 @@ describe('useReaderDoc：打开文章', () => {
     expect(p.setDoc).toHaveBeenCalledWith(segment(cleanText('Other text.')))
     expect(p.setArticleTitle).toHaveBeenCalledWith('Mine')
 
-    p.setDoc.mockClear()
+    vi.mocked(p.setDoc).mockClear()
     act(() => result.current.loadFromBook('不存在'))
     expect(p.setDoc).not.toHaveBeenCalled()
   })
@@ -307,7 +307,7 @@ describe('useReaderDoc：副作用', () => {
     expect(p.setDoc).toHaveBeenCalledWith({ paragraphs: a.paragraphs, sentences: a.sentences })
 
     // 之后列表变化不会再把用户正在看的文章替换掉
-    p.setDoc.mockClear()
+    vi.mocked(p.setDoc).mockClear()
     setParams({ saved: [article({ id: 'saved:2' })] })
     expect(p.setDoc).not.toHaveBeenCalled()
   })
