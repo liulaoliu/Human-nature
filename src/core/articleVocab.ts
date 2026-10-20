@@ -15,6 +15,7 @@ import type {
   VocabLibrary,
   VocabMeaningSource,
   VocabOrigin,
+  VocabVia,
 } from '../types/document'
 import { kindOf } from './entryKind'
 
@@ -73,6 +74,8 @@ export interface AddArticleEntryInput {
   articleId: string
   lemma: string
   origin: VocabOrigin
+  /** 细分来源（AI / 词典 / 手动 / 语言点）；旧调用不传就只显示粗粒度 origin */
+  via?: VocabVia
   sentenceId?: string | null
   sentenceText?: string
   meaning?: string | null
@@ -100,12 +103,15 @@ export function addArticleEntry(
     const prev = list[idx]
     const next: ArticleVocabEntry = {
       ...prev,
+      // 旧条目没有 via 时，后来的动作可以补上；已有来源不覆盖（保留第一次收录方式）
+      via: prev.via ?? input.via,
       sentenceId: prev.sentenceId ?? input.sentenceId ?? null,
       sentenceText: prev.sentenceText || input.sentenceText || '',
       meaning: prev.meaning || input.meaning || null,
       meaningSource: prev.meaningSource ?? input.meaningSource,
     }
     if (
+      next.via === prev.via &&
       next.sentenceId === prev.sentenceId &&
       next.sentenceText === prev.sentenceText &&
       next.meaning === prev.meaning &&
@@ -120,6 +126,7 @@ export function addArticleEntry(
     articleId,
     lemma,
     origin: input.origin,
+    via: input.via,
     addedAt: now.toISOString(),
     sentenceId: input.sentenceId ?? null,
     sentenceText: input.sentenceText ?? '',

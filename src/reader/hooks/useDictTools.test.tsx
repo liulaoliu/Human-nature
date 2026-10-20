@@ -134,7 +134,7 @@ describe('useDictTools：按水平挑超纲词', () => {
     setDictionary(dict)
     const { p, result } = params()
     result.current.pickFromDict()
-    expect(p.batchItemsFromWords).toHaveBeenCalledWith(['ubiquitous'])
+    expect(p.batchItemsFromWords).toHaveBeenCalledWith(['ubiquitous'], 'dict')
     expect(p.mergeBatch).toHaveBeenCalledWith([{ word: 'ubiquitous', sentence: '', sentenceId: null }])
     expect(p.flash).toHaveBeenCalledWith('已按词典挑出 1 个超纲词，其中「新 1」个进「待选」')
   })

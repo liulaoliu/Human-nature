@@ -6,6 +6,7 @@ import type {
   VocabLibrary,
   VocabOrigin,
   VocabSource,
+  VocabVia,
   WordAnalysis,
 } from '../../types/document'
 import { defaultReviewState } from '../../types/document'
@@ -47,6 +48,8 @@ export interface MarkInput {
   kind?: VocabKind
   /** 收录方式：自动标词 / 手动加入（默认手动；只影响按篇条目的标签） */
   origin?: VocabOrigin
+  /** 细分来源：AI / 离线词典 / 手动 / 语言点 */
+  via?: VocabVia
 }
 
 export interface MarkResult {
@@ -73,6 +76,7 @@ function collectToArticle(
       articleId,
       lemma: item.lemma,
       origin: input.origin ?? 'manual',
+      via: input.via,
       sentenceId: input.sentenceId ?? null,
       sentenceText: input.sentenceText ?? '',
       meaning: input.meaning?.trim() || null,

@@ -73,6 +73,33 @@ describe('VocabList：卡片视图的按钮带上词条', () => {
   })
 })
 
+describe('VocabList：来源标签', () => {
+  it('有 via 时显示细分来源，旧批量不冒充手动', () => {
+    const badgeItems = [
+      vocabItem({ id: 'ai', word: 'run', lemma: 'run', meaning: '跑' }),
+      vocabItem({ id: 'dict', word: 'wall', lemma: 'wall', meaning: '墙' }),
+      vocabItem({ id: 'manual', word: 'walk', lemma: 'walk', meaning: '走' }),
+      vocabItem({ id: 'legacy', word: 'talk', lemma: 'talk', meaning: '说' }),
+    ]
+    setup({
+      items: badgeItems,
+      originOf: (it) => (it.id === 'manual' ? 'manual' : 'auto'),
+      viaOf: (it) =>
+        it.id === 'ai' ? 'ai' : it.id === 'dict' ? 'dict' : it.id === 'manual' ? 'manual' : 'legacy',
+    })
+    expect(screen.getByText('AI')).toBeTruthy()
+    expect(screen.getByText('词典')).toBeTruthy()
+    expect(screen.getByText('手动')).toBeTruthy()
+    expect(screen.getByText('旧数据')).toBeTruthy()
+  })
+
+  it('没有 via 时：自动照旧，手动老条目不再冒充「手动」', () => {
+    setup({ originOf: (it) => (it.id === 'w1' ? 'auto' : 'manual') })
+    expect(screen.getByText('自动')).toBeTruthy()
+    expect(screen.getByText('旧数据')).toBeTruthy()
+  })
+})
+
 describe('VocabList：表格视图的图标按钮带上词条', () => {
   it('编辑/删除都念得出 lemma', () => {
     setup({ view: 'table' })

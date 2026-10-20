@@ -1,5 +1,5 @@
 import { Fragment, useState } from 'react'
-import type { VocabItem } from '../types/document'
+import type { VocabItem, VocabOrigin, VocabVia } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
 import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
 import { KIND_LABEL, kindOf } from '../core/entryKind'
@@ -34,7 +34,38 @@ interface Props {
   /** 词条序号（与正文对应）；返回 null 则不显示 */
   numberOf?: (item: VocabItem) => number | null
   /** 本篇收录方式（自动 / 手动）；不传则不显示标签 */
-  originOf?: (item: VocabItem) => 'auto' | 'manual' | undefined
+  originOf?: (item: VocabItem) => VocabOrigin | undefined
+  /** 更细来源（AI / 词典 / 手动 / 语言点）；旧条目可能没有 */
+  viaOf?: (item: VocabItem) => VocabVia | undefined
+}
+
+/**
+ * 来源标签：有 via 就按细分来源显示；旧数据没有 via 时退回粗粒度 auto/manual。
+ * `batch` / `legacy` 明确表示「旧数据没记具体来源」，不冒充手动。
+ */
+function OriginBadge({ origin, via }: { origin?: VocabOrigin; via?: VocabVia }) {
+  if (!origin) return null
+  const info =
+    via === 'ai'
+      ? { cls: 'o-ai', label: 'AI', title: 'AI 自动标词收录' }
+      : via === 'dict'
+        ? { cls: 'o-dict', label: '词典', title: '离线词典挑词收录' }
+        : via === 'language'
+          ? { cls: 'o-lang', label: '语言点', title: 'AI 语言点自动收藏' }
+          : via === 'batch'
+            ? { cls: 'o-batch', label: '批量', title: '批量加入（旧数据未记录具体来源）' }
+            : via === 'legacy'
+              ? { cls: 'o-legacy', label: '旧数据', title: '旧版数据（未记录收录来源）' }
+              : via === 'manual'
+                ? { cls: '', label: '手动', title: '手动加入' }
+                : origin === 'auto'
+                  ? { cls: 'o-auto', label: '自动', title: '自动标词收录' }
+                  : { cls: 'o-legacy', label: '旧数据', title: '旧版数据未记录来源（可能是批量或手动）' }
+  return (
+    <span className={'origin-badge ' + info.cls} title={info.title}>
+      {info.label}
+    </span>
+  )
 }
 
 interface Draft {
@@ -62,6 +93,7 @@ export default function VocabList({
   showSource = false,
   numberOf,
   originOf,
+  viaOf,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
@@ -204,11 +236,7 @@ export default function VocabList({
                   title="点读发音"
                 >
                   {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
-                  {originOf?.(it) && (
-                    <span className={'origin-badge o-' + originOf(it)} title={originOf(it) === 'auto' ? '自动标词收录' : '手动加入'}>
-                      {originOf(it) === 'auto' ? '自动' : '手动'}
-                    </span>
-                  )}
+                  <OriginBadge origin={originOf?.(it)} via={viaOf?.(it)} />
                   {it.word}
                   {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                   {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
@@ -292,11 +320,7 @@ export default function VocabList({
                 title="点读发音"
               >
                 {numberOf && numberOf(it) != null && <span className="wnum-badge">{numberOf(it)}</span>}
-                {originOf?.(it) && (
-                  <span className={'origin-badge o-' + originOf(it)} title={originOf(it) === 'auto' ? '自动标词收录' : '手动加入'}>
-                    {originOf(it) === 'auto' ? '自动' : '手动'}
-                  </span>
-                )}
+                <OriginBadge origin={originOf?.(it)} via={viaOf?.(it)} />
                 {it.word}{' '}
                 {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
                 {it.phonetic && <span className="ph">{it.phonetic}</span>}

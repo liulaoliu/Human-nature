@@ -115,6 +115,11 @@
    各按钮的回调，后一个 `persist` 会覆盖前一个（闭包里还是旧 `library`）。规矩：每步读
    `libraryRef.current`，上一步 persist 后同步更新；例句放在校正原形之前（否则旧词形对不上）；
    按钮用 `busy` 防重入。测试用可更新的假 ref + persist，断言调用顺序和最终库不丢步骤。
+22. **待选词提交必须带来源，不能默认成「手动」**。`commitBatch` 过去只传 `origin`，AI 自动标词 /
+   离线词典挑词整批提交后全变「手动」，用户以为自己点过。规矩：`BatchItem.via` 从产生处一路带到
+   `markWord`（手动点选 `manual`、词典 `dict`、AI `ai`、听写 `auto`）；旧待选没有 `via` 时提交记
+   `batch`。**不要按加入时间反推来源**：旧条目没有 `via` 就显示「旧数据」，不猜是 AI / 词典 / 手动。
+   来源合法值只在 `core/vocabVia.ts`（`isVocabVia`），localStorage 读回先过守卫。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

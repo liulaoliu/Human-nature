@@ -27,6 +27,23 @@ describe('addArticleEntry：按篇收录', () => {
     expect(articleItemsOf(l, 'A').map((it) => it.lemma)).toEqual(['beta', 'alpha'])
   })
 
+  it('写入细分来源；已有来源不被后来的动作覆盖', () => {
+    let l = lib({ items: [vocabItem({ id: 'v1', lemma: 'alpha' })] })
+    l = addArticleEntry(l, { articleId: 'A', lemma: 'alpha', origin: 'auto', via: 'dict' }, NOW)
+    expect(articleEntriesOf(l, 'A')[0].via).toBe('dict')
+    l = addArticleEntry(l, { articleId: 'A', lemma: 'alpha', origin: 'manual', via: 'manual' }, NOW)
+    expect(articleEntriesOf(l, 'A')[0].via).toBe('dict')
+  })
+
+  it('旧条目没有 via：后来的动作可以补上，但不改 origin', () => {
+    let l = lib({
+      items: [vocabItem({ id: 'v1', lemma: 'alpha' })],
+      articleEntries: [{ articleId: 'A', lemma: 'alpha', origin: 'manual', addedAt: NOW.toISOString() }],
+    })
+    l = addArticleEntry(l, { articleId: 'A', lemma: 'alpha', origin: 'auto', via: 'ai' }, NOW)
+    expect(articleEntriesOf(l, 'A')[0]).toMatchObject({ origin: 'manual', via: 'ai' })
+  })
+
   it('同篇同词只收一次，只补空着的语境，不改变顺序', () => {
     let l = lib({ items: [vocabItem({ id: 'v1', lemma: 'alpha' })] })
     l = addArticleEntry(l, { articleId: 'A', lemma: 'alpha', origin: 'auto' }, NOW)
@@ -123,10 +140,11 @@ describe('articleEntryViews / mergeArticleEntries', () => {
 describe('markWord 写入按篇条目', () => {
   it('普通单词自动 / 手动都收进当前篇；词组不进', () => {
     let l = createLibrary()
-    l = markWord(l, { word: 'alpha', articleId: 'A', fileName: 'A', origin: 'auto' }, NOW).library
-    l = markWord(l, { word: 'beta', articleId: 'A', fileName: 'A' }, NOW).library
+    l = markWord(l, { word: 'alpha', articleId: 'A', fileName: 'A', origin: 'auto', via: 'dict' }, NOW).library
+    l = markWord(l, { word: 'beta', articleId: 'A', fileName: 'A', via: 'manual' }, NOW).library
     l = markWord(l, { word: 'take off', articleId: 'A', fileName: 'A' }, NOW).library
     expect(articleEntriesOf(l, 'A')).toHaveLength(2)
     expect(articleEntriesOf(l, 'A').map((e) => e.origin)).toEqual(['auto', 'manual'])
+    expect(articleEntriesOf(l, 'A').map((e) => e.via)).toEqual(['dict', 'manual'])
   })
 })

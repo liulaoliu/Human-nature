@@ -1,8 +1,12 @@
 /** 「选词模式」里攒的待选生词。 */
+import type { VocabVia } from '../../types/document'
+
 export interface BatchItem {
   word: string
   sentence: string
   sentenceId: string | null
+  /** 来源：手动点选 / 离线词典挑词 / AI 自动标词；旧待选没有这个字段 */
+  via?: VocabVia
 }
 
 export interface SidePickBatchProps {

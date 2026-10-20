@@ -13,7 +13,7 @@ import {
 import { applyWordAnalysis, dedupeLibrary, lemmaOf } from '../../core/vocab'
 import { applyTableTask, missingWords, type ApplyTableTask } from '../../core/aiApply'
 import type { MissingTask } from '../missingPrompts'
-import type { Sentence, VocabLibrary } from '../../types/document'
+import type { Sentence, VocabLibrary, VocabVia } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import {
   dictLemmaOf,
@@ -27,7 +27,7 @@ import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+type BatchItemLike = { word: string; sentence: string; sentenceId: string | null; via?: VocabVia }
 
 export interface ApplyOutcome {
   report: string[]
@@ -43,7 +43,7 @@ export interface UseApplyTaskResultParams {
   sentence: Sentence | null
   persist: (library: VocabLibrary) => void
   mergeBatch: (items: BatchItemLike[]) => void
-  batchItemsFromWords: (words: string[]) => BatchItemLike[]
+  batchItemsFromWords: (words: string[], via?: VocabVia) => BatchItemLike[]
   /** 自动标词直入：true = 直接写进生词本（跳过「待选」）。 */
   autoVocabDirect: boolean
   /** 把词条直接加进生词本（按原形去重）。 */
@@ -204,7 +204,7 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const mergedCount = words.length - newCount
         const split =
           mergedCount > 0 ? `（新 ${newCount} · 已在生词本 ${mergedCount}）` : ''
-        const items = batchItemsFromWords(words)
+        const items = batchItemsFromWords(words, 'ai')
         if (autoVocabDirect) {
           // 直入模式：跳过「待选」，直接进生词本（状态未查），下次跑批自动补音标/释义
           commitBatchItems(items)

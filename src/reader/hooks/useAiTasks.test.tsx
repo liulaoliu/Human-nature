@@ -46,7 +46,7 @@ function setup(over: Partial<UseAiTasksParams> = {}) {
     ...over,
   }
   const hook = renderHook(() => useAiTasks(base))
-  return { ...hook, flash, setLastTask, askedWordsRef, askedIdsRef }
+  return { ...hook, flash, setLastTask, persist, askedWordsRef, askedIdsRef }
 }
 
 describe('useAiTasks.copyLanguagePrompt', () => {
@@ -114,5 +114,33 @@ describe('useAiTasks.copyMissingAgain', () => {
     const { result, flash } = setup({ pasteMissing: { task: 'confusable', words: ['run'] } })
     await act(() => result.current.copyMissingAgain())
     expect(flash).toHaveBeenCalledWith('复制失败：浏览器需要 localhost 或 https')
+  })
+})
+
+describe('useAiTasks.commitBatch：保留待选来源', () => {
+  it('词典挑词 / 手动点选 / AI 自动标词分别写入 via 和 origin', () => {
+    const { result, persist } = setup({
+      visibleBatch: [
+        { word: 'run', sentence: 'I run.', sentenceId: 's1', via: 'dict' },
+        { word: 'walk', sentence: 'I walk.', sentenceId: 's2', via: 'manual' },
+        { word: 'talk', sentence: 'I talk.', sentenceId: 's3', via: 'ai' },
+      ],
+    })
+    act(() => result.current.commitBatch())
+    const lib = persist.mock.calls[0][0] as VocabLibrary
+    expect(lib.articleEntries).toMatchObject([
+      { lemma: 'run', origin: 'auto', via: 'dict' },
+      { lemma: 'walk', origin: 'manual', via: 'manual' },
+      { lemma: 'talk', origin: 'auto', via: 'ai' },
+    ])
+  })
+
+  it('旧待选没有 via：标成 batch，不冒充手动', () => {
+    const { result, persist } = setup({
+      visibleBatch: [{ word: 'run', sentence: 'I run.', sentenceId: 's1' }],
+    })
+    act(() => result.current.commitBatch())
+    const lib = persist.mock.calls[0][0] as VocabLibrary
+    expect(lib.articleEntries?.[0]).toMatchObject({ origin: 'auto', via: 'batch' })
   })
 })

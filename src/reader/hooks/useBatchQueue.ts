@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { lemmaOf } from '../../core/vocab'
 import { wordSpans } from '../../core/wordSelect'
-import type { Sentence } from '../../types/document'
+import type { Sentence, VocabVia } from '../../types/document'
 import type { BatchItem } from '../panels/SidePick'
 import { readRaw, writeRaw } from '../storage'
+import { isVocabVia } from '../../core/vocabVia'
 
 const BATCH_MAP_KEY = 'reader:batch'
 
@@ -19,6 +20,7 @@ function toBatchItem(v: unknown): BatchItem | null {
     word,
     sentence: typeof v.sentence === 'string' ? v.sentence : '',
     sentenceId: typeof v.sentenceId === 'string' ? v.sentenceId : null,
+    via: isVocabVia(v.via) ? v.via : undefined,
   }
 }
 
@@ -95,7 +97,7 @@ export function useBatchQueue({ articleIdentity, sentences }: UseBatchQueueParam
         const key = lemmaOf(w)
         const i = next.findIndex((x) => lemmaOf(x.word) === key)
         if (i >= 0) next.splice(i, 1)
-        else next.push({ word: w, sentence, sentenceId })
+        else next.push({ word: w, sentence, sentenceId, via: 'manual' })
       }
       return next
     })
@@ -107,7 +109,9 @@ export function useBatchQueue({ articleIdentity, sentences }: UseBatchQueueParam
       const next = [...prev]
       for (const it of items) {
         const key = lemmaOf(it.word)
-        if (!next.some((x) => lemmaOf(x.word) === key)) next.push(it)
+        const i = next.findIndex((x) => lemmaOf(x.word) === key)
+        if (i < 0) next.push(it)
+        else if (!next[i].via && it.via) next[i] = { ...next[i], via: it.via }
       }
       return next
     })
@@ -115,7 +119,7 @@ export function useBatchQueue({ articleIdentity, sentences }: UseBatchQueueParam
 
   /** 把一串词映射成待选项，并尽量在正文里找到它所在的句子（回填来源）。 */
   const batchItemsFromWords = useCallback(
-    (words: string[]): BatchItem[] =>
+    (words: string[], via: VocabVia = 'auto'): BatchItem[] =>
       words.map((w) => {
         const key = lemmaOf(w)
         const s = (sentences ?? []).find((x) =>
@@ -123,7 +127,7 @@ export function useBatchQueue({ articleIdentity, sentences }: UseBatchQueueParam
             (t) => t.text.toLowerCase() === w.toLowerCase() || lemmaOf(t.text) === key,
           ),
         )
-        return { word: w, sentence: s?.text ?? '', sentenceId: s?.id ?? null }
+        return { word: w, sentence: s?.text ?? '', sentenceId: s?.id ?? null, via }
       }),
     [sentences],
   )

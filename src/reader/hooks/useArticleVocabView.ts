@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import type { ArticleVocabEntry, Sentence, VocabLibrary, VocabOrigin } from '../../types/document'
+import type { ArticleVocabEntry, Sentence, VocabLibrary, VocabOrigin, VocabVia } from '../../types/document'
 import { articleEntryViews } from '../../core/articleVocab'
 import { articleNumbering } from '../../core/articleNums'
 import { resolveArticleMeaning } from '../../core/articleMeaning'
@@ -50,6 +50,15 @@ export function useArticleVocabView({ library, articleIdentity, sentences }: Art
   /** 本篇自动 / 手动标签（含语言点） */
   const articleOrigins = useMemo(
     () => new Map<string, VocabOrigin>(allViews.map((v) => [v.entry.lemma, v.entry.origin])),
+    [allViews],
+  )
+
+  /** 本篇细分来源（AI / 词典 / 手动 / 语言点；旧条目可能没有） */
+  const articleVias = useMemo(
+    () =>
+      new Map<string, VocabVia>(
+        allViews.flatMap((v) => (v.entry.via ? [[v.entry.lemma, v.entry.via] as const] : [])),
+      ),
     [allViews],
   )
 
@@ -123,6 +132,7 @@ export function useArticleVocabView({ library, articleIdentity, sentences }: Art
     articleEntryLookup,
     knownLemmas,
     articleOrigins,
+    articleVias,
     languageSentCount,
     wordsInSentence,
     articleNums,

@@ -1996,9 +1996,23 @@ button.danger {
   color: #57b26a;
   white-space: nowrap;
 }
-.origin-badge.o-auto {
+.origin-badge.o-auto,
+.origin-badge.o-ai {
   background: rgba(232, 168, 56, 0.2);
   color: #d99a2b;
+}
+.origin-badge.o-dict {
+  background: rgba(86, 156, 214, 0.2);
+  color: #3f86c9;
+}
+.origin-badge.o-lang {
+  background: rgba(150, 120, 220, 0.2);
+  color: #7a5fc0;
+}
+.origin-badge.o-batch,
+.origin-badge.o-legacy {
+  background: rgba(127, 127, 127, 0.18);
+  color: #777;
 }
 
 /* 生词本就地编辑 */

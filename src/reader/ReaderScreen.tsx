@@ -2,7 +2,7 @@ import { useMemo, type ComponentProps } from 'react'
 import { articleKey } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
-import type { Sentence, VocabItem, VocabLibrary } from '../types/document'
+import type { Sentence, VocabItem, VocabLibrary, VocabVia } from '../types/document'
 import type { ReaderDoc } from './hooks/useReaderDoc'
 import ReaderShell from './ReaderShell'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -82,6 +82,7 @@ export interface ReaderScreenProps {
   articleWords: VocabItem[]
   articleNums: Map<string, number>
   articleOrigins: Map<string, 'auto' | 'manual'>
+  articleVias: Map<string, VocabVia>
   articleFirst: ArticleP['articleFirst']
   articleAllPrinted: boolean
   articlePrintedAt: string | null

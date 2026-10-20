@@ -101,10 +101,13 @@ types ← core ← adapters ← reader
 
 - `VocabItem`（`library.items`）仍是**复习 / 词义主数据**：一个 lemma 一条，背单词只背一次。
 - `ArticleVocabEntry`（`library.articleEntries`）记**这一篇收了哪些词**：`articleId + lemma + origin +
-  addedAt + 语境释义 + printedAt`。本篇列表、编号、正文高亮、按篇打印都只读这一层。
+  via + addedAt + 语境释义 + printedAt`。本篇列表、编号、正文高亮、按篇打印都只读这一层。
 - **新文章不继承总词库**：不许再用「正文里出现过 + 词库里有」判断本篇归属；只有自动标词 / 手动加入
   / 语言点自动收藏会写条目。词组 / 习语 / 用法也收进本篇（侧栏语言点页签），但 `articleNums` 只给单词编号。
-- 编号 = 本篇条目数组的下标 + 1（加入顺序），删除后自然重排；自动 / 手动共用同一套编号，用 `origin` 标来源。
+- 编号 = 本篇条目数组的下标 + 1（加入顺序），删除后自然重排；自动 / 手动共用同一套编号。
+- `origin` 只保留粗粒度 `auto / manual`（打印、老逻辑用）；**细分来源看 `via`**（`ai / dict / manual /
+  language / auto / batch / legacy`）。合法值与守卫只在 `core/vocabVia.ts`，UI 显示时优先 `via`、
+  没有才退回 `origin`；旧数据无法还原具体来源时用 `batch / legacy`，**不按时间反推**，也不许猜成「手动」。
 - 打印是「按篇行」：`core/printPlan.ts` 产出 `PrintRow { item, articleId, number, meaning }`，
   同一词在不同篇各有一行、各用本篇编号，不再按 lemma 跨篇去重。
 

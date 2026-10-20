@@ -174,6 +174,25 @@ describe('migrateLibrary：按篇收录表', () => {
     expect(libraryErrors(out)).toEqual([])
   })
 
+  it('保留合法 via；非法来源当没记', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          { word: 'run', lemma: 'run' },
+          { word: 'walk', lemma: 'walk' },
+        ],
+        articleEntries: [
+          { articleId: 'A', lemma: 'run', origin: 'auto', via: 'dict', addedAt: '2026-10-01T00:00:00.000Z' },
+          { articleId: 'A', lemma: 'walk', origin: 'manual', via: '乱写', addedAt: '2026-10-01T00:00:01.000Z' },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.articleEntries?.[0].via).toBe('dict')
+    expect(out.articleEntries?.[1].via).toBeUndefined()
+    expect(libraryErrors(out)).toEqual([])
+  })
+
   it('幂等：已是当前结构时 articleEntries 引用复用', () => {
     const entries = [{ articleId: 'A', lemma: 'run', origin: 'auto' as const, addedAt: '2026-10-01T00:00:00.000Z' }]
     const first = migrateLibrary({ items: [{ word: 'run', lemma: 'run' }], articleEntries: entries }, TEST_NOW)

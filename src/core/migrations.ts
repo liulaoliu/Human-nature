@@ -22,6 +22,7 @@ import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import { KIND_ORDER } from './entryKind'
 import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
 import { repairLanguageKinds } from './langPoints'
+import { isVocabVia } from './vocabVia'
 
 const KINDS = new Set<string>(KIND_ORDER)
 const STATUSES = new Set(['unqueried', 'queried', 'edited', 'mastered'])
@@ -176,6 +177,7 @@ function looksCurrentEntry(o: Record<string, unknown>): boolean {
     typeof o.lemma === 'string' &&
     !!o.lemma.trim() &&
     (o.origin === 'auto' || o.origin === 'manual') &&
+    (o.via === undefined || isVocabVia(o.via)) &&
     typeof o.addedAt === 'string' &&
     ISO_ISH.test(o.addedAt) &&
     (o.sentenceId === undefined || o.sentenceId === null || typeof o.sentenceId === 'string') &&
@@ -196,6 +198,7 @@ function migrateEntry(raw: unknown, items: Map<string, VocabItem>, now: string):
   const item = items.get(lemma)
   if (!item) return null
   const origin: VocabOrigin = o.origin === 'auto' ? 'auto' : 'manual'
+  const via = isVocabVia(o.via) ? o.via : undefined
   const meaningSource = ['manual', 'context', 'library', 'dict', 'ai'].includes(String(o.meaningSource))
     ? (o.meaningSource as VocabMeaningSource)
     : undefined
@@ -203,6 +206,7 @@ function migrateEntry(raw: unknown, items: Map<string, VocabItem>, now: string):
     articleId,
     lemma,
     origin,
+    via,
     addedAt: iso(o.addedAt, now),
     sentenceId: strOrNull(o.sentenceId),
     sentenceText: str(o.sentenceText),
@@ -225,6 +229,7 @@ function deriveLegacyEntries(items: VocabItem[], now: string): ArticleVocabEntry
         articleId: sourceArticle,
         lemma: it.lemma,
         origin: 'manual',
+        via: 'legacy',
         addedAt: it.createdAt || now,
         sentenceId: it.source?.sentenceId ?? null,
         sentenceText: it.source?.sentenceText ?? '',
@@ -251,6 +256,7 @@ function deriveLegacyEntries(items: VocabItem[], now: string): ArticleVocabEntry
         articleId,
         lemma: it.lemma,
         origin: 'manual',
+        via: 'legacy',
         addedAt: iso(c.at, now),
         sentenceId: c.sentenceId,
         sentenceText: c.sentenceText,

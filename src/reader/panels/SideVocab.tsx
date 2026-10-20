@@ -1,7 +1,7 @@
 
 import { useMemo, useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
-import type { VocabItem } from '../../types/document'
+import type { VocabItem, VocabVia } from '../../types/document'
 import type { PrintRow } from '../../core/printPlan'
 import { sortItems, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
 import { langEntries, wordEntries } from '../../core/entryKind'
@@ -95,6 +95,8 @@ export interface SideVocabProps {
   articleNums: Map<string, number>
   /** 本篇收录方式：lemma → auto/manual（列表标签用） */
   articleOrigins?: Map<string, 'auto' | 'manual'>
+  /** 更细来源：lemma → AI / 词典 / 手动 / 语言点 / 旧数据 */
+  articleVias?: Map<string, VocabVia>
   /** 本篇是否已全部打印（用于「已打印」标记，避免重复打印）。 */
   articleAllPrinted: boolean
   /** 本篇最近一次打印时间（ISO），没打印过为 null。 */
@@ -161,6 +163,7 @@ export default function SideVocab({
   onDailyGoalChange,
   articleNums,
   articleOrigins,
+  articleVias,
   articleAllPrinted,
   articlePrintedAt,
   focusLemma,
@@ -536,6 +539,7 @@ export default function SideVocab({
           onEdit={onEdit}
           numberOf={(it) => articleNums.get(it.lemma) ?? null}
           originOf={(it) => articleOrigins?.get(it.lemma)}
+          viaOf={(it) => articleVias?.get(it.lemma)}
         />
       ) : (
         <div className="muted empty-hint">这篇还没有生词；划词标记，或点「全部生词」看别的文章。</div>

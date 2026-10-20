@@ -56,6 +56,7 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
           sentenceId: it.sentenceId,
           sentenceText: it.sentence,
           origin: 'auto',
+          via: it.via ?? 'ai',
         }).library
       }
       persist(lib)
@@ -76,6 +77,7 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
           fileName,
           sentenceId: it.sentenceId,
           sentenceText: it.sentenceText,
+          via: 'manual',
         })
         lib = r.library
         if (r.created) created++
@@ -102,6 +104,7 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
           sentenceId: sentence?.id ?? null,
           sentenceText: sentence?.text ?? '',
           meaning: gloss,
+          via: 'manual',
         })
         lib = r.library
         if (r.created) created++

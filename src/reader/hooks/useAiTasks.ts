@@ -13,7 +13,7 @@ import {
 import { dedupeLibrary, markWord, relemmaLibrary } from '../../core/vocab'
 import { buildLanguagePrompt } from '../../core/language'
 import { buildMissingPrompt, type MissingTask } from '../missingPrompts'
-import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+import type { Sentence, VocabItem, VocabLibrary, VocabVia } from '../../types/document'
 
 /** 复制提示词时会用到的任务键。 */
 export type AiTaskKey =
@@ -29,7 +29,7 @@ export type AiTaskKey =
   | 'imitation'
   | 'feedback'
 
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+type BatchItemLike = { word: string; sentence: string; sentenceId: string | null; via?: VocabVia }
 
 export interface UseAiTasksParams {
   exact: string
@@ -146,6 +146,9 @@ export function useAiTasks({
         fileName: articleIdentity,
         sentenceId: b.sentenceId,
         sentenceText: b.sentence,
+        // 待选里保留了来源：手动点选 = manual；词典/一键挑词 = dict；AI 自动标词 = ai
+        origin: b.via === 'manual' ? 'manual' : 'auto',
+        via: b.via ?? 'batch',
       }).library
     }
     persist(lib)

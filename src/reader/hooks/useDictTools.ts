@@ -4,10 +4,10 @@ import { dictConfusables, dictLemmaPairs, pickAboveLevelWords, type EcdictLevel 
 import { applyConfusables, applyLemmaMap, dedupeLibrary, lemmaOf } from '../../core/vocab'
 import { enrichWithDict } from '../../core/dictEnrich'
 import { isWordEntry } from '../../core/entryKind'
-import type { VocabLibrary } from '../../types/document'
+import type { VocabLibrary, VocabVia } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
 
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+type BatchItemLike = { word: string; sentence: string; sentenceId: string | null; via?: VocabVia }
 
 export interface UseDictToolsParams {
   library: VocabLibrary
@@ -17,7 +17,7 @@ export interface UseDictToolsParams {
   doc: { sentences: { id: string; text: string }[] } | null
   level: EcdictLevel
   mergeBatch: (items: BatchItemLike[]) => void
-  batchItemsFromWords: (words: string[]) => BatchItemLike[]
+  batchItemsFromWords: (words: string[], via?: VocabVia) => BatchItemLike[]
   flash: (message: string) => void
   /** 一键流程里的「补离线例句」（异步，由正文动作提供）。 */
   enrichExamples?: () => Promise<void> | void
@@ -97,7 +97,7 @@ export function useDictTools({
     }
     const existing = new Set(readLibrary().items.map((it) => it.lemma))
     const fresh = words.filter((w) => !existing.has(lemmaOf(w))).length
-    mergeBatch(batchItemsFromWords(words))
+    mergeBatch(batchItemsFromWords(words, 'dict'))
     flash(
       fresh
         ? `已按词典挑出 ${words.length} 个超纲词，其中「新 ${fresh}」个进「待选」${

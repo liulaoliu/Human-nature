@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react'
 import type { AnalysisTask } from '../core/analyzer'
-import type { VocabItem, VocabLibrary } from '../types/document'
+import type { VocabItem, VocabLibrary, VocabVia } from '../types/document'
 import type { useAiPack } from './hooks/useAiPack'
 import type { useAiTasks } from './hooks/useAiTasks'
 import type { useDictTools } from './hooks/useDictTools'
@@ -67,6 +67,7 @@ export interface ReaderSidebarHostProps {
     articleWords: VocabItem[]
     articleNums: Map<string, number>
     articleOrigins?: Map<string, 'auto' | 'manual'>
+    articleVias?: Map<string, VocabVia>
     articleAllPrinted: boolean
     articlePrintedAt: string | null
     languageCount: number
@@ -410,6 +411,7 @@ export default function ReaderSidebarHost({
         onDailyGoalChange: vocab.onDailyGoalChange,
         articleNums: derived.articleNums,
         articleOrigins: derived.articleOrigins,
+        articleVias: derived.articleVias,
         articleAllPrinted: derived.articleAllPrinted,
         articlePrintedAt: derived.articlePrintedAt,
         focusLemma: vocab.focusLemma,

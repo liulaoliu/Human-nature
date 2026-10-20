@@ -258,6 +258,12 @@ export interface VocabItem {
 /** 这个词是通过自动标词还是手动加入收进本篇的。 */
 export type VocabOrigin = 'auto' | 'manual'
 
+/**
+ * 更细的来源：自动 / 手动只是「谁触发」，这里记录「从哪来」。
+ * 旧数据没有这个字段；`batch` / `legacy` 是迁移时兜底，不假装知道具体来源。
+ */
+export type VocabVia = 'ai' | 'dict' | 'manual' | 'language' | 'auto' | 'batch' | 'legacy'
+
 /** 本篇语境释义的来源（界面可据此标注，AI 结果不覆盖手改）。 */
 export type VocabMeaningSource = 'manual' | 'context' | 'library' | 'dict' | 'ai'
 
@@ -274,6 +280,8 @@ export interface ArticleVocabEntry {
   lemma: string
   /** 自动标词 / 手动加入 */
   origin: VocabOrigin
+  /** 细分来源：AI / 离线词典 / 手动 / 语言点 / 旧数据兜底 */
+  via?: VocabVia
   /** 加入时间 ISO（合并备份时排序用；篇内编号按数组顺序） */
   addedAt: string
   /** 收录时所在的句子（速读「本句已收录」/语境释义用） */

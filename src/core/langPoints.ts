@@ -256,6 +256,7 @@ export function upsertLanguagePoints(
         articleId,
         lemma: key,
         origin: 'auto',
+        via: 'language',
         sentenceId: point.source?.sentenceId ?? null,
         sentenceText: point.source?.sentenceText ?? '',
         meaning: gloss,

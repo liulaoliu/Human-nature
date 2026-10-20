@@ -451,6 +451,7 @@ export function useSelection({
       fileName: articleIdentity,
       sentenceId: sentence?.id ?? null,
       sentenceText: sentence?.text ?? '',
+      via: 'manual',
     })
     persist(result.library)
     flash(result.created ? `已加入：${result.item.word}` : `已合并：${result.item.word}`)
