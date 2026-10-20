@@ -44,8 +44,11 @@
    - `state/session.ts` 1185 → 732、`ui/App.tsx` 1191 → 624、`reader/ReaderApp.tsx` 1036 → 781、
      `state/session.test.ts` 1057 → 拆成 4 个按主题的测试文件（共用 `sessionDoubles`）。
    - `tool/check_god_file.mjs` 的 `BASELINE` 现在是空的：新文件超 800 行一律拆，别再登记。
-   - 想继续瘦身的话，下一批是 `hooks/useAiPack`（587）、`hooks/useQuizSession`（535）、
-     `hooks/useApplyTaskResult`（508）——都在 800 线下，属于「可读性」而非门禁问题。
+   - 第二批（2026-10-20）把三个「AI / 考试」hook 也拆了：`useAiPack` 587 → **505**
+     （HTTP 与轮询搬去 `adapters/aiRun`）、`useQuizSession` 535 → **437**
+     （设置搬去 `hooks/useQuizSettings`、候选池与出题集搬去 `core/quizPool`）、
+     `useApplyTaskResult` 508 → **410**（表格型任务规则搬去 `core/aiApply`）。
+   - 大文件清零了，剩下的都是 500 行上下的正常规模；想再动先看 `npm run gates` 里的「存量豁免」。
 5. **记录分页（P2，暂不做）**
    - 练习 500 / 错题 300 / 写作 200 条上限还没到；真要做时服务端 `limit/offset`，别改事实来源。
 

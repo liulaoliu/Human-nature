@@ -167,7 +167,7 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
-- **hooks 53 / 53 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
+- **hooks 54 / 54 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
   `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
   `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动；
   速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（7 条），
@@ -179,13 +179,19 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `newToday` 跨天归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
   `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
+- **AI / 考试三个大 hook 也拆干净了（2026-10-20 第二批）**：`core/aiApply`（16：六个表格型任务的解析 / 校验 / 回执，
+  含「自己当自己的易混词」「词库里没有这个词」「AI 未返回」三类分支）、`core/quizPool`（13：范围 → 候选池、
+  各范围题量、`unique` 开关下每词最多一题）、`adapters/aiRun`（8：起跑 / done / error / 没配 key /
+  连续 20 次失联 / 取消后不再请求 / 定时器清干净）、`hooks/useQuizSettings`（5：默认值 / 坏 JSON 回默认 /
+  文章级题型表混进词级题型只留文章级 / 写入落盘）。
+  三个 hook 的原有测试一条没改：`useApplyTaskResult` 13、`useQuizSession` 8、`useAiPack` 10。
 - **panels 35 / 35 有测试**：本轮补齐 `SpeedReadPanel` / `SidePick` / `StudyPanel` / `DictPanel` / `QuizPanel` /
   `IntensivePanel` / `GoalPanel` / `JournalPanel` / `ListeningPanel` / `WritingPanel` / `LanguageEditor` /
   `QuickPanel` / `QuizSetupPanel` / `StatsPanel` / `PlanPanel` / `Composer` / `SideOverview` / `SideMastery` /
   `LangPhrases` / `VocabBlocks` / `ReaderBody` / `ReaderSidebar` / `ReaderToolbar`（薄容器 `ReaderSidebar`
   用 stub 子面板只测页签接线）。`SidePick` 582 行拆成 `SidePickBatch` / `SidePickDictTools` / `SidePickAiPack`
   （3 + 2 + 6 条），原 10 条面板级测试继续覆盖整块接线。
-- **adapters 10 / 16 有同名测试，其余按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` /
+- **adapters 11 / 16 有同名测试，其余按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` / `aiRun` /
   `stateBackup` / `hybridMode` / `vocabRepo` / `sqliteRepo` / `audioPick`；`articleRepo` / `storeApi` 由
   `server/*.test.js` 间接覆盖；三个脚本/跟读仓储依赖真实浏览器/IndexedDB，走 §4 人工用例
   （R7 只要求 `core/`，adapters 不强制同名测试）。`browserAudio` 的测试用假 `Audio` / 假 `AudioContext`
