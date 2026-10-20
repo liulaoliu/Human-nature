@@ -7,6 +7,7 @@ import {
   dayKeyLocal,
   dayTotal,
   levelFor,
+  nextStudyDayStart,
   normalizeActivity,
   sumCats,
   type DayActivity,
@@ -22,6 +23,11 @@ describe('dayKeyLocal / calendarDayKey（结算点 04:00）', () => {
   it('calendarDayKey 就是那一天（不做结算偏移）', () => {
     expect(calendarDayKey(new Date(2026, 9, 3, 0, 0))).toBe('2026-10-03')
     expect(calendarDayKey(new Date(2026, 9, 3, 23, 59))).toBe('2026-10-03')
+  })
+  it('nextStudyDayStart：凌晨归到当天 04:00，白天归到下一天 04:00', () => {
+    expect(nextStudyDayStart(new Date(2026, 9, 3, 3, 59))).toEqual(new Date(2026, 9, 3, 4, 0, 0, 0))
+    expect(nextStudyDayStart(new Date(2026, 9, 3, 4, 0))).toEqual(new Date(2026, 9, 4, 4, 0, 0, 0))
+    expect(nextStudyDayStart(new Date(2026, 9, 3, 23, 30))).toEqual(new Date(2026, 9, 4, 4, 0, 0, 0))
   })
 })
 

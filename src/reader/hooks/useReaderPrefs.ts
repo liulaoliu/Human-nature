@@ -1,5 +1,6 @@
+import { useEffect } from 'react'
 import { useLocalStorageState, persistentBool, persistentEnum, persistentNumber, persistentString } from './useLocalStorageState'
-import { dayKeyLocal } from '../../core/activity'
+import { dayKeyLocal, nextStudyDayStart } from '../../core/activity'
 import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
 import type { VocabLevel } from '../../core/analyzer'
 import { parseToolbarWidth, type ToolbarWidth } from '../../core/toolbarWidth'
@@ -140,7 +141,7 @@ export function useReaderPrefs(): ReaderPrefs {
   const [newLimit, setNewLimit] = useLocalStorageState('reader:newLimit', 20, persistentNumber)
   /**
    * 今天已引入多少：落盘时带上日期，跨天读回来自动归零。
-   * （不是学习日结算那套 04:00 口径 —— 这是「每天新词配额」，按日历日算就够了）
+   * 日期口径跟学习统计一致（本地 04:00 结算），页面一直开着也会在结算点归零。
    */
   const [newToday, setNewToday] = useLocalStorageState('reader:newToday', 0, {
     parse: (raw) => {
@@ -153,6 +154,18 @@ export function useReaderPrefs(): ReaderPrefs {
     },
     serialize: (count) => JSON.stringify({ day: dayKeyLocal(), count }),
   })
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout>
+    const arm = () => {
+      const now = new Date()
+      timer = setTimeout(() => {
+        setNewToday(0)
+        arm()
+      }, Math.max(0, nextStudyDayStart(now).getTime() - now.getTime()))
+    }
+    arm()
+    return () => clearTimeout(timer)
+  }, [setNewToday])
 
   return {
     fontSize,

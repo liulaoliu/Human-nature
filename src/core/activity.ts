@@ -42,6 +42,12 @@ export function dayKeyLocal(d: Date = new Date()): string {
   return calendarDayKey(new Date(d.getTime() - DAY_ROLLOVER_HOUR * 3600 * 1000))
 }
 
+/** 下一个「学习日」开始时刻（本地 04:00）；页面跨结算点时用它安排归零。 */
+export function nextStudyDayStart(d: Date = new Date()): Date {
+  const shifted = new Date(d.getTime() - DAY_ROLLOVER_HOUR * 3600 * 1000)
+  return new Date(shifted.getFullYear(), shifted.getMonth(), shifted.getDate() + 1, DAY_ROLLOVER_HOUR, 0, 0, 0)
+}
+
 /**
  * 把 localStorage / 备份里读到的活动数组洗成可用形状。
  * 元素级脏数据（`null`、`day: 5`、`counts: null`）整条丢掉，而不是让它把

@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { act, renderHook } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useReaderPrefs } from './useReaderPrefs'
 import { dayKeyLocal } from '../../core/activity'
 import { installFakeStorage } from '../testStorage'
@@ -14,6 +14,7 @@ beforeEach(() => {
 
 afterEach(() => {
   restoreStorage()
+  vi.useRealTimers()
 })
 
 describe('useReaderPrefs（阅读页本机偏好）', () => {
@@ -114,5 +115,23 @@ describe('useReaderPrefs（阅读页本机偏好）', () => {
     localStorage.setItem('reader:newToday', JSON.stringify({ day: '2000-01-01', count: 9 }))
     const again = renderHook(() => useReaderPrefs())
     expect(again.result.current.newToday).toBe(0)
+  })
+
+  it('页面一直开着跨过 04:00：newToday 当场归零，不用等重开', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 9, 3, 3, 59, 59, 900))
+    const { result } = renderHook(() => useReaderPrefs())
+    act(() => result.current.setNewToday(5))
+    expect(result.current.newToday).toBe(5)
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200)
+    })
+
+    expect(result.current.newToday).toBe(0)
+    expect(JSON.parse(localStorage.getItem('reader:newToday') ?? '{}')).toEqual({
+      day: dayKeyLocal(),
+      count: 0,
+    })
   })
 })
