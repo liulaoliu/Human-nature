@@ -107,9 +107,9 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 偏大（2888 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 偏大（2377 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
-  后续继续把练习面板路由（`SessionHost`）和散落 IO 搬出去，目标是 ≤1200 行。
+  练习面板路由在 `SessionHost`，派生统计簇在 `hooks/useReaderDerived`，目标是 ≤1200 行。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
   不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。

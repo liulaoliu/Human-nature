@@ -9,7 +9,6 @@ import {
   isDue,
   lemmaOf,
   markWord,
-  normalizeWord,
   removeItem,
   reviewItem,
   sortItems,
@@ -22,7 +21,6 @@ import {
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
 import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
-import { isWordEntry } from '../core/entryKind'
 import { buildMissingPrompt } from './missingPrompts'
 import { splitGlossText } from '../core/langPoints'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
@@ -40,12 +38,10 @@ import {
   type MistakeEntry,
 } from '../core/mistakes'
 import { buildReadiness } from '../core/readiness'
-import { dueForecast, last7Days, pickDayStats, sessionTotals, studyTotals, wordsByArticle } from '../core/vocabStats'
 import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
-import type { SavedArticle } from '../core/ports'
 import VocabList, { type VocabEditPatch } from './VocabList'
 import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
@@ -72,6 +68,7 @@ import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
+import { useReaderDerived } from './hooks/useReaderDerived'
 import { usePregenerate } from './hooks/usePregenerate'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
 import { articleNumbering } from '../core/articleNums'
@@ -1008,77 +1005,38 @@ export default function ReaderApp() {
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [vocabMode])
 
-  const totals = useMemo(() => sessionTotals(sessions), [sessions])
-
-  /** 背单词时长统计：累计 / 今日 / 评分次数；显示时加上本轮尚未落盘的部分。 */
-  const studyStats = useMemo(() => studyTotals(studyDays), [studyDays])
-
-  /** 今日计划用：今天背了几张、写了几条。 */
-  const todayCards = useMemo(() => studyDays.find((d) => d.day === todayKey)?.cards ?? 0, [studyDays, todayKey])
-  const todayWrites = useMemo(() => {
-    let n = 0
-    for (const r of writingHistory) {
-      try {
-        if (dayKeyLocal(new Date(r.at)) === todayKey) n++
-      } catch {
-        // 忽略
-      }
-    }
-    return n
-  }, [writingHistory, todayKey])
-  const studyTotalSeconds = studyStats.totalSeconds
-  const studyTotalCards = studyStats.totalCards
-  const studyTodaySeconds = studyStats.todaySeconds
-  const studyGrandSeconds = studyTotalSeconds + studyUnflushed
-
-  /** 按天统计：今天选了多少 + 连续打卡天数。 */
-  const dayStats = useMemo(() => pickDayStats(sessions), [sessions])
-
-  /** 最近 7 天每天选了多少词（统计面板用）。 */
-  const last7 = useMemo(() => last7Days(sessions), [sessions])
-
-  /** 未来 30 天每天的到期词数（到期日历热力图用）。 */
-  const dueForecastRows = useMemo(() => dueForecast(library.items), [library.items])
-
-  /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */
-  const savedGroups = useMemo(() => {
-    const map = new Map<string, SavedArticle[]>()
-    for (const a of saved) {
-      const b = a.book || '单篇'
-      const arr = map.get(b)
-      if (arr) arr.push(a)
-      else map.set(b, [a])
-    }
-    return [...map.entries()]
-  }, [saved])
-
-  /** 按文章统计生词产出（Top 10）。 */
-  const byArticle = useMemo(() => wordsByArticle(library.items), [library.items])
-
-  /** 还缺 AI 混淆项、且有释义的词（生成干扰项用）。 */
-  const confusableTodo = useMemo(
-    () => library.items.filter((it) => isWordEntry(it) && it.meaning && !it.confusables?.length),
-    [library.items],
-  )
-  /** 一次生成多少（可自选；0=全部）；应用后再点，处理下一批。 */
-  const confusableBatch = useMemo(
-    () => (confusableBatchSize > 0 ? confusableTodo.slice(0, confusableBatchSize) : confusableTodo),
-    [confusableTodo, confusableBatchSize],
-  )
-
-  /** 疑似「非原型」的词（word 与 lemma 不一致）——供 AI 校正原形。 */
-  const lemmaCandidates = useMemo(
-    () => library.items.filter((it) => isWordEntry(it) && normalizeWord(it.word) !== it.lemma).slice(0, 100),
-    [library.items],
-  )
-
-  /** 含 -ing / -ed 形式的词或短语——供 AI 辨析语法身份。 */
-  const posCandidates = useMemo(() => {
-    const hasIngEd = (s: string) => s.split(/\s+/).some((t) => /(ing|ed)$/i.test(t))
-    return library.items
-      .filter((it) => isWordEntry(it) && (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma))
-      .slice(0, 60)
-  }, [library.items])
+  // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：
+  // 纯派生无副作用，状态仍由各自 hook 持有 —— 逻辑与记忆化都在 useReaderDerived。
+  const {
+    totals,
+    studyTotalSeconds,
+    studyTotalCards,
+    studyTodaySeconds,
+    studyGrandSeconds,
+    todayCards,
+    todayWrites,
+    dayStats,
+    last7,
+    dueForecastRows,
+    savedGroups,
+    byArticle,
+    confusableTodo,
+    confusableBatch,
+    lemmaCandidates,
+    posCandidates,
+    visibleBatch,
+  } = useReaderDerived({
+    items: library.items,
+    sessions,
+    studyDays,
+    studyUnflushed,
+    todayKey,
+    writingHistory,
+    saved,
+    confusableBatchSize,
+    batch,
+    libraryLemmas,
+  })
 
   /** 听写会话（队列 / 判分 / 自动下一句 / 错题重练）；逻辑在 hooks/useDictation。 */
   const dictApi = useDictation({
@@ -1121,12 +1079,6 @@ export default function ReaderApp() {
     },
     true,
     10,
-  )
-
-  /** 待选里「还没入库」的词（已入库的隐藏，避免和生词本重复）。 */
-  const visibleBatch = useMemo(
-    () => batch.filter((b) => !libraryLemmas.has(lemmaOf(b.word))),
-    [batch, libraryLemmas],
   )
 
   // 考试听力题出现时自动朗读（句子 / 单词）

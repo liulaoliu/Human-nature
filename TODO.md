@@ -18,11 +18,14 @@
       当前 **2424 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
-      1. [ ] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
+      1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
              `dayStats` / `last7` / `dueForecastRows` / `savedGroups` / `byArticle` / `confusableTodo` /
              `confusableBatch` / `lemmaCandidates` / `posCandidates` / `visibleBatch` 抽成
              `useReaderDerived({ library, sessions, studyDays, batch, ... })`；纯派生无副作用，用 `renderHook` 钉住
              几个关键输出即可。验收：`ReaderApp` 掉 ~100 行，行为不变。
+             （已完成：`hooks/useReaderDerived.ts` + 9 条 hook 测试；日期键统计抽到
+             `core/writing.countWritesOnDay` + 2 条 core 测试。`ReaderApp` 2424 → 2377 行，
+             基线同步降到 2377；`npm run gates` 全绿）
       2. [ ] **侧栏宿主**（约 -130 行）：新增 `ReaderSidebarHost`，接收 hook API 整包（`aiPack` / `aiTasks` /
              `useExport` / `useDictTools` / learning 等）与少量状态 setter，在宿主里拼出
              `overview` / `mastery` / `stats` / `pick` / `vocab` 五组 props；`ReaderApp` 只传 `sideTab` + 宿主 props。

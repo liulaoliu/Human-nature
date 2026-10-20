@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   addWritingRecord,
   buildImitationTaskPrompt,
+  countWritesOnDay,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
@@ -70,6 +71,24 @@ describe('parseWritingFeedback', () => {
   it('没有 scores/issues → null；非法 JSON → null', () => {
     expect(parseWritingFeedback(JSON.stringify({ summary: 'x' }))).toBeNull()
     expect(parseWritingFeedback('nope')).toBeNull()
+  })
+})
+
+describe('countWritesOnDay', () => {
+  const rec = (at: string): WritingRecord => ({
+    at,
+    articleId: 'a',
+    model: 'M',
+    text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 },
+  })
+  it('只数逻辑日当天（04:00 结算）', () => {
+    const list = [rec(new Date(2026, 9, 20, 9).toISOString()), rec(new Date(2026, 9, 20, 2).toISOString())]
+    expect(countWritesOnDay(list, '2026-10-20')).toBe(1)
+    expect(countWritesOnDay(list, '2026-10-19')).toBe(1)
+  })
+  it('坏时间戳忽略，不抛错', () => {
+    expect(countWritesOnDay([rec('不是时间')], '2026-10-20')).toBe(0)
   })
 })
 

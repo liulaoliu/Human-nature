@@ -9,6 +9,8 @@
  * 解析层对不合格的 JSON 直接返回空，不放水。
  */
 
+import { dayKeyLocal } from './activity'
+
 export interface RubricItem {
   dimension: string
   weight: number
@@ -235,4 +237,19 @@ export function addWritingRecord(
 ): WritingRecord[] {
   return [rec, ...list].slice(0, Math.max(0, cap))
 }
+
+/**
+ * 数某「逻辑日」写了几条（今日计划用）。`todayKey` 由 `core/activity.ts` 的
+ * `dayKeyLocal` 算好传进来，这里不自己拼日期键；坏时间戳直接忽略。
+ */
+export function countWritesOnDay(list: WritingRecord[], todayKey: string): number {
+  let n = 0
+  for (const r of list) {
+    const d = new Date(r.at)
+    if (Number.isNaN(d.getTime())) continue
+    if (dayKeyLocal(d) === todayKey) n++
+  }
+  return n
+}
+
 

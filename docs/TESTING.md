@@ -130,7 +130,8 @@
 **会话 hook 已有**：`useQuizSession`（出题/判分/错题/卸载定时器）、`useDictation`（整句/判分/错题/卸载）、
 `useSpeaking`（服务端起播/回退/停声）、`useAiPack`（status 探测/空待办/导出/坏结果）、
 `useExport`（导入覆盖/坏文件/合并幂等/打印拦截）、`useBatchQueue`（坏数据守卫/按 lemma 去重/按文章持久化）、
-`usePregenerate`（缓存命中/只补缺/取消/换音色失效）、`useArticleBootstrap`（迁移失败不挡列表/目录失败标记）。
+`usePregenerate`（缓存命中/只补缺/取消/换音色失效）、`useArticleBootstrap`（迁移失败不挡列表/目录失败标记）、
+`useReaderDerived`（派生统计簇：会话/背词/到期/候选/待选过滤，固定 `now` 钉住输出）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。
