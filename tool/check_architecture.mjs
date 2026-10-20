@@ -26,8 +26,7 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
 /** 存量违规（路径 → 理由）。能修就修，登记只是让门禁先能上线。 */
 const EXCEPTIONS = {
   'src/core/stateBackup.ts': 'R6：备份文件名里的日期（UTC），不是学习日，故意不动',
-  'src/ui/App.tsx': 'R3：跟读练习（旧模块）直接读写 localStorage 保存校准/脚本，独立于精读词库，暂不动',
-  'src/ui/ChunkSplitter.tsx': 'R3：同上（跟读切块参数）',
+  'src/ui/ChunkSplitter.tsx': 'R3：跟读切块参数直接读写 localStorage（跟读模块，独立于精读词库）',
   'src/ui/FishLayer.tsx': 'R3：同上（跟读动效开关）',
 }
 

@@ -21,6 +21,10 @@ src/reader/      React 视图层
   ReaderToolbarHost.tsx 顶栏宿主（文章管理 / 朗读 / 预生成 / 统计 / 显示设置 → ReaderToolbar）
   ReaderApp.tsx  组装：状态总线 + 把 hooks/panels 接起来
 src/ui/          跟读练习（旧模块，独立于精读词库）
+  App.tsx         页面装配：状态 → 控件接线 + 全局快捷键
+  ScriptPanel.tsx 原文面板（整篇摊开、当前块高亮、选字定块、锚点微调）
+  AppBits.tsx     空状态 / 备份条 / 录音导出 / 时间格式化
+  ChunkSplitter.tsx 波形撕块面板；FishLayer.tsx 背景动效
 ```
 
 **依赖只能单向往里收**（由 `tool/check_architecture.mjs` 的 R1/R2 保证）：
@@ -48,6 +52,12 @@ types ← core ← adapters ← reader
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |
+| 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
+| 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
+| 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |
+| 跟读：录音与块的对应 | `src/core/takeChunk.ts` | 块号会变，一律按音频时间重算（`remapTakes`） |
+| 跟读：每篇的手动校准账本 | `src/state/calibrationLedger.ts` | 空数组 = 删键；`persist` 里空的键不写（保持老记录形状） |
+| 跟读：本机偏好（显示模式 / 麦克风 / 静音时长） | `src/state/shadowingPrefs.ts` | 读写都兜底；`ui/` 里不许再碰 localStorage（R3） |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方** |
 | 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
@@ -119,7 +129,16 @@ types ← core ← adapters ← reader
   学习记录「重建并核对」在 `hooks/useLearningRebuild`（挂进 `hooks/useLearningData` 一起返回，避免再多一个装配点），
   派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningData`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/useAiTasks`，粘贴应用在 `hooks/usePasteApply`，
   目标是 ≤1200 行。
-- **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
+- **`src/ui/ChunkSplitter` / `FishLayer`（跟读练习）还直接读写 localStorage**：两个小面板，
+  拆出去要连着改波形/动效的调用点，暂登记豁免。**`App.tsx` 的偏好读写已经搬走**（见下一条）。
+- **跟读模块的「规则」和「偏好」不再住在页面里**（2026-10 拆的）：
+  - 录音判定与兜底时长 → `core/recording`（说完静多久、最多录多久、电平阈值）
+  - 原文摊到块上的选择规则 → `core/scriptAlign`（有锚点用锚点，否则跳过正文前的引子再按比例摊）
+  - 锚点随撕开/合并怎么变 → `core/anchorEdits`
+  - 录音挂哪一块 / 每块留最新一条 → `core/takeChunk`
+  - 每篇手动校准的账本（平移/起点/锚点/撕合 + 持久化形状）→ `state/calibrationLedger`
+  - 本机偏好（显示模式/麦克风/静音时长/回放放大）→ `state/shadowingPrefs`
+  `state/session` 只剩编排（状态机、播放/录音时序、竞态守卫）；`ui/App` 只剩装配。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
   不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。
   真要迁，先改端口为异步，再走服务端 SQLite。
