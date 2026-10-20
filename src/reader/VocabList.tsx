@@ -235,7 +235,7 @@ export default function VocabList({
                       startEdit(it)
                     }}
                     title="改单词/音标/词性/释义/用法"
-                    aria-label="编辑词条"
+                    aria-label={`编辑词条 ${it.lemma}`}
                   >
                     ✎
                   </button>
@@ -246,7 +246,9 @@ export default function VocabList({
                       onDelete(it.id)
                     }}
                     title={confirmDel === it.id ? '再点一次确认删除' : '删除（需两步确认）'}
-                    aria-label={confirmDel === it.id ? '确认删除词条' : '删除词条'}
+                    aria-label={
+                      confirmDel === it.id ? `确认删除 ${it.lemma}` : `删除词条 ${it.lemma}`
+                    }
                   >
                     {confirmDel === it.id ? '确认' : '×'}
                   </button>
@@ -306,19 +308,28 @@ export default function VocabList({
                 {it.createdAt ? ` · 加入 ${dayKeyLocal(new Date(it.createdAt))}` : ''}
               </div>
               <div className="row">
-                <button onClick={() => onReview(it.id, 'again')}>重来</button>
-                <button onClick={() => onReview(it.id, 'good')}>记得</button>
-                <button onClick={() => onReview(it.id, 'easy')}>简单</button>
+                <button onClick={() => onReview(it.id, 'again')} aria-label={`${it.word}：重来`}>
+                  重来
+                </button>
+                <button onClick={() => onReview(it.id, 'good')} aria-label={`${it.word}：记得`}>
+                  记得
+                </button>
+                <button onClick={() => onReview(it.id, 'easy')} aria-label={`${it.word}：简单`}>
+                  简单
+                </button>
                 {onJump && (
-                  <button onClick={() => onJump(it)} title="回到原文这句">
+                  <button onClick={() => onJump(it)} title="回到原文这句" aria-label={`回到 ${it.word} 的原文`}>
                     回原文
                   </button>
                 )}
-                <button onClick={() => startEdit(it)}>编辑</button>
+                <button onClick={() => startEdit(it)} aria-label={`编辑 ${it.word}`}>
+                  编辑
+                </button>
                 <button
                   className={confirmDel === it.id ? 'danger' : ''}
                   onClick={() => onDelete(it.id)}
                   title="两步确认，防误触"
+                  aria-label={confirmDel === it.id ? `确认删除 ${it.word}` : `删除 ${it.word}`}
                 >
                   {confirmDel === it.id ? '确认删除' : '删除'}
                 </button>

@@ -53,6 +53,7 @@ export default function SpeedReadBasket({
                   className={confirmIdx === i ? 'danger' : ''}
                   onClick={() => onTapDelete(i)}
                   title={confirmIdx === i ? '再点一次确认移出（两步确认）' : '从生词本移出（剔除误加）'}
+                  aria-label={confirmIdx === i ? `确认移出 ${it.word}` : `从生词本移出 ${it.word}`}
                 >
                   {confirmIdx === i ? '确认删除' : '删除'}
                 </button>

@@ -11,7 +11,9 @@
 >   1. [x] 统计/设置面板加「重建并核对」按钮，调用 `POST /api/store/learning/rebuild-derived`（可选）。
 >          （已做：`core/learningCheck.ts` 对账 + `hooks/useLearningRebuild` + 统计面板底部按钮；
 >          只比对不改本地——本地可能有还没同步的改动，替用户自动覆盖风险更大）
->   2. [ ] 无障碍收尾：面板内纯文本按钮补 `aria-label`（审查 #9，低风险）。
+>   2. [x] 无障碍收尾：面板内纯文本按钮补 `aria-label`（审查 #9，低风险）。
+>          （已做：列表内重复动作按钮带条目名——生词本 重来/记得/简单/编辑/删除、
+>          语言点 改/删、速读清单 移出；toast 加 `role=status` + `aria-live`）
 >   3. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS。
 >   4. [ ] 存量大文件（低优先，只准变小）：`src/state/session.ts` 1185、`src/ui/App.tsx` 1191。
 >   5. [ ] 记录分页（P2）：数据量还没到，先不做。

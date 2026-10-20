@@ -56,7 +56,11 @@ export default function LangPointList({
               {(onEdit || onDelete) && (
                 <div className="lp-act">
                   {onEdit && (
-                    <button onClick={() => onEdit(it)} title="改这条（可在生词本编辑器里改）">
+                    <button
+                      onClick={() => onEdit(it)}
+                      title="改这条（可在生词本编辑器里改）"
+                      aria-label={`修改语言点 ${it.word}`}
+                    >
                       改
                     </button>
                   )}
@@ -65,7 +69,9 @@ export default function LangPointList({
                       className={confirmDel === it.id ? 'danger' : ''}
                       onClick={() => onDelete(it.id)}
                       title={confirmDel === it.id ? '再点一次确认删除' : '删除（两步确认）'}
-                      aria-label={confirmDel === it.id ? '确认删除语言点' : '删除语言点'}
+                      aria-label={
+                        confirmDel === it.id ? `确认删除语言点 ${it.word}` : `删除语言点 ${it.word}`
+                      }
                     >
                       {confirmDel === it.id ? '确认' : '×'}
                     </button>

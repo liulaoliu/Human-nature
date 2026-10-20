@@ -155,6 +155,8 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
 `adapters/ttsCache`（URL 编码 / 非 2xx / 空数组 / 坏 JSON 一律降级为不高亮），连字符词典在 `core/dictionary`。
 视图层 `ReaderScreen` 只留外壳，三个槽位在 `screen/*Zone`（纯映射，不单测；由 `ReaderApp.integration.test.tsx` 覆盖条件渲染）。
 组件宿主：`ReaderSidebarHost`（10 条）、`ReaderToolbarHost`（6 条）、`ReaderOverlaysHost`（6 条：开关路由 / props 转发 / 全部生词工具栏）。
+列表无障碍：`VocabList`（7 条：卡片/表格视图的动作按钮都带词条名、两步删除换标签、回调不变）、
+`LangPointList`（改/删带条目名）、`SpeedReadBasket`（移出带词）、`ReaderShell`（toast 的 `role=status` + `aria-live`）。
 
 组件/钩子测试的三个坑（都踩过了，照着做）：
 1. 默认环境是 `node`（快）；要测 React 就在**文件第一行**写 `// @vitest-environment jsdom`。

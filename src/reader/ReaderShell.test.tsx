@@ -91,4 +91,30 @@ describe('ReaderShell', () => {
     )
     expect(screen.getByText('已保存').className).toBe('toast')
   })
+
+  it('toast 是 role=status + aria-live，读屏能播报保存/失败结果', () => {
+    const { rerender, container } = setup()
+    expect(container.querySelector('[role="status"]')).toBeNull()
+    rerender(
+      <ReaderShell
+        fontSize="md"
+        bold={false}
+        serif={false}
+        examActive={false}
+        studying={false}
+        sideTab="overview"
+        sideRef={createRef<HTMLElement>()}
+        onMouseDown={vi.fn()}
+        onMouseUp={vi.fn()}
+        onContextMenu={vi.fn()}
+        toast="词库读取失败"
+        sidebar={null}
+      >
+        {null}
+      </ReaderShell>,
+    )
+    const status = screen.getByRole('status')
+    expect(status.getAttribute('aria-live')).toBe('polite')
+    expect(status.textContent).toBe('词库读取失败')
+  })
 })

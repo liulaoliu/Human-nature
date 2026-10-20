@@ -65,7 +65,12 @@ export default function ReaderShell({
         {sidebar}
       </aside>
 
-      {toast && <div className="toast">{toast}</div>}
+      {/* 提示条要能被读屏播报：保存失败 / 恢复词库这类结果只有这一处可见反馈 */}
+      {toast && (
+        <div className="toast" role="status" aria-live="polite">
+          {toast}
+        </div>
+      )}
     </div>
   )
 }

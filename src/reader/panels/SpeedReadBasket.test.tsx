@@ -34,7 +34,8 @@ describe('SpeedReadBasket', () => {
     )
     expect(screen.getByText('abandon')).toBeTruthy()
     expect(screen.getByText('They abandon it.')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '删除' }))
+    // 标签带词：多行清单里读屏能分清移出哪条
+    fireEvent.click(screen.getByRole('button', { name: '从生词本移出 abandon' }))
     expect(onTapDelete).toHaveBeenCalledWith(0)
   })
 
