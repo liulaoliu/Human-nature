@@ -18,6 +18,7 @@ src/reader/      React 视图层
   SessionHost.tsx   会话面板路由（背词/考试/快刷/听写/听力/仿写 → 对应 panel）
   panels/ReaderSidebar.tsx 右侧栏（页签 + 五个面板的接线）
   ReaderSidebarHost.tsx 右侧栏宿主（hook 整包 + 派生值 → 五组面板 props）
+  ReaderToolbarHost.tsx 顶栏宿主（文章管理 / 朗读 / 预生成 / 统计 / 显示设置 → ReaderToolbar）
   ReaderApp.tsx  组装：状态总线 + 把 hooks/panels 接起来
 src/ui/          跟读练习（旧模块，独立于精读词库）
 ```
@@ -108,9 +109,10 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 偏大（2213 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
+- **`ReaderApp.tsx` 偏大（2190 行，拆分中）**：已登记在 `tool/check_god_file.mjs` 的基线里，
   **只准变小**。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
-  练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，派生统计簇在 `hooks/useReaderDerived`，
+  练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
+  派生统计簇在 `hooks/useReaderDerived`，
   目标是 ≤1200 行。
 - **`src/ui/*`（跟读练习）直接读写 localStorage**：独立老模块，暂不改造，已登记豁免。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；

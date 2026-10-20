@@ -49,7 +49,7 @@ import PlanPanel from './panels/PlanPanel'
 import IntensivePanel, { type DrillKind } from './panels/IntensivePanel'
 import { type BatchItem } from './panels/SidePick'
 import Composer from './panels/Composer'
-import ReaderToolbar from './panels/ReaderToolbar'
+import ReaderToolbarHost from './ReaderToolbarHost'
 import ReaderShell from './ReaderShell'
 import ReaderArticle from './ReaderArticle'
 import ReaderSidebarHost from './ReaderSidebarHost'
@@ -174,6 +174,7 @@ export default function ReaderApp() {
   const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [savedId, setSavedId] = useState<string | null>(null)
+  const [edition, setEdition] = useState('全部')
   /** 有内容改动、需要（首次则建立记录）自动保存 */
   const [pendingSave, setPendingSave] = useState(false)
   const [sourceText, setSourceText] = useState('')
@@ -183,7 +184,6 @@ export default function ReaderApp() {
   const [ctrlHeld, setCtrlHeld] = useState(false)
   /** 是否按住 Alt（选词模式下：Alt+拖动选词组，否则只选一个词） */
   const [altHeld, setAltHeld] = useState(false)
-  const [edition, setEdition] = useState('全部')
   /** 阅读字号 / 字重，存本机 */
   const [fontSize, setFontSize] = useLocalStorageState('reader:size', 'md', persistentString)
   /** 右侧面板当前 Tab：总览 / 选词分析 / 生词本 / 统计 */
@@ -1099,19 +1099,7 @@ export default function ReaderApp() {
   }, [])
 
   /** 文章文档管理（加载/保存/删除/改名/编辑/自动存/恢复）；逻辑在 hooks/useReaderDoc。 */
-  const {
-    loadSaved,
-    saveCurrent,
-    askDeleteSave,
-    renameArticle,
-    enterEdit,
-    applyEdit,
-    cancelEdit,
-    onPick,
-    bookKeys,
-    editions,
-    shownKeys,
-  } = useReaderDoc({
+  const readerDocApi = useReaderDoc({
     articles,
     batchMapRef,
     setBatch,
@@ -1142,6 +1130,8 @@ export default function ReaderApp() {
     setConfirmDelSave,
     edition,
   })
+
+  const { loadSaved, renameArticle } = readerDocApi
 
   /** 新建/导入文章（含 PDF/EPUB 与清洗提示词）。 */
   const { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub } = useArticleImport({
@@ -1775,81 +1765,68 @@ export default function ReaderApp() {
       onContextMenu={onContextMenu}
       toast={toast}
       toolbar={
-        readingView && (
-          <ReaderToolbar
-            book={book}
-            editions={editions}
-            edition={edition}
-            onEditionChange={setEdition}
-            bookKeysCount={bookKeys.length}
-            saved={saved}
-            savedGroups={savedGroups}
-            shownKeys={shownKeys}
-            readDays={readDays}
-            currentValue={currentValue}
-            onPickArticle={onPick}
-            hasDoc={!!doc}
-            editing={editing}
-            savedId={savedId}
-            onSave={() => void saveCurrent()}
-            onNewArticle={() => setComposing((v) => !v)}
-            vocabMode={vocabMode}
-            onToggleVocab={toggleVocabMode}
-            onTranslateAll={() => void copyTranslateAll()}
-            vocabLevel={vocabLevel}
-            onVocabLevelChange={setVocabLevel}
-            onAutoVocab={() => void copyAutoVocab()}
-            translateView={translateView}
-            onTranslateViewChange={setTranslateView}
-            autoSpeak={autoSpeak}
-            onAutoSpeakChange={setAutoSpeak}
-            selectedId={selectedId}
-            onSpeakSelected={() => {
-              const s = doc?.sentences.find((x) => x.id === selectedId)
-              if (s) speak(s.text)
-            }}
-            readingAll={readingAll}
-            onToggleReadAll={readingAll ? stopReadAll : startReadAll}
-            onSpeedRead={openSpeedRead}
-            onOpenIntensive={() => setIntensiveOpen(true)}
-            onOpenJournal={() => setJournalOpen(true)}
-            onOpenGoals={() => setGoalOpen(true)}
-            ttsState={ttsState}
-            ttsVoice={ttsVoice}
-            onTtsVoiceChange={setTtsVoice}
-            ttsAccents={ttsAccents}
-            pregenRunning={pregen.running}
-            pregenDone={pregen.done}
-            pregenTotal={pregen.total}
-            onPregenerate={() => void pregenerateAll()}
-            onCancelPregenerate={cancelPregenerate}
-            pregenAllCached={pregen.allCached}
-            onEnterEdit={enterEdit}
-            draft={draft}
-            onCleanupEdit={() => void copyCleanupPrompt(draft, '「完成」')}
-            onApplyEdit={applyEdit}
-            onCancelEdit={cancelEdit}
-            vocabSeconds={vocabSeconds}
-            sessionPicked={sessionPickedRef.current}
-            todayPicked={dayStats.todayPicked}
-            streak={dayStats.streak}
-            totalPicked={totals.picked}
-            totalSeconds={totals.seconds}
-            studiedCount={studiedTodayIds.length}
-            dailyGoal={dailyGoal}
-            libraryCount={library.items.length}
-            fontSize={fontSize}
-            onFontSizeChange={setFontSize}
-            bold={bold}
-            onBoldChange={setBold}
-            serif={serif}
-            onSerifChange={setSerif}
-            eye={eye}
-            onEyeChange={setEye}
-            confirmDelSave={confirmDelSave}
-            onDeleteSave={askDeleteSave}
-          />
-        )
+        <ReaderToolbarHost
+          visible={readingView}
+          docApi={readerDocApi}
+          edition={edition}
+          onEditionChange={setEdition}
+          book={book}
+          saved={saved}
+          savedGroups={savedGroups}
+          readDays={readDays}
+          currentValue={currentValue}
+          doc={doc}
+          selectedId={selectedId}
+          speak={speak}
+          editing={editing}
+          savedId={savedId}
+          onNewArticle={() => setComposing((v) => !v)}
+          vocab={{
+            mode: vocabMode,
+            onToggle: toggleVocabMode,
+            level: vocabLevel,
+            onLevelChange: setVocabLevel,
+            translateView,
+            onTranslateViewChange: setTranslateView,
+            autoSpeak,
+            onAutoSpeakChange: setAutoSpeak,
+            onTranslateAll: () => void copyTranslateAll(),
+            onAutoVocab: () => void copyAutoVocab(),
+          }}
+          reading={{
+            all: readingAll,
+            onToggleAll: readingAll ? stopReadAll : startReadAll,
+            onSpeedRead: openSpeedRead,
+            onOpenIntensive: () => setIntensiveOpen(true),
+            onOpenJournal: () => setJournalOpen(true),
+            onOpenGoals: () => setGoalOpen(true),
+          }}
+          tts={{ state: ttsState, voice: ttsVoice, onVoiceChange: setTtsVoice, accents: ttsAccents }}
+          pregen={{ ...pregen, onStart: () => void pregenerateAll(), onCancel: cancelPregenerate }}
+          edit={{ draft, onCleanup: () => void copyCleanupPrompt(draft, '「完成」') }}
+          stats={{
+            vocabSeconds,
+            sessionPicked: sessionPickedRef.current,
+            todayPicked: dayStats.todayPicked,
+            streak: dayStats.streak,
+            totalPicked: totals.picked,
+            totalSeconds: totals.seconds,
+            studiedCount: studiedTodayIds.length,
+            dailyGoal,
+            libraryCount: library.items.length,
+          }}
+          display={{
+            fontSize,
+            onFontSizeChange: setFontSize,
+            bold,
+            onBoldChange: setBold,
+            serif,
+            onSerifChange: setSerif,
+            eye,
+            onEyeChange: setEye,
+          }}
+          confirmDelSave={confirmDelSave}
+        />
       }
       sidebar={
         <ReaderSidebarHost

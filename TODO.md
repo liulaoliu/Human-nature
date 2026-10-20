@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **2213 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **2190 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -33,7 +33,9 @@
              （已完成：`ReaderSidebarHost.tsx` + 10 条组件测试（假 API 映射 / 派生字段 / 会话按钮顺序）；
              `ReaderApp` 侧栏接线 190 行 → 宿主调用；`ReaderApp` 2377 → 2213 行，基线同步降到 2214；
              `npm run gates` 全绿）
-      3. [ ] **工具栏宿主**（约 -70 行）：同法抽 `ReaderToolbarHost`，把 `toolbar={...}`（约 76 行）整块搬走。
+      3. [x] **工具栏宿主**（约 -70 行）：同法抽 `ReaderToolbarHost`，把 `toolbar={...}`（约 76 行）整块搬走。
+             （已完成：`ReaderToolbarHost.tsx` + 6 条组件测试；进度条/版本筛选仍由 `ReaderApp` 持有并传入。
+             实际 2213 → 2190 行（-23）：顶栏多为分散的标量状态，能整包搬的只有 `useReaderDoc` / `pregen` / `tts`）
       4. [ ] **会话外回调归位**（最大块，约 -250 行）：把 `retryMistakeVocab/Listen/Dict`、`commitBatchItems`、
              `addItemsToVocab`、`addPhrasesToVocab`、`removeWordFromVocab`、`copyLanguagePrompt`、`applyPaste`、
              `copyMissingAgain`、`applyAnyPaste`、`handleReview`、`handleEdit`、`saveRetell`、`deleteRetell`、
