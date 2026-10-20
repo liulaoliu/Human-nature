@@ -126,6 +126,7 @@
 + **组件测试**（`src/reader/panels/*.test.tsx`：`ExportPanel`（内容×范围×动作交给打印的条目与标题）、
 `SideVocab`（生词/语言点两个页签、打印只交当前页签）、`LangPointList`（分组/来源句/两步删除）；
 `ReaderShell`/`ReaderArticle` 钉三个 slot 的顺序与编辑态；`SessionHost`（六类会话面板按状态互斥渲染）；
+`ReaderSidebarHost`（假 API → 断言五组面板 props 的映射、会话按钮顺序）；
 `StudyDrill`（强制锤炼选词义键盘）、`SpeedReadSentence`（阅读/揭示/拷打三态）、`SpeedReadBasket`（清单增删与结算））。
 **会话 hook 已有**：`useQuizSession`（出题/判分/错题/卸载定时器）、`useDictation`（整句/判分/错题/卸载）、
 `useSpeaking`（服务端起播/回退/停声）、`useAiPack`（status 探测/空待办/导出/坏结果）、

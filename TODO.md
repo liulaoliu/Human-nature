@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **2424 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **2213 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -26,10 +26,13 @@
              （已完成：`hooks/useReaderDerived.ts` + 9 条 hook 测试；日期键统计抽到
              `core/writing.countWritesOnDay` + 2 条 core 测试。`ReaderApp` 2424 → 2377 行，
              基线同步降到 2377；`npm run gates` 全绿）
-      2. [ ] **侧栏宿主**（约 -130 行）：新增 `ReaderSidebarHost`，接收 hook API 整包（`aiPack` / `aiTasks` /
+      2. [x] **侧栏宿主**（约 -130 行）：新增 `ReaderSidebarHost`，接收 hook API 整包（`aiPack` / `aiTasks` /
              `useExport` / `useDictTools` / learning 等）与少量状态 setter，在宿主里拼出
              `overview` / `mastery` / `stats` / `pick` / `vocab` 五组 props；`ReaderApp` 只传 `sideTab` + 宿主 props。
              先给宿主挂一个「假 API → 断言分组对象字段」的组件测试。验收：`ReaderApp` 掉 ~130 行。
+             （已完成：`ReaderSidebarHost.tsx` + 10 条组件测试（假 API 映射 / 派生字段 / 会话按钮顺序）；
+             `ReaderApp` 侧栏接线 190 行 → 宿主调用；`ReaderApp` 2377 → 2213 行，基线同步降到 2214；
+             `npm run gates` 全绿）
       3. [ ] **工具栏宿主**（约 -70 行）：同法抽 `ReaderToolbarHost`，把 `toolbar={...}`（约 76 行）整块搬走。
       4. [ ] **会话外回调归位**（最大块，约 -250 行）：把 `retryMistakeVocab/Listen/Dict`、`commitBatchItems`、
              `addItemsToVocab`、`addPhrasesToVocab`、`removeWordFromVocab`、`copyLanguagePrompt`、`applyPaste`、

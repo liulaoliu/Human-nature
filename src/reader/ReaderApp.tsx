@@ -52,7 +52,7 @@ import Composer from './panels/Composer'
 import ReaderToolbar from './panels/ReaderToolbar'
 import ReaderShell from './ReaderShell'
 import ReaderArticle from './ReaderArticle'
-import ReaderSidebar from './panels/ReaderSidebar'
+import ReaderSidebarHost from './ReaderSidebarHost'
 import SessionHost from './SessionHost'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useTtsEngines } from './hooks/useTtsEngines'
@@ -104,15 +104,6 @@ interface Doc {
   paragraphs: Paragraph[]
   sentences: Sentence[]
 }
-
-const TASKS: { task: AnalysisTask; label: string }[] = [
-  { task: 'translate', label: '翻译' },
-  { task: 'lookup', label: '查词' },
-  { task: 'grammar', label: '语法' },
-  { task: 'collocations', label: '搭配' },
-  { task: 'extract_vocab', label: '提取生词' },
-  { task: 'summarize', label: '概述' },
-]
 
 export default function ReaderApp() {
   const [articleKey, setArticleKey] = useState<string | null>(null)
@@ -633,7 +624,6 @@ export default function ReaderApp() {
     pool: studyPool,
     unflushedSeconds: studyUnflushed,
     start: startStudy,
-    startArticleAll,
     close: closeStudy,
   } = studyApi
 
@@ -664,7 +654,6 @@ export default function ReaderApp() {
     setQueue: setQuizQueue,
     index: quizIndex,
     articleKinds: quizArticleKinds,
-    setResults: setQuizResults,
     startArticle: startArticleQuiz,
     startItems: startQuizItems,
     startDrill: startQuizDrill,
@@ -805,7 +794,7 @@ export default function ReaderApp() {
     },
   })
   quickApiRef.current = quickApi
-  const { queue: quickQueue, setQueue: setQuickQueue, start: startQuick } = quickApi
+  const { queue: quickQueue, setQueue: setQuickQueue } = quickApi
 
   /** 把词条**直接**加进生词本（跳过「待选」）。用于「自动标词」直入模式。 */
   const commitBatchItems = useCallback(
@@ -1061,7 +1050,7 @@ export default function ReaderApp() {
   })
   // 供定义在 hook 之前的少数回调（打开听力/仿写、错题重练）通过 ref 调用
   dictApiRef.current = dictApi
-  const { queue: dictQueue, index: dictIndex, start: startDictation } = dictApi
+  const { queue: dictQueue, index: dictIndex } = dictApi
 
   // 键盘 W 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
   useHotkeys(
@@ -1299,18 +1288,7 @@ export default function ReaderApp() {
   )
 
   /** 各类「复制提示词给 AI」的动作（逻辑在 hooks/useAiTasks）。 */
-  const {
-    copyPrompt,
-    commitBatch,
-    copyBatchPrompt,
-    copyMissingPhonetic,
-    copyTranslateAll,
-    copyAutoVocab,
-    copyConfusablePrompt,
-    copyLemmaPrompt,
-    copyPosPrompt,
-    dedupeNow,
-  } = useAiTasks({
+  const aiTasksApi = useAiTasks({
     exact,
     useExact,
     sentence,
@@ -1332,6 +1310,8 @@ export default function ReaderApp() {
     askedWordsRef,
     askedIdsRef,
   })
+
+  const { copyTranslateAll, copyAutoVocab } = aiTasksApi
 
   /** 应用一份 AI 结果（按任务分派）；逻辑在 hooks/useApplyTaskResult。 */
   const applyTaskResult = useApplyTaskResult({
@@ -1398,18 +1378,7 @@ export default function ReaderApp() {
   }, [pasteMissing, library.items, flash])
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
-  const {
-    download,
-    doExportAnki,
-    exportJson,
-    exportWordList,
-    exportBatch,
-    doExportWrong,
-    exportAll,
-    onImportBackup,
-    onMergeBackup,
-    doPrint,
-  } = useExport({
+  const exporter = useExport({
     articles,
     library,
     saved,
@@ -1422,6 +1391,8 @@ export default function ReaderApp() {
     setSaved,
     setWritingHistory,
   })
+
+  const { download, doExportAnki, exportWordList, doExportWrong, doPrint } = exporter
 
   /** 由当前数据推导 AI 待办（纯逻辑在 core/aiPackage，便于单测）。 */
   const aiJobsInput = useMemo<AiJobsInput>(
@@ -1650,26 +1621,17 @@ export default function ReaderApp() {
   )
 
   /** AI 工作包：导出待办 / 导入结果（agent）+ 网页版提示词 / 应用 / 重问缺项。 */
+  const aiPack = useAiPack({
+    jobsInput: aiJobsInput,
+    applyTaskResult,
+    download,
+    flash,
+    onReport: setPasteReport,
+  })
+
   const {
-    jobCount: aiJobCount,
-    exportJobs: exportAiJobs,
-    fileRef: aiFileRef,
-    onFile: onAiFile,
-    webBatchSize: aiWebBatchSize,
-    setWebBatchSize: setAiWebBatchSize,
-    copyWebPrompt: copyAiWebPrompt,
     applyWeb: applyAiWeb,
-    copyWebMissing: copyAiWebMissing,
-    resetWebProgress: resetAiWebProgress,
-    autoVocabDoneHere: aiAutoVocabDoneHere,
-    rerunAutoVocab,
-    webTotal: aiWebTotal,
-    webDone: aiWebDone,
     webPending: aiWebPending,
-    webMissing: aiWebMissing,
-    webPendingLabels: aiWebPendingLabels,
-    webBreakdown: aiWebBreakdown,
-    localConfigured: aiLocalConfigured,
     localRunning: aiLocalRunning,
     localDone: aiLocalDone,
     localTotal: aiLocalTotal,
@@ -1677,18 +1639,7 @@ export default function ReaderApp() {
     localPhase: aiLocalPhase,
     localError: aiLocalError,
     runLocal: runAiLocal,
-    skipPending: aiSkipPending,
-    checklist: aiChecklist,
-    checklistDone: aiChecklistDone,
-    checklistTotal: aiChecklistTotal,
-    nextHint: aiNextHint,
-  } = useAiPack({
-    jobsInput: aiJobsInput,
-    applyTaskResult,
-    download,
-    flash,
-    onReport: setPasteReport,
-  })
+  } = aiPack
 
   /**
    * 统一的「应用结果」：先按网页版工作包（@@@ANSWER / JSON results）解析，
@@ -1706,7 +1657,8 @@ export default function ReaderApp() {
   }, [pasted, applyAiWeb, applyPaste])
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
-  const { enrichFromDict, fixLemmasFromDict, pickFromDict, confuseFromDict } = useDictTools({
+  const dictTools = useDictTools({
+
     library,
     persist,
     doc,
@@ -1751,34 +1703,6 @@ export default function ReaderApp() {
       }),
     [doc, listenQuiz, library.items, batch, confusableTodo, lemmaCandidates, writingHistory],
   )
-
-  /** 仪表盘每行的「去准备」动作 */
-  const boardAction = (key: string): { label: string; run: () => void } | null => {
-    switch (key) {
-      case 'vocab':
-        return { label: '去选词', run: () => setSideTab('pick') }
-      case 'batch':
-        return { label: '查词', run: () => void copyBatchPrompt() }
-      case 'unqueried':
-        return { label: '补查音标', run: () => void copyMissingPhonetic('missing') }
-      case 'confusable':
-        return { label: '生成混淆项', run: () => void copyConfusablePrompt() }
-      case 'lemma':
-        return { label: '去重整理', run: dedupeNow }
-      case 'review':
-        return { label: '背单词', run: () => startStudy() }
-      case 'dictation':
-        return { label: '去听写', run: startDictation }
-      case 'listen':
-        return { label: '出题', run: openListening }
-      case 'language':
-        return { label: '分析', run: () => void copyLanguagePrompt() }
-      case 'imitation':
-        return { label: '去仿写', run: openWriting }
-      default:
-        return null
-    }
-  }
 
   /** 精读工作流：某一步「跳到对应工具」。 */
   const openIntensiveStage = useCallback(
@@ -1928,47 +1852,63 @@ export default function ReaderApp() {
         )
       }
       sidebar={
-        <ReaderSidebar
+        <ReaderSidebarHost
           sideTab={sideTab}
           onSideTabChange={setSideTab}
+          learning={{ mistakes, activity, practice, onClearMistakes: () => setMistakes([]) }}
           overview={{
-            mistakes,
             readyRows,
-            boardAction,
             onRetryVocab: retryMistakeVocab,
             onSiege: startSiege,
             onRetryListen: retryMistakeListen,
             onRetryDict: retryMistakeDict,
-            onClearMistakes: () => setMistakes([]),
           }}
-          mastery={{
-            mastery: articleMastery,
-            onStartArticle: startArticleQuiz,
-            onStartVocab: () => {
-              setQuizQueue(null)
-              setQuizSetupOpen(false)
-              startStudy()
-            },
+          mastery={{ mastery: articleMastery, onStartArticle: startArticleQuiz }}
+          derived={{
+            totals,
+            dayStats,
+            studyTodaySeconds,
+            studyTotalSeconds,
+            studyTotalCards,
+            studiedCount: studiedTodayIds.length,
+            last7,
+            dueForecast: dueForecastRows,
+            byArticle,
+            visibleBatch,
+            confusableBatchCount: confusableBatch.length,
+            confusableTodoCount: confusableTodo.length,
+            lemmaCount: lemmaCandidates.length,
+            posCount: posCandidates.length,
+            articleWords,
+            articleNums,
+            articleAllPrinted,
+            articlePrintedAt,
+            languageCount: languageSentCount,
           }}
-          stats={{ activity, practice }}
+          study={studyApi}
+          quiz={quizApi}
+          quick={quickApi}
+          dict={dictApi}
+          speech={speak}
+          library={library}
+          restorePrev={() => void restorePrevLibrary()}
+          listening={{ open: openListeningMode, start: openListening }}
+          openSpeedRead={openSpeedRead}
+          openWriting={openWriting}
+          ai={aiPack}
+          tasks={aiTasksApi}
+          exporter={exporter}
+          dictTools={dictTools}
+          dictReady={dictReady}
+          tatoeba={{ ready: tatoebaReady, enrichExamples: () => void enrichExamplesFromTatoeba() }}
+          selection={{ addSelectionToBatch, mark, jumpToSource }}
           pick={{
-            tasks: TASKS,
-            onPrompt: (t) => void copyPrompt(t),
             lastTask,
             target,
             useExact,
             vocabMode,
             canMark: !!exact,
-            visibleBatch,
             batchCount: batch.length,
-            onRemoveWord: (b) => addToBatch([b.word], b.sentence, b.sentenceId),
-            onCommitBatch: commitBatch,
-            onCopyBatchPrompt: () => void copyBatchPrompt(),
-            onExportBatch: exportBatch,
-            onClearBatch: () => setBatch([]),
-            onAddSelectionToBatch: addSelectionToBatch,
-            onMark: mark,
-            onOpenLang: () => openLangFor(sentence),
             pasted,
             onPastedChange: (v) => {
               setPasted(v)
@@ -1979,145 +1919,42 @@ export default function ReaderApp() {
             pasteMissingCount: pasteMissing?.words.length ?? 0,
             onApplyPaste: applyAnyPaste,
             onCopyMissingAgain: () => void copyMissingAgain(),
-            aiJobCount,
-            aiScope: aiPackScope,
-            onAiScopeChange: setAiPackScope,
+            onOpenLang: () => openLangFor(sentence),
+            onRemoveWord: (b) => addToBatch([b.word], b.sentence, b.sentenceId),
+            onClearBatch: () => setBatch([]),
+            scope: aiPackScope,
+            onScopeChange: setAiPackScope,
             autoVocabDirect,
             onAutoVocabDirectChange: setAutoVocabDirect,
-            autoVocabDoneHere: aiAutoVocabDoneHere,
-            onRerunAutoVocab: rerunAutoVocab,
-            onExportAiJobs: exportAiJobs,
-            dictReady,
-            onPickFromDict: pickFromDict,
-            onEnrichFromDict: enrichFromDict,
-            onEnrichExamples: () => void enrichExamplesFromTatoeba(),
-            examplesReady: tatoebaReady,
-            onFixLemmasFromDict: fixLemmasFromDict,
-            onConfuseFromDict: confuseFromDict,
-            aiFileRef,
-            onAiFile,
-            localConfigured: aiLocalConfigured,
-            localRunning: aiLocalRunning,
-            localDone: aiLocalDone,
-            localTotal: aiLocalTotal,
-            localRound: aiLocalRound,
-            localPhase: aiLocalPhase,
-            localError: aiLocalError,
-            onRunLocal: () => void runAiLocal(),
-            checklist: aiChecklist,
-            checklistDone: aiChecklistDone,
-            checklistTotal: aiChecklistTotal,
-            nextHint: aiNextHint,
-            onSkipPending: aiSkipPending,
-            aiWebBatchSize,
-            onAiWebBatchSizeChange: setAiWebBatchSize,
-            onCopyWebPrompt: () => void copyAiWebPrompt(),
-            onCopyWebMissing: () => void copyAiWebMissing(),
-            onRefreshWeb: resetAiWebProgress,
-            webTotal: aiWebTotal,
-            webDone: aiWebDone,
-            webPending: aiWebPending,
-            webMissing: aiWebMissing,
-            webPendingLabels: aiWebPendingLabels,
-            webBreakdown: aiWebBreakdown,
-            confusableBatchCount: confusableBatch.length,
-            confusableTodoCount: confusableTodo.length,
-            onCopyConfusable: () => void copyConfusablePrompt(),
             confusableBatchSize,
             onConfusableBatchSizeChange: setConfusableBatchSize,
-            lemmaCount: lemmaCandidates.length,
-            onCopyLemma: () => void copyLemmaPrompt(),
-            posCount: posCandidates.length,
-            onCopyPos: () => void copyPosPrompt(),
-            hasItems: !!library.items.length,
-            onDedupe: dedupeNow,
           }}
           vocab={{
-            articleWords,
-            libraryItems: library.items,
             view: vocabView,
             onViewChange: setVocabView,
             sortBy: vocabSort,
             onSortChange: setVocabSort,
             hasDoc: !!doc,
-            hasItems: !!library.items.length,
-            hasLapses: library.items.some((w) => (w.reviewState.lapses ?? 0) > 0),
-            onStartStudy: () => {
-              setQuizQueue(null)
-              setQuizSetupOpen(false)
-              startStudy()
-            },
-            onStartArticleAll: () => {
-              setQuizQueue(null)
-              setQuizSetupOpen(false)
-              startArticleAll()
-            },
-            onStartExam: () => {
-              closeStudy()
-              setQuizResults([])
-              setQuizSetupOpen(true)
-            },
-            onStartQuick: () => {
-              setQuickQueue(null)
-              closeStudy()
-              setQuizSetupOpen(false)
-              startQuick()
-            },
-            onStartDictation: () => startDictation(),
-            onOpenListening: () => openListeningMode(false),
-            onOpenReading: () => openListeningMode(true),
-            onOpenSpeedRead: openSpeedRead,
             listenCount,
             onListenCountChange: setListenCount,
             onLanguagePrompt: () => void copyLanguagePrompt(),
             showLanguage,
             onShowLanguageChange: setShowLanguage,
-            languageCount: languageSentCount,
             onOpenPlan: () => setPlanOpen(true),
-            onOpenWriting: openWriting,
-            onWrongPractice: () => {
-              setQuizScope('lapses')
-              setQuizResults([])
-              setQuizSetupOpen(true)
-            },
             onBrowseAll: () => setBrowseAll(true),
-            onExportAnki: doExportAnki,
-            onPrint: doPrint,
-            onOpenExport: () => setExportOpen(true),
             printTitle: articleTitle || articleKey || '本篇生词',
-            onExportJson: exportJson,
-            onExportWordList: exportWordList,
-            onCopyMissingPhonetic: (only) => void copyMissingPhonetic(only),
+            onOpenExport: () => setExportOpen(true),
             onToggleStats: () => setStatsOpen((v) => !v),
-            onExportWrong: doExportWrong,
-            onExportAll: exportAll,
-            onRestorePrev: () => void restorePrevLibrary(),
-            onImportBackup: (f) => void onImportBackup(f),
-            onMergeBackup: (f) => void onMergeBackup(f),
             statsOpen,
-            stats: {
-              totals,
-              dayStats,
-              studyTodaySeconds,
-              studyTotalSeconds,
-              studyTotalCards,
-              studiedCount: studiedTodayIds.length,
-              dailyGoal,
-              last7,
-              dueForecast: dueForecastRows,
-              byArticle,
-            },
+            dailyGoal,
             onDailyGoalChange: setDailyGoal,
-            articleNums,
-            articleAllPrinted,
-            articlePrintedAt,
             focusLemma,
+            onFocusLemmaChange: setFocusLemma,
             confirmDel,
-            onJumpSource: jumpToSource,
-            onSpeak: speak,
+            onConfirmDelChange: setConfirmDel,
             onDelete: askDelete,
-            onReview: handleReview,
             onEdit: handleEdit,
+            onReview: handleReview,
           }}
         />
       }
