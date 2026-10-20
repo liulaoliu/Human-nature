@@ -15,7 +15,7 @@
       （会话面板 props 映射移进 `SessionHost`；ReaderApp 只传 hook 结果，2733 → 2423 行）
 - [ ] **ReaderApp 拆分 ③**：把 `reader:batch` / `reader:last` 等散落 IO 移进对应 hook；验收 ≤1200 行
       （已完成 `reader:batch` → `useBatchQueue`、预生成 → `usePregenerate`、启动加载 → `useArticleBootstrap`；
-      当前 **2115 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
+      当前 **2081 行**。散落 IO 基本收口，剩下的是接线与派生，按下面四刀往下切，每刀单独 commit + 跑门禁）
 
       **明天再战（每刀一次 commit，先补测试再搬）**
       1. [x] **派生统计簇**（风险最低，约 -100 行）：把 `totals` / `studyStats` / `todayCards` / `todayWrites` /
@@ -43,8 +43,9 @@
              「成功 / 坏输入 / 幂等」测试。这刀最大，可以再拆成 2–3 个子主题分别提交。
              - [x] **4a 词库增删**：`commitBatchItems` / `addItemsToVocab` / `addPhrasesToVocab` /
                    `removeWordFromVocab` → `hooks/useVocabEdits`（+9 条钩子测试；`ReaderApp` 2190 → 2115）
-             - [ ] **4b 粘贴应用**：`applyPaste` / `applyAnyPaste` / `copyMissingAgain` / `copyLanguagePrompt`
-             - [ ] **4c 其余会话外回调**：错题重练 / 复述增删 / 包围战 / 略读标记 / 复习评分
+             - [x] **4b 提示词复制**：`copyLanguagePrompt` / `copyMissingAgain` → `hooks/useAiTasks`（+6 条钩子测试）
+             - [ ] **4c 粘贴应用**：`applyPaste` / `applyAnyPaste`
+             - [ ] **4d 其余会话外回调**：错题重练 / 复述增删 / 包围战 / 略读标记 / 复习评分
 
       **验收与红线**：每刀 `npm run gates` 全绿（含上帝文件门禁，`ReaderApp` 基线只准下调）；不新增读写词库的
       effect（写入口仍只有 `useLibraryAutoFill` / `persist`）；拆完 `ReaderApp` 行数同步下调

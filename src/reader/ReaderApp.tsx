@@ -19,8 +19,7 @@ import {
   type VocabLevel,
 } from '../core/analyzer'
 import { type ListeningQuestion } from '../core/listening'
-import { buildLanguagePrompt, hasSentenceLanguage } from '../core/language'
-import { buildMissingPrompt } from './missingPrompts'
+import { hasSentenceLanguage } from '../core/language'
 import { collectOfflineExampleRows } from '../core/libraryAutoFill'
 import {
   addPracticeRecord,
@@ -807,25 +806,6 @@ export default function ReaderApp() {
     flash,
   })
 
-  /** 复制听力理解题出题提示词。 */
-  const copyLanguagePrompt = useCallback(async () => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    setLastTask('language')
-    askedWordsRef.current = []
-    askedIdsRef.current = doc.sentences.map((s) => s.id)
-    try {
-      await navigator.clipboard.writeText(
-        buildLanguagePrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text }))),
-      )
-      flash('已复制语言点分析提示词；把 AI 的 JSON 粘回「应用结果」')
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [doc, flash])
-
   /** 仿写训练（逻辑在 hooks/useWriting）。 */
   const writingApi = useWriting({
     doc,
@@ -1224,9 +1204,10 @@ export default function ReaderApp() {
     setBatch,
     askedWordsRef,
     askedIdsRef,
+    pasteMissing,
   })
 
-  const { copyTranslateAll, copyAutoVocab } = aiTasksApi
+  const { copyTranslateAll, copyAutoVocab, copyLanguagePrompt, copyMissingAgain } = aiTasksApi
 
   /** 应用一份 AI 结果（按任务分派）；逻辑在 hooks/useApplyTaskResult。 */
   const applyTaskResult = useApplyTaskResult({
@@ -1276,21 +1257,6 @@ export default function ReaderApp() {
       flash(res.report[0] ?? '没解析出内容')
     }
   }, [pasted, lastTask, applyTaskResult, flash])
-
-  /** 把上次未返回的词重新组成提示词，一键复制重试。 */
-  const copyMissingAgain = useCallback(async () => {
-    if (!pasteMissing || !pasteMissing.words.length) return
-    const { task, words } = pasteMissing
-    try {
-      askedWordsRef.current = words
-      askedIdsRef.current = []
-      setLastTask(task)
-      await navigator.clipboard.writeText(buildMissingPrompt(task, words, library.items))
-      flash(`已复制缺失的 ${words.length} 个词，去 AI 后再贴回`)
-    } catch {
-      flash('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [pasteMissing, library.items, flash])
 
   /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
   const exporter = useExport({

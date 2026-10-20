@@ -11,6 +11,8 @@ import {
   type VocabLevel,
 } from '../../core/analyzer'
 import { dedupeLibrary, markWord, relemmaLibrary } from '../../core/vocab'
+import { buildLanguagePrompt } from '../../core/language'
+import { buildMissingPrompt, type MissingTask } from '../missingPrompts'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 
 /** 复制提示词时会用到的任务键。 */
@@ -50,6 +52,8 @@ export interface UseAiTasksParams {
   setBatch: (updater: [] | ((prev: BatchItemLike[]) => BatchItemLike[])) => void
   askedWordsRef: MutableRefObject<string[]>
   askedIdsRef: MutableRefObject<string[]>
+  /** 上次回执里缺失的词（有值才能「一键复制未返回的」） */
+  pasteMissing: { task: MissingTask; words: string[] } | null
 }
 
 /**
@@ -77,6 +81,7 @@ export function useAiTasks({
   setBatch,
   askedWordsRef,
   askedIdsRef,
+  pasteMissing,
 }: UseAiTasksParams) {
   const copy = async (prompt: string, okMsg: string) => {
     try {
@@ -85,6 +90,34 @@ export function useAiTasks({
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
+  }
+
+  /** 语言点分析：把全文句子交给 AI 找语法 / 习语 / 用法。 */
+  const copyLanguagePrompt = async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    setLastTask('language')
+    askedWordsRef.current = []
+    askedIdsRef.current = doc.sentences.map((s) => s.id)
+    await copy(
+      buildLanguagePrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text }))),
+      '已复制语言点分析提示词；把 AI 的 JSON 粘回「应用结果」',
+    )
+  }
+
+  /** 把上次未返回的词重新组成提示词，一键复制重试。 */
+  const copyMissingAgain = async () => {
+    if (!pasteMissing || !pasteMissing.words.length) return
+    const { task, words } = pasteMissing
+    askedWordsRef.current = words
+    askedIdsRef.current = []
+    setLastTask(task)
+    await copy(
+      buildMissingPrompt(task, words, library.items),
+      `已复制缺失的 ${words.length} 个词，去 AI 后再贴回`,
+    )
   }
 
   /** 选区任务（翻译/查词/语法/搭配…）：复制对应提示词。 */
@@ -235,6 +268,8 @@ export function useAiTasks({
 
   return {
     copyPrompt,
+    copyLanguagePrompt,
+    copyMissingAgain,
     commitBatch,
     copyBatchPrompt,
     copyMissingPhonetic,
