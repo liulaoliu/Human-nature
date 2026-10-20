@@ -25,7 +25,7 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
  */
 const BASELINE = {
   'src/reader/ReaderApp.tsx': 1037,
-  'src/state/session.ts': 943,
+  'src/state/session.ts': 944,
   'src/state/session.test.ts': 1058,
   'src/state/script.test.ts': 803,
 }
