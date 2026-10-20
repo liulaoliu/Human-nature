@@ -99,6 +99,14 @@
     自动算进新文章、带编号，用户根本没在这篇标过。规矩：本篇只认 `library.articleEntries`
     （SSOT 在 `core/articleVocab.ts`）；编号走 `core/articleNums.ts`，语境释义走
     `core/articleMeaning.ts`。语言点也收进按篇条目，但只有普通单词参与正文编号。
+18. **替换旧资产要先写新的、再删旧的**。录音曾先 `repo.remove(旧 take)` 再 `repo.save(新 take)`；
+    IndexedDB 配额满时新录音没存进去、旧的已删，这一块两条都没了。规矩：先保存成功，再清理旧版本；
+    失败时写 `SessionState.error` 等可见提示，且 `stopRecording()` 自己不 reject（调用方多是 `void`）。
+19. **元素级脏数据要逐条丢，不能整批吞**。`JSON.parse` 成功 ≠ 数据可用：活动数组里一个 `null` /
+   `{day: 5}` 就能让 `addActivity` 抛异常，外层 catch 把今天这笔正常记录也一起丢了；AI 跑批的
+   `results` 里一个缺 `raw` 的元素会让整批作废。规矩：跨边界先过 `normalizeActivity` /
+   `normalizeAiResults` 这类守卫，返回「好数据 + 丢弃数」；`localStorage.getItem` 本身也要走
+   `reader/storage.ts` 的 `readRaw`（隐私模式下 getItem 会抛）。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -119,6 +127,9 @@
 | 每篇生词独立 | 词库里先有几篇生词 → 新建/打开一篇没标过词的文章 | 侧栏「生词本 · 本篇」为空、正文没有编号/高亮；总词库里有的 the / is / are 不自动进来 |
 | 按篇编号 / 删除 | 同一篇依次加 3 个词→删中间一个→重新打开 | 编号按加入顺序 1..n，删除后紧凑重排；删词只从本篇消失，全库/别的篇仍保留 |
 | 按篇打印 | 两个不同篇都收同一个词 → 分别 A4（本篇） | 各自打印自己的清单与编号；打印后只影响当前篇的「已打印」状态 |
+| 录音配额满 | 用 DevTools 把站点存储配额限制到很小 → 录一条 | 出现「录音保存失败…旧录音已保留」；上一块旧 take 仍能回放；控制台无 unhandled rejection |
+| 开麦瞬间中止 | 连续跟读点空格后，在麦克风授权/开麦返回前再按一次空格 | 最终不录音、不生成 take，麦克风指示关闭；再按空格能正常开新一轮 |
+| 新词配额跨结算点 | 把系统时间调到 03:59，打开阅读页并加入新词 → 等到 04:00（或调时间触发） | `newToday` 当场归零；刷新后仍是新学习日的 0 |
 | 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
 | 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |
@@ -182,8 +193,8 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘，3 条）+
   `useStudyCardEdit`（卡内编辑/两步删除，3 条）；`StudyPanel` 再拆 `StudyToolbar` / `StudyEditForm` / `StudyRoundDone`
   （512 → 369 行，子组件 3 + 2 + 2 条）。
-- **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（6：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
-  `newToday` 跨天归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
+- **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（8：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
+  `newToday` 跨天归零 / 页面开着跨 04:00 定时归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
   `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
 - **阅读页滚动进度与速读游标（2026-10-20 第三批）**：`core/scrollProgress`（12：比例夹取 / 脏值回顶部 /
