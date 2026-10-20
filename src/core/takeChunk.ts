@@ -23,3 +23,27 @@ export function resolveTakeChunk(take: Take, chunks: Chunk[]): number {
   }
   return Math.min(Math.max(Math.round(take.chunkIndex), 0), chunks.length - 1)
 }
+
+/** 块号变了之后，把每条录音按音频时间重新落到块上（没变的那条原样返回，省一次无谓更新） */
+export function remapTakes(takes: Take[], chunks: Chunk[]): Take[] {
+  if (takes.length === 0) return takes
+  return takes.map((t) => {
+    const idx = resolveTakeChunk(t, chunks)
+    return t.chunkIndex === idx ? t : { ...t, chunkIndex: idx }
+  })
+}
+
+/**
+ * 每块只留最新一条。
+ *
+ * 同一块只保留最新的一条，够「复读」用就行；老版本给同一块堆了好几条时，
+ * 多余的会在加载时清掉。返回按创建时间升序（列表里第 1 条是最早的）。
+ */
+export function latestTakePerChunk(takes: Take[]): Take[] {
+  const latest = new Map<number, Take>()
+  for (const t of takes) {
+    const prev = latest.get(t.chunkIndex)
+    if (!prev || t.createdAt >= prev.createdAt) latest.set(t.chunkIndex, t)
+  }
+  return [...latest.values()].sort((a, b) => a.createdAt - b.createdAt)
+}

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveTakeChunk } from './takeChunk'
+import { latestTakePerChunk, remapTakes, resolveTakeChunk } from './takeChunk'
 import type { Chunk, Take } from './ports'
 
 const ch = (start: number, end: number, index: number): Chunk => ({ index, start, end })
@@ -55,5 +55,48 @@ describe('resolveTakeChunk', () => {
 
   it('没有块时不炸', () => {
     expect(resolveTakeChunk(take({ startSec: 1 }), [])).toBe(0)
+  })
+})
+
+describe('remapTakes', () => {
+  it('块号变了就按时间挂到新块上', () => {
+    const merged = [ch(0, 4, 0)]
+    const out = remapTakes([take({ chunkIndex: 2, startSec: 3.2 })], merged)
+    expect(out[0].chunkIndex).toBe(0)
+  })
+
+  it('块号没变的那条原样返回同一个对象（不制造无谓更新）', () => {
+    const t = take({ chunkIndex: 2, startSec: 3.2 })
+    const out = remapTakes([t], CHUNKS)
+    expect(out[0]).toBe(t)
+  })
+
+  it('没有录音时返回空数组，不新建', () => {
+    const empty: Take[] = []
+    expect(remapTakes(empty, CHUNKS)).toBe(empty)
+  })
+})
+
+describe('latestTakePerChunk', () => {
+  it('同一块只留最新一条', () => {
+    const old = take({ id: 'old', chunkIndex: 0, createdAt: 1 })
+    const fresh = take({ id: 'fresh', chunkIndex: 0, createdAt: 9 })
+    expect(latestTakePerChunk([old, fresh]).map((t) => t.id)).toEqual(['fresh'])
+  })
+
+  it('不同块各自留一条，按创建时间升序排', () => {
+    const a = take({ id: 'a', chunkIndex: 1, createdAt: 5 })
+    const b = take({ id: 'b', chunkIndex: 0, createdAt: 2 })
+    expect(latestTakePerChunk([a, b]).map((t) => t.id)).toEqual(['b', 'a'])
+  })
+
+  it('时间相同时后出现的赢（数组顺序就是写入顺序）', () => {
+    const first = take({ id: 'first', chunkIndex: 0, createdAt: 3 })
+    const second = take({ id: 'second', chunkIndex: 0, createdAt: 3 })
+    expect(latestTakePerChunk([first, second]).map((t) => t.id)).toEqual(['second'])
+  })
+
+  it('空数组不炸', () => {
+    expect(latestTakePerChunk([])).toEqual([])
   })
 })
