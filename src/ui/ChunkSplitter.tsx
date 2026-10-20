@@ -523,7 +523,7 @@ export function ChunkSplitter({
           </button>
         )}
         <span className="grow" />
-        <span className="saved" title="撕开/合并会自动写进本机（localStorage），刷新、换切块档位都还在">
+        <span className="saved" title="撕开/合并会自动写进本机，刷新、换切块档位都还在">
           🔒 自动存本机
         </span>
       </div>

@@ -58,6 +58,7 @@ types ← core ← adapters ← reader
 | 跟读：录音与块的对应 | `src/core/takeChunk.ts` | 块号会变，一律按音频时间重算（`remapTakes`） |
 | 跟读：每篇的手动校准账本 | `src/state/calibrationLedger.ts` | 空数组 = 删键；`persist` 里空的键不写（保持老记录形状） |
 | 跟读：本机偏好（显示模式 / 麦克风 / 静音时长） | `src/state/shadowingPrefs.ts` | 读写都兜底；`ui/` 里不许再碰 localStorage（R3） |
+| 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势；R3 存量豁免只剩 `core/stateBackup` 一条 |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方** |
 | 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
@@ -129,8 +130,9 @@ types ← core ← adapters ← reader
   学习记录「重建并核对」在 `hooks/useLearningRebuild`（挂进 `hooks/useLearningData` 一起返回，避免再多一个装配点），
   派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningData`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/useAiTasks`，粘贴应用在 `hooks/usePasteApply`，
   目标是 ≤1200 行。
-- **`src/ui/ChunkSplitter` / `FishLayer`（跟读练习）还直接读写 localStorage**：两个小面板，
-  拆出去要连着改波形/动效的调用点，暂登记豁免。**`App.tsx` 的偏好读写已经搬走**（见下一条）。
+- **展示层已经不再直接读写 localStorage**：`ui/App` 的偏好搬去 `state/shadowingPrefs`、
+  `ui/FishLayer` 的布局搬去 `state/fishPrefs`（规则在 `core/fishLayout`）。R3 的存量豁免
+  现在只剩 `core/stateBackup` 那条 R6（备份文件名里的 UTC 日期，故意的）。
 - **跟读模块的「规则」和「偏好」不再住在页面里**（2026-10 拆的）：
   - 录音判定与兜底时长 → `core/recording`（说完静多久、最多录多久、电平阈值）
   - 原文摊到块上的选择规则 → `core/scriptAlign`（有锚点用锚点，否则跳过正文前的引子再按比例摊）

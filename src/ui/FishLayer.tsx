@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { FISH_POS_DEFAULT, FISH_SIZE_DEFAULT, clampFishPos, clampFishSize } from '../core/fishLayout'
+import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
 
 /**
  * 装饰用的一条「鱼」：从服务器上的 `/fish`（= assets/imgs/fish/）随机取一张，默认待在右下角。
@@ -8,9 +10,11 @@ import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as R
  *   GET /fish/<name>     → 图片
  * 目录不存在 / 为空时自动不渲染（不报错）。
  *
- * 交互（都持久化，按「页面」存 localStorage）：
- *   - 左上角小手柄：拖动改位置（key = `fish:pos:<pageKey>`）
- *   - 右下角小手柄：拖动改大小、双击复位（key = `fish:size:<pageKey>`）
+ * 交互（都持久化，按「页面」存本机）：
+ *   - 左上角小手柄：拖动改位置
+ *   - 右下角小手柄：拖动改大小、双击复位
+ * 存哪、存多大由 `state/fishPrefs` 负责，范围夹取在 `core/fishLayout`（都有测试）；
+ * 这个组件只管拖拽手势与渲染。
  * 图片本身 pointer-events:none，不挡点击。
  */
 const FISH_BASE = '/fish'
@@ -26,47 +30,10 @@ function loadFishNames(): Promise<string[]> {
   return fishCache
 }
 
-const DEFAULT_SIZE = 104
-const MIN_SIZE = 40
-const MAX_SIZE = 380
-const DEFAULT_POS = { right: 14, bottom: 12 }
-
-function loadSize(key: string): number {
-  try {
-    const n = Number(localStorage.getItem(key))
-    return Number.isFinite(n) && n >= MIN_SIZE && n <= MAX_SIZE ? n : DEFAULT_SIZE
-  } catch {
-    return DEFAULT_SIZE
-  }
-}
-
-function loadPos(key: string): { right: number; bottom: number } {
-  try {
-    const o = JSON.parse(localStorage.getItem(key) ?? 'null') as { right?: number; bottom?: number } | null
-    if (o && Number.isFinite(o.right) && Number.isFinite(o.bottom)) {
-      return { right: o.right as number, bottom: o.bottom as number }
-    }
-  } catch {
-    // 忽略
-  }
-  return DEFAULT_POS
-}
-
-function clampPos(right: number, bottom: number, size: number): { right: number; bottom: number } {
-  const vw = typeof window !== 'undefined' ? window.innerWidth : 1200
-  const vh = typeof window !== 'undefined' ? window.innerHeight : 800
-  return {
-    right: Math.round(Math.min(Math.max(0, right), Math.max(0, vw - size))),
-    bottom: Math.round(Math.min(Math.max(0, bottom), Math.max(0, vh - size))),
-  }
-}
-
 export default function FishLayer({ pageKey = 'default' }: { pageKey?: string }) {
-  const sizeKey = `fish:size:${pageKey}`
-  const posKey = `fish:pos:${pageKey}`
   const [url, setUrl] = useState('')
-  const [size, setSize] = useState(() => loadSize(sizeKey))
-  const [pos, setPos] = useState(() => loadPos(posKey))
+  const [size, setSize] = useState(() => readFishSize(pageKey))
+  const [pos, setPos] = useState(() => readFishPos(pageKey))
   const sizeRef = useRef(size)
   const posRef = useRef(pos)
   const drag = useRef<
@@ -88,23 +55,18 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
   }, [])
 
   const applySize = (w: number) => {
-    const s = Math.round(Math.min(MAX_SIZE, Math.max(MIN_SIZE, w)))
+    const s = clampFishSize(w)
     sizeRef.current = s
     setSize(s)
   }
   const applyPos = (right: number, bottom: number) => {
-    const p = clampPos(right, bottom, sizeRef.current)
+    const width = typeof window !== 'undefined' ? window.innerWidth : 1200
+    const height = typeof window !== 'undefined' ? window.innerHeight : 800
+    const p = clampFishPos(right, bottom, sizeRef.current, { w: width, h: height })
     posRef.current = p
     setPos(p)
   }
-  const persist = () => {
-    try {
-      localStorage.setItem(sizeKey, String(sizeRef.current))
-      localStorage.setItem(posKey, JSON.stringify(posRef.current))
-    } catch {
-      // 忽略
-    }
-  }
+  const persist = () => saveFishLayout(pageKey, sizeRef.current, posRef.current)
 
   if (!url) return null
 
@@ -139,8 +101,8 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     if (d?.moved) persist()
   }
   const reset = () => {
-    applySize(DEFAULT_SIZE)
-    applyPos(DEFAULT_POS.right, DEFAULT_POS.bottom)
+    applySize(FISH_SIZE_DEFAULT)
+    applyPos(FISH_POS_DEFAULT.right, FISH_POS_DEFAULT.bottom)
     persist()
   }
 
