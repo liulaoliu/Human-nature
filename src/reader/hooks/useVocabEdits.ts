@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
 import type { MutableRefObject } from 'react'
 import type { Sentence, VocabLibrary } from '../../types/document'
-import { lemmaOf, markWord, removeItem } from '../../core/vocab'
+import { editItem, lemmaOf, markWord, removeItem, reviewItem, type ReviewGrade } from '../../core/vocab'
 import { splitGlossText } from '../../core/langPoints'
 import type { BatchItem } from '../panels/SidePick'
 
@@ -24,6 +24,10 @@ export interface UseVocabEditsResult {
   addPhrases: (items: string[], sentence: Sentence | null) => void
   /** 把误加的词从生词本移出（两步确认在面板里做）。 */
   removeWord: (word: string) => void
+  /** 复习评分（again/hard/good/easy）。 */
+  reviewWord: (id: string, grade: ReviewGrade) => void
+  /** 手动编辑词条。 */
+  editWord: (id: string, patch: Parameters<typeof editItem>[2]) => void
 }
 
 /**
@@ -123,5 +127,19 @@ export function useVocabEdits({ libraryRef, persist, article, flash }: UseVocabE
     [libraryRef, persist, flash],
   )
 
-  return { commitBatchItems, addItems, addPhrases, removeWord }
+  const reviewWord = useCallback(
+    (id: string, grade: ReviewGrade) => {
+      persist(reviewItem(libraryRef.current, id, grade))
+    },
+    [libraryRef, persist],
+  )
+
+  const editWord = useCallback(
+    (id: string, patch: Parameters<typeof editItem>[2]) => {
+      persist(editItem(libraryRef.current, id, patch))
+    },
+    [libraryRef, persist],
+  )
+
+  return { commitBatchItems, addItems, addPhrases, removeWord, reviewWord, editWord }
 }

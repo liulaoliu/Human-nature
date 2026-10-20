@@ -4,14 +4,11 @@ import {
   applyExamples,
   articleWordsOf,
   displayMeaning,
-  editItem,
   hasOwnExamples,
   isDue,
   lemmaOf,
   removeItem,
-  reviewItem,
   sortItems,
-  type ReviewGrade,
   type VocabSortBy,
 } from '../core/vocab'
 import {
@@ -39,7 +36,7 @@ import { type AiJobsInput } from '../core/aiPackage'
 import { activityStreak, addActivity, dayKeyLocal, dayTotal, type ActivityCat } from '../core/activity'
 import { buildOutputBoard } from '../core/output'
 import { buildSiege } from '../core/siege'
-import VocabList, { type VocabEditPatch } from './VocabList'
+import VocabList from './VocabList'
 import SpeedReadPanel from './panels/SpeedReadPanel'
 import LanguageEditor from './panels/LanguageEditor'
 import PlanPanel from './panels/PlanPanel'
@@ -800,6 +797,8 @@ export default function ReaderApp() {
     addItems: addItemsToVocab,
     addPhrases: addPhrasesToVocab,
     removeWord: removeWordFromVocab,
+    reviewWord: handleReview,
+    editWord: handleEdit,
   } = useVocabEdits({
     libraryRef,
     persist,
@@ -1532,15 +1531,6 @@ export default function ReaderApp() {
   })
 
   const allList = sortItems(library.items, vocabSort)
-  const handleReview = useCallback(
-    (id: string, grade: ReviewGrade) => persist(reviewItem(library, id, grade)),
-    [library, persist],
-  )
-  const handleEdit = useCallback(
-    (id: string, patch: VocabEditPatch) => persist(editItem(library, id, patch)),
-    [library, persist],
-  )
-
   /** 仪表盘：各能力当前可用性 */
   const readyRows = useMemo(
     () =>

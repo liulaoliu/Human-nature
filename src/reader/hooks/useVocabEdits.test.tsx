@@ -120,3 +120,33 @@ describe('useVocabEdits：移出词库', () => {
     expect(flash).toHaveBeenCalledWith('不在生词本：absent')
   })
 })
+
+describe('useVocabEdits：复习评分 / 手动编辑', () => {
+  it('评分只改指定词条，写回一次', () => {
+    const initial = { ...createLibrary(), items: [vocabItem({ id: 'x', word: 'run', lemma: 'run' })] }
+    const { result, persist } = setup(initial)
+    act(() => result.current.reviewWord('x', 'good'))
+    const saved = persist.mock.calls[0][0]
+    expect(saved.items).toHaveLength(1)
+    expect(saved.items[0].id).toBe('x')
+    expect(saved.items[0].reviewState.due).not.toBeNull()
+  })
+
+  it('编辑按 id 合并补丁，并标记为 edited', () => {
+    const initial = { ...createLibrary(), items: [vocabItem({ id: 'x', word: 'run', lemma: 'run' })] }
+    const { result, persist } = setup(initial)
+    act(() => result.current.editWord('x', { meaning: '跑；经营' }))
+    const item = persist.mock.calls[0][0].items[0]
+    expect(item.meaning).toBe('跑；经营')
+    expect(item.status).toBe('edited')
+    expect(item.word).toBe('run')
+  })
+
+  it('id 不存在时仍只写一次（内容不变，不抛错）', () => {
+    const initial = { ...createLibrary(), items: [vocabItem({ id: 'x', word: 'run', lemma: 'run' })] }
+    const { result, persist } = setup(initial)
+    act(() => result.current.editWord('nope', { meaning: 'x' }))
+    expect(persist).toHaveBeenCalledOnce()
+    expect(persist.mock.calls[0][0].items[0].meaning).toBeNull()
+  })
+})
