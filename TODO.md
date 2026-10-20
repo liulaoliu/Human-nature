@@ -3,7 +3,7 @@
 > **2026-10-20 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`（本轮最后一条是「docs: 滚动进度 / 速读游标」）；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：204 个测试文件，**1834 passed / 5 skipped**。
+> - schema **v7**；`npm run gates` 全绿：205 个测试文件，**1836 passed / 5 skipped**。
 >   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - 本轮已完成：
@@ -25,6 +25,8 @@
 >   - **阅读页滚动进度按文章记住**：`core/scrollProgress`（12）+ `state/scrollPrefs`（10）+
 >     `hooks/useReadingScroll`（9）；内存优先、重开回落到 `reader:scroll:<文章标识>`；
 >     存的是比例（换字号/衬线不错位），停滚 400ms 落一次盘
+>   - **「同一篇」认正文签名**：`core/docSignature`（5 条）——文章标识可能是书名 / 空标题 / 「未命名」，
+>     凡按文章记东西键里都带它（滚动进度、速读游标都用了）
 >   - **速读游标不串篇 + 读完即归零**：键改成「文章标识 + 正文签名」（`core/speedRead.speedCursorKey`），
 >     停在/读完最后一句再退出就清零；面板没关就换文章也会重置游标与成绩；hook 覆盖 54 → **55 / 55**
 > - 下一步优先级：

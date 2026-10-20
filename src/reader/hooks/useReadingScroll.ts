@@ -12,6 +12,9 @@ import { readScroll, saveScroll } from '../../state/scrollPrefs'
  * - **换篇**：先把上一篇没落盘的那一笔写掉，再按这篇自己的进度恢复；
  *   正文高度还没铺开（可滚区间 0）时不恢复也不记，免得把「还没渲染完」当成滚到顶。
  *
+ * `docKey` 由调用方拼成「文章标识 + 正文签名」（见 `core/docSignature`）：只按标识存，
+ * 空标题 / 同名的两篇文章会互相继承滚动位置。
+ *
  * 展示层只拿到这个 hook，不直接碰 localStorage（架构门禁 R3）。
  */
 export const SCROLL_SAVE_DELAY_MS = 400

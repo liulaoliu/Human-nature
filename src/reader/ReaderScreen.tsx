@@ -1,4 +1,5 @@
-import type { ComponentProps } from 'react'
+import { useMemo, type ComponentProps } from 'react'
+import { docSignature } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
 import type { Sentence, VocabItem, VocabLibrary } from '../types/document'
@@ -188,6 +189,14 @@ export interface ReaderScreenProps {
  */
 export default function ReaderScreen(props: ReaderScreenProps) {
   const { fontSize, bold, serif, examActive, sideTab, sideRef, onMouseDown, onMouseUp, onContextMenu, toast } = props
+  /**
+   * 滚动进度按「文章标识 + 正文签名」存：标识可能是空标题 / 同名 / 「未命名」，
+   * 只按标识存会让另一篇同标识的文章继承这里的滚动位置。
+   */
+  const scrollKey = useMemo(
+    () => `${props.articleIdentity}@${docSignature(props.doc?.sentences ?? [])}`,
+    [props.articleIdentity, props.doc],
+  )
 
   return (
     <ReaderShell
@@ -196,7 +205,7 @@ export default function ReaderScreen(props: ReaderScreenProps) {
       serif={serif}
       examActive={examActive}
       studying={!!props.services.studyQueue}
-      docKey={props.articleIdentity}
+      docKey={scrollKey}
       sideTab={sideTab}
       sideRef={sideRef}
       onMouseDown={onMouseDown}

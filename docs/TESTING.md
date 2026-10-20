@@ -182,8 +182,8 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
 - **阅读页滚动进度与速读游标（2026-10-20 第三批）**：`core/scrollProgress`（12：比例夹取 / 脏值回顶部 /
   像素↔比例 / 可滚区间为 0 不算 NaN）、`state/scrollPrefs`（10：内存优先于 localStorage / 按文章分开 /
   重开后回落硬存 / 空 docKey 不建键 / 写失败不抛）、`hooks/useReadingScroll`（9：恢复到位 / trailing 节流只写最后一笔 /
-  滚回顶部也记 / 卸载与换篇会结清）。速读那边 `core/speedRead` 补了 `docSignature` / `speedCursorKey`（5 条，
-  含「同标识不同正文不撞键」「ab|c ≠ a|bc」「空正文签名稳定」），`useSpeedReadSession` 补 5 条
+  滚回顶部也记 / 卸载与换篇会结清）。正文签名单独立成 `core/docSignature`（5 条：同正文同签名 / 不同正文不撞 / `ab|c ≠ a|bc` / 空正文稳定），
+  速读那边 `core/speedRead` 的 `speedCursorKey` 补 2 条（标识相同、正文不同 → 键不同），`useSpeedReadSession` 补 5 条
   （停在最后一句退出清零 / 读完退出清零 / 读到中间退出保留 / 同标识换正文从第一句开始且成绩清空 / 换回原篇回原位）。
   这条 hook 用「假滚动元素」测：jsdom 不做布局，`scrollHeight` 恒为 0，会被「可滚区间 0」的守卫挡掉。
 - **AI / 考试三个大 hook 也拆干净了（2026-10-20 第二批）**：`core/aiApply`（16：六个表格型任务的解析 / 校验 / 回执，
