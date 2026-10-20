@@ -11,7 +11,7 @@
 | 纯逻辑（计算 / 规则 / 解析 / 键规则） | **单测**（`src/core/*.test.ts`） | 已有 40+ 文件、800 项 |
 | 数据层（IndexedDB / fetch / 备份） | 单测（内存兜底实现 / 假端口） | `adapters/` 的 Memory* 实现 |
 | 有状态编排（effect / 会话状态机 / 写入策略） | **钩子测试 + 把判断抽成纯函数** | `hooks/useLibraryAutoFill.test.tsx`、`hooks/useReadDone.test.tsx`、`core/libraryAutoFill.ts` |
-| 单个面板 / 列表 / 对话框 | 组件测试（环境已就绪，待补） | `reader/panels/*` |
+| 单个面板 / 列表 / 对话框 | 组件测试（环境已就绪；29 个面板全部有测试） | `reader/panels/*` |
 | 浏览器能力（打印对话框 / TTS / 剪贴板 / IndexedDB 真库） | **人工用例**（§4） | 登记，不写自动化 |
 
 **判定原则**：先问「这块判断能不能抽成纯函数」。能 → 抽出去写单测（最便宜、最稳）；
@@ -162,11 +162,15 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
-- **hooks 9 个无测试**：`useArticleImport` / `useDictionary` / `useDictTools` / `useDocVocabSets` /
-  `useListening` / `useQuickSession` / `useReaderDoc` / `useTtsEngines` / `useWriting`。
-- **panels 23 / 29 无测试**：`SpeedReadPanel`(597) / `SidePick`(582) / `StudyPanel`(512) 优先。
-- **adapters 10 / 14 无同名测试**：`learningRepo` / `browserAudio` / `stateBackup`(adapters) 可直测；
-  `articleRepo` / `storeApi` 由 `server/*.test.js` 间接覆盖，可在 `check_architecture` 登记豁免。
+- **hooks 39 / 39 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
+  `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`。
+- **panels 29 / 29 有测试**：本轮补齐 `SpeedReadPanel` / `SidePick` / `StudyPanel` / `DictPanel` / `QuizPanel` /
+  `IntensivePanel` / `GoalPanel` / `JournalPanel` / `ListeningPanel` / `WritingPanel` / `LanguageEditor` /
+  `QuickPanel` / `QuizSetupPanel` / `StatsPanel` / `PlanPanel` / `Composer` / `SideOverview` / `SideMastery` /
+  `LangPhrases` / `VocabBlocks` / `ReaderBody` / `ReaderSidebar` / `ReaderToolbar`（薄容器 `ReaderSidebar`
+  用 stub 子面板只测页签接线）。
+- **adapters 3 / 14 有同名测试，其余按需补**：`learningRepo` / `browserAudio` / `stateBackup`(adapters) 可直测；
+  `articleRepo` / `storeApi` 由 `server/*.test.js` 间接覆盖（R7 只要求 `core/`，adapters 不强制同名测试）。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
