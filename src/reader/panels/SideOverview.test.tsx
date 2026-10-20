@@ -11,9 +11,9 @@ const mistakes: MistakeEntry[] = [
 ]
 
 const readyRows: ReadyRow[] = [
-  { group: '读', key: 'read', label: '精读', level: 'ok', detail: '1 篇', hint: '继续' },
-  { group: '词', key: 'vocab', label: '词汇', level: 'warn', detail: '12 个到期' },
-  { group: '写', key: 'write', label: '仿写', level: 'bad', detail: '0 条' },
+  { group: '读', key: 'read', label: '精读', level: 'ready', detail: '1 篇', hint: '继续' },
+  { group: '词', key: 'vocab', label: '词汇', level: 'partial', detail: '12 个到期' },
+  { group: '写', key: 'write', label: '仿写', level: 'blocked', detail: '0 条' },
 ]
 
 function props(over: Partial<SideOverviewProps> = {}): SideOverviewProps {

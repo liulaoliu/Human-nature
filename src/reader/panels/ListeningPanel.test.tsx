@@ -51,7 +51,7 @@ describe('ListeningPanel：作答', () => {
         {...props({
           answers: { q1: 'run', q2: 'run' },
           submitted: true,
-          result: { total: 2, correct: 1, score: 0.5 },
+          result: { total: 2, correct: 1, score: 0.5, per: [{ id: 'q1', correct: true }, { id: 'q2', correct: false }] },
         })}
       />,
     )
@@ -69,7 +69,7 @@ describe('ListeningPanel：作答', () => {
       <ListeningPanel
         {...props({
           submitted: true,
-          result: { total: 2, correct: 1, score: 0.5 },
+          result: { total: 2, correct: 1, score: 0.5, per: [{ id: 'q1', correct: true }, { id: 'q2', correct: false }] },
           onRetryWrong,
           onShowAll,
         })}
@@ -81,7 +81,7 @@ describe('ListeningPanel：作答', () => {
     expect(onShowAll).toHaveBeenCalled()
 
     rerender(
-      <ListeningPanel {...props({ submitted: true, result: { total: 2, correct: 2, score: 1 } })} />,
+      <ListeningPanel {...props({ submitted: true, result: { total: 2, correct: 2, score: 1, per: [{ id: 'q1', correct: true }, { id: 'q2', correct: true }] } })} />,
     )
     expect(screen.queryByRole('button', { name: /重做错题/ })).toBeNull()
   })
@@ -112,7 +112,7 @@ describe('ListeningPanel：朗读与原文', () => {
     expect(screen.getByText('原文（阅读理解：先读原文再答题）')).toBeTruthy()
     expect(screen.getByText('He runs fast.')).toBeTruthy()
 
-    rerender(<ListeningPanel {...props({ submitted: true, result: { total: 2, correct: 2, score: 1 } })} />)
+    rerender(<ListeningPanel {...props({ submitted: true, result: { total: 2, correct: 2, score: 1, per: [{ id: 'q1', correct: true }, { id: 'q2', correct: true }] } })} />)
     expect(screen.getByText('显示原文')).toBeTruthy()
   })
 

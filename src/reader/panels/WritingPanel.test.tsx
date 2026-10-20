@@ -24,6 +24,7 @@ const feedback: WritingFeedback = {
 const history: WritingRecord[] = [
   {
     at: '2026-10-20T00:00:00.000Z',
+    articleId: 'doc:1',
     model: 'Run fast.',
     text: 'I ran.',
     feedback,
