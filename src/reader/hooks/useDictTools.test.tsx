@@ -139,6 +139,23 @@ describe('useDictTools：按水平挑超纲词', () => {
     expect(p.flash).toHaveBeenCalledWith('已按词典挑出 1 个超纲词，其中「新 1」个进「待选」')
   })
 
+  it('长文章不截断到 40：提示真实超纲词数量', () => {
+    const words = Array.from({ length: 45 }, (_, i) =>
+      'w' + String.fromCharCode(97 + Math.floor(i / 26)) + String.fromCharCode(97 + (i % 26)),
+    )
+    const longDict: Ecdict = {
+      entries: new Map(words.map((w) => [w, entry({ word: w, tag: 'gre', zh: '超纲词' })])),
+      forms: new Map(),
+      near: new Map(),
+    }
+    setDictionary(longDict)
+    const { p, result } = params({ doc: { sentences: [{ id: 's1', text: words.join(' ') }] } })
+    result.current.pickFromDict()
+    expect(p.batchItemsFromWords).toHaveBeenCalledTimes(1)
+    expect((vi.mocked(p.batchItemsFromWords).mock.calls[0][0] as string[]).length).toBe(45)
+    expect(p.flash).toHaveBeenCalledWith('已按词典挑出 45 个超纲词，其中「新 45」个进「待选」')
+  })
+
   it('超纲词都已在生词本：不同措辞提示', () => {
     setDictionary(dict)
     const { p, result } = params({

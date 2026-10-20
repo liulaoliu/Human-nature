@@ -65,7 +65,9 @@ export function useDictTools({ library, persist, doc, level, mergeBatch, batchIt
       flash('先打开一篇文章')
       return
     }
-    const words = pickAboveLevelWords(dict, doc.sentences.map((s) => s.text).join(' '), level, 40)
+    // 这里是「看这一篇到底有多少超纲词」的诊断入口，不再一刀切截到 40：
+    // 否则长文章永远提示「挑出 40 个」，用户看不出真实难度。批量加词仍由待选列表管理。
+    const words = pickAboveLevelWords(dict, doc.sentences.map((s) => s.text).join(' '), level, Number.POSITIVE_INFINITY)
     if (!words.length) {
       flash('词典没挑出超纲词')
       return
