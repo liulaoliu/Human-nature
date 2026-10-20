@@ -66,6 +66,33 @@
 > 下面「Review 重构待办（2026-10-19）」保留为历史记录，里面的事项均已完成；
 > 更早的录音 / PDF 抽取待办仍然有效，但别把旧状态当成最新状态。
 
+## 数据来源标记（下一轮候选，2026-10-20）
+
+> 本轮已完成「本篇生词来源」：`ArticleVocabEntry.via` + `core/vocabVia.ts`，
+> 在写入边界标来源（AI / 词典 / 手动 / 语言点 / 旧数据），旧数据不按时间反推。
+> 同一套思路还能用到下面这些内容，原则是：**同一字段有多个生产者、合并/覆盖会丢信息才加来源；
+> 只在写入边界标，不靠时间或状态猜；旧数据写 `unknown` / `legacy`。**
+
+- [ ] **P1 易混项来源**：`VocabItem.confusables` 现在由 AI（`core/aiApply.ts`）和离线词典
+      （`useDictTools.confuseFromDict`）两处写，界面分不出。加 `confusablesSource: 'ai' | 'dict'`，
+      卡片「易混」块显示标签；老数据不猜。
+- [ ] **P1 词条字段来源**：`phonetic / partOfSpeech / meaning / definition` 可能来自 AI
+      （`applyWordAnalysis`）、ECDICT/M-W（`enrichWithDict`）或手动编辑。加
+      `fieldSources?: Partial<Record<字段, 来源>>`；顺带把现在 `status === 'edited'` 的「整条锁死」
+      升级成「只锁手动改过的字段」。
+- [ ] **P2 已保存文章来源**：`SavedArticle.sourceKey` 只分「articles.json / 粘贴」，EPUB / 文件导入
+      都落 `null`。加 `origin: 'library' | 'paste' | 'epub' | 'file'`；老数据 `unknown`。
+- [ ] **P2 语境释义来源展示**：`ArticleVocabEntry.meaningSource` 已存
+      `manual/context/library/dict/ai`，UI 还没显示；先加标签，零迁移。
+- [ ] **P3 句子翻译/语法/搭配来源**：当前基本只有 AI / 导入写入，暂不加；等出现手动编辑再加
+      `translationSource` 等。
+
+**不要做的事**
+
+- 不用 `addedAt`、`status`、字段是否为空反推来源。
+- 不给只有一个写入方、来源也不影响合并的字段加 `source`。
+- 新来源枚举放 `core/` 的守卫里；备份 / localStorage / AI 粘回等外部输入先过守卫。
+
 > **2026-10-19 历史交接**：最新数据安全进展、换电脑带数据的步骤、下次优先做的事件表/分页，
 > 见 [`docs/HANDOFF.md`](docs/HANDOFF.md)。本文件下面很多是较早的录音/抽取待办，
 > 仍然有效，但别把旧状态当成最新状态。
@@ -384,4 +411,4 @@ nothing new;` 出现在**第 4 块** —— 音频前面有文本里没有的引
 
 ---
 
-_最后更新：2026-10-19（数据安全交接见 docs/HANDOFF.md）_
+_最后更新：2026-10-20（数据安全交接见 docs/HANDOFF.md）_
