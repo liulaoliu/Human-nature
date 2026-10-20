@@ -237,11 +237,12 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `state/shadowingPrefs`（8：脏值兜底 / 隐私模式读写不炸）、
   `state/fishPrefs`（6：按页面分开存 / 脏值回默认 / 写失败不抛）、
   `state/levelMeter`（6：首拍直发 / 窗口内只发一次且补尾帧 / flush 清定时器）、
-  `state/localActivity`（6：同键累加 / 派发 `reader:local-state` / 坏数据当空库）、
+  `state/localActivity`（7：同键累加 / 派发 `reader:local-state` / 坏数据当空库 / 元素级脏数据只丢坏行）、
   `ui/ScriptPanel`（8：未粘原文 / 原文库失败提示 / 当前块与邻块标记 / 编辑态提交 / 锚定与两步清空）。
-  会话测试按主题拆成四个（共用 `state/sessionDoubles` 的假播放器/录音器/仓库）：
-  `sessionLoad`（10）/ `sessionPlay`（16）/ `sessionRecord`（20）/ `sessionCycle`（26，含 A/B 与整圈时序）。
-  `state/anchorEditor` 与 `state/cycleRunner` 没有单独文件：它们的行为由 `session*` 四个文件从公开 API 覆盖
+  会话测试按主题拆成五个（共用 `state/sessionDoubles` 的假播放器/录音器/仓库）：
+  `sessionLoad`（10）/ `sessionPlay`（16）/ `sessionRecord`（21）/ `sessionCycle`（22，含 A/B 与整圈时序）/
+  `sessionScript`（55：原文对齐 / 自动带原文 / 偏移 / 撕合 / 改文本）。
+  `state/anchorEditor` 与 `state/cycleRunner` 没有单独文件：它们的行为由 `session*` 五个文件从公开 API 覆盖
   （拆出去是为了让 store 只剩编排，不是为了少测）。
   真实播放、录音、撕块波形仍走 §4 人工用例。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
