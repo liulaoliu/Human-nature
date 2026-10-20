@@ -141,7 +141,12 @@ types ← core ← adapters ← reader
   - 录音挂哪一块 / 每块留最新一条 → `core/takeChunk`
   - 每篇手动校准的账本（平移/起点/锚点/撕合 + 持久化形状）→ `state/calibrationLedger`
   - 本机偏好（显示模式/麦克风/静音时长/回放放大）→ `state/shadowingPrefs`
-  `state/session` 只剩编排（状态机、播放/录音时序、竞态守卫）；`ui/App` 只剩装配。
+  - 锚点的增删改（选字定块 / 微调 / 撕开的拆分 / 合并的并回）→ `state/anchorEditor`
+  - 「撕 = 抵消合并、合并 = 撤销撕开」与 0.02s 容差 → `core/chunkEditLog`
+  - 连续跟读那一轮（轮次号 / 录音定时器 / 说完收工 / 提前收尾）→ `state/cycleRunner`
+  - 电平表节流（原始值判说话、节流值给 UI）→ `state/levelMeter`
+  - 「说」记进学习统计（同一个 `reader:activity` 键 + 事件）→ `state/localActivity`
+  `state/session` 只剩编排（状态机、播放/录音时序、竞态守卫），732 行；`ui/App` 只剩装配。
 - **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
   不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。
   真要迁，先改端口为异步，再走服务端 SQLite。

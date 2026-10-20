@@ -1,17 +1,9 @@
 import { detectSpeechSpans } from '../core/vad'
-import { addActivity, dayKeyLocal, type DayActivity } from '../core/activity'
 import { applyChunkEdits, MIN_PIECE_SEC } from '../core/chunkEdits'
+import { addSplit, editCount, mergeAt, type ChunkEditLog } from '../core/chunkEditLog'
 import { latestTakePerChunk, remapTakes } from '../core/takeChunk'
 import { alignScript, resolveScriptAnchors, scriptWords, type ScriptLayout } from '../core/scriptAlign'
-import { joinAnchorAt, nudgeAnchorEdge, splitAnchorSpan } from '../core/anchorEdits'
-import {
-  AUTO_CYCLE_GAP_MS,
-  LEVEL_PUSH_MS,
-  NOISE_FLOOR_INIT,
-  VOICE_LEVEL,
-  recordCapMs,
-  voiceThreshold,
-} from '../core/recording'
+import { AUTO_CYCLE_GAP_MS, NOISE_FLOOR_INIT, VOICE_LEVEL, voiceThreshold } from '../core/recording'
 import {
   GRANULARITY_MS,
   type Chunk,
@@ -20,6 +12,10 @@ import {
   type Take,
 } from '../core/ports'
 import { CalibrationLedger } from './calibrationLedger'
+import { LevelMeter } from './levelMeter'
+import { AnchorEditor } from './anchorEditor'
+import { CycleRunner } from './cycleRunner'
+import { recordLocalActivity } from './localActivity'
 import { INITIAL, type SessionDeps, type SessionState } from './sessionConfig'
 
 export type { SessionDeps, SessionState } from './sessionConfig'
@@ -40,75 +36,55 @@ export class SessionStore {
   private generation = 0 // load 竞态守卫
   /** 每篇的校准（平移 / 起点 / 锚点 / 撕合），按文件名分篇 */
   private cal: CalibrationLedger
-  /** 连续跟读的轮次号：中途改主意时靠它让跑着的那一轮自己退出 */
-  private cycleGen = 0
-  private recordTimer: ReturnType<typeof setInterval> | null = null
-  /** 这一轮录音里说过话没有 / 最后一次说话的时刻（判断「读完了」用） */
-  private speechSeen = false
-  private lastVoiceAt = 0
-  private recStartedAt = 0
+  /** 锚点的增删改（规则在 core/anchorEdits，跟账本打交道的部分在这里） */
+  private anchors: AnchorEditor
+  /** 连续跟读的那一轮（轮次号 / 录音定时器 / 说过话没有），见 state/cycleRunner */
+  private cycle: CycleRunner
   /** 噪声底：录音期间见过的最低电平，用来自适应说话阈值（不同麦克风增益差很多） */
   private noiseFloor = NOISE_FLOOR_INIT
   /** 这次录音见过的最高电平，用完判断「麦克风是不是太小声」 */
   private recPeak = 0
   /**
-   * 电平上报的节流：电平表每帧都回调（~60/s），直接进 state 就是 60fps 的整页重渲染。
-   * 判定「说完没有」用**原始值**（不受节流影响），只有给 UI 看的 level 才节流到 ~25/s。
+   * 电平上报的节流（~25/s）：电平表每帧都回调，直接进 state 就是 60fps 整页重渲染。
+   * 判定「说完没有」用**原始值**（不受节流影响），只有给 UI 看的 level 才节流。
    */
-  private lastLevelPush = 0
-  private pendingLevel = 0
-  private levelTimer: ReturnType<typeof setTimeout> | null = null
+  private level = new LevelMeter((v) => this.set({ level: v }))
 
   constructor(private deps: SessionDeps) {
     this.cal = new CalibrationLedger(deps.calibration)
+    this.cycle = new CycleRunner({
+      state: () => this.state,
+      set: (patch) => this.set(patch),
+      chunk: () => this.chunk(),
+      player: deps.player,
+      recorder: deps.recorder,
+      startRecording: () => this.startRecording(),
+      stopRecording: () => this.stopRecording(),
+      playTake: (take) => this.playTake(take),
+      stopAb: () => this.stopAb(),
+      cycleGapMs: () => deps.cycleGapMs ?? AUTO_CYCLE_GAP_MS,
+      hangoverMs: () => deps.voiceHangoverMs ?? this.state.hangoverMs,
+    })
+    this.anchors = new AnchorEditor({
+      cal: this.cal,
+      fileName: () => this.state.fileName,
+      words: () => this.wordList(),
+      chunk: () => this.chunk(),
+      alignedWordRange: (i) => this.state.aligned[i]?.wordRange ?? null,
+      persist: () => this.cal.persist(this.state.fileName),
+    })
     this.deps.recorder.onLevel((v) => {
       if (this.state.recording) {
         if (v > this.recPeak) this.recPeak = v
         // 噪声底只取「见过的最低电平」，单调不增 —— 连续朗读时也不会被自己的语音抬高
         if (v < this.noiseFloor) this.noiseFloor = v
         const thr = voiceThreshold(this.noiseFloor, this.deps.voiceLevel ?? VOICE_LEVEL)
-        if (v > thr) {
-          this.speechSeen = true
-          this.lastVoiceAt = Date.now()
-        }
+        this.cycle.noteLevel(v, thr)
       }
-      this.publishLevel(v)
+      this.level.accept(v)
     })
   }
 
-  /**
-   * 把电平送进 state，但最多每 40ms 一次。
-   * 20fps 足够看清电平表在动，却把整页重渲染从每秒 60 次压到 25 次。
-   * 收尾时（停录）会把最后那个值补上去。
-   */
-  private publishLevel(v: number) {
-    const now = Date.now()
-    const since = now - this.lastLevelPush
-    if (since >= LEVEL_PUSH_MS) {
-      this.lastLevelPush = now
-      this.pendingLevel = v
-      this.set({ level: v })
-      return
-    }
-    // 这一拍不发，但把最新值记下，交给尾帧发出去
-    this.pendingLevel = v
-    if (this.levelTimer === null) {
-      this.levelTimer = setTimeout(() => {
-        this.levelTimer = null
-        this.lastLevelPush = Date.now()
-        this.set({ level: this.pendingLevel })
-      }, LEVEL_PUSH_MS - since)
-    }
-  }
-
-  /** 立刻把待发值发出去（停录时用，免得电平表停在旧数字） */
-  private flushLevel() {
-    if (this.levelTimer !== null) {
-      clearTimeout(this.levelTimer)
-      this.levelTimer = null
-    }
-    this.set({ level: this.pendingLevel })
-  }
 
   getState = (): SessionState => this.state
 
@@ -189,6 +165,19 @@ export class SessionStore {
       if (gen !== this.generation) return
       this.set({ status: 'error', error: e instanceof Error ? e.message : String(e) })
     }
+  }
+
+  /** 这一篇记过的撕/合（账本形状 → core 认的 `ChunkEditLog`） */
+  private editLog(): ChunkEditLog {
+    return {
+      splits: this.cal.splitsOf(this.state.fileName),
+      merges: this.cal.mergesOf(this.state.fileName),
+    }
+  }
+
+  private applyEditLog(log: ChunkEditLog): void {
+    this.cal.setSplits(this.state.fileName, log.splits)
+    this.cal.setMerges(this.state.fileName, log.merges)
   }
 
   /** 只跑 VAD，得到原始块（不含手动撕/合） */
@@ -325,86 +314,28 @@ export class SessionStore {
 
   /**
    * 鼠标选字定块：把「当前这一块的音频」绑到原文的 [startWord, endWord) 上。
-   * 同时记下这段文字，改文本后靠它在新词表里重新定位。
-   * 同一个时刻只留一个锚点，重选就覆盖；冲突的旧锚点由对齐逻辑处理。
+   * 重选就覆盖；冲突的旧锚点由对齐逻辑处理（细节在 state/anchorEditor）。
    */
   setAnchorWords(startWord: number, endWord: number) {
-    const c = this.chunk()
-    if (!c) return
-    const s = Math.min(startWord, endWord)
-    const e = Math.max(startWord, endWord)
-    if (e <= s) return
-    const words = this.wordList()
-    const fileName = this.state.fileName
-    const kept = this.cal
-      .anchorsOf(fileName)
-      .filter((a) => Math.abs(a.atSec - c.start) > 1e-6)
-    this.cal.setAnchors(fileName, [
-      ...kept,
-      { atSec: c.start, startWord: s, endWord: e, text: words.slice(s, e).join(' ') },
-    ])
-    this.cal.persist(fileName)
-    this.realign()
+    if (this.anchors.setWords(startWord, endWord)) this.realign()
   }
 
   /**
-   * 用快捷键/按钮微调当前块锚点的开头或结尾。
-   * 当前块还没锚定的话，先按现在的对齐结果钉一个，再挪。
-   * 夹在相邻锚点之间，保证词范围仍然有序不重叠。
+   * 用快捷键/按钮微调当前块锚点的开头或结尾（夹在相邻锚点之间、至少留一个词的规则在
+   * core/anchorEdits；没锚定时先按对齐结果钉一个，在 state/anchorEditor）。
    */
   nudgeAnchor(edge: 'start' | 'end', delta: number) {
-    const c = this.chunk()
-    if (!c) return
-    const words = this.wordList()
-    const total = words.length
-    if (total === 0) return
-
-    const fileName = this.state.fileName
-    const list = [...this.cal.anchorsOf(fileName)]
-    if (!list.some((a) => Math.abs(a.atSec - c.start) < 1e-6)) {
-      const wr = this.state.aligned[c.index]?.wordRange
-      if (!wr || wr[1] <= wr[0]) return
-      list.push({ atSec: c.start, startWord: wr[0], endWord: wr[1] })
-    }
-
-    const sorted = list.sort((a, b) => a.atSec - b.atSec)
-    const pos = sorted.findIndex((a) => Math.abs(a.atSec - c.start) < 1e-6)
-    const cur = sorted[pos]
-    const prev = sorted[pos - 1]
-    const next = sorted[pos + 1]
-    // 挪动规则（夹在相邻锚点之间、至少留一个词）在 core/anchorEdits 里，有测试
-    const moved = nudgeAnchorEdge(cur, edge, delta, prev ? prev.endWord : 0, next ? next.startWord : total)
-    sorted[pos] = {
-      atSec: cur.atSec,
-      startWord: moved.startWord,
-      endWord: moved.endWord,
-      text: words.slice(moved.startWord, moved.endWord).join(' '),
-    }
-    this.cal.setAnchors(fileName, sorted)
-    this.cal.persist(fileName)
-    this.realign()
+    if (this.anchors.nudge(edge, delta)) this.realign()
   }
 
   /** 去掉当前块的锚点（其余锚点不动） */
   clearAnchorHere() {
-    const c = this.chunk()
-    if (!c) return
-    const fileName = this.state.fileName
-    const list = this.cal.anchorsOf(fileName)
-    const next = list.filter((a) => Math.abs(a.atSec - c.start) > 1e-6)
-    if (next.length === list.length) return
-    this.cal.setAnchors(fileName, next)
-    this.cal.persist(fileName)
-    this.realign()
+    if (this.anchors.clearHere()) this.realign()
   }
 
   /** 清掉这一篇全部手动锚点，回到自动估计 */
   clearAnchors() {
-    const fileName = this.state.fileName
-    if (this.cal.anchorsOf(fileName).length === 0) return
-    this.cal.clearAnchors(fileName)
-    this.cal.persist(fileName)
-    this.realign()
+    if (this.anchors.clearAll()) this.realign()
   }
 
   // ---- 手动撕开 / 合并块 ----
@@ -431,17 +362,12 @@ export class SessionStore {
     const at = Math.min(Math.max(t, lo), hi)
     const fileName = this.state.fileName
 
-    const splits = this.cal.splitsOf(fileName)
-    if (splits.some((s) => Math.abs(s - at) < 0.02)) return
-    this.cal.setSplits(fileName, [...splits, at])
+    // 「撕 = 抵消合并」「同一刀口不重复记」都在 core/chunkEditLog（有测试）
+    const next = addSplit(this.editLog(), at)
+    if (!next) return
+    this.applyEditLog(next)
 
-    // 这一刀正好落在此前的某次合并边界上：撕 = 抵消那次合并
-    this.cal.setMerges(
-      fileName,
-      this.cal.mergesOf(fileName).filter((m) => Math.abs(m - at) > 0.02),
-    )
-
-    this.splitAnchorAt(c, at)
+    this.anchors.splitAtStart(c, at)
     this.cal.persist(fileName)
     this.rederiveFromEdits()
   }
@@ -487,17 +413,9 @@ export class SessionStore {
     const boundary = next.start
     const fileName = this.state.fileName
 
-    const splits = this.cal.splitsOf(fileName)
-    // 这条边界如果是「撕开」产生的，合并就是撤销那次撕开：
-    // 把 split 删掉就够了，不该再记一条 merge（否则切分计数虚高，还可能误合）
-    const wasSplit = splits.some((s) => Math.abs(s - boundary) < 0.02)
-    this.cal.setSplits(fileName, splits.filter((s) => Math.abs(s - boundary) > 0.02))
-
-    const merges = this.cal.mergesOf(fileName).filter((m) => Math.abs(m - boundary) > 0.02)
-    if (!wasSplit) merges.push(boundary)
-    this.cal.setMerges(fileName, merges)
-
-    this.rejoinAnchorAcross(boundary)
+    // 「合并 = 撤销撕开」的规则在 core/chunkEditLog（有测试）
+    this.applyEditLog(mergeAt(this.editLog(), boundary))
+    this.anchors.joinAcross(boundary)
     this.cal.persist(fileName)
     this.rederive() // 撤销要真正合上两半，必须从 VAD 结果重算（见 rederiveFromEdits）
   }
@@ -505,32 +423,12 @@ export class SessionStore {
   /** 清掉这一篇全部手动撕/合，回到纯 VAD 切块（这个必须重跑 VAD：要把刀口全丢掉） */
   resetChunkEdits() {
     const fileName = this.state.fileName
-    if (this.cal.editCountOf(fileName) === 0) return
+    if (editCount(this.editLog()) === 0) return
     this.cal.clearEdits(fileName)
     this.cal.persist(fileName)
     this.rederive()
   }
 
-  /** 当前块起点上的锚点，按刀口比例拆成两个（两半的词都留着） */
-  private splitAnchorAt(c: Chunk, at: number) {
-    const fileName = this.state.fileName
-    const list = this.cal.anchorsOf(fileName)
-    const i = list.findIndex((a) => Math.abs(a.atSec - c.start) < 1e-6)
-    if (i < 0) return
-    const halves = splitAnchorSpan(c, list[i], this.wordList(), at)
-    if (!halves) return
-    const next = [...list]
-    next.splice(i, 1, ...halves)
-    this.cal.setAnchors(fileName, next)
-  }
-
-  /** 合并边界时，把紧挨着边界前后的锚点重新并成一个 */
-  private rejoinAnchorAcross(boundary: number) {
-    const fileName = this.state.fileName
-    const next = joinAnchorAt(this.cal.anchorsOf(fileName), boundary, this.wordList())
-    if (!next) return
-    this.cal.setAnchors(fileName, next)
-  }
 
   // ---- 麦克风 ----
 
@@ -683,108 +581,21 @@ export class SessionStore {
   //   标准音 →（喘口气）→ 录音（按块长自动停）→ 回放刚才那条录音
   // 手动那条路：R 开始录音，再按 R 停录并自动回放。
   //
-  // 提前收尾：
-  //   · 录音中按空格或 R = 我读完了，直接回放（不用等自动停）
-  //   · 标准音/回放中按空格 = 中止这一轮；按 R 则中止并开始手动录音
+  // 这一轮的字段与「提前收尾」规则全在 `state/cycleRunner`（轮次号 / 录音定时器 /
+  // 说过话没有…），这里只把 store 的能力递进去。
 
-  /** 打开/关闭连续跟读。打开时先摸一下麦克风，免得走到录音那步才发现没权限 */
-  async setAutoCycle(on: boolean): Promise<void> {
-    this.abortCycle()
-    this.set({ autoCycle: on })
-    if (!on) return
-    try {
-      await this.deps.recorder.start()
-      await this.deps.recorder.stop() // 只为了触发权限/设备初始化，这段不留
-      this.set({ error: null })
-    } catch (e) {
-      this.set({
-        autoCycle: false,
-        error: `麦克风打不开（${e instanceof Error ? e.message : String(e)}），连续跟读没打开`,
-      })
-    }
+  /** 打开/关闭连续跟读（会先摸一下麦克风） */
+  setAutoCycle(on: boolean): Promise<void> {
+    return this.cycle.setEnabled(on)
   }
 
   /** 空格键在连续跟读模式下的行为 */
-  async runAutoCycle(): Promise<void> {
-    if (this.state.cycleStep === 'rec') {
-      // 录音中按 = 我读完了，直接回放刚才那条
-      await this.stopRecordingThenPlayback()
-      return
-    }
-    if (this.state.cycleStep !== 'idle') {
-      this.abortCycle()
-      return
-    }
-    const c = this.chunk()
-    if (!c) return
-    const gen = ++this.cycleGen
-    this.stopAb()
-
-    this.set({ cycleStep: 'ref', playing: true, pausedChunk: null })
-    await this.deps.player.playRange(c.start, c.end, this.state.rate)
-    this.set({ playing: false })
-    if (gen !== this.cycleGen) return
-
-    await sleep(this.deps.cycleGapMs ?? AUTO_CYCLE_GAP_MS)
-    if (gen !== this.cycleGen) return
-
-    await this.startRecording()
-    if (gen !== this.cycleGen || !this.state.recording) {
-      this.set({ cycleStep: 'idle' })
-      return
-    }
-
-    const ms = recordCapMs(Math.max(0, c.end - c.start))
-    this.speechSeen = false
-    this.recStartedAt = Date.now()
-    this.lastVoiceAt = this.recStartedAt
-    this.set({ cycleStep: 'rec', autoRecordMs: ms })
-    // 每 200ms 看一次：说完静了一会儿就收工；一直没动静（或一直在说）就等兜底上限
-    const hangover = this.deps.voiceHangoverMs ?? this.state.hangoverMs
-    this.recordTimer = setInterval(() => {
-      const now = Date.now()
-      const silentFor = now - this.lastVoiceAt
-      const elapsed = now - this.recStartedAt
-      if ((this.speechSeen && silentFor > hangover) || elapsed > ms) {
-        this.clearRecordTimer()
-        void this.stopRecordingThenPlayback()
-      }
-    }, 200)
+  runAutoCycle(): Promise<void> {
+    return this.cycle.run()
   }
 
-  /**
-   * 停了录音、存下来，然后直接回放刚才那条（连续跟读的第 3 步）。
-   * 只放「我的」，不再回头放标准音 —— 想对照标准音按 C 或再跑一轮。
-   */
-  private async stopRecordingThenPlayback(): Promise<void> {
-    this.clearRecordTimer()
-    const saved = await this.stopRecording()
-    if (this.state.cycleStep !== 'rec') {
-      this.set({ cycleStep: 'idle' })
-      return
-    }
-    const gen = this.cycleGen
-    this.set({ cycleStep: 'playback' })
-    if (saved) await this.playTake(saved)
-    if (gen === this.cycleGen) this.set({ cycleStep: 'idle' })
-  }
-
-  abortCycle() {
-    this.cycleGen++ // 让还在跑的那一轮自己退出
-    this.clearRecordTimer()
-    if (this.state.recording) void this.stopRecording()
-    this.deps.player.pause()
-    this.stopAb()
-    if (this.state.cycleStep !== 'idle' || this.state.playing) {
-      this.set({ cycleStep: 'idle', playing: false })
-    }
-  }
-
-  private clearRecordTimer() {
-    if (this.recordTimer !== null) {
-      clearInterval(this.recordTimer)
-      this.recordTimer = null
-    }
+  abortCycle(): void {
+    this.cycle.abort()
   }
 
   // ---- 录音 ----
@@ -797,7 +608,7 @@ export class SessionStore {
       await this.deps.recorder.start()
       this.noiseFloor = NOISE_FLOOR_INIT
       this.recPeak = 0
-      this.lastLevelPush = 0 // 让第一帧电平立刻进 state
+      this.level.resetThrottle() // 让第一帧电平立刻进 state
       this.set({ recording: true })
     } catch (e) {
       this.set({ error: e instanceof Error ? e.message : String(e) })
@@ -808,10 +619,8 @@ export class SessionStore {
   async stopRecording(): Promise<Take | null> {
     if (!this.state.recording) return null
     const c = this.chunk()
-    this.clearRecordTimer()
-    this.pendingLevel = 0
     this.set({ recording: false, level: 0 })
-    this.flushLevel() // 清掉可能还挂着的节流定时器
+    this.level.flush(0) // 电平归零 + 清掉可能还挂着的节流定时器
     const take = await this.deps.recorder.stop()
     if (take.durationSec < 0.2) return null // 手滑了
 
@@ -835,7 +644,7 @@ export class SessionStore {
     const stale = this.state.takes.filter((t) => t.chunkIndex === record.chunkIndex)
     for (const t of stale) await this.deps.repo.remove(t.id)
     await this.deps.repo.save(record)
-    recordSpeakActivity()
+    recordLocalActivity('speak')
     this.set({
       takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],
     })
@@ -857,7 +666,7 @@ export class SessionStore {
    */
   async toggleRecording() {
     if (this.state.cycleStep === 'rec') {
-      await this.stopRecordingThenPlayback()
+      await this.cycle.stopThenPlayback()
       return
     }
     if (this.state.cycleStep !== 'idle') this.abortCycle()
@@ -915,26 +724,6 @@ export class SessionStore {
     this.stopAb()
     this.deps.player.release()
     this.deps.recorder.release()
-  }
-}
-
-/**
- * 记一笔「说」到学习统计（与精读页共用 localStorage；无 localStorage 时跳过）。
- * 精读页那边是 `useLocalStorageState('reader:activity')`，键要一致，
- * 并派发同名事件，否则记录只留在这边的缓存里。
- */
-function recordSpeakActivity() {
-  try {
-    if (typeof localStorage === 'undefined') return
-    const raw = JSON.parse(localStorage.getItem('reader:activity') ?? '[]')
-    const list = Array.isArray(raw) ? (raw as DayActivity[]) : []
-    localStorage.setItem(
-      'reader:activity',
-      JSON.stringify(addActivity(list, dayKeyLocal(new Date()), 'speak', 1)),
-    )
-    globalThis.dispatchEvent(new CustomEvent('reader:local-state', { detail: { key: 'reader:activity' } }))
-  } catch {
-    // 隐私模式 / 存储满了都不影响录音本身
   }
 }
 

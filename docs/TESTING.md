@@ -199,9 +199,17 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `core/scriptAlign`（13：比例摊 / 正文起点 / 平移 / 锚点优先 / 锚点解析不出来时退回）、
   `core/anchorEdits`（14：撕开按比例拆 / 合并并回前一个 / 微调夹在邻居之间）、
   `core/takeChunk`（15，含 `remapTakes` / `latestTakePerChunk`）、
+  `core/chunkEditLog`（10：撕 = 抵消合并 / 合并 = 撤销撕开 / 容差内不重复记）、
   `state/calibrationLedger`（11：分篇 / 空数组等于删键 / persist 不写空键）、
   `state/shadowingPrefs`（8：脏值兜底 / 隐私模式读写不炸）、
+  `state/fishPrefs`（6：按页面分开存 / 脏值回默认 / 写失败不抛）、
+  `state/levelMeter`（6：首拍直发 / 窗口内只发一次且补尾帧 / flush 清定时器）、
+  `state/localActivity`（6：同键累加 / 派发 `reader:local-state` / 坏数据当空库）、
   `ui/ScriptPanel`（8：未粘原文 / 原文库失败提示 / 当前块与邻块标记 / 编辑态提交 / 锚定与两步清空）。
+  会话测试按主题拆成四个（共用 `state/sessionDoubles` 的假播放器/录音器/仓库）：
+  `sessionLoad`（10）/ `sessionPlay`（16）/ `sessionRecord`（20）/ `sessionCycle`（26，含 A/B 与整圈时序）。
+  `state/anchorEditor` 与 `state/cycleRunner` 没有单独文件：它们的行为由 `session*` 四个文件从公开 API 覆盖
+  （拆出去是为了让 store 只剩编排，不是为了少测）。
   真实播放、录音、撕块波形仍走 §4 人工用例。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。

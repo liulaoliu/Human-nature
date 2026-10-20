@@ -40,9 +40,12 @@
 3. **真机验证（用户自己做）**
    - 听写 diff、理解题判分、仿写两轮闭环、语言点显示、写作历史。
    - 真实 TTS 发音 / 逐词高亮（离线音色无逐词时间戳时工具栏会提示「无逐词高亮」）。
-4. **存量上帝文件（低优先，只准变小）**
-   - `src/state/session.ts` 1185 行、`src/ui/App.tsx` 1191 行（跟读旧模块，独立于精读词库）。
-   - `src/reader/ReaderApp.tsx` 已降到 1036 行，继续拆收益递减，暂不主动开工。
+4. **存量上帝文件（已清空）**
+   - `state/session.ts` 1185 → 732、`ui/App.tsx` 1191 → 624、`reader/ReaderApp.tsx` 1036 → 781、
+     `state/session.test.ts` 1057 → 拆成 4 个按主题的测试文件（共用 `sessionDoubles`）。
+   - `tool/check_god_file.mjs` 的 `BASELINE` 现在是空的：新文件超 800 行一律拆，别再登记。
+   - 想继续瘦身的话，下一批是 `hooks/useAiPack`（587）、`hooks/useQuizSession`（535）、
+     `hooks/useApplyTaskResult`（508）——都在 800 线下，属于「可读性」而非门禁问题。
 5. **记录分页（P2，暂不做）**
    - 练习 500 / 错题 300 / 写作 200 条上限还没到；真要做时服务端 `limit/offset`，别改事实来源。
 

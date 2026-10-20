@@ -24,9 +24,8 @@ const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
  * 登记即承认债务；拆分后必须把这里的数字改小（同一次提交里改）。
  */
 const BASELINE = {
-  'src/state/session.ts': 944,
-  'src/state/session.test.ts': 1058,
-  'src/state/script.test.ts': 803,
+  // 目前没有存量超限文件了：ReaderApp（1037）、session.ts（944）、session.test.ts（1058）都已拆到线下。
+  // 新超限一律拆，别再往这里加。
 }
 
 function walk(dir, out = []) {
