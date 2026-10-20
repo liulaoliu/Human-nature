@@ -54,6 +54,9 @@ export interface ReaderScreenProps {
   setSerif: (v: boolean) => void
   eye: boolean
   setEye: (v: boolean) => void
+  /** 顶栏按钮区宽度档位（自适应 / 窄 / 宽 / 铺满），选择存在本机 */
+  toolbarWidth: ToolbarP['display']['toolbarWidth']
+  setToolbarWidth: ToolbarP['display']['onToolbarWidthChange']
   readingView: boolean
 
   // ---- 文章 / 词库 / 选区状态 ----

@@ -247,6 +247,7 @@ a { color: var(--accent); }
 .board-act { flex: none; font-size: 12px; padding: 3px 8px; }
 
 /* 顶部「显示 ⚙」下拉，收拢字号/加粗/衬线/护眼 */
+/* 「显示」放在顶栏最后一格：弹层从右边缘向左开，不会溢出视窗 */
 .tb-settings { position: relative; }
 .tb-settings > summary {
   list-style: none;
@@ -272,6 +273,9 @@ a { color: var(--accent); }
   border-radius: 8px;
   box-shadow: var(--shadow-2);
   min-width: 170px;
+  max-width: min(320px, calc(100vw - 48px));
+  max-height: min(60vh, 420px);
+  overflow: auto;
 }
 
 .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
@@ -286,11 +290,43 @@ a { color: var(--accent); }
   position: sticky;
   top: 0;
   z-index: 20;
+  /* 负 margin 撑满 .reader-main 的 padding：背景条始终占满视窗宽，
+     sticky 时正文不会从左右两侧露出来（只有里面的按钮区是有宽度的）。 */
   margin: -24px -34px 16px;
-  padding: 16px 34px 12px;
+  /* 左右各留 34px：按钮区的左边缘和正文、标题落在同一条竖线上 */
+  padding: 14px 34px 10px;
   background: var(--bg);
   border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
+/* 按钮区宽度：默认取「内容宽度」（fit-content），给 800 的下限、视窗减留白的上限。
+   于是窗口 1080 → 800、1366/1920/2560 都还是这一块 800–900 的宽度居中排，
+   按钮位置不会随窗口拉伸而浮动。用户可在「显示 ⚙」里改成窄/宽/铺满（存本机）。 */
+.tb-inner {
+  /* 兜底值，和 core/toolbarWidth 的 auto 档一致（真实宽度走 inline style）。
+     内容多宽就多宽 + 800 下限：窗口从 1080 拉到 2560，这一块位置不动。 */
+  width: fit-content;
+  min-width: min(800px, 100%);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  flex-wrap: wrap;
+}
+/* 行内控件一律不收缩：宽度说什么就是什么（下拉框默认会跟着挤扁，
+   挤扁之后同一行的按钮就会互相推挤——不定宽正是「按钮乱跑」的来源）。
+   宽度不够时只在自己这一行换行，不会跨到别行去。 */
+.tb-row > * { flex: 0 0 auto; }
+/* 显示设置固定在行的最后：弹层从顶栏右边缘往里开，不会再被挤出视窗 */
+
 /* 尾部统计：给个最小宽度（配等宽数字），数字变大时不会把后面的按钮推来推去 */
 .reader-toolbar .lib-count { min-width: 84px; text-align: right; }
 .reader-toolbar .goal-chip { min-width: 108px; text-align: right; }
@@ -307,13 +343,34 @@ a { color: var(--accent); }
   white-space: nowrap;
   overflow: hidden;
 }
-.reader-toolbar .tb-edition { width: 158px; }
-.reader-toolbar .tb-level { width: 126px; }
-.reader-toolbar .tb-view { width: 112px; }
-.reader-toolbar .tb-voice { width: 176px; }
-.reader-toolbar .tb-speak { width: 104px; }
-.reader-toolbar .tb-readall { width: 104px; }
-.reader-toolbar .tb-pregen { width: 132px; }
+.reader-toolbar .tb-edition { width: 148px; }
+.reader-toolbar .tb-level { width: 112px; }
+.reader-toolbar .tb-view { width: 98px; }
+.reader-toolbar .tb-voice { width: 138px; }
+/* 按钮也全给固定宽度：文案会变（选词模式 · 开 / 生成中 3/40 / 停止朗读），
+   宽度不跟着变，才不会把同一行的按钮推来推去。 */
+/* 宽度取「最长文案」实测值 + 余量（14px 字：4 汉字 = 56 + 左右 padding 24） */
+.reader-toolbar .tb-save { width: 78px; }
+.reader-toolbar .tb-new { width: 96px; }
+.reader-toolbar .tb-del { width: 104px; }
+.reader-toolbar .tb-edit { width: 78px; }
+.reader-toolbar .tb-vocab { width: 106px; }
+.reader-toolbar .tb-translate { width: 74px; }
+.reader-toolbar .tb-autovocab { width: 74px; }
+.reader-toolbar .tb-speak { width: 98px; }
+.reader-toolbar .tb-readall { width: 98px; }
+.reader-toolbar .tb-pregen { width: 124px; }
+.reader-toolbar .tb-speed { width: 70px; }
+.reader-toolbar .tb-intensive { width: 70px; }
+.reader-toolbar .tb-journal { width: 70px; }
+.reader-toolbar .tb-goals { width: 70px; }
+.reader-toolbar .tb-clean { width: 118px; }
+.reader-toolbar .tb-done,
+.reader-toolbar .tb-cancel { width: 50px; }
+.reader-toolbar .tb-autospeak { width: 84px; }
+/* 定宽之后必须配合不换行，否则文字会折成两行；内边距也收窄，20 个控件才排得下 */
+.reader-toolbar .tb-row button { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+.reader-toolbar .tb-tts-note { flex: 0 0 auto; font-size: 11px; white-space: nowrap; }
 .reader-toolbar select { text-overflow: ellipsis; }
 
 .article { max-width: none; }
@@ -1291,7 +1348,7 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
    标题再长也只在自己这一格省略，不会把后面的按钮挤到别处。 */
 .reader-toolbar .picker { flex: 0 0 auto; }
 .reader-toolbar .picker-btn {
-  width: clamp(170px, 22vw, 320px);
+  width: 150px;
   max-width: none;
   justify-content: space-between;
 }

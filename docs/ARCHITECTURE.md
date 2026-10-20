@@ -58,6 +58,7 @@ types ← core ← adapters ← reader
 | 跟读：录音与块的对应 | `src/core/takeChunk.ts` | 块号会变，一律按音频时间重算（`remapTakes`） |
 | 跟读：每篇的手动校准账本 | `src/state/calibrationLedger.ts` | 空数组 = 删键；`persist` 里空的键不写（保持老记录形状） |
 | 跟读：本机偏好（显示模式 / 麦克风 / 静音时长） | `src/state/shadowingPrefs.ts` | 读写都兜底；`ui/` 里不许再碰 localStorage（R3） |
+| 顶栏按钮区多宽 | `src/core/toolbarWidth.ts` | 默认 `fit-content`（按钮多宽就多宽）+ 800 下限 + 视窗上限；档位 auto/窄/宽/铺满 存本机（`reader:toolbarWidth`），展示层只拿算好的 style |
 | 正文签名（「同一篇」怎么认） | `src/core/docSignature.ts` | 只由句子文本算（djb2，句间有分隔）。**凡按文章记东西，键里都要带它**：标识可能是书名 / 空标题 / 「未命名」 |
 | 阅读页滚动到哪 | `src/core/scrollProgress.ts`（比例口径、脏值兜底）+ `src/state/scrollPrefs.ts`（按「标识 + 签名」存，内存优先） | 存比例不存像素：换字号/衬线/译文后还能回到同一段；`ReaderShell` 只拿 hook，不碰 localStorage（R3） |
 | 速读「读到第几句」 | `src/core/speedRead.ts` 的 `speedCursorKey`（文章标识 + 正文签名） | 只按标识存会串篇（空标题 / 同名 / 「未命名」共用一个标识）；读完最后一句退出即清零 |

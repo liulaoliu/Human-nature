@@ -2,6 +2,7 @@ import { useLocalStorageState, persistentBool, persistentEnum, persistentNumber,
 import { dayKeyLocal } from '../../core/activity'
 import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
 import type { VocabLevel } from '../../core/analyzer'
+import { parseToolbarWidth, type ToolbarWidth } from '../../core/toolbarWidth'
 import type { VocabSortBy } from '../../core/vocab'
 
 /**
@@ -37,6 +38,9 @@ export interface ReaderPrefs {
   /** 护眼主题（浅色纸感） */
   eye: boolean
   setEye: (v: boolean) => void
+  /** 顶栏按钮区宽度：自适应（按视窗）/ 窄 / 宽 / 铺满 */
+  toolbarWidth: ToolbarWidth
+  setToolbarWidth: (v: ToolbarWidth) => void
   sideTab: SideTab
   setSideTab: (v: SideTab) => void
   translateView: TranslateView
@@ -79,6 +83,15 @@ export function useReaderPrefs(): ReaderPrefs {
   const [eye, setEye] = useLocalStorageState('reader:theme', false, {
     parse: (raw) => raw === 'green',
     serialize: (v) => (v ? 'green' : 'dark'),
+  })
+  /**
+   * 顶栏宽度档位：默认「自适应」（约 72% 视窗，800–1800）。
+   * 宽度本身由 `core/toolbarWidth` 算，这里只记住用户选的那一档；
+   * 脏值（旧版本、手改）回到自适应，不会因为存了个怪值把顶栏撑坏。
+   */
+  const [toolbarWidth, setToolbarWidth] = useLocalStorageState<ToolbarWidth>('reader:toolbarWidth', 'auto', {
+    parse: parseToolbarWidth,
+    serialize: (v) => v,
   })
   const [sideTab, setSideTab] = useLocalStorageState<SideTab>('reader:sideTab', 'overview', persistentEnum(SIDE_TABS, 'overview'))
   const [translateView, setTranslateView] = useLocalStorageState<TranslateView>(
@@ -138,6 +151,8 @@ export function useReaderPrefs(): ReaderPrefs {
     setSerif,
     eye,
     setEye,
+    toolbarWidth,
+    setToolbarWidth,
     sideTab,
     setSideTab,
     translateView,

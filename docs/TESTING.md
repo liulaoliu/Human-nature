@@ -175,7 +175,7 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘，3 条）+
   `useStudyCardEdit`（卡内编辑/两步删除，3 条）；`StudyPanel` 再拆 `StudyToolbar` / `StudyEditForm` / `StudyRoundDone`
   （512 → 369 行，子组件 3 + 2 + 2 条）。
-- **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（5：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
+- **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（6：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
   `newToday` 跨天归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
   `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
@@ -186,6 +186,11 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   速读那边 `core/speedRead` 的 `speedCursorKey` 补 2 条（标识相同、正文不同 → 键不同），`useSpeedReadSession` 补 5 条
   （停在最后一句退出清零 / 读完退出清零 / 读到中间退出保留 / 同标识换正文从第一句开始且成绩清空 / 换回原篇回原位）。
   这条 hook 用「假滚动元素」测：jsdom 不做布局，`scrollHeight` 恒为 0，会被「可滚区间 0」的守卫挡掉。
+- **顶栏按钮区宽度（2026-10-20 第四批）**：`core/toolbarWidth`（7：四档识别 / 脏值回自适应 /
+  `auto` 是 `fit-content` 不是写死像素 / 800 下限 / 固定档带视窗上限 / 任何档都不出 NaN）、
+  `useReaderPrefs` 补 1 条（默认自适应 / 改档写进 `reader:toolbarWidth` / 怪值回自适应）、
+  `ReaderToolbar` 补 1 条（`.tb-inner` 的 `style.width` 随档位变，改 select 走回调）、
+  `ReaderToolbarHost` 夹具补 `display.toolbarWidth`。宽度规则不写在 CSS 里手算，避免「CSS 一套、JS 一套」。
 - **AI / 考试三个大 hook 也拆干净了（2026-10-20 第二批）**：`core/aiApply`（16：六个表格型任务的解析 / 校验 / 回执，
   含「自己当自己的易混词」「词库里没有这个词」「AI 未返回」三类分支）、`core/quizPool`（13：范围 → 候选池、
   各范围题量、`unique` 开关下每词最多一题）、`adapters/aiRun`（8：起跑 / done / error / 没配 key /

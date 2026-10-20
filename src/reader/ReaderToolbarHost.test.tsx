@@ -87,6 +87,8 @@ function makeProps(over: Partial<ReaderToolbarHostProps> = {}): ReaderToolbarHos
       serif: false,
       onSerifChange: fn(),
       eye: false,
+      toolbarWidth: 'auto' as const,
+      onToolbarWidthChange: fn(),
       onEyeChange: fn(),
     },
     confirmDelSave: false,

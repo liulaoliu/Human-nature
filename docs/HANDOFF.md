@@ -54,7 +54,13 @@
    - 要做的前提是「数据层不再截断」：`core/mergeBackup` 现在 练习 500 / 错题 300 / 写作 200 /
      复述 200 / 会话 500，恢复备份时更早的记录本来就没了，先分页也翻不出东西。
    - 到了再做：服务端 `limit/offset` + 按 `at` 倒序的游标分页，别在全量数组上 `slice`。
-6. **阅读页滚动进度与速读游标（2026-10-20）**
+6. **顶栏按钮区宽度（2026-10-20）**
+   - `core/toolbarWidth` 出档位与 style：`auto` = `fit-content` + 800 下限 + 视窗上限，
+     也就是「按钮多宽就多宽」——窗口从 1080 拉到 2560，这一块位置不动（不要再写死 1800 那样的固定容器，
+     按钮会全挤在左边）。固定档（窄 1000 / 宽 1400 / 铺满）留给用户自己选。
+   - 顶栏是「背景条铺满 + 内部 `.tb-inner` 有宽度」：负 margin 仍撑满，sticky 时正文不会从两侧露出。
+   - 档位存 `reader:toolbarWidth`（`useReaderPrefs`），脏值回自适应。
+7. **阅读页滚动进度与速读游标（2026-10-20）**
    - 滚动位置按文章存在 `reader:scroll:<文章标识>`（`core/scrollProgress` + `state/scrollPrefs` +
      `hooks/useReadingScroll`），存比例不存像素；会话内走内存缓存，重开才读 localStorage。
    - 速读游标键 = 文章标识 + 正文签名（`core/speedRead.speedCursorKey`）：同标识的不同文章不再串进度；

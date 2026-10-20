@@ -13,6 +13,7 @@ describe('useReaderPrefs（阅读页本机偏好）', () => {
     expect(result.current.bold).toBe(false)
     expect(result.current.serif).toBe(false)
     expect(result.current.eye).toBe(false)
+    expect(result.current.toolbarWidth).toBe('auto')
     expect(result.current.sideTab).toBe('overview')
     expect(result.current.translateView).toBe('off')
     expect(result.current.autoSpeak).toBe(false)
@@ -60,6 +61,20 @@ describe('useReaderPrefs（阅读页本机偏好）', () => {
     const { result } = renderHook(() => useReaderPrefs())
     expect(result.current.sideTab).toBe('overview')
     expect(result.current.translateView).toBe('off')
+  })
+
+  it('顶栏宽度档位：默认自适应，改了写进本机，脏值回到自适应', () => {
+    const { result } = renderHook(() => useReaderPrefs())
+    expect(localStorage.getItem('reader:toolbarWidth')).toBeNull()
+
+    act(() => result.current.setToolbarWidth('wide'))
+    expect(result.current.toolbarWidth).toBe('wide')
+    expect(localStorage.getItem('reader:toolbarWidth')).toBe('wide')
+
+    // 手改 / 旧版本留下的怪值：不许把顶栏撑坏，回自适应
+    localStorage.setItem('reader:toolbarWidth', 'enormous')
+    const dirty = renderHook(() => useReaderPrefs())
+    expect(dirty.result.current.toolbarWidth).toBe('auto')
   })
 
   it('newToday 落盘带当天日期，跨天读回来归零', () => {

@@ -89,6 +89,8 @@ export interface ReaderToolbarHostProps {
     onSerifChange: ReaderToolbarProps['onSerifChange']
     eye: boolean
     onEyeChange: ReaderToolbarProps['onEyeChange']
+    toolbarWidth: ReaderToolbarProps['toolbarWidth']
+    onToolbarWidthChange: ReaderToolbarProps['onToolbarWidthChange']
   }
 
   confirmDelSave: boolean
@@ -200,6 +202,8 @@ export default function ReaderToolbarHost({
       onSerifChange={display.onSerifChange}
       eye={display.eye}
       onEyeChange={display.onEyeChange}
+      toolbarWidth={display.toolbarWidth}
+      onToolbarWidthChange={display.onToolbarWidthChange}
       confirmDelSave={confirmDelSave}
     />
   )

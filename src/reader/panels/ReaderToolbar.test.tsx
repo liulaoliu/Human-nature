@@ -95,6 +95,8 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
     serif: false,
     onSerifChange: noop,
     eye: false,
+    toolbarWidth: 'auto',
+    onToolbarWidthChange: noop,
     onEyeChange: noop,
     confirmDelSave: false,
     onDeleteSave: noop,
@@ -152,7 +154,7 @@ describe('ReaderToolbar：阅读操作', () => {
     expect(onVocabLevelChange).toHaveBeenCalledWith('cet6')
 
     rerender(<ReaderToolbar {...props({ hasDoc: true, vocabMode: true })} />)
-    expect((screen.getByRole('button', { name: '选词模式 · 开' }) as HTMLButtonElement).className).toBe('primary')
+    expect((screen.getByRole('button', { name: '选词模式 · 开' }) as HTMLButtonElement).className).toContain('primary')
     expect(screen.getByText(/本轮 2 · 今日 5 ·🔥3 · 累计 42 词/)).toBeTruthy()
   })
 
@@ -302,6 +304,20 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
 
     rerender(<ReaderToolbar {...props({ hasDoc: true, savedId: 'saved:1', confirmDelSave: true })} />)
     expect(screen.getByRole('button', { name: '确认删除保存' })).toBeTruthy()
+  })
+
+  it('顶栏宽度：自适应时按钮区按内容宽（不铺满），改了档位走回调', () => {
+    const onToolbarWidthChange = vi.fn()
+    const { container, rerender } = render(<ReaderToolbar {...props({ hasDoc: true, onToolbarWidthChange })} />)
+    // 默认自适应 = fit-content：窗口再宽，这一块也不会被拉满
+    expect((container.querySelector('.tb-inner') as HTMLElement).style.width).toBe('fit-content')
+
+    fireEvent.change(screen.getByTitle(/顶栏按钮区的宽度/), { target: { value: 'full' } })
+    expect(onToolbarWidthChange).toHaveBeenCalledWith('full')
+
+    // 存档被读回来时（比如选了「铺满」），直接体现成 100%
+    rerender(<ReaderToolbar {...props({ hasDoc: true, toolbarWidth: 'full' })} />)
+    expect((container.querySelector('.tb-inner') as HTMLElement).style.width).toBe('100%')
   })
 
   it('有原文库/已保存文章时渲染文章选择器', () => {
