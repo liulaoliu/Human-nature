@@ -49,8 +49,16 @@
      （设置搬去 `hooks/useQuizSettings`、候选池与出题集搬去 `core/quizPool`）、
      `useApplyTaskResult` 508 → **410**（表格型任务规则搬去 `core/aiApply`）。
    - 大文件清零了，剩下的都是 500 行上下的正常规模；想再动先看 `npm run gates` 里的「存量豁免」。
-5. **记录分页（P2，暂不做）**
-   - 练习 500 / 错题 300 / 写作 200 条上限还没到；真要做时服务端 `limit/offset`，别改事实来源。
+5. **记录分页（P2，暂不做，触发条件在 `TODO.md` 第 4 条）**
+   - 渲染层没有全量列表（统计页只取最近 8 条、日志按天、错题本只算计数），所以 200 条也不卡。
+   - 要做的前提是「数据层不再截断」：`core/mergeBackup` 现在 练习 500 / 错题 300 / 写作 200 /
+     复述 200 / 会话 500，恢复备份时更早的记录本来就没了，先分页也翻不出东西。
+   - 到了再做：服务端 `limit/offset` + 按 `at` 倒序的游标分页，别在全量数组上 `slice`。
+6. **阅读页滚动进度与速读游标（2026-10-20）**
+   - 滚动位置按文章存在 `reader:scroll:<文章标识>`（`core/scrollProgress` + `state/scrollPrefs` +
+     `hooks/useReadingScroll`），存比例不存像素；会话内走内存缓存，重开才读 localStorage。
+   - 速读游标键 = 文章标识 + 正文签名（`core/speedRead.speedCursorKey`）：同标识的不同文章不再串进度；
+     停在/读完最后一句再退出会清零，读到中间退出仍保留。
 
 ## 换电脑怎么把数据带走
 

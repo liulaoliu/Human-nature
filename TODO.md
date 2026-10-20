@@ -2,8 +2,8 @@
 
 > **2026-10-20 最新交接（换电脑先看这段）**
 >
-> - 分支 `main`，最后提交见 `git log -1`（本轮最后一条是「docs: 可读性瘦身收尾」）；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：201 个测试文件，**1793 passed / 5 skipped**。
+> - 分支 `main`，最后提交见 `git log -1`（本轮最后一条是「docs: 滚动进度 / 速读游标」）；工作树干净。
+> - schema **v7**；`npm run gates` 全绿：204 个测试文件，**1834 passed / 5 skipped**。
 >   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - 本轮已完成：
@@ -21,6 +21,12 @@
 >     候选池/出题集 → `core/quizPool`（13 条）、`isArticleKind` → `core/quiz`
 >   - `hooks/useAiPack` 587 → **505**：起跑 + 轮询 → `adapters/aiRun`（8 条）、`jobPhaseLabel` → `core/aiPackage`
 >   - 三个 hook 原有测试一条没改（13 / 8 / 10 全绿）；hook 覆盖 53 → **54 / 54**
+> - 第三批（同日，阅读体验）：
+>   - **阅读页滚动进度按文章记住**：`core/scrollProgress`（12）+ `state/scrollPrefs`（10）+
+>     `hooks/useReadingScroll`（9）；内存优先、重开回落到 `reader:scroll:<文章标识>`；
+>     存的是比例（换字号/衬线不错位），停滚 400ms 落一次盘
+>   - **速读游标不串篇 + 读完即归零**：键改成「文章标识 + 正文签名」（`core/speedRead.speedCursorKey`），
+>     停在/读完最后一句再退出就清零；面板没关就换文章也会重置游标与成绩；hook 覆盖 54 → **55 / 55**
 > - 下一步优先级：
 >   1. [ ] 真机验证：听写 diff / 理解题 / 仿写 / 语言点 / 写作历史 / TTS、跟读页（录音 / 撕块 / 选字锚定）、
 >      以及「统计 → 重建并核对」。（**用户自己做**）
@@ -29,7 +35,17 @@
 >      得动 `applyChunkEdits` 的口径，收益不值当。见 `core/chunkEditLog.ts` 注释。
 >   3. [x] 可读性瘦身：`useAiPack` 587 → 505、`useQuizSession` 535 → 437、`useApplyTaskResult` 508 → 410
 >      （规则分别落到 `adapters/aiRun` / `core/quizPool` + `hooks/useQuizSettings` / `core/aiApply`）。
->   4. [ ] 记录分页（P2）：数据量还没到，先不做。
+>   4. [ ] 记录分页（P2）：**先不做**，触发条件写在这里，到了再做，别提前上
+>      - 渲染层现在不需要它：`StatsPanel` 只取最近 8 条（`recentPractice`）、日志按天过滤、
+>        错题本只算类型计数——没有任何一处把整份记录 `map` 出来。
+>      - 要分页得**同时**满足：① 某个列表真要往回翻到全部；② 单次渲染超过约 200 行
+>        （DOM 200 → 1000 行，首屏渲染大致 20ms → 150ms+）；③ 数据层不再截断
+>        （`core/mergeBackup` 现在 练习 500 / 错题 300 / 写作 200 / 复述 200 / 会话 500，
+>        恢复备份时更早的记录本来就没了，分页也翻不出东西）。
+>      - 看这几个数字就够判断：`reader:practice` > 300 条、`reader:answerEvents` > 2000 条，
+>        或 `reader:practice` 这个键 > 200KB（约 1500 条；每加一条都要整段 stringify + 同步写）。
+>      - 真做的时候：服务端 `limit/offset`（SQLite 里已有表）+ 按 `at` 倒序的游标分页，
+>        别在全量数组上 `slice`。
 >
 > 下面「Review 重构待办（2026-10-19）」保留为历史记录，里面的事项均已完成；
 > 更早的录音 / PDF 抽取待办仍然有效，但别把旧状态当成最新状态。

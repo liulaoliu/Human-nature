@@ -58,6 +58,8 @@ types ← core ← adapters ← reader
 | 跟读：录音与块的对应 | `src/core/takeChunk.ts` | 块号会变，一律按音频时间重算（`remapTakes`） |
 | 跟读：每篇的手动校准账本 | `src/state/calibrationLedger.ts` | 空数组 = 删键；`persist` 里空的键不写（保持老记录形状） |
 | 跟读：本机偏好（显示模式 / 麦克风 / 静音时长） | `src/state/shadowingPrefs.ts` | 读写都兜底；`ui/` 里不许再碰 localStorage（R3） |
+| 阅读页滚动到哪 | `src/core/scrollProgress.ts`（比例口径、脏值兜底）+ `src/state/scrollPrefs.ts`（按文章存，内存优先） | 存比例不存像素：换字号/衬线/译文后还能回到同一段；`ReaderShell` 只拿 hook，不碰 localStorage（R3） |
+| 速读「读到第几句」 | `src/core/speedRead.ts` 的 `speedCursorKey`（文章标识 + 正文签名） | 只按标识存会串篇（空标题 / 同名 / 「未命名」共用一个标识）；读完最后一句退出即清零 |
 | 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势；R3 存量豁免只剩 `core/stateBackup` 一条 |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` | 六个表格型任务；自动标词（要离线词典）与查词（要来源句）仍留在 `useApplyTaskResult` |
@@ -137,7 +139,9 @@ types ← core ← adapters ← reader
   AI 结果落地规则在 `core/aiApply`、服务端跑批客户端在 `adapters/aiRun`，
   软上限 800 行（上帝文件门禁的线）。
 - **展示层已经不再直接读写 localStorage**：`ui/App` 的偏好搬去 `state/shadowingPrefs`、
-  `ui/FishLayer` 的布局搬去 `state/fishPrefs`（规则在 `core/fishLayout`）。R3 的存量豁免
+  `ui/FishLayer` 的布局搬去 `state/fishPrefs`（规则在 `core/fishLayout`），
+  `ReaderShell` 的正文滚动位置搬去 `state/scrollPrefs`（规则在 `core/scrollProgress`，
+  节流与恢复在 `hooks/useReadingScroll`）。R3 的存量豁免
   现在只剩 `core/stateBackup` 那条 R6（备份文件名里的 UTC 日期，故意的）。
 - **跟读模块的「规则」和「偏好」不再住在页面里**（2026-10 拆的）：
   - 录音判定与兜底时长 → `core/recording`（说完静多久、最多录多久、电平阈值）

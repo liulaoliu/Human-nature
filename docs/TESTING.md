@@ -167,10 +167,10 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
-- **hooks 54 / 54 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
+- **hooks 55 / 55 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
   `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
   `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动；
-  速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（7 条），
+  速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（12 条），
   面板 `SpeedReadPanel` 只留渲染（597 → 260 行）。
   背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘，3 条）+
   `useStudyCardEdit`（卡内编辑/两步删除，3 条）；`StudyPanel` 再拆 `StudyToolbar` / `StudyEditForm` / `StudyRoundDone`
@@ -179,6 +179,13 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `newToday` 跨天归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
   `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
+- **阅读页滚动进度与速读游标（2026-10-20 第三批）**：`core/scrollProgress`（12：比例夹取 / 脏值回顶部 /
+  像素↔比例 / 可滚区间为 0 不算 NaN）、`state/scrollPrefs`（10：内存优先于 localStorage / 按文章分开 /
+  重开后回落硬存 / 空 docKey 不建键 / 写失败不抛）、`hooks/useReadingScroll`（9：恢复到位 / trailing 节流只写最后一笔 /
+  滚回顶部也记 / 卸载与换篇会结清）。速读那边 `core/speedRead` 补了 `docSignature` / `speedCursorKey`（5 条，
+  含「同标识不同正文不撞键」「ab|c ≠ a|bc」「空正文签名稳定」），`useSpeedReadSession` 补 5 条
+  （停在最后一句退出清零 / 读完退出清零 / 读到中间退出保留 / 同标识换正文从第一句开始且成绩清空 / 换回原篇回原位）。
+  这条 hook 用「假滚动元素」测：jsdom 不做布局，`scrollHeight` 恒为 0，会被「可滚区间 0」的守卫挡掉。
 - **AI / 考试三个大 hook 也拆干净了（2026-10-20 第二批）**：`core/aiApply`（16：六个表格型任务的解析 / 校验 / 回执，
   含「自己当自己的易混词」「词库里没有这个词」「AI 未返回」三类分支）、`core/quizPool`（13：范围 → 候选池、
   各范围题量、`unique` 开关下每词最多一题）、`adapters/aiRun`（8：起跑 / done / error / 没配 key /
