@@ -91,6 +91,8 @@ export interface ReaderToolbarHostProps {
     onEyeChange: ReaderToolbarProps['onEyeChange']
     toolbarWidth: ReaderToolbarProps['toolbarWidth']
     onToolbarWidthChange: ReaderToolbarProps['onToolbarWidthChange']
+    toolbarRows: ReaderToolbarProps['toolbarRows']
+    onToolbarRowsChange: ReaderToolbarProps['onToolbarRowsChange']
   }
 
   confirmDelSave: boolean
@@ -204,6 +206,8 @@ export default function ReaderToolbarHost({
       onEyeChange={display.onEyeChange}
       toolbarWidth={display.toolbarWidth}
       onToolbarWidthChange={display.onToolbarWidthChange}
+      toolbarRows={display.toolbarRows}
+      onToolbarRowsChange={display.onToolbarRowsChange}
       confirmDelSave={confirmDelSave}
     />
   )

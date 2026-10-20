@@ -57,6 +57,9 @@ export interface ReaderScreenProps {
   /** 顶栏按钮区宽度档位（自适应 / 窄 / 宽 / 铺满），选择存在本机 */
   toolbarWidth: ToolbarP['display']['toolbarWidth']
   setToolbarWidth: ToolbarP['display']['onToolbarWidthChange']
+  /** 顶栏按钮区占几行（4 / 3 / 2），选择存在本机 */
+  toolbarRows: ToolbarP['display']['toolbarRows']
+  setToolbarRows: ToolbarP['display']['onToolbarRowsChange']
   readingView: boolean
 
   // ---- 文章 / 词库 / 选区状态 ----

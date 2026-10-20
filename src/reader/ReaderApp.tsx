@@ -101,10 +101,10 @@ export default function ReaderApp() {
   /** 阅读字号 / 字重、主题、译文、音色、词汇标准、面板持久开关… —— 18 个本机偏好全在 hooks/useReaderPrefs */
   const prefs = useReaderPrefs()
   const {
-    fontSize, bold, serif, eye, toolbarWidth, sideTab, translateView, autoSpeak, ttsVoice,
+    fontSize, bold, serif, eye, toolbarWidth, toolbarRows, sideTab, translateView, autoSpeak, ttsVoice,
     vocabLevel, vocabView, vocabSort, dailyGoal, showLanguage, confusableBatchSize,
     aiPackScope, autoVocabDirect, newLimit, newToday,
-    setFontSize, setBold, setSerif, setEye, setToolbarWidth, setSideTab, setTranslateView, setAutoSpeak,
+    setFontSize, setBold, setSerif, setEye, setToolbarWidth, setToolbarRows, setSideTab, setTranslateView, setAutoSpeak,
     setTtsVoice, setVocabLevel, setVocabView, setVocabSort, setDailyGoal, setShowLanguage,
     setConfusableBatchSize, setAiPackScope, setAutoVocabDirect, setNewLimit, setNewToday,
   } = prefs
@@ -661,6 +661,8 @@ export default function ReaderApp() {
       setEye={setEye}
       toolbarWidth={toolbarWidth}
       setToolbarWidth={setToolbarWidth}
+      toolbarRows={toolbarRows}
+      setToolbarRows={setToolbarRows}
       readingView={readingView}
       saved={saved}
       book={book}

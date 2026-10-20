@@ -97,6 +97,8 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
     eye: false,
     toolbarWidth: 'auto',
     onToolbarWidthChange: noop,
+    toolbarRows: 4,
+    onToolbarRowsChange: noop,
     onEyeChange: noop,
     confirmDelSave: false,
     onDeleteSave: noop,
@@ -318,6 +320,38 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
     // 存档被读回来时（比如选了「铺满」），直接体现成 100%
     rerender(<ReaderToolbar {...props({ hasDoc: true, toolbarWidth: 'full' })} />)
     expect((container.querySelector('.tb-inner') as HTMLElement).style.width).toBe('100%')
+  })
+
+  it('顶栏行数：4 行各自一行，3 / 2 行把相邻组并起来（控件不丢，「显示」仍在最后）', () => {
+    const { container, rerender } = render(<ReaderToolbar {...props({ hasDoc: true })} />)
+    expect(container.querySelectorAll('.tb-row')).toHaveLength(4)
+    expect(container.querySelectorAll('.tb-sep')).toHaveLength(0)
+    // 「选中朗读」不再占视图行，跟在「显示 ⚙」右边
+    expect(container.querySelectorAll('.tb-row')[1].querySelector('.tb-autospeak')).toBeNull()
+
+    rerender(<ReaderToolbar {...props({ hasDoc: true, toolbarRows: 3 })} />)
+    const rows3 = container.querySelectorAll('.tb-row')
+    expect(rows3).toHaveLength(3)
+    expect(rows3[2].className).toContain('tb-row-action-status')
+    // 合并处一条竖线，说明这两组本来各占一行
+    expect(container.querySelectorAll('.tb-sep')).toHaveLength(1)
+    expect(container.querySelector('.tb-settings')).toBeTruthy()
+
+    rerender(<ReaderToolbar {...props({ hasDoc: true, toolbarRows: 2 })} />)
+    const rows2 = container.querySelectorAll('.tb-row')
+    expect(rows2).toHaveLength(2)
+    expect(rows2[0].className).toContain('tb-row-doc-view')
+    expect(container.querySelectorAll('.tb-sep')).toHaveLength(2)
+    // 统计组恒在最后一行；「显示 ⚙」后面紧跟「选中朗读」，都贴在顶栏右端
+    expect(rows2[1].querySelector('.tb-settings')).toBeTruthy()
+    expect(rows2[1].lastElementChild?.className).toContain('tb-autospeak')
+  })
+
+  it('顶栏行数：改了档位走回调（值为数字）', () => {
+    const onToolbarRowsChange = vi.fn()
+    render(<ReaderToolbar {...props({ hasDoc: true, onToolbarRowsChange })} />)
+    fireEvent.change(screen.getByTitle(/顶栏按钮区分几行/), { target: { value: '2' } })
+    expect(onToolbarRowsChange).toHaveBeenCalledWith(2)
   })
 
   it('有原文库/已保存文章时渲染文章选择器', () => {

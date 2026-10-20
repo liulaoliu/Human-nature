@@ -13,11 +13,13 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
     serif,
     eye,
     toolbarWidth,
+    toolbarRows,
     setFontSize,
     setBold,
     setSerif,
     setEye,
     setToolbarWidth,
+    setToolbarRows,
     book,
     saved,
     doc,
@@ -112,6 +114,8 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
         onEyeChange: setEye,
         toolbarWidth,
         onToolbarWidthChange: setToolbarWidth,
+        toolbarRows,
+        onToolbarRowsChange: setToolbarRows,
       }}
       confirmDelSave={confirmDelSave}
     />

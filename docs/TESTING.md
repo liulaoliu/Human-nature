@@ -186,6 +186,14 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   速读那边 `core/speedRead` 的 `speedCursorKey` 补 2 条（标识相同、正文不同 → 键不同），`useSpeedReadSession` 补 5 条
   （停在最后一句退出清零 / 读完退出清零 / 读到中间退出保留 / 同标识换正文从第一句开始且成绩清空 / 换回原篇回原位）。
   这条 hook 用「假滚动元素」测：jsdom 不做布局，`scrollHeight` 恒为 0，会被「可滚区间 0」的守卫挡掉。
+- **顶栏行数（2026-10-20 第五批）**：`core/toolbarRows`（8：默认 4 行 / 脏值回 4 / 字符串与数字都认 /
+  每档行数等于档位 / 四组不丢不重不乱序 / 3、2 档的具体并法 / 统计组恒在最后一行 / 类名拼法）、
+  `useReaderPrefs` 补 1 条（默认 4 行 / 改档存成字符串 `reader:toolbarRows` / 怪值回 4）、
+  `ReaderToolbar` 补 2 条（4/3/2 档的行数与 `.tb-sep` 数量、合并后 `.tb-settings` 仍在最后一行；
+  改 select 回调收到的是数字）、`ReaderToolbarHost` 夹具补 `display.toolbarRows`。
+  「选中朗读」从视图行挪到「显示 ⚙」右边（用例断言它不再出现在视图行、且是最后一行的末项）。
+  实测（mock 引真实 CSS + headless 量 `getBoundingClientRect`）：1080 视窗三档都在 ~190px（宽度被压住，合并行会折）；
+  1366 起 3 行档 155px、2 行档要 1920 且 `auto` 才落到 108px —— 行数少了要更宽，窄屏靠 `flex-wrap` 折行兜底。
 - **顶栏按钮区宽度（2026-10-20 第四批）**：`core/toolbarWidth`（7：四档识别 / 脏值回自适应 /
   `auto` 是 `fit-content` 不是写死像素 / 800 下限 / 固定档带视窗上限 / 任何档都不出 NaN）、
   `useReaderPrefs` 补 1 条（默认自适应 / 改档写进 `reader:toolbarWidth` / 怪值回自适应）、

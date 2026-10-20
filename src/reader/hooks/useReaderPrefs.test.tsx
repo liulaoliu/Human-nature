@@ -77,6 +77,20 @@ describe('useReaderPrefs（阅读页本机偏好）', () => {
     expect(dirty.result.current.toolbarWidth).toBe('auto')
   })
 
+  it('顶栏行数：默认 4 行，改了写进本机（存字符串），脏值回到 4 行', () => {
+    const { result } = renderHook(() => useReaderPrefs())
+    expect(result.current.toolbarRows).toBe(4)
+    expect(localStorage.getItem('reader:toolbarRows')).toBeNull()
+
+    act(() => result.current.setToolbarRows(2))
+    expect(result.current.toolbarRows).toBe(2)
+    expect(localStorage.getItem('reader:toolbarRows')).toBe('2')
+
+    localStorage.setItem('reader:toolbarRows', '9')
+    const dirty = renderHook(() => useReaderPrefs())
+    expect(dirty.result.current.toolbarRows).toBe(4)
+  })
+
   it('newToday 落盘带当天日期，跨天读回来归零', () => {
     const { result } = renderHook(() => useReaderPrefs())
     act(() => result.current.setNewToday(3))

@@ -60,6 +60,13 @@
      按钮会全挤在左边）。固定档（窄 1000 / 宽 1400 / 铺满）留给用户自己选。
    - 顶栏是「背景条铺满 + 内部 `.tb-inner` 有宽度」：负 margin 仍撑满，sticky 时正文不会从两侧露出。
    - 档位存 `reader:toolbarWidth`（`useReaderPrefs`），脏值回自适应。
+6b. **顶栏行数可调（2026-10-20）**
+   - `core/toolbarRows` 把四组控件（文章 / 视图 / 动作 / 统计）分成 4 / 3 / 2 行：从尾部并，
+     `统计`（最矮）跟 `动作` 并；`ReaderToolbar` 里四组写成 `groups` 表，只按 plan 铺行、不改顺序。
+   - 合并行插一条 `.tb-sep` 竖线隔开原来的两组；「显示 ⚙」后面的「选中朗读」是最后一项。
+   - 档位存 `reader:toolbarRows`（`useReaderPrefs`），脏值回 4 行。
+   - 注意：行数少一行，那行就变宽。实测 1080 视窗三档高度都在 190 上下（被 `max-width` 压住会折行），
+     3 行档 1366 起有效（198 → 155），2 行档要 1920 + `auto` 宽度才真两行（108）。别为了「行数」去改行内定宽。
 7. **阅读页滚动进度与速读游标（2026-10-20）**
    - 滚动位置按文章存在 `reader:scroll:<文章标识>`（`core/scrollProgress` + `state/scrollPrefs` +
      `hooks/useReadingScroll`），存比例不存像素；会话内走内存缓存，重开才读 localStorage。

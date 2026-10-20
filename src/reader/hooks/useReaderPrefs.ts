@@ -3,12 +3,13 @@ import { dayKeyLocal } from '../../core/activity'
 import { DEFAULT_TTS_VOICE } from '../../core/ttsVoices'
 import type { VocabLevel } from '../../core/analyzer'
 import { parseToolbarWidth, type ToolbarWidth } from '../../core/toolbarWidth'
+import { parseToolbarRows, type ToolbarRowMode } from '../../core/toolbarRows'
 import type { VocabSortBy } from '../../core/vocab'
 
 /**
  * 阅读页这一堆「存在本机的偏好」：字号 / 主题 / 译文 / 音色 / 词汇标准 / 面板开关…
  *
- * 从 `ReaderApp` 抽出来，是因为它们**只是 18 个彼此无关的小开关**：
+ * 从 `ReaderApp` 抽出来，是因为它们**只是二十来个彼此无关的小开关**：
  * 留在装配层会把「页面怎么拼」淹掉，而且每个键的脏值兜底规则也没地方放。
  * 这里只负责「键名 + 默认值 + 解析」，不掺任何业务判断。
  *
@@ -41,6 +42,9 @@ export interface ReaderPrefs {
   /** 顶栏按钮区宽度：自适应（按视窗）/ 窄 / 宽 / 铺满 */
   toolbarWidth: ToolbarWidth
   setToolbarWidth: (v: ToolbarWidth) => void
+  /** 顶栏按钮区占几行：4（默认）/ 3 / 2 */
+  toolbarRows: ToolbarRowMode
+  setToolbarRows: (v: ToolbarRowMode) => void
   sideTab: SideTab
   setSideTab: (v: SideTab) => void
   translateView: TranslateView
@@ -92,6 +96,14 @@ export function useReaderPrefs(): ReaderPrefs {
   const [toolbarWidth, setToolbarWidth] = useLocalStorageState<ToolbarWidth>('reader:toolbarWidth', 'auto', {
     parse: parseToolbarWidth,
     serialize: (v) => v,
+  })
+  /**
+   * 顶栏行数：默认 4 行（文章 / 视图 / 动作 / 统计各一行）。
+   * 分行规则在 `core/toolbarRows`，这里只记住档位。
+   */
+  const [toolbarRows, setToolbarRows] = useLocalStorageState<ToolbarRowMode>('reader:toolbarRows', 4, {
+    parse: parseToolbarRows,
+    serialize: (v) => String(v),
   })
   const [sideTab, setSideTab] = useLocalStorageState<SideTab>('reader:sideTab', 'overview', persistentEnum(SIDE_TABS, 'overview'))
   const [translateView, setTranslateView] = useLocalStorageState<TranslateView>(
@@ -153,6 +165,8 @@ export function useReaderPrefs(): ReaderPrefs {
     setEye,
     toolbarWidth,
     setToolbarWidth,
+    toolbarRows,
+    setToolbarRows,
     sideTab,
     setSideTab,
     translateView,
