@@ -10,12 +10,12 @@
 export const FISH_SIZE_MIN = 40
 export const FISH_SIZE_MAX = 380
 /**
- * 默认尺寸 = 最小档。
+ * 默认尺寸 = 最大尺寸的 20%（76px）。
  *
- * 鱼只是装饰，第一次出现不该压住正文（以前默认 104px，页面一打开就有点抢眼）；
- * 想看大一点可以双击 / 滚轮 / 拖右下角手柄，存过的尺寸照旧以本机记录为准。
+ * 鱼是装饰，第一次出现时别压住正文；想看大一点可以双击（最小 → 50% → 最大循环）、
+ * 滚轮，或拖右下角手柄。存过的尺寸照旧以本机记录为准。
  */
-export const FISH_SIZE_DEFAULT = FISH_SIZE_MIN
+export const FISH_SIZE_DEFAULT = Math.round(FISH_SIZE_MAX * 0.2)
 /** 双击循环的中间档：最大尺寸的 50% */
 export const FISH_SIZE_HALF = Math.round(FISH_SIZE_MAX / 2)
 
@@ -36,9 +36,9 @@ export function clampFishSize(w: number): number {
 /**
  * 双击切换尺寸：**最小 → 50% → 最大 → 最小**。
  *
- * 默认尺寸本身就是最小档，所以鱼刚出现时双击第一下就去 50%（否则第一下会
- * 「看起来没反应」）；滚轮 / 拖拽停在档与档之间的任意值时，第一下先回最小，
- * 再按三档循环。用当前尺寸推导，不另存状态，刷新 / 换页后行为一致。
+ * 默认尺寸（最大的 20%）不在三档上，所以鱼刚出现时双击第一下先回最小 —— 也就是
+ * 「第一次双击变最小，第二次 50%，第三次最大」；之后一直按三档循环。滚轮 / 拖拽
+ * 停在档与档之间也一样先回最小。用当前尺寸推导，不另存状态，刷新 / 换页后行为一致。
  */
 export function nextFishSize(current: number): number {
   const size = clampFishSize(current)

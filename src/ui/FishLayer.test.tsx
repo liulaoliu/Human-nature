@@ -53,9 +53,9 @@ afterEach(() => {
 })
 
 describe('FishLayer：滚轮缩放', () => {
-  it('默认是最小档 + 悬停「手」形光标', async () => {
+  it('默认是最大尺寸的 20% + 悬停「手」形光标', async () => {
     const { img } = await renderFish()
-    expect(img.style.width).toBe('40px')
+    expect(img.style.width).toBe('76px')
     expect(img.style.cursor).toBe('grab')
     expect(img.style.pointerEvents).toBe('auto')
   })
@@ -65,7 +65,7 @@ describe('FishLayer：滚轮缩放', () => {
 
     fireEvent.wheel(img, { deltaY: -200 })
     const enlarged = Number.parseInt(img.style.width, 10)
-    expect(enlarged).toBeGreaterThan(40)
+    expect(enlarged).toBeGreaterThan(76)
 
     fireEvent.wheel(img, { deltaY: 200 })
     expect(Number.parseInt(img.style.width, 10)).toBeLessThan(enlarged)
@@ -105,9 +105,9 @@ describe('FishLayer：图片上拖动', () => {
     expect(JSON.parse(localStorage.getItem(POS_KEY) ?? '{}')).toEqual({ right: 54, bottom: 42 })
   })
 
-  it('默认最小；双击 50% → 最大 → 最小，位置不动', async () => {
+  it('双击循环：默认 20% → 最小 → 50% → 最大 → 最小，位置不动', async () => {
     const { img } = await renderFish()
-    expect(img.style.width).toBe('40px')
+    expect(img.style.width).toBe('76px')
 
     // 先把鱼拖到别处，验证双击只改大小
     fireEvent.pointerDown(img, { pointerId: 1, clientX: 500, clientY: 500 })
@@ -116,16 +116,20 @@ describe('FishLayer：图片上拖动', () => {
     const shell = shellOf(img)
     const pos = { right: shell.style.right, bottom: shell.style.bottom }
 
-    // 第一下：已经在最小档，直接去 50%（最大 380 的一半）
+    // 第一下：默认尺寸不在三档上 → 回最小
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('40px')
+    expect(localStorage.getItem(SIZE_KEY)).toBe('40')
+
+    // 第二下 → 50%（最大 380 的一半）
     fireEvent.doubleClick(img)
     expect(img.style.width).toBe('190px')
-    expect(localStorage.getItem(SIZE_KEY)).toBe('190')
 
-    // 第二下 → 最大
+    // 第三下 → 最大
     fireEvent.doubleClick(img)
     expect(img.style.width).toBe('380px')
 
-    // 第三下回到最小
+    // 第四下回到最小
     fireEvent.doubleClick(img)
     expect(img.style.width).toBe('40px')
     expect(localStorage.getItem(SIZE_KEY)).toBe('40')
