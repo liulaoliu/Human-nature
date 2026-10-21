@@ -1,4 +1,4 @@
-import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Sentence, SentenceLanguage } from '../../types/document'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
@@ -39,6 +39,8 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   const [form, setForm] = useState<LanguageForm>(EMPTY_LANGUAGE_FORM)
   /** 当前展开的字段：点到哪个框，哪个框就长到对话框剩余高度；点框外收回。 */
   const [expanded, setExpanded] = useState<keyof LanguageForm | null>(null)
+  /** 这次点击是否**按在输入框里**：展开会让布局瞬间移动，click 的 target 可能已经偏了，不能只看 target。 */
+  const pressInFieldRef = useRef(false)
 
   useEffect(() => {
     setLangs(getSentenceLanguages(sentence))
@@ -80,7 +82,12 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   /** 点「正在展开的框」以外的地方：收回原高度（不关闭对话框；保存 / 取消仍走按钮）。 */
   const collapseOutside = (e: ReactMouseEvent<HTMLDivElement>) => {
     if (!expanded) return
-    if ((e.target as HTMLElement).closest('.lang-form label.expanded')) return
+    const fromField = pressInFieldRef.current
+    pressInFieldRef.current = false
+    // 按在框里就算点中：展开那一下会把布局挪走，click 的 target 不能作准。
+    if (fromField) return
+    const t = e.target as HTMLElement
+    if (t.closest('.lang-form label, button, a, input, textarea, select')) return
     setExpanded(null)
   }
 
@@ -103,6 +110,9 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
         role="dialog"
         aria-modal="true"
         aria-label="语言点编辑"
+        onMouseDown={(e) => {
+          pressInFieldRef.current = !!(e.target as HTMLElement).closest('.lang-form label')
+        }}
         onClick={(e) => {
           e.stopPropagation()
           collapseOutside(e)

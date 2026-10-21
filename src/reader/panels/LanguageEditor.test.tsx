@@ -146,6 +146,25 @@ describe('LanguageEditor：点输入框展开 / 点框外收回', () => {
     fireEvent.click(container.querySelector('.lang-editor-overlay') as HTMLElement)
     expect(editor.className).not.toContain('expanded')
   })
+
+  it('按在输入框里（展开会挪布局、click target 可能偏）不会被误收回', () => {
+    const { container } = render(<LanguageEditor {...props()} />)
+    const editor = container.querySelector('.lang-editor') as HTMLElement
+    const usage = screen.getAllByPlaceholderText(/多个用「；」/)[2]
+
+    fireEvent.mouseDown(usage)
+    fireEvent.focus(usage)
+    expect(editor.className).toContain('expanded')
+
+    // 布局已经变了：click 落到标题上；但按下时在框里，不应收回
+    fireEvent.click(screen.getByText('语言点（2）'))
+    expect(editor.className).toContain('expanded')
+
+    // 下一次确实按在框外 → 收回
+    fireEvent.mouseDown(screen.getByText('语言点（2）'))
+    fireEvent.click(screen.getByText('语言点（2）'))
+    expect(editor.className).not.toContain('expanded')
+  })
 })
 
 describe('LanguageEditor：关闭', () => {
