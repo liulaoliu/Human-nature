@@ -1,11 +1,14 @@
 # TODO
 
-> **2026-10-20 最新交接（换电脑先看这段）**
+> **2026-10-21 最新交接（换电脑先看这段）**
 >
-> - 分支 `main`，最后提交见 `git log -1`（本轮最后一条是「docs: 滚动进度 / 速读游标」）；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：205 个测试文件，**1837 passed / 5 skipped**。
+> - 分支 `main`，最后提交见 `git log -1`；工作树干净。
+> - schema **v7**；`npm run gates` 全绿：212 个测试文件，**1953 passed / 1 skipped**。
 >   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
+> - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`
+>   已落地；合法值分别在 `core/vocabVia.ts` / `core/vocabConfusables.ts` / `core/vocabFields.ts`，
+>   旧数据没有记录就不猜。
 > - 本轮已完成：
 >   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
 >   - **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）
