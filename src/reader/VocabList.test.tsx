@@ -100,6 +100,26 @@ describe('VocabList：来源标签', () => {
   })
 })
 
+describe('VocabList：字段来源', () => {
+  it('音标 / 词性 / 释义的 title 标出来源；旧数据不标', () => {
+    setup({
+      items: [
+        vocabItem({
+          word: 'run',
+          lemma: 'run',
+          phonetic: '/rʌn/',
+          partOfSpeech: 'v.',
+          meaning: '跑',
+          fieldSources: { phonetic: 'ai', partOfSpeech: 'dict', meaning: 'manual' },
+        }),
+      ],
+    })
+    expect(screen.getByText('/rʌn/').getAttribute('title')).toBe('音标来源：AI')
+    expect(screen.getByText('v.').getAttribute('title')).toBe('词性来源：词典')
+    expect(screen.getByText('跑').getAttribute('title')).toBe('释义来源：手动')
+  })
+})
+
 describe('VocabList：易混项来源', () => {
   it('表格里标注 AI / 词典；旧数据没有来源就不标', () => {
     setup({

@@ -2,6 +2,9 @@ import type {
   VocabConfusable,
   VocabConfusableSource,
   VocabExample,
+  VocabField,
+  VocabFieldSource,
+  VocabFieldSources,
   VocabItem,
   VocabKind,
   VocabLibrary,
@@ -13,6 +16,7 @@ import type {
 import { defaultReviewState } from '../../types/document'
 import type { PosRow } from '../analyzer'
 import { addArticleEntry } from '../articleVocab'
+import { VOCAB_FIELDS, isFieldLocked } from '../vocabFields'
 import { lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
 import {
   betterSource,
@@ -21,6 +25,15 @@ import {
   mergeUnique,
   upsertContext,
 } from './merge'
+
+/** 查词结果 + 每个字段的来源（AI / 离线词典）；直接调用不传时按 AI 处理。 */
+export type WordAnalysisWithSources = WordAnalysis & { fieldSources?: VocabFieldSources }
+
+const hasText = (v: string | null | undefined): v is string => !!v?.trim()
+
+function sourceOf(wa: WordAnalysisWithSources, field: VocabField): VocabFieldSource {
+  return wa.fieldSources?.[field] ?? 'ai'
+}
 
 /**
  * 分析结果回填：标记单词、粘回 AI 查词结果、混淆项、原形校正、-ing/-ed 辨析。
@@ -121,13 +134,20 @@ export function markWord(
   // 「单词」不写 kind（老数据也没有），保持数据干净；词组/习语/用法才标
   const kind = input.kind && input.kind !== 'word' ? input.kind : undefined
   if (existing) {
+    // 已有释义不改；只在「这次才补上释义」时记手动来源
+    const meaning = existing.meaning ?? given
+    const fieldSources =
+      !existing.meaning && given
+        ? { ...existing.fieldSources, meaning: 'manual' as const }
+        : existing.fieldSources
     const merged: VocabItem = {
       ...existing,
       kind: existing.kind ?? kind,
       examples: mergeExamples(existing.examples, [example]),
       source: betterSource(existing.source, source),
       contexts: upsertContext(existing.contexts, contextFromSource(source, iso, given ?? undefined)),
-      meaning: existing.meaning ?? given,
+      meaning,
+      fieldSources,
       updatedAt: iso,
     }
     return {
@@ -145,6 +165,7 @@ export function markWord(
     phonetic: null,
     partOfSpeech: null,
     meaning: given,
+    fieldSources: given ? { meaning: 'manual' } : undefined,
     usage: [],
     examples: [example],
     source,
@@ -171,7 +192,7 @@ export function markWord(
  */
 export function applyWordAnalysis(
   library: VocabLibrary,
-  words: WordAnalysis[],
+  words: WordAnalysisWithSources[],
   now: Date = new Date(),
   defaultSource?: VocabSource,
 ): VocabLibrary {
@@ -188,6 +209,16 @@ export function applyWordAnalysis(
       text: e.text,
       translation: e.translation,
     }))
+    const incoming: Record<VocabField, string | null> = {
+      phonetic: hasText(wa.phonetic) ? wa.phonetic : null,
+      partOfSpeech: normalizePos(wa.partOfSpeech || '') || null,
+      meaning: cleanGloss(wa.meaning) || null,
+      definition: cleanGloss(wa.definition) || null,
+    }
+    const incomingSources: VocabFieldSources = {}
+    for (const field of VOCAB_FIELDS) {
+      if (hasText(incoming[field])) incomingSources[field] = sourceOf(wa, field)
+    }
 
     if (idx === -1) {
       items = [
@@ -196,15 +227,16 @@ export function applyWordAnalysis(
           id: `vocab:${lemma}`,
           word: wa.word.trim(),
           lemma,
-          phonetic: wa.phonetic ?? null,
-          partOfSpeech: normalizePos(wa.partOfSpeech) || null,
-          meaning: cleanGloss(wa.meaning) || null,
-          definition: cleanGloss(wa.definition) || null,
+          phonetic: incoming.phonetic,
+          partOfSpeech: incoming.partOfSpeech,
+          meaning: incoming.meaning,
+          definition: incoming.definition,
+          fieldSources: Object.keys(incomingSources).length ? incomingSources : undefined,
           usage: wa.usage ?? [],
           examples,
           source: defaultSource ?? null,
           status: 'queried',
-          contexts: defaultSource ? [contextFromSource(defaultSource, iso, cleanGloss(wa.meaning) || undefined)] : undefined,
+          contexts: defaultSource ? [contextFromSource(defaultSource, iso, incoming.meaning ?? undefined)] : undefined,
           note: '',
           tags: [],
           reviewState: defaultReviewState(),
@@ -216,25 +248,50 @@ export function applyWordAnalysis(
     }
 
     const cur = items[idx]
-    const locked = cur.status === 'edited' || cur.status === 'mastered'
-    // 查询结果里的「原形」优先：连 word/lemma/id 一起改，保持三者一致（手动改过的不动）
-    const newWord = locked ? cur.word : wa.word?.trim() || cur.word
-    const newLemma = locked ? cur.lemma : lemmaOf(newWord) || cur.lemma
-    const ctxMeaning = cleanGloss(wa.meaning) || undefined
+    // 词形 / id 仍按旧规则整条锁：手动改过或已掌握的不让查询结果改身份
+    const identityLocked = cur.status === 'edited' || cur.status === 'mastered'
+    const newWord = identityLocked ? cur.word : wa.word?.trim() || cur.word
+    const newLemma = identityLocked ? cur.lemma : lemmaOf(newWord) || cur.lemma
+    const fieldSources: VocabFieldSources = { ...cur.fieldSources }
+
+    // 音标 / 词性只补空；释义 / 英英释义允许 AI 刷新（该字段手动锁住时除外）
+    let phonetic = cur.phonetic
+    if (!isFieldLocked(cur, 'phonetic') && !cur.phonetic && incoming.phonetic) {
+      phonetic = incoming.phonetic
+      fieldSources.phonetic = sourceOf(wa, 'phonetic')
+    }
+    let partOfSpeech = cur.partOfSpeech
+    if (!isFieldLocked(cur, 'partOfSpeech') && !cur.partOfSpeech && incoming.partOfSpeech) {
+      partOfSpeech = incoming.partOfSpeech
+      fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
+    }
+    let meaning = cur.meaning
+    if (!isFieldLocked(cur, 'meaning') && incoming.meaning) {
+      meaning = incoming.meaning
+      fieldSources.meaning = sourceOf(wa, 'meaning')
+    }
+    let definition = cur.definition
+    if (!isFieldLocked(cur, 'definition') && incoming.definition) {
+      definition = incoming.definition
+      fieldSources.definition = sourceOf(wa, 'definition')
+    }
+
+    const ctxMeaning = incoming.meaning ?? undefined
     const merged: VocabItem = {
       ...cur,
-      id: locked ? cur.id : `vocab:${newLemma}`,
+      id: identityLocked ? cur.id : `vocab:${newLemma}`,
       word: newWord,
       lemma: newLemma,
-      phonetic: cur.phonetic ?? wa.phonetic ?? null,
-      partOfSpeech: cur.partOfSpeech ?? (normalizePos(wa.partOfSpeech) || null),
-      meaning: locked && cur.meaning ? cur.meaning : cleanGloss(wa.meaning) || cur.meaning,
-      definition: locked && cur.definition ? cur.definition : cleanGloss(wa.definition) || cur.definition,
+      phonetic,
+      partOfSpeech,
+      meaning,
+      definition,
+      fieldSources: Object.keys(fieldSources).length ? fieldSources : undefined,
       usage: mergeUnique(cur.usage, wa.usage ?? []),
       examples: mergeExamples(cur.examples, examples),
       source: betterSource(cur.source, defaultSource ?? { articleId: '', fileName: null, sentenceId: null, sentenceText: '' }),
       contexts: defaultSource ? upsertContext(cur.contexts, contextFromSource(defaultSource, iso, ctxMeaning)) : cur.contexts,
-      status: locked ? cur.status : 'queried',
+      status: identityLocked ? cur.status : 'queried',
       updatedAt: iso,
     }
     items = items.map((it, i) => (i === idx ? merged : it))
@@ -343,6 +400,14 @@ export function applyPosAnalysis(
     const rewrite = single && !locked && !!row.lemma.trim()
     const nextWord = rewrite ? row.lemma.trim() : cur.word
     const nextLemma = rewrite ? lemmaOf(nextWord) || cur.lemma : cur.lemma
+    const fieldSources: VocabFieldSources = { ...cur.fieldSources }
+    const pos = row.pos.trim()
+    const partOfSpeech = !isFieldLocked(cur, 'partOfSpeech') && pos ? pos : cur.partOfSpeech
+    if (partOfSpeech !== cur.partOfSpeech) fieldSources.partOfSpeech = 'ai'
+    const givenMeaning = row.meaning.trim() || null
+    const meaning =
+      cur.meaning ?? (!isFieldLocked(cur, 'meaning') ? givenMeaning : null)
+    if (meaning !== cur.meaning) fieldSources.meaning = 'ai'
     const noteLine = `[辨析] ${row.surface} — ${row.syntax || ''}${row.role ? `；${row.role}` : ''}${
       row.reason ? `；${row.reason}` : ''
     }${row.label || row.pos ? ` → ${row.label || row.pos}` : ''}`
@@ -351,8 +416,9 @@ export function applyPosAnalysis(
       id: rewrite ? `vocab:${nextLemma}` : cur.id,
       word: nextWord,
       lemma: nextLemma,
-      partOfSpeech: row.pos || cur.partOfSpeech,
-      meaning: cur.meaning ?? row.meaning ?? null,
+      partOfSpeech,
+      meaning,
+      fieldSources: Object.keys(fieldSources).length ? fieldSources : undefined,
       note: cur.note ? `${cur.note}\n${noteLine}` : noteLine,
       updatedAt: iso,
     }

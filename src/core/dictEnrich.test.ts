@@ -26,6 +26,7 @@ describe('enrichWithDict', () => {
     expect(it.phonetic).toBe("/'hɒbl/")
     expect(it.meaning).toContain('阻碍')
     expect(it.status).toBe('queried')
+    expect(it.fieldSources).toEqual({ phonetic: 'dict', meaning: 'dict', definition: 'dict' })
   })
 
   it('不覆盖已有内容（用户改过/AI 给过的留着）', () => {
@@ -62,5 +63,26 @@ describe('enrichWithDict', () => {
     const out = enrichWithDict(lib, dict, (w) => (w === 'run' ? { en: 'to move with speed', pos: 'verb' } : null), TEST_NOW)
     expect(out.library.items[0].definition).toBe('to move with speed')
     expect(out.library.items[0].partOfSpeech).toBe('v.')
+    expect(out.library.items[0].fieldSources).toMatchObject({ definition: 'dict', partOfSpeech: 'dict' })
+  })
+
+  it('手动清空的字段不再被词典补回（只锁该字段，别的字段照补）', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [
+        vocabItem({
+          word: 'hobble',
+          lemma: 'hobble',
+          meaning: null,
+          fieldSources: { meaning: 'manual' },
+          status: 'edited',
+        }),
+      ],
+    }
+    const out = enrichWithDict(lib, dict, undefined, TEST_NOW)
+    const it = out.library.items[0]
+    expect(it.meaning).toBeNull()
+    expect(it.phonetic).toBe("/'hɒbl/")
+    expect(it.fieldSources).toMatchObject({ meaning: 'manual', phonetic: 'dict' })
   })
 })

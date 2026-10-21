@@ -26,6 +26,13 @@ describe('编辑 / 状态 / 删除', () => {
     expect(lib.items[0].note).toBe('易混淆')
     expect(lib.items[0].status).toBe('edited')
   })
+  it('只给手动改过的核心字段记来源；改笔记不锁字段', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = editItem(lib, lib.items[0].id, { note: '易混淆' }, NOW)
+    expect(lib.items[0].fieldSources).toBeUndefined()
+    lib = editItem(lib, lib.items[0].id, { meaning: '跑' }, NOW)
+    expect(lib.items[0].fieldSources).toEqual({ meaning: 'manual' })
+  })
   it('setStatus', () => {
     let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
     lib = setStatus(lib, lib.items[0].id, 'mastered', NOW)

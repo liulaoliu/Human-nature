@@ -216,6 +216,8 @@ export interface VocabItem {
   grammarMarks?: string[]
   /** 英英释义（学习者词典风格的一句话，可选） */
   definition?: string | null
+  /** 核心字段来源（音标 / 词性 / 中文释义 / 英英释义）；旧数据没有，不猜 */
+  fieldSources?: VocabFieldSources
   /** 用法 / 搭配说明（v1 的 collocations 并入这里） */
   usage: string[]
   /** 词组 / 搭配，如 run out；run a business（AI 生成，可选；与 usage 分开展示） */
@@ -271,6 +273,14 @@ export type VocabMeaningSource = 'manual' | 'context' | 'library' | 'dict' | 'ai
 
 /** 易混项来源：AI 生成 / 离线词典拼写近邻；旧数据没有这个字段，不猜。 */
 export type VocabConfusableSource = 'ai' | 'dict'
+
+/** 可能被 AI / 离线词典 / 手动同时写入的核心字段。 */
+export type VocabField = 'phonetic' | 'partOfSpeech' | 'meaning' | 'definition'
+
+/** 核心字段来源；旧数据没有记录时为 undefined，不猜。 */
+export type VocabFieldSource = 'ai' | 'dict' | 'manual'
+
+export type VocabFieldSources = Partial<Record<VocabField, VocabFieldSource>>
 
 /**
  * 「这篇文章收了这个词」的独立记录。

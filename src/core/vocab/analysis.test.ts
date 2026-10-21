@@ -83,6 +83,44 @@ describe('applyWordAnalysis', () => {
     expect(lib.items[0].status).toBe('edited')
   })
 
+  it('只锁手动改过的字段，其他字段仍可由 AI 补', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = editItem(lib, lib.items[0].id, { meaning: '我的释义' }, NOW)
+    lib = applyWordAnalysis(
+      lib,
+      [{ word: 'run', phonetic: '/rʌn/', meaning: '跑', definition: 'to move fast' }],
+      NOW,
+    )
+    const it = lib.items[0]
+    expect(it.meaning).toBe('我的释义')
+    expect(it.phonetic).toBe('/rʌn/')
+    expect(it.definition).toBe('to move fast')
+    expect(it.fieldSources).toMatchObject({ meaning: 'manual', phonetic: 'ai', definition: 'ai' })
+  })
+
+  it('新词条逐字段记来源（AI 没给的由词典补）', () => {
+    const lib = applyWordAnalysis(
+      createLibrary(),
+      [
+        {
+          word: 'run',
+          phonetic: '/rʌn/',
+          partOfSpeech: 'v.',
+          meaning: '跑',
+          definition: 'to move fast',
+          fieldSources: { meaning: 'dict' },
+        },
+      ],
+      NOW,
+    )
+    expect(lib.items[0].fieldSources).toEqual({
+      phonetic: 'ai',
+      partOfSpeech: 'ai',
+      meaning: 'dict',
+      definition: 'ai',
+    })
+  })
+
   it('没标记过的词也会建条目', () => {
     const lib = applyWordAnalysis(createLibrary(), [{ word: 'phonics', meaning: '\u81ea\u7136\u62fc\u8bfb\u6cd5' }], NOW)
     expect(lib.items).toHaveLength(1)
@@ -102,6 +140,7 @@ describe('markWord 词组 / 带释义 / -ed 还原', () => {
     const r = markWord(createLibrary(), { word: 'fall back on', articleId: 'a1', meaning: '转而依靠' }, NOW)
     expect(r.created).toBe(true)
     expect(r.item.meaning).toBe('转而依靠')
+    expect(r.item.fieldSources).toEqual({ meaning: 'manual' })
     expect(r.item.status).toBe('queried')
     expect(r.item.lemma).toBe('fall back on') // 短语不做词形还原
   })
@@ -184,6 +223,16 @@ describe('applyPosAnalysis', () => {
     expect(lib.items[0].partOfSpeech).toBe('adj.')
     expect(lib.items[0].note).toContain('辨析')
   })
+  it('手动改过的词性不被 AI 辨析覆盖', () => {
+    let lib = markWord(createLibrary(), { word: 'sliding', articleId: 'a1' }, NOW).library
+    lib = editItem(lib, lib.items[0].id, { partOfSpeech: 'n.' }, NOW)
+    lib = applyPosAnalysis(lib, [row], NOW)
+    const it = lib.items[0]
+    expect(it.partOfSpeech).toBe('n.')
+    expect(it.fieldSources).toMatchObject({ partOfSpeech: 'manual' })
+    expect(it.note).toContain('辨析')
+  })
+
   it('短语条目不改词形，只记笔记', () => {
     let lib = markWord(createLibrary(), { word: 'sliding oil price', articleId: 'a1' }, NOW).library
     lib = applyPosAnalysis(lib, [row], NOW)

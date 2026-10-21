@@ -1,8 +1,9 @@
 import { Fragment, useState } from 'react'
-import type { VocabItem, VocabOrigin, VocabVia } from '../types/document'
+import type { VocabFieldSource, VocabItem, VocabOrigin, VocabVia } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
 import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
 import { confusableSourceLabel } from '../core/vocabConfusables'
+import { fieldSourceLabel } from '../core/vocabFields'
 import { KIND_LABEL, kindOf } from '../core/entryKind'
 import { dayKeyLocal } from '../core/activity'
 import VocabBlocks from './panels/VocabBlocks'
@@ -17,6 +18,12 @@ export interface VocabEditPatch {
   phrases?: string[]
   idioms?: string[]
   grammarMarks?: string[]
+}
+
+/** 字段来源只放在 title 里，避免卡片上再堆一排标签。 */
+function fieldSourceTitle(label: string, source: VocabFieldSource | undefined): string | undefined {
+  const text = fieldSourceLabel(source)
+  return text ? `${label}来源：${text}` : undefined
 }
 
 interface Props {
@@ -240,11 +247,19 @@ export default function VocabList({
                   <OriginBadge origin={originOf?.(it)} via={viaOf?.(it)} />
                   {it.word}
                   {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
-                  {it.phonetic && <span className="cell-phon">{it.phonetic}</span>}
+                  {it.phonetic && (
+                    <span className="cell-phon" title={fieldSourceTitle('音标', it.fieldSources?.phonetic)}>
+                      {it.phonetic}
+                    </span>
+                  )}
                 </td>
                 <td className="cell-meaning">
-                  {it.partOfSpeech && <span className="cell-pos">{it.partOfSpeech} </span>}
-                  {it.meaning ?? ''}
+                  {it.partOfSpeech && (
+                    <span className="cell-pos" title={fieldSourceTitle('词性', it.fieldSources?.partOfSpeech)}>
+                      {it.partOfSpeech}{' '}
+                    </span>
+                  )}
+                  <span title={fieldSourceTitle('释义', it.fieldSources?.meaning)}>{it.meaning ?? ''}</span>
                   {it.grammarMarks?.length ? (
                     <span className="grammar-marks">
                       {it.grammarMarks.map((m) => (
@@ -330,10 +345,22 @@ export default function VocabList({
                 <OriginBadge origin={originOf?.(it)} via={viaOf?.(it)} />
                 {it.word}{' '}
                 {kindOf(it) !== 'word' && <span className={'kind-badge k-' + kindOf(it)}>{KIND_LABEL[kindOf(it)]}</span>}
-                {it.phonetic && <span className="ph">{it.phonetic}</span>}
+                {it.phonetic && (
+                  <span className="ph" title={fieldSourceTitle('音标', it.fieldSources?.phonetic)}>
+                    {it.phonetic}
+                  </span>
+                )}
               </div>
-              {normalizePos(it.partOfSpeech) && <div className="mu">{normalizePos(it.partOfSpeech)}</div>}
-              {displayMeaning(it) && <div className="mu">{displayMeaning(it)}</div>}
+              {normalizePos(it.partOfSpeech) && (
+                <div className="mu" title={fieldSourceTitle('词性', it.fieldSources?.partOfSpeech)}>
+                  {normalizePos(it.partOfSpeech)}
+                </div>
+              )}
+              {displayMeaning(it) && (
+                <div className="mu" title={fieldSourceTitle('释义', it.fieldSources?.meaning)}>
+                  {displayMeaning(it)}
+                </div>
+              )}
               {it.grammarMarks?.length ? (
                 <div className="grammar-marks">
                   {it.grammarMarks.map((m) => (

@@ -263,6 +263,25 @@ describe('dedupeLibrary', () => {
     expect(lib.items[0].confusables).toEqual([{ word: 'ran' }])
     expect(lib.items[0].confusablesSource).toBe('dict')
   })
+  it('合并核心字段时来源跟着值走', () => {
+    const a = item({
+      id: 'vocab:run',
+      lemma: 'run',
+      word: 'run',
+      phonetic: '/rʌn/',
+      fieldSources: { phonetic: 'ai' },
+    })
+    const b = item({
+      id: 'vocab:run2',
+      lemma: 'run',
+      word: 'running',
+      meaning: '跑',
+      fieldSources: { meaning: 'dict' },
+    })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0]).toMatchObject({ phonetic: '/rʌn/', meaning: '跑' })
+    expect(lib.items[0].fieldSources).toEqual({ phonetic: 'ai', meaning: 'dict' })
+  })
   it('两边易混项来源不同 → 不冒充单一来源', () => {
     const a = item({
       id: 'vocab:run',

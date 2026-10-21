@@ -13,7 +13,7 @@ import {
 import { applyWordAnalysis, dedupeLibrary, lemmaOf } from '../../core/vocab'
 import { applyTableTask, missingWords, type ApplyTableTask } from '../../core/aiApply'
 import type { MissingTask } from '../missingPrompts'
-import type { Sentence, VocabLibrary, VocabVia } from '../../types/document'
+import type { Sentence, VocabFieldSources, VocabLibrary, VocabVia } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import {
   dictLemmaOf,
@@ -296,16 +296,26 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
         const wordsForApply = result.words.map((w) => {
           const hit = dict ? resolveWord(dict, w.word) : null
           const mw = mwldLookupWord(w.word)
-          if (!hit && !mw) return w
           const e = hit?.entry
+          // 每个字段分别记来源：AI 没给的才用离线词典补，不能整条算 AI
+          const fieldSources: VocabFieldSources = {}
           const ph = mw?.phonetic || e?.phonetic
+          const phonetic = w.phonetic || (ph ? `/${ph.replace(/^\/+|\/+$/g, '')}/` : undefined)
+          const partOfSpeech = w.partOfSpeech || mw?.pos || e?.pos || undefined
+          const meaning = w.meaning || (e?.zh ? firstLine(e.zh) : undefined)
+          const definition = w.definition || mw?.en || (e?.en ? firstLine(e.en) : undefined)
+          if (phonetic) fieldSources.phonetic = w.phonetic ? 'ai' : 'dict'
+          if (partOfSpeech) fieldSources.partOfSpeech = w.partOfSpeech ? 'ai' : 'dict'
+          if (meaning) fieldSources.meaning = w.meaning ? 'ai' : 'dict'
+          if (definition) fieldSources.definition = w.definition ? 'ai' : 'dict'
           return {
             ...w,
             word: hit?.lemma ?? w.word,
-            phonetic: w.phonetic || (ph ? `/${ph.replace(/^\/+|\/+$/g, '')}/` : undefined),
-            partOfSpeech: w.partOfSpeech || mw?.pos || e?.pos || undefined,
-            meaning: w.meaning || (e?.zh ? firstLine(e.zh) : undefined),
-            definition: w.definition || mw?.en || (e?.en ? firstLine(e.en) : undefined),
+            phonetic,
+            partOfSpeech,
+            meaning,
+            definition,
+            fieldSources: Object.keys(fieldSources).length ? fieldSources : undefined,
           }
         })
         // 逐词写回，带上它在**本篇**里的那句来源（来源不空 + 记一条本篇语境）

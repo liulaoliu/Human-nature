@@ -115,6 +115,7 @@ describe('useApplyTaskResult：任务注册表', () => {
     expect(outcome.report[0]).toContain('词条')
     const next = (params.libraryRef.current as VocabLibrary).items.find((it) => it.lemma === 'run')
     expect(next?.source?.sentenceText).toBe('He runs.')
+    expect(next?.fieldSources).toMatchObject({ phonetic: 'ai', meaning: 'ai' })
   })
 
   it('空输入 / 坏格式：ok=false，保留粘贴内容（不写库）', () => {

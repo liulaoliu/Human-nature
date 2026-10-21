@@ -2,6 +2,7 @@ import type { VocabItem, VocabLibrary, VocabStatus } from '../../types/document'
 import { SCHEMA_VERSION } from '../../types/document'
 import { dayKeyLocal } from '../activity'
 import { articleItemsOf } from '../articleVocab'
+import { VOCAB_FIELDS } from '../vocabFields'
 import { lemmaOf } from './word'
 
 /**
@@ -25,9 +26,25 @@ export function editItem(
 ): VocabLibrary {
   return {
     ...library,
-    items: library.items.map((it) =>
-      it.id === id ? { ...it, ...patch, status: patch.status ?? 'edited', updatedAt: now.toISOString() } : it,
-    ),
+    items: library.items.map((it) => {
+      if (it.id !== id) return it
+      // 手动改过的核心字段逐个标来源；之后 AI / 词典只锁这些字段，不整条锁死
+      let touched = false
+      const fieldSources = { ...it.fieldSources }
+      for (const field of VOCAB_FIELDS) {
+        if (Object.prototype.hasOwnProperty.call(patch, field)) {
+          fieldSources[field] = 'manual'
+          touched = true
+        }
+      }
+      return {
+        ...it,
+        ...patch,
+        fieldSources: touched ? fieldSources : it.fieldSources,
+        status: patch.status ?? 'edited',
+        updatedAt: now.toISOString(),
+      }
+    }),
   }
 }
 

@@ -26,6 +26,7 @@ VocabLibrary { schemaVersion, items: VocabItem[] }
 VocabItem {
   id: `vocab:${lemma}`；word/lemma；kind?: 'word'|'phrase'|'idiom'|'usage'；langPointId?
   phonetic/partOfSpeech/meaning/definition/grammarMarks
+  fieldSources?: { phonetic/partOfSpeech/meaning/definition: 'ai'|'dict'|'manual' }
   usage[]；phrases?[]；idioms?[]；examples[]；confusables?；confusablesSource?: 'ai'|'dict'
   source?: { articleId, fileName, sentenceId, sentenceText }
   contexts?: { articleId, fileName, sentenceId, sentenceText, meaning?, at }[]

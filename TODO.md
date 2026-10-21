@@ -77,10 +77,11 @@
       （`useDictTools.confuseFromDict`）两处写，界面分不出。加 `confusablesSource: 'ai' | 'dict'`，
       卡片「易混」块显示标签；老数据不猜。**2026-10-21 完成**：`core/vocabConfusables.ts` 管合法值，
       表格与卡片显示 `[AI] / [词典]`，备份迁移不猜旧数据。
-- [ ] **P1 词条字段来源**：`phonetic / partOfSpeech / meaning / definition` 可能来自 AI
+- [x] **P1 词条字段来源**：`phonetic / partOfSpeech / meaning / definition` 可能来自 AI
       （`applyWordAnalysis`）、ECDICT/M-W（`enrichWithDict`）或手动编辑。加
       `fieldSources?: Partial<Record<字段, 来源>>`；顺带把现在 `status === 'edited'` 的「整条锁死」
-      升级成「只锁手动改过的字段」。
+      升级成「只锁手动改过的字段」。**2026-10-21 完成**：`core/vocabFields.ts` 管合法值与
+      `isFieldLocked`，AI / 词典 / 手动各自在写入边界标来源。
 - [ ] **P2 已保存文章来源**：`SavedArticle.sourceKey` 只分「articles.json / 粘贴」，EPUB / 文件导入
       都落 `null`。加 `origin: 'library' | 'paste' | 'epub' | 'file'`；老数据 `unknown`。
 - [ ] **P2 语境释义来源展示**：`ArticleVocabEntry.meaningSource` 已存

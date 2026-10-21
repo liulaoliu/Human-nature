@@ -23,6 +23,7 @@ import { KIND_ORDER } from './entryKind'
 import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
 import { repairLanguageKinds } from './langPoints'
 import { isVocabConfusableSource } from './vocabConfusables'
+import { normalizeVocabFieldSources } from './vocabFields'
 import { isVocabVia } from './vocabVia'
 
 const KINDS = new Set<string>(KIND_ORDER)
@@ -98,6 +99,7 @@ function migrateItem(raw: unknown, now: string): VocabItem | null {
     meaning: cleanGloss(str(o.meaning)) || null,
     grammarMarks: Array.isArray(o.grammarMarks) ? strArray(o.grammarMarks) : undefined,
     definition: cleanGloss(str(o.definition)) || null,
+    fieldSources: normalizeVocabFieldSources(o.fieldSources),
     usage: strArray(o.usage),
     phrases: Array.isArray(o.phrases) ? strArray(o.phrases) : undefined,
     idioms: Array.isArray(o.idioms) ? strArray(o.idioms) : undefined,

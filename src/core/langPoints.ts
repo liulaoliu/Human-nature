@@ -193,6 +193,7 @@ export function upsertLanguagePoints(
         phonetic: null,
         partOfSpeech: null,
         meaning: gloss,
+        fieldSources: gloss ? { meaning: 'ai' } : undefined,
         usage: [],
         examples: [example],
         source: p.source,
@@ -217,6 +218,11 @@ export function upsertLanguagePoints(
     const locked = cur.status === 'edited' || cur.status === 'mastered'
     const mine = cur.langPointId !== undefined
     const meaning = locked ? cur.meaning : mine && gloss ? gloss : cur.meaning ?? gloss
+    const meaningFromGloss = !locked && !!gloss && (mine || !cur.meaning)
+    const fieldSources =
+      meaningFromGloss && cur.fieldSources?.meaning !== 'ai'
+        ? { ...cur.fieldSources, meaning: 'ai' as const }
+        : cur.fieldSources
     // 已存在就不改类型（单词被 AI 误列为词组时不误标）
     const nextKind = cur.kind ?? kind
     const merged = mergeExamples(cur.examples, [example])
@@ -224,6 +230,7 @@ export function upsertLanguagePoints(
     if (
       contexts === cur.contexts &&
       meaning === cur.meaning &&
+      fieldSources === cur.fieldSources &&
       nextKind === cur.kind &&
       examples === cur.examples &&
       cur.langPointId !== undefined && // 还没打标记 → 这次要补上
@@ -236,6 +243,7 @@ export function upsertLanguagePoints(
       kind: nextKind,
       langPointId: cur.langPointId ?? pointId,
       meaning,
+      fieldSources,
       contexts,
       examples,
       source: betterSource(cur.source, p.source),

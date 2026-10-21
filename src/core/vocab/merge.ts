@@ -4,6 +4,8 @@ import type {
   VocabContext,
   VocabExample,
   VocabExampleOrigin,
+  VocabField,
+  VocabFieldSources,
   VocabItem,
   VocabLibrary,
   VocabSource,
@@ -389,12 +391,30 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
   const rank: Record<VocabStatus, number> = { unqueried: 0, queried: 1, edited: 2, mastered: 3 }
   const stronger = rank[a.status] >= rank[b.status] ? a : b
   const confusables = mergeConfusables(a.confusables, b.confusables)
+  const fieldSources: VocabFieldSources = {}
+  // 字段值取谁，来源就跟着谁；两边都没值时不保留来源
+  const pick = (key: VocabField): string | null | undefined => {
+    const av = a[key]
+    const bv = b[key]
+    const aHas = !!av?.trim()
+    const bHas = !!bv?.trim()
+    if (aHas) {
+      if (a.fieldSources?.[key]) fieldSources[key] = a.fieldSources[key]!
+      return av
+    }
+    if (bHas) {
+      if (b.fieldSources?.[key]) fieldSources[key] = b.fieldSources[key]!
+      return bv
+    }
+    return av ?? bv
+  }
   return {
     ...a,
-    phonetic: a.phonetic ?? b.phonetic,
-    partOfSpeech: a.partOfSpeech ?? b.partOfSpeech,
-    meaning: a.meaning ?? b.meaning,
-    definition: a.definition ?? b.definition,
+    phonetic: pick('phonetic') ?? null,
+    partOfSpeech: pick('partOfSpeech') ?? null,
+    meaning: pick('meaning') ?? null,
+    definition: pick('definition'),
+    fieldSources: Object.keys(fieldSources).length ? fieldSources : undefined,
     usage: mergeUnique(a.usage, b.usage),
     phrases: mergeOptionalList(a.phrases, b.phrases),
     idioms: mergeOptionalList(a.idioms, b.idioms),

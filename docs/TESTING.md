@@ -125,6 +125,12 @@
     界面分不出。规矩：`applyConfusables` 必须显式传 `'ai' | 'dict'`；旧数据没有
     `confusablesSource` 就不显示来源，不按内容/时间猜。合法值与标签只在
     `core/vocabConfusables.ts`（`isVocabConfusableSource`），备份 / localStorage 读回先过守卫。
+24. **词条核心字段要逐字段记来源，不要一条 `status` 管全部**。音标 / 词性 / 中文释义 / 英英释义
+    可能来自 AI、离线词典或手动；过去 `status === 'edited'` 会把整条锁死，AI 补不了没动过的字段。
+    规矩：写入边界给 `fieldSources[字段]`（`ai` / `dict` / `manual`）；`editItem` 只给实际改过的字段标
+    `manual`；AI 覆盖判断统一走 `isFieldLocked`，旧数据没有 `fieldSources` 时保持整条锁。
+    词典只填空，因此只跳过 `fieldSources[字段] === 'manual'`（用户手动清空的不再补）。
+    备份 / localStorage 的 `fieldSources` 先过 `core/vocabFields.ts` 的清洗。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

@@ -46,6 +46,25 @@ describe('migrateLibrary：宽容解析', () => {
     expect(libraryErrors(twice)).toEqual([])
   })
 
+  it('核心字段来源逐项清洗，坏值不保留', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          {
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            fieldSources: { meaning: 'manual', phonetic: 'bad', extra: 'ai' },
+          },
+          { word: 'wall', lemma: 'wall', meaning: '墙' },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.items.find((i) => i.lemma === 'run')?.fieldSources).toEqual({ meaning: 'manual' })
+    expect(out.items.find((i) => i.lemma === 'wall')?.fieldSources).toBeUndefined()
+  })
+
   it('易混项来源只认 ai / dict；旧数据与坏值不猜', () => {
     const out = migrateLibrary(
       {
