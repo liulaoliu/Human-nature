@@ -3,12 +3,15 @@
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：212 个测试文件，**1953 passed / 1 skipped**。
+> - schema **v7**；`npm run gates` 全绿：212 个测试文件，**1963 passed / 1 skipped**。
 >   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
-> - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`
->   已落地；合法值分别在 `core/vocabVia.ts` / `core/vocabConfusables.ts` / `core/vocabFields.ts`，
+> - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`、
+>   本篇语境释义 `meaningSource` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
+>   `core/vocabConfusables.ts` / `core/vocabFields.ts` / `core/articleMeaning.ts`，
 >   旧数据没有记录就不猜。
+> - **背单词复习门禁**：标过「不认识」的词，复习/加练时先选中文释义；规则在
+>   `core/vocab/review.ts`（`needsMeaningCheck` + `canQuizMeaning`），词库不够出题时退回普通卡片。
 > - 本轮已完成：
 >   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
 >   - **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）
@@ -87,8 +90,9 @@
       `isFieldLocked`，AI / 词典 / 手动各自在写入边界标来源。
 - [ ] **P2 已保存文章来源**：`SavedArticle.sourceKey` 只分「articles.json / 粘贴」，EPUB / 文件导入
       都落 `null`。加 `origin: 'library' | 'paste' | 'epub' | 'file'`；老数据 `unknown`。
-- [ ] **P2 语境释义来源展示**：`ArticleVocabEntry.meaningSource` 已存
-      `manual/context/library/dict/ai`，UI 还没显示；先加标签，零迁移。
+- [x] **P2 语境释义来源展示**：`ArticleVocabEntry.meaningSource` 已存
+      `manual/context/library/dict/ai`。**2026-10-21 完成**：列表显示本篇释义来源徽标，
+      优先于词条字段来源；没条目释义时不拿 `fieldSources.meaning` 冒充，零迁移。
 - [ ] **P3 句子翻译/语法/搭配来源**：当前基本只有 AI / 导入写入，暂不加；等出现手动编辑再加
       `translationSource` 等。
 

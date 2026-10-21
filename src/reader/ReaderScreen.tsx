@@ -2,7 +2,7 @@ import { useMemo, type ComponentProps } from 'react'
 import { articleKey } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
-import type { Sentence, VocabItem, VocabLibrary, VocabVia } from '../types/document'
+import type { Sentence, VocabItem, VocabLibrary, VocabMeaningSource, VocabVia } from '../types/document'
 import type { ReaderDoc } from './hooks/useReaderDoc'
 import ReaderShell from './ReaderShell'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -83,6 +83,8 @@ export interface ReaderScreenProps {
   articleNums: Map<string, number>
   articleOrigins: Map<string, 'auto' | 'manual'>
   articleVias: Map<string, VocabVia>
+  /** 本篇语境释义来源：lemma → 手动/语境/词典/AI（没条目释义的不放） */
+  articleMeaningSources: Map<string, VocabMeaningSource>
   articleFirst: ArticleP['articleFirst']
   articleAllPrinted: boolean
   articlePrintedAt: string | null

@@ -115,6 +115,9 @@ types ← core ← adapters ← reader
   没有才退回 `origin`；旧数据无法还原具体来源时用 `batch / legacy`，**不按时间反推**，也不许猜成「手动」。
 - 打印是「按篇行」：`core/printPlan.ts` 产出 `PrintRow { item, articleId, number, meaning }`，
   同一词在不同篇各有一行、各用本篇编号，不再按 lemma 跨篇去重。
+- 本篇语境释义来源：`ArticleVocabEntry.meaningSource` 由 `core/articleMeaning.ts` 的
+  `resolveArticleMeaning` 解析，列表标签统一走 `meaningSourceLabel`；没有条目释义时不为它标来源，
+  也不拿词条 `fieldSources.meaning` 冒充本篇来源。
 
 ## 三·五、数据安全（事故之后立的规矩）
 

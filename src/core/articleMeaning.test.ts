@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { resolveArticleMeaning } from './articleMeaning'
+import { MEANING_SOURCE_LABEL, meaningSourceLabel, resolveArticleMeaning } from './articleMeaning'
 import { vocabItem } from './testFixtures'
 import type { ArticleVocabEntry, VocabItem } from '../types/document'
 
@@ -25,6 +25,12 @@ const item = (over: Partial<VocabItem> = {}) =>
   })
 
 describe('resolveArticleMeaning：本篇语境优先', () => {
+  it('释义来源有统一显示文案（旧数据不硬猜）', () => {
+    expect(MEANING_SOURCE_LABEL).toEqual({ manual: '手动', context: '语境', library: '词库', dict: '词典', ai: 'AI' })
+    expect(meaningSourceLabel('dict')).toBe('词典')
+    expect(meaningSourceLabel(undefined)).toBeNull()
+  })
+
   it('1. 本篇条目释义最高', () => {
     const r = resolveArticleMeaning(item(), entry({ meaning: '岸边（手改）' }), 'A', 's2')
     expect(r).toEqual({ text: '岸边（手改）', source: 'manual' })

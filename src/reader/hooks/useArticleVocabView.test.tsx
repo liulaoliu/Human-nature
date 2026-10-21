@@ -38,6 +38,24 @@ describe('useArticleVocabView（本篇生词口径）', () => {
     expect(result.current.articleOrigins.get('mitigate')).toBe('auto')
   })
 
+  it('本篇语境释义来源只收自己带释义的条目；老条目默认手动', () => {
+    const library = lib(
+      [
+        vocabItem({ id: 'v1', word: 'mitigate', lemma: 'mitigate', meaning: '减轻' }),
+        vocabItem({ id: 'v2', word: 'quiet', lemma: 'quiet', meaning: '安静' }),
+      ],
+      [
+        { ...entry('mitigate'), meaning: '缓解', meaningSource: 'dict' },
+        { ...entry('quiet'), meaning: '安静的' },
+        entry('other'),
+      ],
+    )
+    const { result } = renderHook(() => useArticleVocabView({ ...base, library }))
+    expect(result.current.articleMeaningSources.get('mitigate')).toBe('dict')
+    expect(result.current.articleMeaningSources.get('quiet')).toBe('manual')
+    expect(result.current.articleMeaningSources.has('other')).toBe(false)
+  })
+
   it('同一词在别的篇有记录、正文也出现，也不会自动算本篇', () => {
     const library = lib(
       [vocabItem({ id: 'v2', word: 'quiet', lemma: 'quiet' })],

@@ -1,5 +1,5 @@
 import { useCallback, useMemo } from 'react'
-import type { ArticleVocabEntry, Sentence, VocabLibrary, VocabOrigin, VocabVia } from '../../types/document'
+import type { ArticleVocabEntry, Sentence, VocabLibrary, VocabMeaningSource, VocabOrigin, VocabVia } from '../../types/document'
 import { articleEntryViews } from '../../core/articleVocab'
 import { articleNumbering } from '../../core/articleNums'
 import { resolveArticleMeaning } from '../../core/articleMeaning'
@@ -58,6 +58,20 @@ export function useArticleVocabView({ library, articleIdentity, sentences }: Art
     () =>
       new Map<string, VocabVia>(
         allViews.flatMap((v) => (v.entry.via ? [[v.entry.lemma, v.entry.via] as const] : [])),
+      ),
+    [allViews],
+  )
+
+  /**
+   * 本篇语境释义的来源（只有条目自己带释义时才有）。
+   * 视图里显示「手动 / 语境 / 词典 / AI」，不拿全库字段来源顶替。
+   */
+  const articleMeaningSources = useMemo(
+    () =>
+      new Map<string, VocabMeaningSource>(
+        allViews.flatMap((v) =>
+          v.entry.meaning?.trim() ? [[v.entry.lemma, v.entry.meaningSource ?? 'manual'] as const] : [],
+        ),
       ),
     [allViews],
   )
@@ -133,6 +147,7 @@ export function useArticleVocabView({ library, articleIdentity, sentences }: Art
     knownLemmas,
     articleOrigins,
     articleVias,
+    articleMeaningSources,
     languageSentCount,
     wordsInSentence,
     articleNums,

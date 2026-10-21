@@ -208,6 +208,7 @@ export default function ReaderApp() {
     knownLemmas,
     articleOrigins,
     articleVias,
+    articleMeaningSources,
     languageSentCount,
     wordsInSentence,
     articleNums,
@@ -692,6 +693,7 @@ export default function ReaderApp() {
       articleNums={articleNums}
       articleOrigins={articleOrigins}
       articleVias={articleVias}
+      articleMeaningSources={articleMeaningSources}
       articleFirst={articleFirst}
       articleAllPrinted={articleAllPrinted}
       articlePrintedAt={articlePrintedAt}

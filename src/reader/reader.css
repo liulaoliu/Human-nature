@@ -2014,6 +2014,19 @@ button.danger {
   background: rgba(127, 127, 127, 0.18);
   color: #777;
 }
+.meaning-src {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 5px;
+  border-radius: 999px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  vertical-align: 1px;
+  background: rgba(86, 156, 214, 0.14);
+  color: #3f86c9;
+  white-space: nowrap;
+}
 
 /* 生词本就地编辑 */
 .edit-inline {

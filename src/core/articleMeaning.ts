@@ -22,6 +22,19 @@ export interface ResolvedMeaning {
   source: VocabMeaningSource
 }
 
+/** 释义来源的显示文案（本篇条目 / 悬浮解释共用）。 */
+export const MEANING_SOURCE_LABEL: Record<VocabMeaningSource, string> = {
+  manual: '手动',
+  context: '语境',
+  library: '词库',
+  dict: '词典',
+  ai: 'AI',
+}
+
+export function meaningSourceLabel(source: VocabMeaningSource | undefined | null): string | null {
+  return source ? MEANING_SOURCE_LABEL[source] : null
+}
+
 function contextMatches(c: VocabContext, articleId: string): boolean {
   return c.fileName === articleId || c.articleId === articleId
 }

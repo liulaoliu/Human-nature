@@ -118,6 +118,15 @@ describe('VocabList：字段来源', () => {
     expect(screen.getByText('v.').getAttribute('title')).toBe('词性来源：词典')
     expect(screen.getByText('跑').getAttribute('title')).toBe('释义来源：手动')
   })
+
+  it('本篇语境释义来源优先于词条字段来源', () => {
+    setup({
+      items: [vocabItem({ word: 'bank', lemma: 'bank', meaning: '河岸', fieldSources: { meaning: 'ai' } })],
+      meaningSourceOf: () => 'manual',
+    })
+    expect(screen.getByText('河岸').getAttribute('title')).toBe('本篇释义来源：手动')
+    expect(screen.getByText('手动')).toBeTruthy()
+  })
 })
 
 describe('VocabList：易混项来源', () => {

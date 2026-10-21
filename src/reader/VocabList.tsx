@@ -1,9 +1,10 @@
 import { Fragment, useState } from 'react'
-import type { VocabFieldSource, VocabItem, VocabOrigin, VocabVia } from '../types/document'
+import type { VocabFieldSource, VocabItem, VocabMeaningSource, VocabOrigin, VocabVia } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
 import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
 import { confusableSourceLabel } from '../core/vocabConfusables'
 import { fieldSourceLabel } from '../core/vocabFields'
+import { meaningSourceLabel } from '../core/articleMeaning'
 import { KIND_LABEL, kindOf } from '../core/entryKind'
 import { dayKeyLocal } from '../core/activity'
 import VocabBlocks from './panels/VocabBlocks'
@@ -45,6 +46,8 @@ interface Props {
   originOf?: (item: VocabItem) => VocabOrigin | undefined
   /** 更细来源（AI / 词典 / 手动 / 语言点）；旧条目可能没有 */
   viaOf?: (item: VocabItem) => VocabVia | undefined
+  /** 本篇语境释义来源；有就优先于词条字段来源显示 */
+  meaningSourceOf?: (item: VocabItem) => VocabMeaningSource | undefined
 }
 
 /**
@@ -102,9 +105,26 @@ export default function VocabList({
   numberOf,
   originOf,
   viaOf,
+  meaningSourceOf,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+
+  /** 本篇语境释义来源优先；没有才退回词条字段来源（两者不是一回事）。 */
+  const meaningTitle = (it: VocabItem) => {
+    const source = meaningSourceOf?.(it)
+    const label = meaningSourceLabel(source)
+    return label ? `本篇释义来源：${label}` : fieldSourceTitle('释义', it.fieldSources?.meaning)
+  }
+  const meaningSourceBadge = (it: VocabItem) => {
+    const label = meaningSourceLabel(meaningSourceOf?.(it))
+    if (!label) return null
+    return (
+      <span className="meaning-src" title={`本篇释义来源：${label}`}>
+        {label}
+      </span>
+    )
+  }
 
   const startEdit = (it: VocabItem) => {
     setEditingId(it.id)
@@ -259,7 +279,8 @@ export default function VocabList({
                       {it.partOfSpeech}{' '}
                     </span>
                   )}
-                  <span title={fieldSourceTitle('释义', it.fieldSources?.meaning)}>{it.meaning ?? ''}</span>
+                  <span title={meaningTitle(it)}>{it.meaning ?? ''}</span>
+                  {meaningSourceBadge(it)}
                   {it.grammarMarks?.length ? (
                     <span className="grammar-marks">
                       {it.grammarMarks.map((m) => (
@@ -357,8 +378,9 @@ export default function VocabList({
                 </div>
               )}
               {displayMeaning(it) && (
-                <div className="mu" title={fieldSourceTitle('释义', it.fieldSources?.meaning)}>
+                <div className="mu" title={meaningTitle(it)}>
                   {displayMeaning(it)}
+                  {meaningSourceBadge(it)}
                 </div>
               )}
               {it.grammarMarks?.length ? (
