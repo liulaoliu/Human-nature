@@ -148,3 +148,65 @@ describe('FishLayer：图片上拖动', () => {
     expect(img.style.width).toBe('40px')
   })
 })
+
+describe('FishLayer：右上角单击切换下一张', () => {
+  /** 用 3 张鱼的清单，便于验证「切到下一张」会改变图片。 */
+  async function renderFishMulti() {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: true, json: async () => ['a.png', 'b.png', 'c.png'] })),
+    )
+    vi.resetModules()
+    const { default: FreshFishLayer } = await import('./FishLayer')
+    const view = render(<FreshFishLayer pageKey="test" />)
+    const img = await waitFor(() => {
+      const el = view.container.querySelector('img.fish')
+      if (!el) throw new Error('fish not rendered')
+      return el as HTMLImageElement
+    })
+    await waitFor(() => expect(img.getAttribute('src')).toContain('/fish/'))
+    return { img, ...view }
+  }
+
+  it('点击右上角（右 65% 以上、上 35% 以内）切到下一张', async () => {
+    const { img } = await renderFishMulti()
+    const initial = img.getAttribute('src')
+    vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({
+      width: 100,
+      height: 100,
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    } as DOMRect)
+
+    fireEvent.click(img, { clientX: 85, clientY: 8 }) // 右上角
+
+    await waitFor(() => expect(img.getAttribute('src')).not.toBe(initial))
+    expect(img.getAttribute('src')).toMatch(/\/fish\/(a|b|c)\.png$/)
+  })
+
+  it('点左上角不切换（仍显示原图）', async () => {
+    const { img } = await renderFishMulti()
+    const initial = img.getAttribute('src')
+    vi.spyOn(img, 'getBoundingClientRect').mockReturnValue({
+      width: 100,
+      height: 100,
+      left: 0,
+      top: 0,
+      right: 100,
+      bottom: 100,
+      x: 0,
+      y: 0,
+      toJSON() {},
+    } as DOMRect)
+
+    fireEvent.click(img, { clientX: 8, clientY: 8 }) // 左上角
+
+    await new Promise((r) => setTimeout(r, 0))
+    expect(img.getAttribute('src')).toBe(initial)
+  })
+})

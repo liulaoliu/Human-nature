@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
+import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { clampFishPos, clampFishSize, nextFishSize } from '../core/fishLayout'
 import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
 
@@ -10,12 +10,13 @@ import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
  *   GET /fish/<name>     → 图片
  * 目录不存在 / 为空时自动不渲染（不报错）。
  *
- * 交互（都持久化，按「页面」存本机）：
+ * 交互（拖拽 / 缩放 / 双击都持久化，按「页面」存本机）：
  *   - 图片上滚轮：缩放（向上放大、向下缩小，夹在 `FISH_SIZE_MIN`–`MAX`）
  *   - 图片上按住左键：拖动改位置（悬停变「手」形，按住变抓取）
  *   - 左上角小手柄：拖动改位置
  *   - 右下角小手柄：拖动改大小
  *   - 双击图片 / 任一手柄：尺寸循环「最小 → 50% → 最大 → 最小」（位置不动）
+ *   - 图片右上角单击（不拖动）：在 `/fish` 列表里切到下一张（循环；不持久化）
  * 存哪、存多大由 `state/fishPrefs` 负责，范围夹取在 `core/fishLayout`（都有测试）；
  * 这个组件只管拖拽手势与渲染。
  *
@@ -44,6 +45,12 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
   const sizeRef = useRef(size)
   const posRef = useRef(pos)
   const imgRef = useRef<HTMLImageElement | null>(null)
+  /** `/fish` 里的全部鱼名（加载后填入），用于右上角点击「下一张」时循环取下一个。 */
+  const namesRef = useRef<string[]>([])
+  /** 当前显示的鱼在 namesRef 里的下标；加载时随机选，点击右上角 +1 循环。 */
+  const idxRef = useRef(-1)
+  /** 上一次指针交互是否发生了拖动：拖动后的 click 不该切换图片。 */
+  const lastMoved = useRef(false)
   /** 滚轮缩放很密集，落盘做 200ms 防抖，别每格滚轮都写一次 localStorage。 */
   const persistTimer = useRef<number | null>(null)
   const drag = useRef<
@@ -55,9 +62,12 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
   useEffect(() => {
     let alive = true
     void loadFishNames().then((names) => {
-      if (!alive || !names.length) return
-      const pick = names[Math.floor(Math.random() * names.length)]
-      setUrl(`${FISH_BASE}/${encodeURIComponent(pick)}`)
+      if (!alive) return
+      namesRef.current = names
+      if (!names.length) return
+      const idx = Math.floor(Math.random() * names.length)
+      idxRef.current = idx
+      setUrl(`${FISH_BASE}/${encodeURIComponent(names[idx])}`)
     })
     return () => {
       alive = false
@@ -158,12 +168,33 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     } catch {
       // 忽略
     }
+    lastMoved.current = d?.moved ?? false
     if (d?.moved) persist()
   }
   /** 双击切换尺寸：最小 → 50% → 最大 → 最小；只改大小，不动位置。 */
   const cycleSize = () => {
     applySize(nextFishSize(sizeRef.current))
     persist()
+  }
+  /** 右上角点击：在 `/fish` 列表里切到下一张（循环）。少于 2 张时等于不切。 */
+  const switchFish = () => {
+    const names = namesRef.current
+    if (names.length < 2) return
+    const next = (idxRef.current + 1) % names.length
+    idxRef.current = next
+    setUrl(`${FISH_BASE}/${encodeURIComponent(names[next])}`)
+  }
+  /** 图片单击：不是拖动收尾、且点在右上角（右 65% 以上、上 35% 以内）就切下一张。 */
+  const onImageClick = (e: ReactMouseEvent<HTMLImageElement>) => {
+    if (lastMoved.current) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    if (!rect.width || !rect.height) return
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    if (x >= rect.width * 0.65 && y <= rect.height * 0.35) {
+      e.stopPropagation()
+      switchFish()
+    }
   }
 
   const handleBase: CSSProperties = {
@@ -198,12 +229,13 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
         src={url}
         alt=""
         draggable={false}
-        title="滚轮缩放 · 按住拖动 · 双击切换大小"
+        title="滚轮缩放 · 按住拖动 · 双击切换大小 · 右上角切换下一张"
         onPointerDown={onDown('move')}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
         onDoubleClick={cycleSize}
+        onClick={onImageClick}
         style={{
           width: `${size}px`,
           height: 'auto',
