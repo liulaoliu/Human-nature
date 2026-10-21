@@ -238,6 +238,7 @@ describe('useDictTools：混淆项', () => {
     expect(p.persist).toHaveBeenCalledTimes(1)
     const next = vi.mocked(p.persist).mock.calls[0][0]
     expect(next.items[0].confusables).toHaveLength(3)
+    expect(next.items[0].confusablesSource).toBe('dict')
     expect(p.flash).toHaveBeenCalledWith('已用词典给 1 个词生成混淆项')
   })
 

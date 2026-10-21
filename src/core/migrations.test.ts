@@ -46,6 +46,24 @@ describe('migrateLibrary：宽容解析', () => {
     expect(libraryErrors(twice)).toEqual([])
   })
 
+  it('易混项来源只认 ai / dict；旧数据与坏值不猜', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          { word: 'adapt', lemma: 'adapt', confusables: [{ word: 'adopt' }], confusablesSource: 'ai' },
+          { word: 'adept', lemma: 'adept', confusables: [{ word: 'adopt' }], confusablesSource: 'dict' },
+          { word: 'adopt', lemma: 'adopt', confusables: [{ word: 'adept' }], confusablesSource: 'manual' },
+          { word: 'legacy', lemma: 'legacy', confusables: [{ word: 'adopt' }] },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.items.find((i) => i.lemma === 'adapt')?.confusablesSource).toBe('ai')
+    expect(out.items.find((i) => i.lemma === 'adept')?.confusablesSource).toBe('dict')
+    expect(out.items.find((i) => i.lemma === 'adopt')?.confusablesSource).toBeUndefined()
+    expect(out.items.find((i) => i.lemma === 'legacy')?.confusablesSource).toBeUndefined()
+  })
+
   it('早先版本误标的类型 / 与词性不符的语法标记，一并修掉', () => {
     const out = migrateLibrary(
       {

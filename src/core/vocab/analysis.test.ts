@@ -122,11 +122,17 @@ describe('applyWordAnalysis 默认来源', () => {
 describe('applyConfusables', () => {
   it('按 lemma 写回混淆项', () => {
     let lib = markWord(createLibrary(), { word: 'adapt', articleId: 'a1' }, NOW).library
-    lib = applyConfusables(lib, [{ word: 'adapts', confusables: [{ word: 'adopt', meaning: '采用' }] }], NOW)
+    lib = applyConfusables(lib, [{ word: 'adapts', confusables: [{ word: 'adopt', meaning: '采用' }] }], 'ai', NOW)
     expect(lib.items[0].confusables).toEqual([{ word: 'adopt', meaning: '采用' }])
+    expect(lib.items[0].confusablesSource).toBe('ai')
+  })
+  it('写入时按调用方标来源（离线词典）', () => {
+    let lib = markWord(createLibrary(), { word: 'adapt', articleId: 'a1' }, NOW).library
+    lib = applyConfusables(lib, [{ word: 'adapt', confusables: [{ word: 'adopt' }] }], 'dict', NOW)
+    expect(lib.items[0].confusablesSource).toBe('dict')
   })
   it('匹配不到的词条不动', () => {
-    const lib = applyConfusables(createLibrary(), [{ word: 'zzz', confusables: [{ word: 'x' }] }], NOW)
+    const lib = applyConfusables(createLibrary(), [{ word: 'zzz', confusables: [{ word: 'x' }] }], 'ai', NOW)
     expect(lib.items).toHaveLength(0)
   })
   it('去重合并（dedupeLibrary）', () => {

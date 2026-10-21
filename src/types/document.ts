@@ -240,8 +240,10 @@ export interface VocabItem {
    * 老数据没有，按「未打印」算。
    */
   lastPrintedAt?: string | null
-  /** AI 生成的易混项（形近/义近）；选择题干扰项优先用它 */
+  /** 易混项（形近/义近）；选择题干扰项优先用它 */
   confusables?: VocabConfusable[]
+  /** 易混项来源；旧数据没有，界面不标注具体来源 */
+  confusablesSource?: VocabConfusableSource
   /**
    * 优先重排到期时间（ISO 8601）。答错后写入「次日」，
    * 到期重练时把它排到队列最前（"今日鞭打、次日优先重练"）。
@@ -266,6 +268,9 @@ export type VocabVia = 'ai' | 'dict' | 'manual' | 'language' | 'auto' | 'batch' 
 
 /** 本篇语境释义的来源（界面可据此标注，AI 结果不覆盖手改）。 */
 export type VocabMeaningSource = 'manual' | 'context' | 'library' | 'dict' | 'ai'
+
+/** 易混项来源：AI 生成 / 离线词典拼写近邻；旧数据没有这个字段，不猜。 */
+export type VocabConfusableSource = 'ai' | 'dict'
 
 /**
  * 「这篇文章收了这个词」的独立记录。

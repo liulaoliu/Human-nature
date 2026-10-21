@@ -73,9 +73,10 @@
 > 同一套思路还能用到下面这些内容，原则是：**同一字段有多个生产者、合并/覆盖会丢信息才加来源；
 > 只在写入边界标，不靠时间或状态猜；旧数据写 `unknown` / `legacy`。**
 
-- [ ] **P1 易混项来源**：`VocabItem.confusables` 现在由 AI（`core/aiApply.ts`）和离线词典
+- [x] **P1 易混项来源**：`VocabItem.confusables` 现在由 AI（`core/aiApply.ts`）和离线词典
       （`useDictTools.confuseFromDict`）两处写，界面分不出。加 `confusablesSource: 'ai' | 'dict'`，
-      卡片「易混」块显示标签；老数据不猜。
+      卡片「易混」块显示标签；老数据不猜。**2026-10-21 完成**：`core/vocabConfusables.ts` 管合法值，
+      表格与卡片显示 `[AI] / [词典]`，备份迁移不猜旧数据。
 - [ ] **P1 词条字段来源**：`phonetic / partOfSpeech / meaning / definition` 可能来自 AI
       （`applyWordAnalysis`）、ECDICT/M-W（`enrichWithDict`）或手动编辑。加
       `fieldSources?: Partial<Record<字段, 来源>>`；顺带把现在 `status === 'edited'` 的「整条锁死」

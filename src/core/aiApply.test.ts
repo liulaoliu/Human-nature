@@ -65,6 +65,7 @@ describe('applyTableTask：confusable', () => {
     expect(out.ok).toBe(true)
     expect(out.next).not.toBe(null)
     expect(first(out.next!, 'run').confusables).toHaveLength(2)
+    expect(first(out.next!, 'run').confusablesSource).toBe('ai')
     expect(out.report[0]).toBe('成功写入 1 个词的混淆项')
     expect(out.missing).toBe(null)
   })

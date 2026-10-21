@@ -2,6 +2,7 @@ import { Fragment, useState } from 'react'
 import type { VocabItem, VocabOrigin, VocabVia } from '../types/document'
 import type { ReviewGrade } from '../core/vocab'
 import { displayMeaning, normalizePos, vocabCardBlocks } from '../core/vocab'
+import { confusableSourceLabel } from '../core/vocabConfusables'
 import { KIND_LABEL, kindOf } from '../core/entryKind'
 import { dayKeyLocal } from '../core/activity'
 import VocabBlocks from './panels/VocabBlocks'
@@ -254,7 +255,13 @@ export default function VocabList({
                     </span>
                   ) : null}
                   {it.confusables && it.confusables.length > 0 && (
-                    <div className="muted">易混：{it.confusables.map((c) => c.word).join(' / ')}</div>
+                    <div className="muted">
+                      易混：
+                      {confusableSourceLabel(it.confusablesSource)
+                        ? `[${confusableSourceLabel(it.confusablesSource)}] `
+                        : ''}
+                      {it.confusables.map((c) => c.word).join(' / ')}
+                    </div>
                   )}
                 </td>
                 <td className="cell-usage">{it.usage.join('；')}</td>

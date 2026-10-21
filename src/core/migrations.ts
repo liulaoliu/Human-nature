@@ -22,6 +22,7 @@ import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import { KIND_ORDER } from './entryKind'
 import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
 import { repairLanguageKinds } from './langPoints'
+import { isVocabConfusableSource } from './vocabConfusables'
 import { isVocabVia } from './vocabVia'
 
 const KINDS = new Set<string>(KIND_ORDER)
@@ -153,6 +154,7 @@ function migrateItem(raw: unknown, now: string): VocabItem | null {
           return w ? [{ word: w, meaning: strOrNull(cc.meaning) ?? undefined }] : []
         })
       : undefined,
+    confusablesSource: isVocabConfusableSource(o.confusablesSource) ? o.confusablesSource : undefined,
     priorityUntil: strOrNull(o.priorityUntil),
     reviewState: {
       ease: typeof rs.ease === 'number' && rs.ease > 0 ? rs.ease : 2.5,

@@ -1,5 +1,6 @@
 import type {
   VocabConfusable,
+  VocabConfusableSource,
   VocabExample,
   VocabItem,
   VocabKind,
@@ -243,12 +244,16 @@ export function applyWordAnalysis(
 }
 
 /**
- * 把 AI 生成的混淆项（形近/义近词）写回对应词条。
+ * 把混淆项（形近/义近词）写回对应词条。
  * 按 lemma 匹配；已有的会被覆盖（视为刷新）。
+ *
+ * `source` 必须由调用方在写入边界给出（AI / 离线词典），
+ * 旧数据没有来源时保持 undefined，不能靠时间或内容反推。
  */
 export function applyConfusables(
   library: VocabLibrary,
   results: { word: string; confusables: VocabConfusable[] }[],
+  source: VocabConfusableSource,
   now: Date = new Date(),
 ): VocabLibrary {
   if (!results.length) return library
@@ -262,7 +267,7 @@ export function applyConfusables(
     ...library,
     items: library.items.map((it) => {
       const c = byLemma.get(it.lemma)
-      return c ? { ...it, confusables: c, updatedAt: iso } : it
+      return c ? { ...it, confusables: c, confusablesSource: source, updatedAt: iso } : it
     }),
   }
 }

@@ -125,7 +125,7 @@ export function useDictTools({
       flash('词典没生成出混淆项（这些词没有合适的拼写近邻）')
       return
     }
-    persist(applyConfusables(cur, results))
+    persist(applyConfusables(cur, results, 'dict'))
     flash(`已用词典给 ${results.length} 个词生成混淆项`)
   }, [readLibrary, persist, flash])
 

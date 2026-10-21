@@ -120,6 +120,11 @@
    `markWord`（手动点选 `manual`、词典 `dict`、AI `ai`、听写 `auto`）；旧待选没有 `via` 时提交记
    `batch`。**不要按加入时间反推来源**：旧条目没有 `via` 就显示「旧数据」，不猜是 AI / 词典 / 手动。
    来源合法值只在 `core/vocabVia.ts`（`isVocabVia`），localStorage 读回先过守卫。
+23. **易混项来源也要在写入边界标**。`VocabItem.confusables` 有两个写入方：AI 混淆项任务
+    （`core/aiApply.ts`）和离线词典（`useDictTools.confuseFromDict`），过去没有来源字段，
+    界面分不出。规矩：`applyConfusables` 必须显式传 `'ai' | 'dict'`；旧数据没有
+    `confusablesSource` 就不显示来源，不按内容/时间猜。合法值与标签只在
+    `core/vocabConfusables.ts`（`isVocabConfusableSource`），备份 / localStorage 读回先过守卫。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

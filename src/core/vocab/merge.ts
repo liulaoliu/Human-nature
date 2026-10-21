@@ -1,5 +1,6 @@
 import type {
   VocabConfusable,
+  VocabConfusableSource,
   VocabContext,
   VocabExample,
   VocabExampleOrigin,
@@ -8,6 +9,7 @@ import type {
   VocabSource,
   VocabStatus,
 } from '../../types/document'
+import { confusableSourceLabel } from '../vocabConfusables'
 import { lemmaOf, normalizePos, normalizeWord } from './word'
 
 /**
@@ -339,12 +341,14 @@ export function vocabCardBlocks(item: VocabItem, opts: { maxExamples?: number } 
   const sentence = item.source?.sentenceText?.trim()
   push('source', '来源', sentence ? [sentence] : [])
 
+  const confusableTag = confusableSourceLabel(item.confusablesSource)
+  const confusablePrefix = confusableTag ? `[${confusableTag}] ` : ''
   push(
     'confusables',
     '易混',
     (item.confusables ?? [])
       .filter((c) => c.word.trim())
-      .map((c) => (c.meaning ? `${c.word}（${c.meaning}）` : c.word)),
+      .map((c) => `${confusablePrefix}${c.meaning ? `${c.word}（${c.meaning}）` : c.word}`),
   )
 
   return blocks
@@ -361,10 +365,30 @@ function mergeConfusables(
   return out.length ? out : undefined
 }
 
+/**
+ * 合并后的易混项来源：
+ *   - 只有一边有易混项 → 用那边的来源；
+ *   - 两边都有且来源相同 → 保留；
+ *   - 两边来源不同 / 有一边没记录 → undefined（不拿一边的来源代表混合内容）。
+ */
+function mergeConfusableSource(
+  a: VocabItem,
+  b: VocabItem,
+  merged: VocabConfusable[] | undefined,
+): VocabConfusableSource | undefined {
+  if (!merged?.length) return undefined
+  const aHas = !!a.confusables?.length
+  const bHas = !!b.confusables?.length
+  if (aHas && !bHas) return a.confusablesSource
+  if (bHas && !aHas) return b.confusablesSource
+  return a.confusablesSource && a.confusablesSource === b.confusablesSource ? a.confusablesSource : undefined
+}
+
 /** 合并两个同 lemma 的词条（信息互补；不丢字段）。 */
 function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
   const rank: Record<VocabStatus, number> = { unqueried: 0, queried: 1, edited: 2, mastered: 3 }
   const stronger = rank[a.status] >= rank[b.status] ? a : b
+  const confusables = mergeConfusables(a.confusables, b.confusables)
   return {
     ...a,
     phonetic: a.phonetic ?? b.phonetic,
@@ -377,7 +401,8 @@ function mergeItem(a: VocabItem, b: VocabItem): VocabItem {
     grammarMarks: mergeOptionalList(a.grammarMarks, b.grammarMarks),
     examples: mergeExamples(a.examples, b.examples),
     tags: [...new Set([...a.tags, ...b.tags])],
-    confusables: mergeConfusables(a.confusables, b.confusables),
+    confusables,
+    confusablesSource: mergeConfusableSource(a, b, confusables),
     contexts: (a.contexts ?? []).concat(b.contexts ?? []).reduce<VocabContext[]>((acc, c) => upsertContext(acc, c), []),
     priorityUntil: [a.priorityUntil, b.priorityUntil].filter(Boolean).sort().pop() ?? null,
     note: a.note || b.note,

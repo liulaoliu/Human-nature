@@ -94,6 +94,7 @@ types ← core ← adapters ← reader
 - 打印范围/内容/分组：`core/printPlan.ts`（同时是文案来源 `PRINT_*_LABEL`）。
 - 日期：`core/activity.ts`。
 - 语言点的键与签名：`core/langPoints.ts`。
+- 易混项来源：`core/vocabConfusables.ts`（`ai` / `dict`；旧数据没有来源就不标，不按内容猜）。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
 

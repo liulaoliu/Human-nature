@@ -100,6 +100,28 @@ describe('VocabList：来源标签', () => {
   })
 })
 
+describe('VocabList：易混项来源', () => {
+  it('表格里标注 AI / 词典；旧数据没有来源就不标', () => {
+    setup({
+      view: 'table',
+      items: [
+        vocabItem({ id: 'ai', word: 'adapt', lemma: 'adapt', confusables: [{ word: 'adopt' }], confusablesSource: 'ai' }),
+        vocabItem({
+          id: 'dict',
+          word: 'adept',
+          lemma: 'adept',
+          confusables: [{ word: 'adopt' }],
+          confusablesSource: 'dict',
+        }),
+        vocabItem({ id: 'legacy', word: 'adopt', lemma: 'adopt', confusables: [{ word: 'adept' }] }),
+      ],
+    })
+    expect(screen.getByText(/易混：\[AI\] adopt/)).toBeTruthy()
+    expect(screen.getByText(/易混：\[词典\] adopt/)).toBeTruthy()
+    expect(screen.getByText(/易混：adept/)).toBeTruthy()
+  })
+})
+
 describe('VocabList：表格视图的图标按钮带上词条', () => {
   it('编辑/删除都念得出 lemma', () => {
     setup({ view: 'table' })

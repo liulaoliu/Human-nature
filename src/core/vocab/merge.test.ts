@@ -217,6 +217,18 @@ describe('vocabCardBlocks', () => {
     expect(blocks.find((b) => b.label === '例句')?.lines).toEqual(['I run every day. — 我每天跑步。'])
     expect(blocks.find((b) => b.label === '易混')?.lines).toEqual(['ran（跑步）'])
   })
+  it('易混块按来源加标签；旧数据没有来源就不标', () => {
+    const ai = vocabCardBlocks(
+      item({ confusables: [{ word: 'adopt', meaning: '采用' }], confusablesSource: 'ai' }),
+    )
+    expect(ai.find((b) => b.key === 'confusables')?.lines).toEqual(['[AI] adopt（采用）'])
+
+    const dict = vocabCardBlocks(item({ confusables: [{ word: 'adept' }], confusablesSource: 'dict' }))
+    expect(dict.find((b) => b.key === 'confusables')?.lines).toEqual(['[词典] adept'])
+
+    const legacy = vocabCardBlocks(item({ confusables: [{ word: 'adopt' }] }))
+    expect(legacy.find((b) => b.key === 'confusables')?.lines).toEqual(['adopt'])
+  })
   it('maxExamples 截断例句；没有内容的块不出现', () => {
     const it = item({ examples: [{ text: 'a' }, { text: 'b' }, { text: 'c' }] })
     const blocks = vocabCardBlocks(it, { maxExamples: 2 })
@@ -237,6 +249,38 @@ describe('dedupeLibrary', () => {
   it('不同 lemma 不动', () => {
     const lib = dedupeLibrary({ schemaVersion: 1, items: [item({ id: 'a', lemma: 'a' }), item({ id: 'b', lemma: 'b' })] })
     expect(lib.items).toHaveLength(2)
+  })
+  it('合并易混项时保留「有内容那边」的来源', () => {
+    const a = item({ id: 'vocab:run', lemma: 'run', word: 'run' })
+    const b = item({
+      id: 'vocab:run2',
+      lemma: 'run',
+      word: 'running',
+      confusables: [{ word: 'ran' }],
+      confusablesSource: 'dict',
+    })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0].confusables).toEqual([{ word: 'ran' }])
+    expect(lib.items[0].confusablesSource).toBe('dict')
+  })
+  it('两边易混项来源不同 → 不冒充单一来源', () => {
+    const a = item({
+      id: 'vocab:run',
+      lemma: 'run',
+      word: 'run',
+      confusables: [{ word: 'ran' }],
+      confusablesSource: 'ai',
+    })
+    const b = item({
+      id: 'vocab:run2',
+      lemma: 'run',
+      word: 'running',
+      confusables: [{ word: 'sprint' }],
+      confusablesSource: 'dict',
+    })
+    const lib = dedupeLibrary({ schemaVersion: 1, items: [a, b] })
+    expect(lib.items[0].confusables).toHaveLength(2)
+    expect(lib.items[0].confusablesSource).toBeUndefined()
   })
   it('同 lemma 合并时保留「未标注」状态（grammarMarks/phrases 不被写成空数组）', () => {
     const a = item({ id: 'vocab:run', lemma: 'run', word: 'run' })

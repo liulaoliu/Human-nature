@@ -85,7 +85,7 @@ function applyConfusable(text: string, lib: VocabLibrary, askedWords: string[]):
   if (empty.length) report.push(`内容无效 ${empty.length} 个（缺有效易混词）：${head(empty, EMPTY_PREVIEW)}`)
   if (unknown.length) report.push(`词库里没有 ${unknown.length} 个：${head(unknown, EMPTY_PREVIEW)}`)
   return {
-    next: applied.length ? applyConfusables(lib, applied) : null,
+    next: applied.length ? applyConfusables(lib, applied, 'ai') : null,
     report,
     missing: missing.length ? { task: 'confusable', words: missing } : null,
     ok: true,
