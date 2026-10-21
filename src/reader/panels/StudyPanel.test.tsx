@@ -47,6 +47,9 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     canRetryForgot: true,
     drillOn: false,
     meaningGate: false,
+    relearning: false,
+    spellMiss: null,
+    navLocked: false,
     drillAfter: 45,
     onClose: noop,
     onExam: noop,
@@ -72,6 +75,8 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     onMarkUnknown: noop,
     onDrillCleared: noop,
     onMeaningCleared: noop,
+    onAckSpellMiss: noop,
+    onSpellMiss: noop,
     onRetryForgot: noop,
     onRestart: noop,
     ...over,
@@ -126,8 +131,36 @@ describe('StudyPanel：卡片与评分', () => {
     expect(screen.getByText('✔ 正确')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^认识/ })).toBeTruthy()
 
-    rerender(<StudyPanel {...props({ spelling: true, checked: true, input: 'ran' })} />)
-    expect(screen.getByText(/你写的是「ran」/)).toBeTruthy()
+    // 拼错：不再显示评分按钮，改为一屏「判为不认识」的确认
+    const onAckSpellMiss = vi.fn()
+    rerender(
+      <StudyPanel
+        {...props({
+          spelling: true,
+          checked: true,
+          input: 'ran',
+          spellMiss: { input: 'ran', word: 'run', meaning: '跑', requeued: true },
+          navLocked: true,
+          onAckSpellMiss,
+        })}
+      />,
+    )
+    expect(screen.getByText(/拼写错误/)).toBeTruthy()
+    expect(screen.getByText(/判为「不认识」/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
+    expect((screen.getByRole('button', { name: '结束（Esc）' }) as HTMLButtonElement).disabled).toBe(true)
+    fireEvent.click(screen.getByRole('button', { name: /从头重学/ }))
+    expect(onAckSpellMiss).toHaveBeenCalled()
+  })
+
+  it('重学卡不直接考拼写：先看词，揭示释义后强制锤炼', () => {
+    const { rerender } = render(<StudyPanel {...props({ spelling: true, relearning: true })} />)
+    expect(screen.queryByPlaceholderText(/拼出这个英文单词/)).toBeNull()
+    expect(screen.getByText('run')).toBeTruthy()
+
+    rerender(<StudyPanel {...props({ spelling: true, relearning: true, revealed: true, drillOn: true })} />)
+    expect(screen.getByPlaceholderText('拼出这个英文单词')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
   })
 
   it('超时锤炼：隐藏评分按钮，交给 DrillBoard', () => {

@@ -24,7 +24,7 @@ const dropMistake = vi.fn()
 const closeOthers = vi.fn()
 const speak = vi.fn()
 
-function Harness({ library }: { library: VocabLibrary }) {
+function Harness({ library, onRelearn }: { library: VocabLibrary; onRelearn?: (ids: string[]) => void }) {
   api = useQuizSession({
     library,
     articleIdentity: 'A',
@@ -40,6 +40,7 @@ function Harness({ library }: { library: VocabLibrary }) {
     recordAnswer,
     addMistake,
     dropMistake,
+    onRelearn,
   })
   return null
 }
@@ -139,5 +140,53 @@ describe('useQuizSession：出题与判分', () => {
     act(() => api!.check())
     unmount()
     expect(clear).toHaveBeenCalled()
+  })
+})
+
+describe('useQuizSession：拼写错 = 不认识，不许重试 / 直接退出', () => {
+  it('拼错：写 SRS again + 标签、给判定提示，先锁住下一题与结束', () => {
+    render(<Harness library={lib([word()])} />)
+    act(() => api!.startItems(['w1'], ['spell']))
+    act(() => api!.setInput('ran'))
+    act(() => api!.check())
+
+    expect(api!.result).toBe(false)
+    expect(api!.spellMiss).toEqual({ itemId: 'w1', word: 'run', input: 'ran' })
+
+    const saved = persist.mock.calls.at(-1)![0] as VocabLibrary
+    const w1 = saved.items.find((it) => it.id === 'w1')!
+    expect(w1.tags).toContain('不认识')
+    expect(w1.reviewState.relearn).toBe(1)
+    expect(w1.reviewState.repetitions).toBe(0)
+
+    // 直接切题 / 退出都不行
+    act(() => api!.next())
+    expect(api!.index).toBe(0)
+    act(() => api!.close())
+    expect(api!.queue).not.toBeNull()
+
+    act(() => api!.ackSpellMiss())
+    expect(api!.spellMiss).toBeNull()
+    expect(api!.index).toBe(1)
+  })
+
+  it('「从头重学」：关掉考试并把词交给背单词会话', () => {
+    const onRelearn = vi.fn()
+    render(<Harness library={lib([word()])} onRelearn={onRelearn} />)
+    act(() => api!.startItems(['w1'], ['spell']))
+    act(() => api!.setInput('ran'))
+    act(() => api!.check())
+    act(() => api!.relearnSpellMiss())
+
+    expect(onRelearn).toHaveBeenCalledWith(['w1'])
+    expect(api!.queue).toBeNull()
+  })
+
+  it('其它题型答错仍是普通错题：不触发拼写判定', () => {
+    render(<Harness library={lib([word({ usage: ['run a business'] })])} />)
+    act(() => api!.startItems(['w1'], ['usage']))
+    act(() => api!.setInput('xxx'))
+    act(() => api!.check())
+    expect(api!.spellMiss).toBeNull()
   })
 })

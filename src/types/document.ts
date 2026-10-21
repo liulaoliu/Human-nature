@@ -55,6 +55,11 @@ export interface ReviewState {
   repetitions: number
   /** 出错（评「忘记」）次数。老数据没有，按 0 算 */
   lapses?: number
+  /**
+   * 重学阶段：>0 表示这个词正在「从零重学」（拼错 / 记住过又忘记）。
+   * 1–3，重新连续答对两次后清零；老数据没有，按 0 算。
+   */
+  relearn?: number
 }
 
 /** 句子级语言点（AI 结构化分析：结构 / 语法 / idiom / 词组 / 用法）。 */

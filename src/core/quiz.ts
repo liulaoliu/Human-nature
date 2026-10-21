@@ -670,9 +670,15 @@ export function countQuestions(items: VocabItem[], kinds: QuizKind[]): number {
   }
 }
 
+/** 这些题型考的是「能不能拼对」，不能用词形还原兜底（ran ≠ run）。 */
+const STRICT_SPELLING: ReadonlySet<QuizKind> = new Set(['spell', 'ear', 'define'])
+
 /**
  * 判分：归一化后精确命中，或词形还原一致（run / running），
  * 且忽略连字符 / 撇号 / 空格（bad-temperedly = badtemperedly）。
+ *
+ * 拼写题例外：只认答案本身的拼写，不把 ran / runs 当成 run —— 否则
+ * 「拼写错」永远触发不了「判为不认识」。
  */
 export function isCorrect(q: QuizQuestion, input: string): boolean {
   const n = normalizeAnswer(input)
@@ -680,6 +686,7 @@ export function isCorrect(q: QuizQuestion, input: string): boolean {
   if (q.accept.includes(n)) return true
   const c = canonical(n)
   if (c && q.accept.some((a) => canonical(a) === c)) return true
+  if (STRICT_SPELLING.has(q.kind)) return false
   // 词形兜底（run / running）只在「标准答案本身就是该词」时生效；
   // 否则搭配默写写个光杆单词也算对。
   const answerIsWord = lemmaOf(q.answer) === q.lemma

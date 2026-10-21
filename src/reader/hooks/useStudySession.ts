@@ -5,13 +5,18 @@ import {
   buildLearnQueue,
   buildReviewQueue,
   canQuizMeaning,
+  isFresh,
+  isRelearning,
+  markSpellingMiss,
   MAX_CARD_APPEARANCES,
   needsMeaningCheck,
   planExtra,
   planRetryForgot,
   reviewItem,
   sortItems,
+  spellingMatches,
   beginExtraRound,
+  displayMeaning,
   emptyExtraRound,
   type ExtraRound,
   type ReviewGrade,
@@ -47,10 +52,14 @@ export interface UseStudySessionParams {
 }
 
 /**
- * 背单词会话：模式/范围/队列/评分（SRS）/错题重排/每日新词配额/卡内编辑删除/计时/快捷键。
+ * 背单词会话：模式/范围/队列/评分（SRS）/重学/错题重排/每日新词配额/卡内编辑删除/计时/快捷键。
  *
- * 评分：认识→good、模糊→hard、忘记了→again；忘记/模糊的词本轮末尾再出现（加练），
- * 但每张卡每轮最多出场 3 次（账本在 `core/vocab/extra`），到上限只写排期、不再追加。
+ * 评分：认识→good、模糊→hard、忘记了→again。again 会把词打进「重学」：
+ * 本轮末尾再出现（每卡每轮最多 3 次，账本在 `core/vocab/extra`），下次从「看词」开始、
+ * 揭示后强制锤炼；SRS 走 1 天 → 3 天阶梯，连续两次答对才退出重学。
+ *
+ * 拼写：错一次即判「不认识」（`checkSpelling` / `applySpellingMiss`），不提供第二次输入，
+ * 确认前锁住切卡与退出。
  */
 export function useStudySession(params: UseStudySessionParams) {
   const {
@@ -98,6 +107,13 @@ export function useStudySession(params: UseStudySessionParams) {
   const [extraRound, setExtraRound] = useState<ExtraRound>(emptyExtraRound)
   /** 本轮点过「忘记了」的词 id，用于收尾重练 */
   const forgotRef = useRef<string[]>([])
+  /** 拼写错误后的「不认识」提示：确认前不允许切卡 / 退出（见 checkSpelling）。 */
+  const [spellMiss, setSpellMiss] = useState<{
+    input: string
+    word: string
+    meaning: string | null
+    requeued: boolean
+  } | null>(null)
   /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
   const bumpedRef = useRef<Set<string>>(new Set())
   /** 供外部（收尾小结）显示「重练忘记的 N 个」 */
@@ -118,9 +134,14 @@ export function useStudySession(params: UseStudySessionParams) {
     queue && index < queue.length ? (library.items.find((it) => it.id === queue[index].id) ?? queue[index]) : null
   /** 本轮加练（忘记/模糊后被追加到队尾）的卡；收尾重练另有 retrying 标记。 */
   const isExtraCard = !!queue && roundTotal > 0 && index >= roundTotal
+  /**
+   * 正在重学的词（拼错 / 记住过又忘）：从「看词」开始，而不是直接进拼写题；
+   * 揭示释义后强制走一遍锤炼（拼写 + 选义 + 搭配），过了才允许评分。
+   */
+  const relearning = !!card && isRelearning(card)
   /** 标过「不认识」的词，在复习 / 加练时要先选中文释义（规则在 core）。 */
   const meaningRequired =
-    !!card && needsMeaningCheck(card, { extra: isExtraCard, retrying }) && canQuizMeaning(card, library.items)
+    !!card && !relearning && needsMeaningCheck(card, { extra: isExtraCard, retrying }) && canQuizMeaning(card, library.items)
   const meaningGate = meaningRequired && !meaningCleared
 
   const clearMeaningGate = useCallback(() => setMeaningCleared(true), [])
@@ -162,8 +183,12 @@ export function useStudySession(params: UseStudySessionParams) {
     paused: editOpen,
   })
 
-  /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
-  const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
+  /** 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。 */
+  const drillOn =
+    !!queue &&
+    !!card &&
+    !spellMiss &&
+    ((drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared) || (relearning && revealed && !drillCleared))
   const clearDrill = useCallback(() => {
     setDrillCleared(true)
     // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
@@ -180,6 +205,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setDelArmed(false)
     setDrillCleared(false)
     setMeaningCleared(false)
+    setSpellMiss(null)
   }, [])
 
   const resetSession = useCallback(() => {
@@ -193,9 +219,82 @@ export function useStudySession(params: UseStudySessionParams) {
     resetCardUi()
   }, [resetCardUi])
 
+  /**
+   * 拼写错误：一次定生死。
+   *
+   * - 立刻按「忘记」写 SRS（`relearn` +1，进入重学）并打「不认识」标签；
+   * - 本轮把它重排到队尾（仍受每卡 3 次上限约束），下次出场从「看词」开始，
+   *   揭示释义后强制走完整锤炼（拼写 → 选义 → 搭配）；
+   * - 在用户确认前锁住切卡 / 退出，避免拼错后直接略过。
+   *
+   * 不做「再试一次」：拼写是硬门槛，允许反复输入等于把判断变成抄写。
+   */
+  const applySpellingMiss = useCallback(
+    (typed: string) => {
+      if (!queue || !card) return
+      const cur = card
+      persist(markSpellingMiss(library, cur.id))
+      if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
+        bumpedRef.current.add(cur.id)
+        onBumpNewToday()
+      }
+      addStudyTime(0, 1)
+      markStudied(cur.id)
+      recordActivity('vocab', 1)
+      setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
+      if (!forgotRef.current.includes(cur.id)) {
+        forgotRef.current.push(cur.id)
+        setForgotCount(forgotRef.current.length)
+      }
+      const decision = planExtra(extraRound, cur.id, 'again')
+      const requeued = decision.append
+      if (decision.append) {
+        setExtraRound(decision.round)
+        setQueue((q) => (q ? [...q, cur] : q))
+        setExtraCount((n) => n + 1)
+      } else if (decision.blocked === 'cap') {
+        flash(`本轮已练 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
+      }
+      setGradeInfo('拼写错误 · 判为不认识 · 已从零重学')
+      window.setTimeout(() => setGradeInfo(''), 2000)
+      flash('拼写错误，已判为「不认识」：这个词会从零重学')
+      setChecked(true)
+      setRevealed(false)
+      setSpellMiss({ input: typed, word: cur.word, meaning: displayMeaning(cur) || null, requeued })
+    },
+    [
+      queue,
+      card,
+      library,
+      persist,
+      onBumpNewToday,
+      addStudyTime,
+      markStudied,
+      recordActivity,
+      extraRound,
+      flash,
+    ],
+  )
+
+  /** 确认拼写判错，进入下一张卡（这个词已重排在队尾）。 */
+  const ackSpellMiss = useCallback(() => {
+    if (!spellMiss) return
+    setSpellMiss(null)
+    resetCardUi()
+    setIndex((i) => i + 1)
+  }, [spellMiss, resetCardUi])
+
+  /** 拼写模式的「检查」：对 → 解锁评分；错 → 立即判不认识（不提供第二次输入）。 */
+  const checkSpelling = useCallback(() => {
+    if (!queue || !card || checked) return
+    setChecked(true)
+    if (!spellingMatches(input, card.word)) applySpellingMiss(input)
+  }, [queue, card, checked, input, applySpellingMiss])
+
   /** 开始背单词/背搭配：按模式组队（新学习 = 没学过的；复习 = 已学过且到期的）。 */
   const start = useCallback(
     (opts?: { mode?: StudyMode; scope?: StudyScope; deck?: StudyDeck }) => {
+      if (spellMiss) return
       const nextMode = opts?.mode ?? mode
       const nextScope = opts?.scope ?? scope
       const nextDeck = opts?.deck ?? deck
@@ -229,7 +328,7 @@ export function useStudySession(params: UseStudySessionParams) {
       setRoundTotal(q.length)
       setIndex(0)
     },
-    [poolFor, mode, scope, deck, newLimit, newToday, flash, closeQuiz, resetSession, setMode, setScope, setDeck],
+    [poolFor, mode, scope, deck, newLimit, newToday, flash, closeQuiz, resetSession, setMode, setScope, setDeck, spellMiss],
   )
 
   const switchMode = useCallback((m: StudyMode) => start({ mode: m }), [start])
@@ -248,6 +347,7 @@ export function useStudySession(params: UseStudySessionParams) {
 
   /** 「本篇全部」：把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）。 */
   const startArticleAll = useCallback(() => {
+    if (spellMiss) return
     const p = poolFor('article')
     if (!p.length) {
       flash(deck === 'collocation' ? '这篇还没有搭配' : '这篇还没有生词')
@@ -261,17 +361,42 @@ export function useStudySession(params: UseStudySessionParams) {
     setExtraRound(beginExtraRound(all.map((it) => it.id)))
     setRoundTotal(all.length)
     setIndex(0)
-  }, [poolFor, deck, flash, closeQuiz, resetSession, setScope])
+  }, [poolFor, deck, flash, closeQuiz, resetSession, setScope, spellMiss])
+
+  /**
+   * 「从头重学」一批词（考试拼错后立即跳过来）。
+   * 队列只放这些词，并标 `retrying`：标过不认识的词先过释义关。
+   */
+  const startRelearn = useCallback(
+    (ids: string[]) => {
+      const set = new Set(ids)
+      const items = library.items.filter((it) => set.has(it.id))
+      if (!items.length) {
+        flash('找不到要重学的词')
+        return
+      }
+      closeQuiz()
+      resetSession()
+      const ordered = sortItems(items, 'due')
+      setQueue(ordered)
+      setExtraRound(beginExtraRound(ordered.map((it) => it.id)))
+      setRoundTotal(ordered.length)
+      setRetrying(true)
+      setIndex(0)
+    },
+    [library.items, flash, closeQuiz, resetSession],
+  )
 
   const grade = useCallback(
     (g: ReviewGrade) => {
+      if (spellMiss) return
       if (!queue) return
       const queued = queue[index]
       if (!queued) return
       const cur = library.items.find((it) => it.id === queued.id) ?? queued
       const nextLibrary = reviewItem(library, cur.id, g)
       persist(nextLibrary)
-      if (cur.reviewState.repetitions === 0 && !bumpedRef.current.has(cur.id)) {
+      if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
         bumpedRef.current.add(cur.id)
         onBumpNewToday()
       }
@@ -314,24 +439,33 @@ export function useStudySession(params: UseStudySessionParams) {
       setMeaningCleared(false)
       setIndex((i) => i + 1)
     },
-    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, meaningRequired, flash],
+    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, meaningRequired, flash, spellMiss],
   )
 
-  const close = useCallback(() => setQueue(null), [])
+  const close = useCallback(() => {
+    // 拼错后必须先确认「判为不认识」，不给直接退出把这次判罚吞掉
+    if (spellMiss) {
+      flash('拼错了：先确认「从头重学」，再退出')
+      return
+    }
+    setQueue(null)
+  }, [spellMiss, flash])
 
   /** 回滚到上一个单词（不撤销已评分，只回看/再练）。 */
   const back = useCallback(() => {
+    if (spellMiss) return
     if (!queue || index <= 0) return
     resetCardUi()
     setIndex((i) => Math.max(0, i - 1))
-  }, [queue, index, resetCardUi])
+  }, [queue, index, resetCardUi, spellMiss])
 
   /** 切到下一个单词（不评分，只切换）。 */
   const forward = useCallback(() => {
+    if (spellMiss) return
     if (!queue || index >= queue.length) return
     resetCardUi()
     setIndex((i) => i + 1)
-  }, [queue, index, resetCardUi])
+  }, [queue, index, resetCardUi, spellMiss])
 
   /** 「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
   const markUnknown = useCallback(() => {
@@ -354,9 +488,9 @@ export function useStudySession(params: UseStudySessionParams) {
     addStudyTime(0, 1)
     markStudied(cur.id)
     recordActivity('vocab', 1)
-    setGradeInfo('已标为「不认识」· 已安排复习')
+    setGradeInfo('已标为「不认识」· 已从零重学')
     window.setTimeout(() => setGradeInfo(''), 1600)
-    flash('已标为「不认识」的全新词，已安排复习')
+    flash('已标为「不认识」的全新词，已安排重学')
     resetCardUi()
     setIndex((i) => i + 1)
   }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])
@@ -394,7 +528,7 @@ export function useStudySession(params: UseStudySessionParams) {
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
   useHotkeys(
     (e) => {
-      if (!queue || editOpen || drillOn) return
+      if (!queue || editOpen || drillOn || spellMiss) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
@@ -434,7 +568,7 @@ export function useStudySession(params: UseStudySessionParams) {
         forward()
       } else if (e.key === 'Escape') close()
     },
-    !!queue && !editOpen && !drillOn && !meaningGate,
+    !!queue && !editOpen && !drillOn && !meaningGate && !spellMiss,
     40,
   )
 
@@ -475,6 +609,12 @@ export function useStudySession(params: UseStudySessionParams) {
     newCount,
     drillOn,
     meaningGate,
+    /** 当前卡正在重学（拼错 / 记住过又忘）：从「看词」开始，揭示后强制锤炼。 */
+    relearning,
+    /** 拼写错误的判定提示；非空时禁止切卡 / 退出，必须先确认。 */
+    spellMiss,
+    /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
+    navLocked: !!spellMiss,
     drillAfter,
     setDrillAfter,
     clearDrill,
@@ -485,12 +625,16 @@ export function useStudySession(params: UseStudySessionParams) {
     switchMode,
     switchScope,
     startArticleAll,
+    startRelearn,
     grade,
     back,
     forward,
     markUnknown,
     close,
     retryForgot,
+    checkSpelling,
+    ackSpellMiss,
+    applySpellingMiss,
     openEdit,
     saveEdit,
     removeCard,

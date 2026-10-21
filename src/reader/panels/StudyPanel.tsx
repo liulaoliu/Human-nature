@@ -7,6 +7,7 @@ import {
   isPriority,
   normalizePos,
   review,
+  spellingMatches,
   vocabCardBlocks,
   type ReviewGrade,
   type StudyMode,
@@ -55,6 +56,12 @@ export interface StudyPanelProps {
   forgotCount: number
   /** 本轮还能不能点「重练忘记的」（每轮只发起一次；规则在 core/vocab/extra）。 */
   canRetryForgot: boolean
+  /** 当前卡正在重学（拼错 / 记住过又忘）。 */
+  relearning: boolean
+  /** 拼写错误的判定提示；非空时只显示这张「判为不认识」的卡。 */
+  spellMiss: { input: string; word: string; meaning: string | null; requeued: boolean } | null
+  /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
+  navLocked: boolean
   /** 超过 drillAfter 秒未评分 → 强制锤炼（拼写/选义/搭配/听写），完成后才能评分。 */
   drillOn: boolean
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
@@ -85,6 +92,10 @@ export interface StudyPanelProps {
   onMarkUnknown: () => void
   onDrillCleared: () => void
   onMeaningCleared: () => void
+  /** 拼错后确认「判为不认识」，继续下一张（这个词已重排到队尾）。 */
+  onAckSpellMiss: () => void
+  /** 锤炼里拼错：立即判为不认识（不提供第二次输入）。 */
+  onSpellMiss: (typed: string) => void
   onRetryForgot: () => void
   onRestart: () => void
 }
@@ -120,6 +131,9 @@ export default function StudyPanel({
   canRetryForgot,
   drillOn,
   meaningGate,
+  relearning,
+  spellMiss,
+  navLocked,
   drillAfter,
   onClose,
   onExam,
@@ -145,26 +159,29 @@ export default function StudyPanel({
   onMarkUnknown,
   onDrillCleared,
   onMeaningCleared,
+  onAckSpellMiss,
+  onSpellMiss,
   onRetryForgot,
   onRestart,
 }: StudyPanelProps) {
-  const spellingFront = spelling && !checked
+  // 重学卡不直接考拼写：先看词、看释义，再进锤炼（否则「从头重学」变成又考一次）
+  const spellingFront = spelling && !checked && !relearning
   const canGrade = spelling ? checked : revealed
-  const correct = card ? input.trim().toLowerCase() === card.word.trim().toLowerCase() : false
+  const correct = card ? spellingMatches(input, card.word) : false
   /** 规则由 core 判断，这里只负责显示。 */
   const showMeaningGate = !!card && meaningGate
 
-  // 自动朗读：每张卡（每个位置）读一次；拼写模式不读（会剧透）
+  // 自动朗读：每张卡（每个位置）读一次；拼写模式不读（会剧透），但重学卡要读
   const speakRef = useRef(onSpeak)
   speakRef.current = onSpeak
   const spokeKeyRef = useRef('')
   useEffect(() => {
-    if (!card || spelling) return
+    if (!card || (spelling && !relearning)) return
     const key = `${index}:${card.id}`
     if (spokeKeyRef.current === key) return
     spokeKeyRef.current = key
     speakRef.current(card.word)
-  }, [index, card, spelling])
+  }, [index, card, spelling, relearning])
 
   // 卡片颜色随时间变化（越久越"烫"）
   const heat =
@@ -190,6 +207,7 @@ export default function StudyPanel({
         liveSeconds={liveSeconds}
         grandSeconds={grandSeconds}
         heat={heat}
+        navLocked={navLocked}
         onClose={onClose}
         onBack={onBack}
         onNext={onNext}
@@ -203,7 +221,23 @@ export default function StudyPanel({
         onSpellingChange={onSpellingChange}
       />
 
-      {card ? (
+      {spellMiss ? (
+        <div className="study-card spell-miss">
+          <div className="study-word">{spellMiss.word}</div>
+          <div className="study-result bad">✘ 拼写错误：你写的是「{spellMiss.input || '（空）'}」</div>
+          {spellMiss.meaning && <div className="study-meaning">{spellMiss.meaning}</div>}
+          <div className="muted spell-miss-note">
+            已判为「不认识」：这个词的复习进度已归零。
+            {spellMiss.requeued
+              ? '本轮稍后会从「看词 → 释义 → 拼写」重新学。'
+              : '本轮已经练满 3 次，明天从「看词」开始重学。'}
+            不能靠再输入一次蒙对，也不能直接跳过。
+          </div>
+          <button className="primary" autoFocus onClick={onAckSpellMiss}>
+            确认，从头重学（稍后再出场）
+          </button>
+        </div>
+      ) : card ? (
         <>
           {!drillOn && (showMeaningGate ? (
             <MeaningQuiz
@@ -307,6 +341,7 @@ export default function StudyPanel({
                       {(card.reviewState.lapses ?? 0) > 0 ? ` · 忘记 ${card.reviewState.lapses} 次` : ''}
                       {card.reviewState.due ? ` · 下次 ${fmtDue(card.reviewState.due)}` : ' · 还没排期'}
                       {isPriority(card) ? ' · 🔥 优先重练' : ''}
+                      {relearning ? ' · ♻️ 重学中' : ''}
                       {card.tags.includes('不认识') ? ' · 🆕 标为不认识' : ''}
                     </div>
                   </div>
@@ -318,7 +353,7 @@ export default function StudyPanel({
 
           {/* 超时未评分 → 强制锤炼 */}
           {drillOn ? (
-            <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} />
+            <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
           ) : showMeaningGate ? null : (
             <>
               {/* 卡内维护：改词形/释义、删误加的词 */}

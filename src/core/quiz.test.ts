@@ -416,3 +416,25 @@ describe('isArticleKind：分「文章级」与「词级」题型', () => {
     }
   })
 })
+
+describe('拼写题判分：不做词形兜底', () => {
+  it('run 的拼写题：Run 对，ran / runs 都算错', () => {
+    const it = item({ id: 'v1', word: 'run', lemma: 'run', meaning: '跑' })
+    const q = makeQuestion(it, 'spell')!
+    expect(isCorrect(q, 'Run')).toBe(true)
+    expect(isCorrect(q, 'ran')).toBe(false)
+    expect(isCorrect(q, 'runs')).toBe(false)
+  })
+
+  it('填空 / 搭配题仍宽容词形（语境里 running 可以填 run）', () => {
+    const it = item({
+      id: 'v2',
+      word: 'run',
+      lemma: 'run',
+      meaning: '跑',
+      examples: [{ text: 'They run fast.' }],
+    })
+    const q = makeQuestion(it, 'cloze')!
+    expect(isCorrect(q, 'runs')).toBe(true)
+  })
+})

@@ -202,3 +202,33 @@ describe('QuizPanel：结算', () => {
     expect(screen.queryByText(/正确率/)).toBeNull()
   })
 })
+
+describe('QuizPanel：拼写判错', () => {
+  it('显示「判为不认识」；不给重试，锁住结束，可继续或立即重学', () => {
+    const onAckSpellMiss = vi.fn()
+    const onRelearn = vi.fn()
+    render(
+      <QuizPanel
+        {...props({
+          checked: true,
+          input: 'ran',
+          result: false,
+          spellMiss: { itemId: 'v1', word: 'run', input: 'ran' },
+          onAckSpellMiss,
+          onRelearn,
+        })}
+      />,
+    )
+
+    expect(screen.getByText(/拼写错误，已判为「不认识」/)).toBeTruthy()
+    expect((screen.getByRole('button', { name: '结束（Esc）' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '退出' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByPlaceholderText(/输入答案/) as HTMLInputElement).disabled).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: /从头重学「run」/ }))
+    expect(onRelearn).toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: /继续考试/ }))
+    expect(onAckSpellMiss).toHaveBeenCalled()
+  })
+})

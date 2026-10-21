@@ -46,6 +46,20 @@ describe('migrateLibrary：宽容解析', () => {
     expect(libraryErrors(twice)).toEqual([])
   })
 
+  it('relearn 保留正数，坏值不保留', () => {
+    const out = migrateLibrary(
+      {
+        items: [
+          { word: 'run', reviewState: { ease: 2.5, due: null, interval: 1, repetitions: 0, relearn: 2 } },
+          { word: 'wall', reviewState: { ease: 2.5, due: null, interval: 1, repetitions: 0, relearn: 'x' } },
+        ],
+      },
+      TEST_NOW,
+    )
+    expect(out.items.find((i) => i.word === 'run')!.reviewState.relearn).toBe(2)
+    expect(out.items.find((i) => i.word === 'wall')!.reviewState.relearn).toBeUndefined()
+  })
+
   it('核心字段来源逐项清洗，坏值不保留', () => {
     const out = migrateLibrary(
       {

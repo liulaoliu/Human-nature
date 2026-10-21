@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { countQuestions, isCorrect, shuffleQuiz, type QuizKind, type QuizQuestion } from '../../core/quiz'
 import { buildArticleQuestions } from '../../core/articleQuiz'
-import { nextDayIso, prioritizeItems, reviewItem } from '../../core/vocab'
+import { nextDayIso, prioritizeItems, reviewItem, markSpellingMiss } from '../../core/vocab'
 import { buildQuizSet, poolFor, poolSizes, studyableItems, type QuizScope } from '../../core/quizPool'
 import { isArticleKind } from '../../core/quiz'
 import type { Sentence, VocabLibrary } from '../../types/document'
@@ -54,6 +54,8 @@ export interface UseQuizSessionParams {
   dropMistake: (id: string) => void
   /** 一轮考完时按题型汇总（做「词块/搭配正确率」等量化）。 */
   onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
+  /** 拼错后「从头重学」：交给背单词会话按完整流程重学这些词。 */
+  onRelearn?: (ids: string[]) => void
 }
 
 /**
@@ -79,6 +81,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     addMistake,
     dropMistake,
     onKinds,
+    onRelearn,
   } = params
 
   // ---- 设置（持久化，逻辑在 useQuizSettings） ----
@@ -101,6 +104,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const [input, setInput] = useState(restored?.input ?? '')
   const [checked, setChecked] = useState(restored?.checked ?? false)
   const [result, setResult] = useState<boolean | null>(restored?.result ?? null)
+  /** 拼写题拼错：判定提示（非空时不许直接切题 / 退出）。 */
+  const [spellMiss, setSpellMiss] = useState<{ itemId: string; word: string; input: string } | null>(null)
   const [results, setResults] = useState<QuizResultRow[]>(restored?.results ?? [])
   const [seconds, setSeconds] = useState(0)
   /** 本轮是否自动切题（开始一轮时按设置快照）。 */
@@ -140,13 +145,20 @@ export function useQuizSession(params: UseQuizSessionParams) {
     }
   }, [])
 
-  const next = useCallback(() => {
+  /** 真正切到下一题（不再做「拼错必须先确认」的拦截）。 */
+  const advance = useCallback(() => {
     clearAdvance()
     setInput('')
     setChecked(false)
     setResult(null)
     setIndex((i) => i + 1)
   }, [clearAdvance])
+
+  /** 用户点「下一题」：拼错判定未确认时停在这一题。 */
+  const next = useCallback(() => {
+    if (spellMiss) return
+    advance()
+  }, [spellMiss, advance])
 
   /** 用一批题开一轮考试（内部复用）。 */
   const begin = useCallback(
@@ -166,6 +178,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setInput('')
       setChecked(false)
       setResult(null)
+      setSpellMiss(null)
       setResults([])
       recordedRef.current = false
       setAutoRun(auto)
@@ -254,14 +267,21 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setResult(ok)
       setResults((r) => [...r, { id: q.id, itemId: q.itemId, correct: ok }])
       const isArticle = q.source === 'article'
+      // 拼写错 = 不认识：SRS again + 「不认识」标签 + 进入重学（不是普通错题）
+      const spellingKind = q.kind === 'spell' || q.kind === 'ear' || q.kind === 'define'
       // 文章题不写 SRS / 错题本（那是词级的）
       if (!isArticle) {
         if (ok) dropMistake(`vocab:${q.itemId}`)
         else addMistake(vocabMistake(q.itemId, q.word, new Date().toISOString()))
-        // 答错 → 进错题本 + 标「次日优先重排」（明天队列排最前）
-        const reviewed = reviewItem(library, q.itemId, ok ? 'good' : 'again')
+        // 拼写错 = 不认识：SRS again + 「不认识」标签 + 进入重学（不是普通错题）
+        const reviewed =
+          !ok && spellingKind ? markSpellingMiss(library, q.itemId) : reviewItem(library, q.itemId, ok ? 'good' : 'again')
         persist(ok ? reviewed : prioritizeItems(reviewed, [q.itemId], nextDayIso()))
         markStudied(q.itemId)
+      }
+      // 拼写错：锁在本题，必须确认（可立即重学，或继续考但该词已排队重学）
+      if (!ok && spellingKind && !isArticle) {
+        setSpellMiss({ itemId: q.itemId, word: q.word, input: ans })
       }
       recordActivity(isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
       recordAnswer?.({
@@ -274,8 +294,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
       })
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
       if (speakAfter) speak(q.kind === 'meaning' ? q.word : q.answer)
-      // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切
-      if (autoRun) {
+      // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切；拼写错必须先确认
+      if (autoRun && !(!ok && spellingKind && !isArticle)) {
         if (advanceRef.current) window.clearTimeout(advanceRef.current)
         advanceRef.current = window.setTimeout(
           () => {
@@ -290,7 +310,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
   )
 
   /** 关闭考试并清掉待触发的自动切题（也顺手关掉设置面板）。 */
-  const close = useCallback(() => {
+  const closeSession = useCallback(() => {
     clearAdvance()
     if (drillTimerRef.current) {
       window.clearTimeout(drillTimerRef.current)
@@ -299,7 +319,32 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setQueue(null)
     setSetupOpen(false)
     setArticleRun(false)
+    setSpellMiss(null)
   }, [clearAdvance])
+
+  /** 拼写判错未确认时，不允许直接结束把这次判罚吞掉。 */
+  const close = useCallback(() => {
+    if (spellMiss) {
+      flash('拼错了：先确认「已判为不认识」，再结束考试')
+      return
+    }
+    closeSession()
+  }, [spellMiss, flash, closeSession])
+
+  /** 确认拼写判错，继续下一题（该词已进重学队列）。 */
+  const ackSpellMiss = useCallback(() => {
+    if (!spellMiss) return
+    setSpellMiss(null)
+    advance()
+  }, [spellMiss, advance])
+
+  /** 立即从头重学拼错的词：关掉考试，交给背单词会话走完整流程。 */
+  const relearnSpellMiss = useCallback(() => {
+    if (!spellMiss) return
+    const id = spellMiss.itemId
+    closeSession()
+    onRelearn?.([id])
+  }, [spellMiss, closeSession, onRelearn])
 
   const retryWrong = useCallback(() => {
     // 按题目 id 从本轮全部题目里取错题（词级 / 文章级通用）
@@ -315,6 +360,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setInput('')
     setChecked(false)
     setResult(null)
+    setSpellMiss(null)
     setResults([])
     recordedRef.current = false
   }, [results, clearAdvance, flash])
@@ -383,6 +429,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
       const q = queue[index]
       if (e.key === 'Enter') {
         e.preventDefault()
+        if (spellMiss) {
+          ackSpellMiss()
+          return
+        }
         if (index >= queue.length) return
         if (!checked) check()
         else next()
@@ -419,6 +469,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     result,
     results,
     setResults,
+    /** 拼写错判定提示；非空时禁止直接切题 / 结束。 */
+    spellMiss,
     seconds,
     // 派生
     poolSizes: poolSizesNow,
@@ -432,6 +484,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     check,
     next,
     close,
+    forceClose: closeSession,
+    ackSpellMiss,
+    relearnSpellMiss,
     retryWrong,
   }
 }

@@ -4,7 +4,7 @@ import { buildArticleQuestions } from '../../core/articleQuiz'
 import type { ArticleQuizKind } from '../../core/quiz'
 import { buildJournalDay, journalDays, journalSummary } from '../../core/journal'
 import { buildHeatmap, dayTotal, type DayActivity } from '../../core/activity'
-import { hasOwnExamples, isDue, lemmaOf } from '../../core/vocab'
+import { hasOwnExamples, isDue, isFresh, lemmaOf } from '../../core/vocab'
 import { hasSentenceLanguage } from '../../core/language'
 import { wordSpans } from '../../core/wordSelect'
 import type { ListeningQuiz } from '../../core/listening'
@@ -70,7 +70,7 @@ export function useReaderViewData({
         confusableMissing: confusableTodoCount,
         lemmaCandidates: lemmaCandidatesCount,
         due: libraryItems.filter((it) => isDue(it)).length,
-        newWords: libraryItems.filter((it) => it.reviewState.repetitions === 0).length,
+        newWords: libraryItems.filter(isFresh).length,
         writingHistory: writingHistoryCount,
       }),
     [

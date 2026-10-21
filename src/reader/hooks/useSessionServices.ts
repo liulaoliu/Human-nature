@@ -100,7 +100,7 @@ export function useSessionServices({
     library,
     articleIdentity,
     docLemmas,
-    closeQuiz: () => quizApiRef.current?.close(),
+    closeQuiz: () => quizApiRef.current?.forceClose(),
     flash,
     persist,
     markStudied,
@@ -135,6 +135,7 @@ export function useSessionServices({
     addMistake,
     dropMistake,
     onKinds: mergeKindStats,
+    onRelearn: (ids) => studyApi.startRelearn(ids),
   })
   quizApiRef.current = quizApi
   const {

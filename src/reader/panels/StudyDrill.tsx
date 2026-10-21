@@ -146,17 +146,20 @@ const STEP_LABEL: Record<DrillStep['kind'], string> = {
   usage: '写搭配',
 }
 
-/** 超时「强制锤炼」：拼写 → 选词义 → 写搭配 → 听写句子，全过才解锁评分。 */
+/** 超时「强制锤炼」/ 重学卡：拼写 → 选词义 → 写搭配，全过才解锁评分。 */
 export default function DrillBoard({
   card,
   items,
   onSpeak,
   onDone,
+  onSpellMiss,
 }: {
   card: VocabItem
   items: VocabItem[]
   onSpeak: (text: string) => void
   onDone: () => void
+  /** 拼错：立即判为不认识（一次判定，不提供重试）。 */
+  onSpellMiss: (typed: string) => void
 }) {
   const steps = useMemo(() => buildSteps(card, items), [card, items])
   const [step, setStep] = useState(0)
@@ -182,8 +185,10 @@ export default function DrillBoard({
   const submit = () => {
     if (!cur) return
     if (cur.kind === 'spell') {
+      // 拼写只判一次：对 → 下一步；错 → 外层直接判「不认识」并重排，
+      // 不再把输入框留着让人反复试（那会退化成抄写）。
       if (norm(text) === norm(card.word)) next()
-      else setWrong(true)
+      else onSpellMiss(text)
     } else if (cur.kind === 'usage') {
       const ok = collocationsOf(card).some((u) => {
         const n = norm(stripPunct(u))

@@ -24,12 +24,13 @@ const items = [
 
 function setup() {
   const onDone = vi.fn()
-  render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} />)
+  const onSpellMiss = vi.fn()
+  render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} />)
   // 第一步是拼写：答对后进入「选词义」
   const input = screen.getByPlaceholderText('拼出这个英文单词')
   fireEvent.change(input, { target: { value: 'abandon' } })
   fireEvent.keyDown(input, { key: 'Enter' })
-  return { onDone }
+  return { onDone, onSpellMiss }
 }
 
 const optionButtons = () => Array.from(document.querySelectorAll<HTMLButtonElement>('.quiz-options button'))
@@ -92,5 +93,23 @@ describe('DrillBoard：选词义键盘操作', () => {
     for (let i = 0; i <= correctIndex; i++) fireEvent.keyDown(window, { key: 'd' })
     fireEvent.keyDown(window, { key: 'Enter' })
     expect(onDone).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('DrillBoard：拼写只判一次', () => {
+  it('拼错立即回调 onSpellMiss（带输入），不留在本步重试', () => {
+    const onDone = vi.fn()
+    const onSpellMiss = vi.fn()
+    render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} />)
+
+    const input = screen.getByPlaceholderText('拼出这个英文单词')
+    fireEvent.change(input, { target: { value: 'abandan' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(onSpellMiss).toHaveBeenCalledTimes(1)
+    expect(onSpellMiss).toHaveBeenCalledWith('abandan')
+    expect(onDone).not.toHaveBeenCalled()
+    // 不再出现「再来一次」这种可反复输入的提示
+    expect(screen.queryByText('✘ 不对，再来一次')).toBeNull()
   })
 })

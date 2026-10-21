@@ -193,3 +193,60 @@ describe('新学习 / 复习 两种队列', () => {
     expect(buildReviewQueue([fresh('a'), learned('b', '2027-01-01T00:00:00Z')], now)).toHaveLength(0)
   })
 })
+
+describe('重学（记住过又忘记 / 拼错）', () => {
+  const now = new Date('2026-10-02T00:00:00Z')
+
+  it('again 进入重学，连续答错累计但封顶 3', () => {
+    const base = { ease: 2.5, due: null, interval: 15, repetitions: 3 }
+    const first = review(base, 'again', now)
+    expect(first.relearn).toBe(1)
+    expect(first.repetitions).toBe(0)
+    const second = review(first, 'again', now)
+    expect(second.relearn).toBe(2)
+    const capped = review({ ...second, relearn: 3 }, 'again', now)
+    expect(capped.relearn).toBe(3)
+  })
+
+  it('重学阶梯：1 天 → 3 天，第二次答对才退出重学', () => {
+    const failed = review({ ease: 2.5, due: null, interval: 15, repetitions: 3 }, 'again', now)
+    const first = review(failed, 'good', now)
+    expect(first.interval).toBe(1)
+    expect(first.repetitions).toBe(1)
+    expect(first.relearn).toBe(1)
+
+    const second = review(first, 'good', now)
+    expect(second.interval).toBe(3)
+    expect(second.repetitions).toBe(2)
+    expect(second.relearn).toBeUndefined()
+  })
+
+  it('重学完成后回到正常间隔（不再按重学阶梯）', () => {
+    const done = { ease: 2.5, due: null, interval: 3, repetitions: 2 }
+    const r = review(done, 'good', now)
+    expect(r.interval).toBe(8) // round(3 × 2.5)
+    expect(r.relearn).toBeUndefined()
+  })
+
+  it('答错后 repetitions 归零，但不再算「新词」，而是进复习队列最前', () => {
+    const lapsed = item({
+      id: 'v1',
+      lemma: 'v1',
+      reviewState: { ease: 2.3, due: '2026-10-02T00:00:00Z', interval: 1, repetitions: 0, lapses: 1, relearn: 1 },
+    })
+    const fresh = item({ id: 'v2', lemma: 'v2', reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 } })
+    const overdue = item({
+      id: 'v3',
+      lemma: 'v3',
+      reviewState: { ease: 2.5, due: '2026-09-01T00:00:00Z', interval: 6, repetitions: 2 },
+    })
+
+    expect(buildLearnQueue([lapsed, fresh], now).map((x) => x.id)).toEqual(['v2'])
+    expect(buildReviewQueue([overdue, lapsed], now).map((x) => x.id)).toEqual(['v1', 'v3'])
+  })
+
+  it('正在重学的词即使没打「不认识」标签，也要先选释义', () => {
+    const rel = item({ tags: [], reviewState: { ease: 2.5, due: '2026-10-02T00:00:00Z', interval: 1, repetitions: 0, relearn: 1 } })
+    expect(needsMeaningCheck(rel)).toBe(true)
+  })
+})

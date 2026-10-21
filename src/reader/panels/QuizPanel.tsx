@@ -41,6 +41,8 @@ export interface QuizPanelProps {
   items: VocabItem[]
   /** 「反复鞭打」第几轮（0 = 正常一轮）。 */
   drillRound?: number
+  /** 拼写题拼错：判定提示（非空时不许直接切题 / 退出）。 */
+  spellMiss?: { itemId: string; word: string; input: string } | null
   onClose: () => void
   onSpeak: (text: string) => void
   /** 一键尝试唤醒假死的语音（真死需刷新，刷新后可续考）。 */
@@ -53,6 +55,10 @@ export interface QuizPanelProps {
   onRestart: () => void
   onSelectOption: (option: string) => void
   onInputChange: (value: string) => void
+  /** 确认拼错判定，继续下一题（该词已进重学队列）。 */
+  onAckSpellMiss?: () => void
+  /** 立即从头重学这个词（关掉考试，走完整学习流程）。 */
+  onRelearn?: () => void
 }
 
 /** 考试答题 + 结算。 */
@@ -69,6 +75,7 @@ export default function QuizPanel({
   result,
   items,
   drillRound,
+  spellMiss,
   onClose,
   onSpeak,
   onResetSpeech,
@@ -79,6 +86,8 @@ export default function QuizPanel({
   onRestart,
   onSelectOption,
   onInputChange,
+  onAckSpellMiss,
+  onRelearn,
 }: QuizPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
 
@@ -94,7 +103,9 @@ export default function QuizPanel({
   return (
     <div className="study quiz">
       <div className="bar study-bar">
-        <button onClick={onClose}>结束（Esc）</button>
+        <button onClick={onClose} disabled={!!spellMiss} title={spellMiss ? '先确认拼写判错，再退出' : undefined}>
+          结束（Esc）
+        </button>
         <span className="muted" title="本轮考试范围">
           {articleRun ? '文章测验' : `范围：${QUIZ_SCOPE_LABEL[scope]}`}
           {drillRound ? ` · 🔁 鞭打第 ${drillRound} 轮` : ''}
@@ -202,13 +213,30 @@ export default function QuizPanel({
                 <div className={'study-result ' + (result ? 'ok' : 'bad')}>
                   {result ? '✔ 正确' : `✘ 正确答案：${question.answer}`}
                 </div>
+                {spellMiss && (
+                  <div className="study-result bad spell-miss-note">
+                    拼写错误，已判为「不认识」：复习进度归零，并进入重学队列。
+                    这个判定不能靠再输入一次改掉，也不能直接退出。
+                  </div>
+                )}
                 {question.context && <div className="muted quiz-full">{question.context}</div>}
                 {question.translation && <div className="muted quiz-full">{question.translation}</div>}
               </>
             )}
           </div>
           <div className="bar study-actions">
-            {!checked ? (
+            {spellMiss ? (
+              <>
+                {onRelearn && (
+                  <button className="primary" onClick={onRelearn} title="关掉考试，按完整学习流程重学这个词">
+                    从头重学「{spellMiss.word}」
+                  </button>
+                )}
+                <button className={onRelearn ? '' : 'primary'} onClick={onAckSpellMiss}>
+                  继续考试（已排队重学）
+                </button>
+              </>
+            ) : !checked ? (
               <button className="primary" onClick={onSubmit}>
                 提交（回车）
               </button>
@@ -217,7 +245,7 @@ export default function QuizPanel({
                 {index + 1 >= queueLength ? '看结果（回车）' : '下一题（回车）'}
               </button>
             )}
-            <button onClick={onClose}>退出</button>
+            <button onClick={onClose} disabled={!!spellMiss}>退出</button>
           </div>
         </>
       ) : (

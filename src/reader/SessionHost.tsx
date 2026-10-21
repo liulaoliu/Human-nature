@@ -104,6 +104,9 @@ export default function SessionHost({
           canRetryForgot={study.api.canRetryForgot}
           drillOn={study.api.drillOn}
           meaningGate={study.api.meaningGate}
+          relearning={study.api.relearning}
+          spellMiss={study.api.spellMiss}
+          navLocked={study.api.navLocked}
           drillAfter={study.api.drillAfter}
           onClose={study.api.close}
           onExam={() => {
@@ -124,7 +127,7 @@ export default function SessionHost({
           }}
           onReveal={() => study.api.setRevealed(true)}
           onInputChange={study.api.setInput}
-          onCheckSpelling={() => study.api.setChecked(true)}
+          onCheckSpelling={study.api.checkSpelling}
           onSpeak={speak}
           onOpenEdit={study.api.openEdit}
           onDelete={study.api.removeCard}
@@ -140,6 +143,8 @@ export default function SessionHost({
           onMarkUnknown={study.api.markUnknown}
           onDrillCleared={study.api.clearDrill}
           onMeaningCleared={study.api.clearMeaningGate}
+          onSpellMiss={study.api.applySpellingMiss}
+          onAckSpellMiss={study.api.ackSpellMiss}
           onRetryForgot={study.api.retryForgot}
           onRestart={() => study.api.start()}
         />
@@ -188,6 +193,7 @@ export default function SessionHost({
           result={quiz.result}
           items={items}
           drillRound={quiz.drillRound}
+          spellMiss={quiz.spellMiss}
           onClose={quiz.close}
           onSpeak={speak}
           onResetSpeech={resetSpeech}
@@ -196,6 +202,8 @@ export default function SessionHost({
           onNext={quiz.next}
           onRetryWrong={quiz.retryWrong}
           onRestart={quiz.start}
+          onAckSpellMiss={quiz.ackSpellMiss}
+          onRelearn={quiz.relearnSpellMiss}
           onSelectOption={(opt) => {
             quiz.setInput(opt)
             quiz.check(opt)

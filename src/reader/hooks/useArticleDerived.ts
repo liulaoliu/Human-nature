@@ -3,7 +3,7 @@ import { activityStreak, type DayActivity } from '../../core/activity'
 import { buildArticleMastery, isStable } from '../../core/mastery'
 import { buildIntensivePlan } from '../../core/intensive'
 import { buildOutputBoard } from '../../core/output'
-import { hasOwnExamples, isDue } from '../../core/vocab'
+import { hasOwnExamples, hasReviewHistory, isDue } from '../../core/vocab'
 import { hasSentenceLanguage } from '../../core/language'
 import { practiceForArticle, type PracticeRecord } from '../../core/practice'
 import type { KindStats, RetellRecord } from '../../core/learning'
@@ -101,7 +101,7 @@ export function useArticleDerived({
         withMeaning: w.filter((it) => !!it.meaning).length,
         withChunks: w.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
         withMarks: w.filter((it) => (it.grammarMarks?.length ?? 0) > 0).length,
-        studied: w.filter((it) => it.reviewState.repetitions > 0).length,
+        studied: w.filter(hasReviewHistory).length,
         stable: w.filter((it) => isStable(it)).length,
         due: w.filter((it) => isDue(it)).length,
         noExample: w.filter((it) => !hasOwnExamples(it)).length,
@@ -154,7 +154,7 @@ export function useArticleDerived({
       words: {
         total: articleWords.length,
         withChunks: articleWords.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
-        studied: articleWords.filter((it) => it.reviewState.repetitions > 0).length,
+        studied: articleWords.filter(hasReviewHistory).length,
         stable: articleWords.filter((it) => isStable(it)).length,
       },
       writes: { count: writes.length, avgScore },

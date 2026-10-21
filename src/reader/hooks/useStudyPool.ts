@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { inStudyDeck, isStudyable, type StudyDeck } from '../../core/entryKind'
-import { isDue, type StudyMode } from '../../core/vocab'
+import { hasReviewHistory, isDue, isFresh, type StudyMode } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { useLocalStorageState, persistentBool, persistentEnum, persistentNumber } from './useLocalStorageState'
 
@@ -57,8 +57,8 @@ export function useStudyPool({ library, articleIdentity, docLemmas }: UseStudyPo
     [studyable, deck, articleIdentity, docLemmas],
   )
   const pool: VocabItem[] = useMemo(() => poolFor(scope), [poolFor, scope])
-  const dueCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions > 0 && isDue(it)).length, [pool])
-  const newCount = useMemo(() => pool.filter((it) => it.reviewState.repetitions === 0).length, [pool])
+  const dueCount = useMemo(() => pool.filter((it) => hasReviewHistory(it) && isDue(it)).length, [pool])
+  const newCount = useMemo(() => pool.filter(isFresh).length, [pool])
 
   return {
     scope,

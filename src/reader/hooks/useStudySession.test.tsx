@@ -20,9 +20,11 @@ const docLemmas = new Set<string>()
 function Harness({
   library,
   speak = noop,
+  onPersist = noop,
 }: {
   library: VocabLibrary
   speak?: (text: string) => void
+  onPersist?: (lib: VocabLibrary) => void
 }) {
   api = useStudySession({
     library,
@@ -30,7 +32,7 @@ function Harness({
     docLemmas,
     closeQuiz: noop,
     flash,
-    persist: noop,
+    persist: onPersist,
     markStudied: noop,
     recordActivity: noop,
     addStudyTime: noop,
@@ -265,6 +267,92 @@ describe('useStudySession：卡内编辑暂停计时', () => {
     })
     expect(api!.cardSeconds).toBe(5)
     expect(api!.liveSeconds).toBe(5)
+    unmount()
+  })
+})
+
+describe('useStudySession：拼错即判「不认识」并从头重学', () => {
+  it('拼错写 SRS again + 标签、重排到队尾；确认前锁住退出与切卡', () => {
+    const onPersist = vi.fn()
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({
+            id: 'w1',
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            reviewState: { ease: 2.5, due: '2026-10-02T00:00:00.000Z', interval: 15, repetitions: 3 },
+          }),
+          vocabItem({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+        ])}
+        onPersist={onPersist}
+      />,
+    )
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    expect(api!.card?.id).toBe('w1')
+
+    act(() => api!.setInput('ran'))
+    act(() => api!.checkSpelling())
+    expect(api!.spellMiss).toEqual({ input: 'ran', word: 'run', meaning: '跑', requeued: true })
+    expect(api!.navLocked).toBe(true)
+    expect(api!.queue).toHaveLength(2) // 重排回队尾
+
+    const saved = onPersist.mock.calls.at(-1)![0] as VocabLibrary
+    const w1 = saved.items.find((it) => it.id === 'w1')!
+    expect(w1.tags).toContain('不认识')
+    expect(w1.reviewState.relearn).toBe(1)
+    expect(w1.reviewState.repetitions).toBe(0)
+
+    // 不能靠退出 / 切卡吞掉判罚
+    act(() => api!.close())
+    expect(api!.queue).not.toBeNull()
+    act(() => api!.forward())
+    expect(api!.index).toBe(0)
+
+    act(() => api!.ackSpellMiss())
+    expect(api!.spellMiss).toBeNull()
+    expect(api!.index).toBe(1)
+    expect(api!.navLocked).toBe(false)
+    unmount()
+  })
+
+  it('拼对不判错：只解锁评分，不写「不认识」', () => {
+    const onPersist = vi.fn()
+    const { unmount } = render(
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'run', lemma: 'run', meaning: '跑' })])} onPersist={onPersist} />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.setInput('Run'))
+    act(() => api!.checkSpelling())
+
+    expect(api!.spellMiss).toBeNull()
+    expect(api!.checked).toBe(true)
+    expect(onPersist).not.toHaveBeenCalled()
+    unmount()
+  })
+
+  it('重学卡：不直接考拼写；揭示后强制锤炼', () => {
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({
+            id: 'w1',
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+          }),
+        ])}
+      />,
+    )
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    expect(api!.card?.id).toBe('w1')
+    expect(api!.relearning).toBe(true)
+    expect(api!.drillOn).toBe(false)
+
+    act(() => api!.setRevealed(true))
+    expect(api!.drillOn).toBe(true)
     unmount()
   })
 })

@@ -3,8 +3,9 @@
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：**214 个测试文件，1985 passed / 1 skipped**（2026-10-21 Windows 本机实测，约 95 秒）。
->   （本机 `TEMP` 已在 I 盘，不用再指定 `TMPDIR`；并行 worker 往工作区外的临时目录写缓存会被沙箱拦，属工具环境问题）
+> - schema **v7**；`npm run gates` 全绿：**215 个测试文件，2007 passed / 1 skipped**（2026-10-21 Windows 本机实测，约 100 秒）。
+>   （本机 `TEMP` 已在 I 盘；并行 worker 往工作区外的临时目录写缓存会被沙箱拦，属工具环境问题；
+>   跑门禁可把 `TEMP/TMP` 指到 `I:/Examples/.tmp-gates`，跑完删掉）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`、
 >   本篇语境释义 `meaningSource`、已保存文章 `origin` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
@@ -25,6 +26,15 @@
 >      归零与跑表拆成两个 effect，暂停前补记未落盘秒数）。
 >   3. [ ] **可选（暂不做，先观察）**：释义门禁通过后仍点「忘记」时，给排期一个 `hard` 下限
 >      （或二次确认），避免 `repetitions` 一直归零；先看 1–2 的实测再定。
+>   4. [x] **「记住过又忘」的重学闭环（P1）**：`ReviewState.relearn` 显式标记重学；
+>      again 时 +1（上限 3），答对走 1 天 → 3 天阶梯、连续两次答对才清零；
+>      队列改用 `isFresh` / `hasReviewHistory` 分类，答错的词留在复习队列最前，
+>      不再掉回「新学习」、不重复占新词配额；重学卡从「看词」开始，揭示后强制锤炼。
+>      **2026-10-21 完成**（`core/vocab/review` 8 条测试）。
+>   5. [x] **拼写错 = 判为不认识（P1）**：拼写题严格判分（`STRICT_SPELLING`，ran ≠ run）；
+>      错一次即 `markSpellingMiss`（again + relearn + 「不认识」），本轮重排、下次从零学；
+>      背单词 / 锤炼 / 考试都不给第二次输入，判定未确认前锁住下一题与退出。
+>      **2026-10-21 完成**（`core/vocab/spelling` 5 条 + 会话 / 面板 7 条）。
 > - 本轮已完成：
 >   - **背单词加练上限 + 编辑暂停计时**（`core/vocab/extra` 9 条 + `useStudyTimers.paused` 2 条 +
 >     `useStudySession` 4 条；一轮最多 3 次出场，卡内编辑两只表都不走）
