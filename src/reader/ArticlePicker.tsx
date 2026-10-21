@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
+import { articleOriginLabel } from '../core/articleOrigin'
 import { calendarDayKey } from '../core/activity'
 import { useHotkeys } from './useHotkeys'
 
@@ -183,6 +184,7 @@ export default function ArticlePicker({
                         list.map((a) => {
                           const created = calendarDayKey(new Date(a.createdAt ?? a.updatedAt))
                           const edited = calendarDayKey(new Date(a.updatedAt))
+                          const origin = articleOriginLabel(a.origin)
                           return (
                             <button
                               key={a.id}
@@ -191,10 +193,11 @@ export default function ArticlePicker({
                               }
                               onClick={() => choose(`s:${a.id}`)}
                               title={`${a.title}\n新增：${created}${edited !== created ? `\n最后修改：${edited}` : ''}${
-                                readOf(a.id) ? `\n已读：${readOf(a.id)}` : ''
-                              }`}
+                                origin ? `\n来源：${origin}` : ''
+                              }${readOf(a.id) ? `\n已读：${readOf(a.id)}` : ''}`}
                             >
                               <span className="picker-item-title">{single ? a.title : a.title.replace(`${bookName} · `, '')}</span>
+                              {origin && <span className="picker-origin">{origin}</span>}
                               <span className="picker-item-date">
                                 {created}
                                 {edited !== created ? ` · 改 ${edited}` : ''}

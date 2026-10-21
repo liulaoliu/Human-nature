@@ -3,12 +3,12 @@
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：212 个测试文件，**1963 passed / 1 skipped**。
+> - schema **v7**；`npm run gates` 全绿：213 个测试文件，**1969 passed / 1 skipped**。
 >   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`、
->   本篇语境释义 `meaningSource` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
->   `core/vocabConfusables.ts` / `core/vocabFields.ts` / `core/articleMeaning.ts`，
+>   本篇语境释义 `meaningSource`、已保存文章 `origin` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
+>   `core/vocabConfusables.ts` / `core/vocabFields.ts` / `core/articleMeaning.ts` / `core/articleOrigin.ts`，
 >   旧数据没有记录就不猜。
 > - **背单词复习门禁**：标过「不认识」的词，复习/加练时先选中文释义；规则在
 >   `core/vocab/review.ts`（`needsMeaningCheck` + `canQuizMeaning`），词库不够出题时退回普通卡片。
@@ -88,8 +88,10 @@
       `fieldSources?: Partial<Record<字段, 来源>>`；顺带把现在 `status === 'edited'` 的「整条锁死」
       升级成「只锁手动改过的字段」。**2026-10-21 完成**：`core/vocabFields.ts` 管合法值与
       `isFieldLocked`，AI / 词典 / 手动各自在写入边界标来源。
-- [ ] **P2 已保存文章来源**：`SavedArticle.sourceKey` 只分「articles.json / 粘贴」，EPUB / 文件导入
-      都落 `null`。加 `origin: 'library' | 'paste' | 'epub' | 'file'`；老数据 `unknown`。
+- [x] **P2 已保存文章来源**：`SavedArticle.sourceKey` 只分「articles.json / 粘贴」，EPUB / 文件导入
+      都落 `null`。加 `origin: 'library' | 'paste' | 'epub' | 'file'`；老数据不写、保持未知。
+      **2026-10-21 完成**：合法值在 `core/articleOrigin.ts`，原文库/粘贴/EPUB/文件各自在入库边界标；
+      文章选择器显示来源，备份导入只认白名单。
 - [x] **P2 语境释义来源展示**：`ArticleVocabEntry.meaningSource` 已存
       `manual/context/library/dict/ai`。**2026-10-21 完成**：列表显示本篇释义来源徽标，
       优先于词条字段来源；没条目释义时不拿 `fieldSources.meaning` 冒充，零迁移。

@@ -63,6 +63,15 @@ describe('ArticlePicker：标题搜索', () => {
     expect((screen.getByPlaceholderText('搜索文章标题…') as HTMLInputElement).value).toBe('')
   })
 
+  it('已保存文章显示导入来源；旧文章没有来源就不标', () => {
+    setup([
+      saved('s1', 'Alpha saved'),
+      { ...saved('s2', 'Beta saved'), origin: 'epub' },
+    ])
+    expect(screen.getByText('EPUB')).toBeTruthy()
+    expect(screen.queryByText('原文库')).toBeNull()
+  })
+
   it('搜索后点结果仍然能选中并关闭', () => {
     const { onPick } = setup()
     fireEvent.change(screen.getByPlaceholderText('搜索文章标题…'), { target: { value: 'alpha saved' } })

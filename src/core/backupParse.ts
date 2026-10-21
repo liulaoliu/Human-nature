@@ -11,6 +11,7 @@
  *   - 返回 `dropped/errors`，界面必须能提示用户。
  */
 import type { SavedArticle, VocabLibrary } from '../types/document'
+import { isArticleOrigin } from './articleOrigin'
 import { normalizeLearning, type LearningData } from './learning'
 import { migrateLibrary } from './migrations'
 
@@ -52,6 +53,8 @@ function sanitizeArticle(a: SavedArticle): SavedArticle {
     title: typeof a.title === 'string' && a.title.trim() ? a.title : '未命名',
     text: typeof a.text === 'string' ? a.text : '',
     sourceKey: typeof a.sourceKey === 'string' || a.sourceKey === null ? a.sourceKey : null,
+    // 外部备份里的来源只接受白名单；坏值当未知，不整篇丢。
+    origin: isArticleOrigin(a.origin) ? a.origin : undefined,
   }
 }
 

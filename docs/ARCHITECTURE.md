@@ -118,6 +118,8 @@ types ← core ← adapters ← reader
 - 本篇语境释义来源：`ArticleVocabEntry.meaningSource` 由 `core/articleMeaning.ts` 的
   `resolveArticleMeaning` 解析，列表标签统一走 `meaningSourceLabel`；没有条目释义时不为它标来源，
   也不拿词条 `fieldSources.meaning` 冒充本篇来源。
+- 已保存文章来源：`SavedArticle.origin`（原文库 / 粘贴 / EPUB / 文件）只在入库边界写，
+  合法值与标签在 `core/articleOrigin.ts`；旧文章没有 `origin` 就保持未知，不按 `sourceKey` 反推。
 
 ## 三·五、数据安全（事故之后立的规矩）
 

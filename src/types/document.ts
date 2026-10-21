@@ -324,6 +324,9 @@ export interface VocabLibrary {
  * 粘回来的翻译/语法/搭配是挂在句子上的，重新切句会丢。所以连 paragraphs /
  * sentences 一起存，下次打开是你上次离开时的样子。
  */
+/** 已保存文章从哪来；旧数据没有这个字段，一律当未知，不按 sourceKey 反推。 */
+export type ArticleOrigin = 'library' | 'paste' | 'epub' | 'file'
+
 export interface SavedArticle {
   id: string
   title: string
@@ -331,6 +334,8 @@ export interface SavedArticle {
   book?: string
   /** 对应 articles.json 的键；手动粘贴的为 null */
   sourceKey: string | null
+  /** 导入来源；旧数据没有就不显示，不猜 */
+  origin?: ArticleOrigin
   /** 清洗后的正文；编辑模式与重新切句用 */
   text: string
   paragraphs: Paragraph[]

@@ -92,6 +92,7 @@ describe('useArticleImport：新建文章', () => {
     const article = vi.mocked(repo.save).mock.calls[0][0]
     expect(article.title).toBe('My')
     expect(article.book).toBe('Book')
+    expect(article.origin).toBe('paste')
     expect(article.sentences.length).toBeGreaterThan(0)
     expect(p.setSaved).toHaveBeenCalled()
     expect(p.loadSaved).toHaveBeenCalledWith(article)
@@ -110,8 +111,8 @@ describe('useArticleImport：新建文章', () => {
 })
 
 describe('useArticleImport：txt/md 导入', () => {
-  it('单文件：填 composer 等确认，不直接入库', async () => {
-    const { p, repo, result } = setup()
+  it('单文件：填 composer 等确认，确认后来源记 file', async () => {
+    const { p, repo, result } = setup({ manual: 'Hello there.' })
     await act(async () =>
       result.current.onImportFiles(fileList([new File(['Hello there.'], 'my-note.md')])),
     )
@@ -120,6 +121,19 @@ describe('useArticleImport：txt/md 导入', () => {
     expect(p.setComposing).toHaveBeenCalledWith(true)
     expect(repo.save).not.toHaveBeenCalled()
     expect(p.flash).toHaveBeenCalledWith('已读入，确认后点「创建文章」')
+
+    await act(async () => result.current.createArticle())
+    expect(vi.mocked(repo.save).mock.calls[0][0].origin).toBe('file')
+  })
+
+  it('文件读入后用户重新手输：来源改回 paste', async () => {
+    const { repo, result } = setup({ manual: 'Hello there.' })
+    await act(async () =>
+      result.current.onImportFiles(fileList([new File(['Hello there.'], 'my-note.md')])),
+    )
+    act(() => result.current.markPaste())
+    await act(async () => result.current.createArticle())
+    expect(vi.mocked(repo.save).mock.calls[0][0].origin).toBe('paste')
   })
 
   it('多文件：每篇都保存，刷新列表并提示数量', async () => {
@@ -133,6 +147,7 @@ describe('useArticleImport：txt/md 导入', () => {
     const ids = vi.mocked(repo.save).mock.calls.map((c) => c[0].id)
     expect(new Set(ids).size).toBe(2)
     expect(vi.mocked(repo.save).mock.calls.map((c) => c[0].title)).toEqual(['a', 'b'])
+    expect(vi.mocked(repo.save).mock.calls.map((c) => c[0].origin)).toEqual(['file', 'file'])
     expect(p.setSaved).toHaveBeenCalled()
     expect(p.flash).toHaveBeenCalledWith('已导入 2 篇')
   })
@@ -148,7 +163,7 @@ describe('useArticleImport：txt/md 导入', () => {
 describe('useArticleImport：PDF / EPUB', () => {
   it('PDF 成功：按页码范围抽取，填 composer，最后清掉 importing', async () => {
     pdf.mockResolvedValue('PDF text')
-    const { p, result } = setup()
+    const { p, repo, result } = setup({ manual: 'PDF text' })
     await act(async () => result.current.onPickPdf(new File(['x'], 'book.pdf')))
     expect(pdf).toHaveBeenCalledWith(expect.any(File), '1-3')
     expect(p.setImporting).toHaveBeenNthCalledWith(1, '正在解析 PDF…')
@@ -157,6 +172,9 @@ describe('useArticleImport：PDF / EPUB', () => {
     expect(p.setComposing).toHaveBeenCalledWith(true)
     expect(p.flash).toHaveBeenCalledWith('PDF 已解析，检查正文后点「创建文章」')
     expect(p.setImporting).toHaveBeenLastCalledWith('')
+
+    await act(async () => result.current.createArticle())
+    expect(vi.mocked(repo.save).mock.calls[0][0].origin).toBe('file')
   })
 
   it('PDF 失败：提示扫描件，importing 也会清掉', async () => {
@@ -179,6 +197,7 @@ describe('useArticleImport：PDF / EPUB', () => {
       'my-book · 第一章',
       'my-book · 第 2 章',
     ])
+    expect(vi.mocked(repo.save).mock.calls.map((c) => c[0].origin)).toEqual(['epub', 'epub'])
     expect(p.flash).toHaveBeenCalledWith('已导入《my-book》共 2 章')
     expect(p.setImporting).toHaveBeenLastCalledWith('')
   })

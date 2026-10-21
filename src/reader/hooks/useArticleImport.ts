@@ -1,9 +1,10 @@
-import type { RefObject } from 'react'
+import { useCallback, useRef, type RefObject } from 'react'
 import { cleanText } from '../../core/cleaner'
 import { segment } from '../../core/segmenter'
 import { buildCleanupPrompt } from '../../core/analyzer'
 import { extractEpub, extractPdfText } from '../importers'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
+import type { ArticleOrigin } from '../../types/document'
 
 export interface UseArticleImportParams {
   repo: RefObject<ArticleRepoPort | null>
@@ -40,6 +41,12 @@ export function useArticleImport({
   setImporting,
   flash,
 }: UseArticleImportParams) {
+  /**
+   * composer 里这坨正文是从哪来的：默认粘贴；文件/PDF 读入后改成 file。
+   * 用户重新手输时由 `markPaste` 改回，避免把粘贴误标成文件。
+   */
+  const composeOrigin = useRef<ArticleOrigin>('paste')
+
   /** 复制清洗提示词：让 AI 去掉复制文本的多余换行、粘连和错误。next 是拿到结果后该做什么。 */
   const copyCleanupPrompt = async (text: string, next: string) => {
     if (!text.trim()) return
@@ -62,6 +69,7 @@ export function useArticleImport({
       title,
       book: newBook.trim() || undefined,
       sourceKey: null,
+      origin: composeOrigin.current,
       text: cleaned,
       paragraphs: seg.paragraphs,
       sentences: seg.sentences,
@@ -70,6 +78,7 @@ export function useArticleImport({
     await repo.current?.save(article)
     setSaved((await repo.current?.list()) ?? [])
     loadSaved(article)
+    composeOrigin.current = 'paste'
     setComposing(false)
     setManual('')
     setNewTitle('')
@@ -92,6 +101,7 @@ export function useArticleImport({
     if (list.length === 1) {
       setManual(texts[0])
       setNewTitle(list[0].name.replace(/\.[^.]+$/, ''))
+      composeOrigin.current = 'file'
       setComposing(true)
       flash('已读入，确认后点「创建文章」')
       return
@@ -105,6 +115,7 @@ export function useArticleImport({
         title: list[i].name.replace(/\.[^.]+$/, '') || `第 ${i + 1} 篇`,
         book: newBook.trim() || undefined,
         sourceKey: null,
+        origin: 'file',
         text: cleaned,
         paragraphs: seg.paragraphs,
         sentences: seg.sentences,
@@ -123,6 +134,7 @@ export function useArticleImport({
       const text = await extractPdfText(file, pdfRange)
       setManual(text)
       setNewTitle(file.name.replace(/\.[^.]+$/, ''))
+      composeOrigin.current = 'file'
       setComposing(true)
       flash('PDF 已解析，检查正文后点「创建文章」')
     } catch {
@@ -152,6 +164,7 @@ export function useArticleImport({
           title: `${book} · ${chapters[i].title || `第 ${i + 1} 章`}`,
           book,
           sourceKey: null,
+          origin: 'epub',
           text: cleaned,
           paragraphs: seg.paragraphs,
           sentences: seg.sentences,
@@ -167,5 +180,10 @@ export function useArticleImport({
     }
   }
 
-  return { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub }
+  /** 用户重新手输/粘贴正文：把 composer 来源改回粘贴。 */
+  const markPaste = useCallback(() => {
+    composeOrigin.current = 'paste'
+  }, [])
+
+  return { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub, markPaste }
 }

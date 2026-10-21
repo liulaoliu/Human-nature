@@ -105,6 +105,21 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.dropped).toBe(2)
   })
 
+  it('文章来源只认白名单；旧数据/坏值保持未知', () => {
+    const parsed = parseBackupPayload({
+      articles: [
+        article({ id: 'a1', origin: 'epub' }),
+        article({ id: 'a2' }),
+        { ...article({ id: 'a3' }), origin: 'legacy' },
+      ],
+    })
+    expect(parsed.articles.map((a) => [a.id, a.origin])).toEqual([
+      ['a1', 'epub'],
+      ['a2', undefined],
+      ['a3', undefined],
+    ])
+  })
+
   it('学习记录只留结构正确的条目，坏条目计数', () => {
     const parsed = parseBackupPayload({
       practice: [{ at, kind: 'quiz', total: 5, correct: 4 }, { kind: 'quiz' }],

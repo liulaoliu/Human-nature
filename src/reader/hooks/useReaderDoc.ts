@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react'
 import { cleanText } from '../../core/cleaner'
+import { isArticleOrigin } from '../../core/articleOrigin'
 import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
-import type { Paragraph, Sentence } from '../../types/document'
+import type { ArticleOrigin, Paragraph, Sentence } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 
 /** 一篇打开的文档。 */
@@ -61,6 +62,9 @@ export interface UseReaderDocParams {
   setDraft: (v: string) => void
   articleBook: string
   setArticleBook: (v: string) => void
+  /** 当前文章从哪来；旧文章为 undefined，保存时保持未知 */
+  articleOrigin: ArticleOrigin | undefined
+  setArticleOrigin: (v: ArticleOrigin | undefined) => void
   confirmDelSave: boolean
   setConfirmDelSave: (v: boolean) => void
   edition: string
@@ -99,6 +103,8 @@ export function useReaderDoc({
   setDraft,
   articleBook,
   setArticleBook,
+  articleOrigin,
+  setArticleOrigin,
   confirmDelSave,
   setConfirmDelSave,
   edition,
@@ -123,10 +129,11 @@ export function useReaderDoc({
       setArticleKey(key)
       setArticleTitle(title)
       setArticleBook('')
+      setArticleOrigin('library')
       setSavedId(id)
       setBatch(batchMapRef.current[key ?? id ?? title] ?? [])
     },
-    [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setSavedId, setBatch, batchMapRef],
+    [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setArticleOrigin, setSavedId, setBatch, batchMapRef],
   )
 
   /** 打开一篇已保存的文章（保留上次粘回的翻译/语法）。 */
@@ -139,11 +146,13 @@ export function useReaderDoc({
       setArticleKey(a.sourceKey)
       setArticleTitle(a.title)
       setArticleBook(a.book ?? '')
+      // 服务端 / IndexedDB 的旧数据也可能带坏值；只认白名单，其余当未知。
+      setArticleOrigin(isArticleOrigin(a.origin) ? a.origin : undefined)
       setSavedId(a.id)
       setBatch(batchMapRef.current[a.sourceKey ?? a.id ?? a.title] ?? [])
       remember(a.sourceKey, a.id)
     },
-    [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setSavedId, setBatch, batchMapRef, remember],
+    [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setArticleOrigin, setSavedId, setBatch, batchMapRef, remember],
   )
 
   /** 从内置原文库打开：保存过就优先用保存的版本（含改动）。 */
@@ -178,6 +187,7 @@ export function useReaderDoc({
       title: title || '未命名',
       book: articleBook || undefined,
       sourceKey: articleKey,
+      origin: articleOrigin,
       text: sourceText,
       paragraphs: doc.paragraphs,
       sentences: doc.sentences,
@@ -195,7 +205,7 @@ export function useReaderDoc({
       console.warn('[文章] 保存失败', e)
       flash('保存文章失败：请稍后重试，或先导出全文')
     }
-  }, [doc, savedId, articleKey, articleTitle, articleBook, sourceText, articles, setSaved, setSavedId, setArticleTitle, setArticleBook, remember, flash])
+  }, [doc, savedId, articleKey, articleTitle, articleBook, articleOrigin, sourceText, articles, setSaved, setSavedId, setArticleTitle, setArticleBook, remember, flash])
 
   const deleteSaved = useCallback(async () => {
     if (!savedId) return
@@ -232,6 +242,7 @@ export function useReaderDoc({
         title,
         book: articleBook || undefined,
         sourceKey: articleKey,
+        origin: articleOrigin,
         text: sourceText,
         paragraphs: doc.paragraphs,
         sentences: doc.sentences,
@@ -240,7 +251,7 @@ export function useReaderDoc({
       setSaved((await articles.current?.list()) ?? [])
     }
     flash('已修改标题')
-  }, [articleTitle, articleKey, articleBook, savedId, doc, sourceText, articles, setArticleTitle, setSaved, flash])
+  }, [articleTitle, articleKey, articleBook, articleOrigin, savedId, doc, sourceText, articles, setArticleTitle, setSaved, flash])
 
   const enterEdit = useCallback(() => {
     if (!doc) return

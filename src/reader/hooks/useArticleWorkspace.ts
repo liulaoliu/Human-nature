@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'react'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
-import type { Sentence, SentenceLanguage } from '../../types/document'
+import type { ArticleOrigin, Sentence, SentenceLanguage } from '../../types/document'
 import { useReaderDoc, type ReaderDoc } from './useReaderDoc'
 import { useArticleImport } from './useArticleImport'
 
@@ -66,6 +66,8 @@ export function useArticleWorkspace({
   const [draft, setDraft] = useState('')
   /** 当前打开文章所属的书 */
   const [articleBook, setArticleBook] = useState('')
+  /** 当前文章从哪来；旧文章没有记录时保持 undefined，不猜 */
+  const [articleOrigin, setArticleOrigin] = useState<ArticleOrigin | undefined>(undefined)
 
   /** 新建 / 导入态 */
   const [composing, setComposing] = useState(false)
@@ -106,6 +108,8 @@ export function useArticleWorkspace({
     setDraft,
     articleBook,
     setArticleBook,
+    articleOrigin,
+    setArticleOrigin,
     confirmDelSave,
     setConfirmDelSave,
     edition,
@@ -113,7 +117,7 @@ export function useArticleWorkspace({
 
   const { loadSaved, renameArticle } = docApi
 
-  const { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub } = useArticleImport({
+  const { copyCleanupPrompt, createArticle, onImportFiles, onPickPdf, onPickEpub, markPaste } = useArticleImport({
     repo: articles,
     setSaved,
     loadSaved,
@@ -128,6 +132,15 @@ export function useArticleWorkspace({
     setImporting,
     flash,
   })
+
+  /** 用户重新手输/粘贴：composer 来源改回 paste（文件读入后又被改掉的情况）。 */
+  const changeManual = useCallback(
+    (value: string) => {
+      markPaste()
+      setManual(value)
+    },
+    [markPaste],
+  )
 
   const currentValue = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
 
@@ -172,7 +185,7 @@ export function useArticleWorkspace({
     composing,
     setComposing,
     manual,
-    setManual,
+    setManual: changeManual,
     newTitle,
     setNewTitle,
     newBook,

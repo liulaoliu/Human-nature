@@ -24,6 +24,7 @@ vi.mock('./useArticleImport', () => ({
     onImportFiles: mocks.onImportFiles,
     onPickPdf: mocks.onPickPdf,
     onPickEpub: mocks.onPickEpub,
+    markPaste: vi.fn(),
   }),
 }))
 

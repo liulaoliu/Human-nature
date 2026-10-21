@@ -62,6 +62,8 @@ function setup(over: Partial<UseReaderDocParams> = {}) {
     setDraft: vi.fn(),
     articleBook: '',
     setArticleBook: vi.fn(),
+    articleOrigin: undefined,
+    setArticleOrigin: vi.fn(),
     confirmDelSave: false,
     setConfirmDelSave: vi.fn(),
     edition: '全部',
@@ -103,20 +105,33 @@ describe('useReaderDoc：打开文章', () => {
     expect(p.setArticleKey).toHaveBeenCalledWith('009 Leaders - Interest-rate caps')
     expect(p.setArticleTitle).toHaveBeenCalledWith('T')
     expect(p.setArticleBook).toHaveBeenCalledWith('')
+    expect(p.setArticleOrigin).toHaveBeenCalledWith('library')
     expect(p.setSavedId).toHaveBeenCalledWith(null)
     expect(p.setBatch).toHaveBeenCalledWith(pending)
   })
 
-  it('已保存文章：直接用存下来的切句，不重新切；记住上次打开', () => {
-    const a = article({ text: '', id: 'saved:9', title: 'Old' })
+  it('已保存文章：直接用存下来的切句，不重新切；来源原样带回', () => {
+    const a = article({ text: '', id: 'saved:9', title: 'Old', origin: 'epub' })
     const { p, result } = setup()
     act(() => result.current.loadSaved(a))
 
     expect(p.setDoc).toHaveBeenCalledWith({ paragraphs: a.paragraphs, sentences: a.sentences })
     // 老记录没存 text → 从段落/句子还原
     expect(p.setSourceText).toHaveBeenCalledWith('Hello world. Second sentence.')
+    expect(p.setArticleOrigin).toHaveBeenCalledWith('epub')
     expect(p.setSavedId).toHaveBeenCalledWith('saved:9')
     expect(JSON.parse(localStorage.getItem('reader:last') ?? 'null')).toEqual({ key: null, id: 'saved:9' })
+  })
+
+  it('老文章没有 origin / 带坏值：都当未知，不按 sourceKey 猜来源', () => {
+    const legacy = article({ id: 'saved:legacy', sourceKey: '009 Leaders - Interest-rate caps' })
+    const { p, result } = setup()
+    act(() => result.current.loadSaved(legacy))
+    expect(p.setArticleOrigin).toHaveBeenCalledWith(undefined)
+
+    const bad = { ...article({ id: 'saved:bad' }), origin: 'legacy' } as unknown as SavedArticle
+    act(() => result.current.loadSaved(bad))
+    expect(p.setArticleOrigin).toHaveBeenLastCalledWith(undefined)
   })
 
   it('从内置原文打开：有保存版本优先用保存的', () => {
@@ -161,12 +176,23 @@ describe('useReaderDoc：保存 / 删除 / 改名', () => {
     expect(p.flash).toHaveBeenCalledWith('先打开或粘一篇文章')
 
     vi.spyOn(window, 'prompt').mockReturnValue('My title')
-    const saved = setup({ doc: seg, sourceText: 'Hello world. Second sentence.', articleKey: 'k1' })
+    const saved = setup({
+      doc: seg,
+      sourceText: 'Hello world. Second sentence.',
+      articleKey: 'k1',
+      articleOrigin: 'file',
+    })
     await act(async () => saved.result.current.saveCurrent())
     expect(window.prompt).toHaveBeenCalled()
     expect(saved.repo.save).toHaveBeenCalledTimes(1)
     const a = vi.mocked(saved.repo.save).mock.calls[0][0]
-    expect(a).toMatchObject({ id: 'saved:k1', title: 'My title', sourceKey: 'k1', text: 'Hello world. Second sentence.' })
+    expect(a).toMatchObject({
+      id: 'saved:k1',
+      title: 'My title',
+      sourceKey: 'k1',
+      origin: 'file',
+      text: 'Hello world. Second sentence.',
+    })
     expect(saved.p.setSavedId).toHaveBeenCalledWith('saved:k1')
     expect(saved.p.flash).toHaveBeenCalledWith('已保存到本机')
   })
@@ -228,12 +254,18 @@ describe('useReaderDoc：保存 / 删除 / 改名', () => {
       articleTitle: 'Old',
       savedId: 'saved:1',
       articleKey: 'k1',
+      articleOrigin: 'paste',
       sourceText: 'x',
     })
     prompt.mockReturnValueOnce('New')
     await act(async () => withSaved.result.current.renameArticle())
     expect(withSaved.p.setArticleTitle).toHaveBeenCalledWith('New')
-    expect(vi.mocked(withSaved.repo.save).mock.calls[0][0]).toMatchObject({ id: 'saved:1', title: 'New', sourceKey: 'k1' })
+    expect(vi.mocked(withSaved.repo.save).mock.calls[0][0]).toMatchObject({
+      id: 'saved:1',
+      title: 'New',
+      sourceKey: 'k1',
+      origin: 'paste',
+    })
     expect(withSaved.p.flash).toHaveBeenCalledWith('已修改标题')
   })
 })
