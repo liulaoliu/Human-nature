@@ -105,17 +105,34 @@ describe('FishLayer：图片上拖动', () => {
     expect(JSON.parse(localStorage.getItem(POS_KEY) ?? '{}')).toEqual({ right: 54, bottom: 42 })
   })
 
-  it('双击复位到默认大小与位置', async () => {
+  it('双击循环：最小 → 50% → 最大 → 最小，位置不动', async () => {
     const { img } = await renderFish()
     fireEvent.wheel(img, { deltaY: -200 })
     fireEvent.pointerDown(img, { pointerId: 1, clientX: 500, clientY: 500 })
     fireEvent.pointerMove(img, { pointerId: 1, clientX: 420, clientY: 430 })
     fireEvent.pointerUp(img, { pointerId: 1 })
+    const shell = shellOf(img)
+    const pos = { right: shell.style.right, bottom: shell.style.bottom }
 
+    // 第一次双击（从滚轮后的任意尺寸）→ 最小
     fireEvent.doubleClick(img)
-    expect(img.style.width).toBe('104px')
-    expect(shellOf(img).style.right).toBe('14px')
-    expect(shellOf(img).style.bottom).toBe('12px')
-    expect(localStorage.getItem(SIZE_KEY)).toBe('104')
+    expect(img.style.width).toBe('40px')
+    expect(localStorage.getItem(SIZE_KEY)).toBe('40')
+
+    // 第二次 → 50%（最大 380 的一半）
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('190px')
+
+    // 第三次 → 最大
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('380px')
+
+    // 第四次回到最小
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('40px')
+
+    // 只改大小，不动位置
+    expect(shell.style.right).toBe(pos.right)
+    expect(shell.style.bottom).toBe(pos.bottom)
   })
 })

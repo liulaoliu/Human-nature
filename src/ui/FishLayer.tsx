@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react'
-import { FISH_POS_DEFAULT, FISH_SIZE_DEFAULT, clampFishPos, clampFishSize } from '../core/fishLayout'
+import { clampFishPos, clampFishSize, nextFishSize } from '../core/fishLayout'
 import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
 
 /**
@@ -15,7 +15,7 @@ import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
  *   - 图片上按住左键：拖动改位置（悬停变「手」形，按住变抓取）
  *   - 左上角小手柄：拖动改位置
  *   - 右下角小手柄：拖动改大小
- *   - 双击图片 / 任一手柄：复位
+ *   - 双击图片 / 任一手柄：尺寸循环「最小 → 50% → 最大 → 最小」（位置不动）
  * 存哪、存多大由 `state/fishPrefs` 负责，范围夹取在 `core/fishLayout`（都有测试）；
  * 这个组件只管拖拽手势与渲染。
  *
@@ -160,9 +160,9 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
     if (d?.moved) persist()
   }
-  const reset = () => {
-    applySize(FISH_SIZE_DEFAULT)
-    applyPos(FISH_POS_DEFAULT.right, FISH_POS_DEFAULT.bottom)
+  /** 双击切换尺寸：最小 → 50% → 最大 → 最小；只改大小，不动位置。 */
+  const cycleSize = () => {
+    applySize(nextFishSize(sizeRef.current))
     persist()
   }
 
@@ -198,12 +198,12 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
         src={url}
         alt=""
         draggable={false}
-        title="滚轮缩放 · 按住拖动 · 双击复位"
+        title="滚轮缩放 · 按住拖动 · 双击切换大小"
         onPointerDown={onDown('move')}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
-        onDoubleClick={reset}
+        onDoubleClick={cycleSize}
         style={{
           width: `${size}px`,
           height: 'auto',
@@ -219,22 +219,22 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
       />
       <button
         className="fish-move"
-        title="拖动改位置（双击复位）"
+        title="拖动改位置（双击切换大小）"
         onPointerDown={onDown('move')}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
-        onDoubleClick={reset}
+        onDoubleClick={cycleSize}
         style={{ ...handleBase, left: '-3px', top: '-3px', cursor: 'move' }}
       />
       <button
         className="fish-resize"
-        title="拖动改大小（双击复位）"
+        title="拖动改大小（双击切换大小）"
         onPointerDown={onDown('size')}
         onPointerMove={onMove}
         onPointerUp={onUp}
         onPointerCancel={onUp}
-        onDoubleClick={reset}
+        onDoubleClick={cycleSize}
         style={{ ...handleBase, right: '-3px', bottom: '-3px', cursor: 'nwse-resize' }}
       />
     </div>

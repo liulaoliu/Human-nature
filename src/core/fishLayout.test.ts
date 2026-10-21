@@ -2,10 +2,12 @@ import { describe, expect, it } from 'vitest'
 import {
   FISH_POS_DEFAULT,
   FISH_SIZE_DEFAULT,
+  FISH_SIZE_HALF,
   FISH_SIZE_MAX,
   FISH_SIZE_MIN,
   clampFishPos,
   clampFishSize,
+  nextFishSize,
   parseFishPos,
   parseFishSize,
 } from './fishLayout'
@@ -23,6 +25,24 @@ describe('clampFishSize', () => {
   it('NaN / Infinity 回默认值', () => {
     expect(clampFishSize(Number.NaN)).toBe(FISH_SIZE_DEFAULT)
     expect(clampFishSize(Number.POSITIVE_INFINITY)).toBe(FISH_SIZE_DEFAULT)
+  })
+})
+
+describe('nextFishSize：双击循环', () => {
+  it('最小 → 50% → 最大 → 最小', () => {
+    expect(nextFishSize(FISH_SIZE_MIN)).toBe(FISH_SIZE_HALF)
+    expect(nextFishSize(FISH_SIZE_HALF)).toBe(FISH_SIZE_MAX)
+    expect(nextFishSize(FISH_SIZE_MAX)).toBe(FISH_SIZE_MIN)
+  })
+
+  it('不在这三档时先回最小（默认 / 滚轮后的任意尺寸都算）', () => {
+    expect(nextFishSize(FISH_SIZE_DEFAULT)).toBe(FISH_SIZE_MIN)
+    expect(nextFishSize(123)).toBe(FISH_SIZE_MIN)
+    expect(nextFishSize(Number.NaN)).toBe(FISH_SIZE_MIN)
+  })
+
+  it('50% = 最大值的一半', () => {
+    expect(FISH_SIZE_HALF).toBe(190)
   })
 })
 

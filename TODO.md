@@ -40,6 +40,10 @@
 >      背单词 / 锤炼 / 考试都不给第二次输入，判定未确认前锁住下一题与退出。
 >      **2026-10-21 完成**（`core/vocab/spelling` 5 条 + 会话 / 面板 7 条）。
 > - 本轮已完成：
+>   - **鱼双击切换大小**：双击不再一律复位成最小，改成三档循环**最小 → 50% → 最大 → 最小**
+>     （`core/fishLayout` 的 `nextFishSize` 纯函数，第一下仍是「变最小」，满足「默认最小」）；
+>     只改大小不动位置，手柄拖拽 / 滚轮缩放不受影响（**2026-10-21 完成**，
+>     `core/fishLayout` 3 条 + `ui/FishLayer` 5 条测试）
 >   - **速读选词模式与阅读页共用**：速读顶栏加「选词模式(1)」按钮，点击 / 数字 1 切换
 >     `useVocabMode`（与阅读页同一个开关、同一套计时会话）；删掉速读原来的独立 checkbox
 >     （`reader:speedPickMode`）；速读里的点选 / 右键直接读这个状态。
@@ -54,8 +58,8 @@
 >     core 7 条 + 编辑器 3 条 + 组件 5 条测试）
 >   - **背单词忘记不封顶 + 编辑暂停计时**（`core/vocab/extra` 7 条 + `useStudyTimers.paused` 2 条 +
 >     `useStudySession` 6 条；忘记一直重排到认识/模糊，卡内编辑两只表都不走）
->   - **鱼的交互**：滚轮缩放 + 图片上按住拖动（悬停变手形），保留原两个手柄与双击复位，
->     `ui/FishLayer` 5 条测试
+>   - **鱼的交互**：滚轮缩放 + 图片上按住拖动（悬停变手形），保留原两个手柄；双击改为三档循环
+>     （最小 / 50% / 最大），`ui/FishLayer` 5 条测试
 >   - **速读 Alt+点击复制整句**：复用阅读页的 `altCopyText`，面板捕获阶段处理（词 span 会
 >     stopPropagation），`SpeedReadPanel` 2 条测试
 >   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
