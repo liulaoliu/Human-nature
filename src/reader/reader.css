@@ -1994,12 +1994,19 @@ button.danger {
 /* 整条可点：AI 写的与手动的都能点开编辑，不用非去点那个小按钮 */
 .lang-item.clickable { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
 .lang-item.clickable:hover { background: var(--panel-2); border-color: var(--accent); }
-.lang-item.editing { border-color: var(--accent); }
+.lang-item.editing { border-color: var(--accent); background: var(--accent-soft); }
 .lang-item-head { display: flex; align-items: center; gap: 6px; }
 .lang-item-head .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
 .lang-tag { font-size: 11px; padding: 0 6px; border-radius: 999px; background: var(--panel-3); color: var(--dim); }
 .lang-tag.ai { background: var(--accent-soft); color: var(--accent); }
 .lang-form { display: flex; flex-direction: column; gap: 8px; border-top: 1px dashed var(--line); padding-top: 10px; }
+/* 切换编辑对象时表单会重新挂载：闪一下底色，点条目后能明确看出「下面这块换内容了」 */
+.lang-form { animation: lang-form-in 0.32s ease-out; }
+@keyframes lang-form-in {
+  from { background: var(--accent-soft); box-shadow: 0 0 0 6px var(--accent-soft); }
+  to { background: transparent; box-shadow: 0 0 0 6px transparent; }
+}
+.lang-form .lang-form-head { display: flex; align-items: center; gap: 6px; color: var(--accent); font-weight: 600; }
 .lang-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
 .lang-form input,
 .lang-form textarea { padding: 8px 10px; }

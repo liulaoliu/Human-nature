@@ -58,11 +58,14 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
     setExpanded(null)
   }
   const startEdit = (i: number) => {
+    const next = languageToForm(langs[i])
     setEditIdx(i)
-    setForm(languageToForm(langs[i]))
+    setForm(next)
     setExpanded(null)
-    // 列表在上、表单在下：滚一下，点完条目能马上看到回填的内容（jsdom 没有 scrollIntoView，兜一下）
-    window.requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: 'nearest' }))
+    // 列表在上、表单在下：把表单**居中**滚进对话框可视区。
+    // 用 nearest 时表单若只露出一角就不会滚，看起来像「点了没反应」；这里强制滚动。
+    // （jsdom 没有 scrollIntoView，兜一下。）
+    window.requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: 'center' }))
   }
   const remove = (i: number) => {
     setLangs((l) => l.filter((_, k) => k !== i))
@@ -169,8 +172,21 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
           </div>
         )}
 
-        <div className="lang-form" ref={formRef}>
-          <div className="muted">{editIdx === null ? '＋ 新增一条' : `编辑第 ${editIdx + 1} 条`}</div>
+        {/* key 跟着「编辑哪条」变：切换条目时表单重新挂载，播一次进场高亮，
+            让「点了一下」有肉眼可见的反馈（否则只改值，用户以为没反应）。 */}
+        <div className="lang-form" ref={formRef} key={editIdx ?? 'new'}>
+          <div className="muted lang-form-head">
+            {editIdx === null ? (
+              '＋ 新增一条'
+            ) : (
+              <>
+                <span>编辑第 {editIdx + 1} 条</span>
+                <span className={'lang-tag' + (langs[editIdx]?.source === 'ai' ? ' ai' : '')}>
+                  {langs[editIdx]?.source === 'ai' ? 'AI' : '手动'}
+                </span>
+              </>
+            )}
+          </div>
           {FIELDS.map((f) => (
             <label key={f.key} className={expanded === f.key ? 'expanded' : undefined}>
               {f.label}
