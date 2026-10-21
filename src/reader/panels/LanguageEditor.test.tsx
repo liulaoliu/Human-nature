@@ -44,6 +44,30 @@ describe('LanguageEditor：已有语言点', () => {
     expect(screen.getByText('语言点（1）')).toBeTruthy()
     expect(container.querySelectorAll('.lang-item')).toHaveLength(1)
   })
+
+  it('点列表整条就能编辑：AI 写的与手动加的都能点开回填', () => {
+    const { container } = render(<LanguageEditor {...props()} />)
+    const items = () => container.querySelectorAll('.lang-item')
+
+    // 第 1 条是 AI
+    fireEvent.click(items()[0])
+    expect(screen.getByText('编辑第 1 条')).toBeTruthy()
+    expect((screen.getByDisplayValue('SV') as HTMLTextAreaElement).value).toBe('SV')
+    expect(items()[0].className).toContain('editing')
+
+    // 第 2 条是手动
+    fireEvent.click(items()[1])
+    expect(screen.getByText('编辑第 2 条')).toBeTruthy()
+    expect((screen.getByDisplayValue('run fast') as HTMLTextAreaElement).value).toBe('run fast')
+    expect(items()[1].className).toContain('editing')
+  })
+
+  it('点「删除」不会顺带进入编辑', () => {
+    render(<LanguageEditor {...props()} />)
+    fireEvent.click(screen.getAllByRole('button', { name: '删除' })[0])
+    expect(screen.getByText('语言点（1）')).toBeTruthy()
+    expect(screen.getByText('＋ 新增一条')).toBeTruthy()
+  })
 })
 
 describe('LanguageEditor：旧数据兼容', () => {

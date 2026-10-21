@@ -29,9 +29,10 @@ const FIELDS: { key: keyof LanguageForm; label: string; placeholder: string; row
  * 语言点编辑（列表式）：**一句可多条**——可新增、逐条编辑/删除；AI 生成的那条标「AI」，手动的标「手动」。
  * 写回 `Sentence.languages`（兼容旧的单条 `language`）。
  *
- * 阅读页与速读页**共用这一个编辑器**（都由 `ReaderOverlaysHost` 打开）：表单规则在
- * `core/language`，这里只负责渲染与本地草稿。**点遮罩不会关闭**——只有「保存 / 取消」才关闭，
- * 避免填了一半误点把草稿弄丢。
+ * **列表里每一条都能点开编辑**（整行可点，AI 与手动一样），右边的小按钮只是看得见的入口；
+ * 点「删除」不会顺带进入编辑。阅读页与速读页**共用这一个编辑器**（都由 `ReaderOverlaysHost`
+ * 打开）：表单规则在 `core/language`，这里只负责渲染与本地草稿。**点遮罩不会关闭**——
+ * 只有「保存 / 取消」才关闭，避免填了一半误点把草稿弄丢。
  */
 export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEditorProps) {
   const [langs, setLangs] = useState<SentenceLanguage[]>(() => getSentenceLanguages(sentence))
@@ -41,6 +42,8 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   const [expanded, setExpanded] = useState<keyof LanguageForm | null>(null)
   /** 这次点击是否**按在输入框里**：展开会让布局瞬间移动，click 的 target 可能已经偏了，不能只看 target。 */
   const pressInFieldRef = useRef(false)
+  /** 表单区：点条目后滚到它，别让人以为「点了没反应」。 */
+  const formRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     setLangs(getSentenceLanguages(sentence))
@@ -58,6 +61,8 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
     setEditIdx(i)
     setForm(languageToForm(langs[i]))
     setExpanded(null)
+    // 列表在上、表单在下：滚一下，点完条目能马上看到回填的内容（jsdom 没有 scrollIntoView，兜一下）
+    window.requestAnimationFrame(() => formRef.current?.scrollIntoView?.({ block: 'nearest' }))
   }
   const remove = (i: number) => {
     setLangs((l) => l.filter((_, k) => k !== i))
@@ -128,16 +133,34 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
         {langs.length > 0 && (
           <div className="lang-list">
             {langs.map((L, i) => (
-              <div className={'lang-item' + (editIdx === i ? ' editing' : '')} key={i}>
+              <div
+                className={'lang-item clickable' + (editIdx === i ? ' editing' : '')}
+                key={i}
+                title="点一下编辑这条（AI 写的也能改）"
+                onClick={() => startEdit(i)}
+              >
                 <div className="lang-item-head">
                   <span className={'lang-tag' + (L.source === 'ai' ? ' ai' : '')}>{L.source === 'ai' ? 'AI' : '手动'}</span>
                   <span className="muted ellipsis" title={languagePreview(L)}>
                     {languagePreview(L)}
                   </span>
-                  <button onClick={() => startEdit(i)} title="编辑这条">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      startEdit(i)
+                    }}
+                    title="编辑这条"
+                  >
                     编辑
                   </button>
-                  <button className="danger" onClick={() => remove(i)} title="删除这条">
+                  <button
+                    className="danger"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      remove(i)
+                    }}
+                    title="删除这条"
+                  >
                     删除
                   </button>
                 </div>
@@ -146,7 +169,7 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
           </div>
         )}
 
-        <div className="lang-form">
+        <div className="lang-form" ref={formRef}>
           <div className="muted">{editIdx === null ? '＋ 新增一条' : `编辑第 ${editIdx + 1} 条`}</div>
           {FIELDS.map((f) => (
             <label key={f.key} className={expanded === f.key ? 'expanded' : undefined}>

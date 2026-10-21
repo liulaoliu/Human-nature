@@ -1991,6 +1991,9 @@ button.danger {
 .lang-editor-warn { font-size: 12px; color: #b7791f; margin: -2px 0 0; }
 .lang-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow: auto; }
 .lang-item { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
+/* 整条可点：AI 写的与手动的都能点开编辑，不用非去点那个小按钮 */
+.lang-item.clickable { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
+.lang-item.clickable:hover { background: var(--panel-2); border-color: var(--accent); }
 .lang-item.editing { border-color: var(--accent); }
 .lang-item-head { display: flex; align-items: center; gap: 6px; }
 .lang-item-head .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
