@@ -45,4 +45,11 @@ describe('StudyRoundDone：本轮小结', () => {
     expect(onExam).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
   })
+
+  it('本轮已经重练过（canRetryForgot=false）就不再给重练按钮，改为一句说明', () => {
+    render(<StudyRoundDone {...props({ forgotCount: 2, canRetryForgot: false })} />)
+    expect(screen.queryByRole('button', { name: /重练忘记的/ })).toBeNull()
+    expect(screen.getByText(/本轮已重练过一次/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /再来一轮/ }).className).toContain('primary')
+  })
 })

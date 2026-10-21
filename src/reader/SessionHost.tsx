@@ -101,6 +101,7 @@ export default function SessionHost({
           draft={study.api.draft}
           delArmed={study.api.delArmed}
           forgotCount={study.api.forgotCount}
+          canRetryForgot={study.api.canRetryForgot}
           drillOn={study.api.drillOn}
           meaningGate={study.api.meaningGate}
           drillAfter={study.api.drillAfter}

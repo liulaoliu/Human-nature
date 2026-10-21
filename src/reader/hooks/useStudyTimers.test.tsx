@@ -65,4 +65,59 @@ describe('useStudyTimers：计时与落盘', () => {
     unmount()
     expect(addStudyTime).not.toHaveBeenCalled()
   })
+
+  it('暂停时两只表都停，恢复后接着走、不归零', () => {
+    vi.useFakeTimers()
+    const opts = options()
+    const { result, rerender } = renderHook((p: UseStudyTimersOptions) => useStudyTimers(p), {
+      initialProps: opts,
+    })
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    expect(result.current.cardSeconds).toBe(3)
+
+    rerender({ ...opts, paused: true })
+    act(() => {
+      vi.advanceTimersByTime(10000)
+    })
+    expect(result.current.cardSeconds).toBe(3)
+    expect(result.current.liveSeconds).toBe(3)
+
+    rerender({ ...opts, paused: false })
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    expect(result.current.cardSeconds).toBe(5)
+    expect(result.current.liveSeconds).toBe(5)
+  })
+
+  it('暂停时把未落盘的秒数补记（编辑的时间不计入学习时长）', () => {
+    vi.useFakeTimers()
+    const addStudyTime = vi.fn()
+    const opts = options({ addStudyTime })
+    const { rerender, unmount } = renderHook((p: UseStudyTimersOptions) => useStudyTimers(p), {
+      initialProps: opts,
+    })
+    act(() => {
+      vi.advanceTimersByTime(20000)
+    })
+    expect(addStudyTime).toHaveBeenCalledTimes(1)
+    expect(addStudyTime).toHaveBeenCalledWith(15, 0)
+
+    rerender({ ...opts, paused: true })
+    expect(addStudyTime).toHaveBeenCalledTimes(2)
+    expect(addStudyTime).toHaveBeenLastCalledWith(5, 0)
+
+    act(() => {
+      vi.advanceTimersByTime(30000) // 暂停期间不记时长
+    })
+    rerender({ ...opts, paused: false })
+    act(() => {
+      vi.advanceTimersByTime(2000)
+    })
+    unmount()
+    expect(addStudyTime).toHaveBeenCalledTimes(3)
+    expect(addStudyTime).toHaveBeenLastCalledWith(2, 0)
+  })
 })

@@ -44,6 +44,7 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     draft: null,
     delArmed: false,
     forgotCount: 0,
+    canRetryForgot: true,
     drillOn: false,
     meaningGate: false,
     drillAfter: 45,

@@ -5,9 +5,15 @@ import {
   buildLearnQueue,
   buildReviewQueue,
   canQuizMeaning,
+  MAX_CARD_APPEARANCES,
   needsMeaningCheck,
+  planExtra,
+  planRetryForgot,
   reviewItem,
   sortItems,
+  beginExtraRound,
+  emptyExtraRound,
+  type ExtraRound,
   type ReviewGrade,
   type StudyMode,
 } from '../../core/vocab'
@@ -43,7 +49,8 @@ export interface UseStudySessionParams {
 /**
  * 背单词会话：模式/范围/队列/评分（SRS）/错题重排/每日新词配额/卡内编辑删除/计时/快捷键。
  *
- * 评分：认识→good、模糊→hard、忘记了→again；忘记/模糊的词本轮末尾再出现（各有上限，防死循环）。
+ * 评分：认识→good、模糊→hard、忘记了→again；忘记/模糊的词本轮末尾再出现（加练），
+ * 但每张卡每轮最多出场 3 次（账本在 `core/vocab/extra`），到上限只写排期、不再追加。
  */
 export function useStudySession(params: UseStudySessionParams) {
   const {
@@ -87,8 +94,8 @@ export function useStudySession(params: UseStudySessionParams) {
   const [checked, setChecked] = useState(false)
   const [counts, setCounts] = useState({ know: 0, fuzzy: 0, forgot: 0 })
   const [gradeInfo, setGradeInfo] = useState('')
-  /** 每个词本轮被「忘记/模糊」重排的次数（防死循环） */
-  const requeueRef = useRef<Map<string, number>>(new Map())
+  /** 本轮加练 / 重练的出场账本（每卡最多出场 3 次，跨重练保留）。 */
+  const [extraRound, setExtraRound] = useState<ExtraRound>(emptyExtraRound)
   /** 本轮点过「忘记了」的词 id，用于收尾重练 */
   const forgotRef = useRef<string[]>([])
   /** 本轮已计入每日新词配额的 id（重排后不重复计数） */
@@ -116,16 +123,6 @@ export function useStudySession(params: UseStudySessionParams) {
     !!card && needsMeaningCheck(card, { extra: isExtraCard, retrying }) && canQuizMeaning(card, library.items)
   const meaningGate = meaningRequired && !meaningCleared
 
-  /** 单卡计时 + 本轮总时长（每 15s / 退出时落盘）。 */
-  const { liveSeconds, cardSeconds, unflushedSeconds } = useStudyTimers({ queue, index, addStudyTime })
-
-  /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
-  const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
-  const clearDrill = useCallback(() => {
-    setDrillCleared(true)
-    // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
-    setMeaningCleared(true)
-  }, [])
   const clearMeaningGate = useCallback(() => setMeaningCleared(true), [])
 
   /** 卡内编辑 / 两步删除（队列与进度仍由本 hook 推进）。 */
@@ -154,6 +151,25 @@ export function useStudySession(params: UseStudySessionParams) {
     setChecked,
   })
 
+  /**
+   * 单卡计时 + 本轮总时长（每 15s / 暂停 / 退出时落盘）。
+   * 卡内编辑时两只表都暂停：改词形/释义的时间不算学习时长，也不推进锤炼阈值。
+   */
+  const { liveSeconds, cardSeconds, unflushedSeconds } = useStudyTimers({
+    queue,
+    index,
+    addStudyTime,
+    paused: editOpen,
+  })
+
+  /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
+  const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
+  const clearDrill = useCallback(() => {
+    setDrillCleared(true)
+    // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
+    setMeaningCleared(true)
+  }, [])
+
   /** 换卡时重置卡片 UI 状态。 */
   const resetCardUi = useCallback(() => {
     setRevealed(false)
@@ -167,7 +183,7 @@ export function useStudySession(params: UseStudySessionParams) {
   }, [])
 
   const resetSession = useCallback(() => {
-    requeueRef.current = new Map()
+    setExtraRound(emptyExtraRound())
     forgotRef.current = []
     bumpedRef.current = new Set()
     setForgotCount(0)
@@ -209,6 +225,7 @@ export function useStudySession(params: UseStudySessionParams) {
       closeQuiz()
       resetSession()
       setQueue(q)
+      setExtraRound(beginExtraRound(q.map((it) => it.id)))
       setRoundTotal(q.length)
       setIndex(0)
     },
@@ -239,8 +256,10 @@ export function useStudySession(params: UseStudySessionParams) {
     setScope('article')
     closeQuiz()
     resetSession()
-    setQueue(sortItems(p, 'due'))
-    setRoundTotal(p.length)
+    const all = sortItems(p, 'due')
+    setQueue(all)
+    setExtraRound(beginExtraRound(all.map((it) => it.id)))
+    setRoundTotal(all.length)
     setIndex(0)
   }, [poolFor, deck, flash, closeQuiz, resetSession, setScope])
 
@@ -272,14 +291,18 @@ export function useStudySession(params: UseStudySessionParams) {
         forgotRef.current.push(cur.id)
         setForgotCount(forgotRef.current.length)
       }
-      // 帮记忆：忘记 / 模糊的词本轮末尾再出现一次（各有上限，避免死循环）
+      // 帮记忆：忘记 / 模糊的词本轮末尾再加练（规则在 core/vocab/extra：
+      // 每卡每轮最多出场 3 次、跨「重练忘记的」保留、过了释义门禁就不再追加）
       if (g === 'again' || g === 'hard') {
-        const used = requeueRef.current.get(cur.id) ?? 0
-        const cap = g === 'again' ? 2 : 1
-        if (used < cap) {
-          requeueRef.current.set(cur.id, used + 1)
+        const decision = planExtra(extraRound, cur.id, g, { gated: meaningRequired })
+        if (decision.append) {
+          setExtraRound(decision.round)
           setQueue((q) => (q ? [...q, cur] : q))
           setExtraCount((n) => n + 1)
+        } else if (decision.blocked === 'cap') {
+          flash(`本轮已练 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
+        } else if (decision.blocked === 'gate') {
+          flash('已过释义关，这张卡按当前评分排期')
         }
       }
       setRevealed(false)
@@ -291,7 +314,7 @@ export function useStudySession(params: UseStudySessionParams) {
       setMeaningCleared(false)
       setIndex((i) => i + 1)
     },
-    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity],
+    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, meaningRequired, flash],
   )
 
   const close = useCallback(() => setQueue(null), [])
@@ -338,23 +361,35 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex((i) => i + 1)
   }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])
 
-  /** 收尾重练本轮点过「忘记了」的词。 */
+  /** 收尾重练本轮点过「忘记了」的词（每轮只发起一次，已练满 3 次的不再进队）。 */
   const retryForgot = useCallback(() => {
     const ids = new Set(forgotRef.current)
     const items = library.items.filter((it) => ids.has(it.id))
     if (!items.length) return
-    requeueRef.current = new Map()
+    const plan = planRetryForgot(extraRound, items.map((it) => it.id))
+    if (plan.blocked) {
+      flash('本轮已经重练过忘记的词了')
+      return
+    }
+    setExtraRound(plan.round)
+    if (!plan.ids.length) {
+      flash(`这些词本轮已练满 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
+      return
+    }
+    if (plan.capped > 0) flash(`${plan.capped} 个词本轮已练满 ${MAX_CARD_APPEARANCES} 次，不再重练`)
+    const keep = new Set(plan.ids)
+    const retryItems = items.filter((it) => keep.has(it.id))
     forgotRef.current = []
     bumpedRef.current = new Set()
     setForgotCount(0)
     setExtraCount(0)
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
-    setQueue(items)
-    setRoundTotal(items.length)
+    setQueue(retryItems)
+    setRoundTotal(retryItems.length)
     setRetrying(true)
     setIndex(0)
     resetCardUi()
-  }, [library.items, resetCardUi])
+  }, [library.items, extraRound, flash, resetCardUi])
 
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
   useHotkeys(
@@ -431,6 +466,8 @@ export function useStudySession(params: UseStudySessionParams) {
     setDraft,
     delArmed,
     forgotCount,
+    /** 本轮还能不能点「重练忘记的」（每轮只发起一次）。 */
+    canRetryForgot: !extraRound.retried,
     roundTotal,
     extraCount,
     card,

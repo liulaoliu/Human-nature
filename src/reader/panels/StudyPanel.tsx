@@ -53,6 +53,8 @@ export interface StudyPanelProps {
   draft: StudyDraft | null
   delArmed: boolean
   forgotCount: number
+  /** 本轮还能不能点「重练忘记的」（每轮只发起一次；规则在 core/vocab/extra）。 */
+  canRetryForgot: boolean
   /** 超过 drillAfter 秒未评分 → 强制锤炼（拼写/选义/搭配/听写），完成后才能评分。 */
   drillOn: boolean
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
@@ -115,6 +117,7 @@ export default function StudyPanel({
   draft,
   delArmed,
   forgotCount,
+  canRetryForgot,
   drillOn,
   meaningGate,
   drillAfter,
@@ -374,6 +377,7 @@ export default function StudyPanel({
           counts={counts}
           liveSeconds={liveSeconds}
           forgotCount={forgotCount}
+          canRetryForgot={canRetryForgot}
           mode={mode}
           onRetryForgot={onRetryForgot}
           onRestart={onRestart}

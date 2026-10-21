@@ -3,8 +3,8 @@
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：213 个测试文件，**1969 passed / 1 skipped**。
->   （跑门禁记得带 `TMPDIR=/home/Gxkj-123/.workbuddy/tmp/vitest`，这台机器 `/tmp` 只有 10MB）
+> - schema **v7**；`npm run gates` 全绿：**214 个测试文件，1985 passed / 1 skipped**（2026-10-21 Windows 本机实测，约 95 秒）。
+>   （本机 `TEMP` 已在 I 盘，不用再指定 `TMPDIR`；并行 worker 往工作区外的临时目录写缓存会被沙箱拦，属工具环境问题）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`、
 >   本篇语境释义 `meaningSource`、已保存文章 `origin` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
@@ -12,18 +12,22 @@
 >   旧数据没有记录就不猜。
 > - **背单词复习门禁**：标过「不认识」的词，复习/加练时先选中文释义；规则在
 >   `core/vocab/review.ts`（`needsMeaningCheck` + `canQuizMeaning`），词库不够出题时退回普通卡片。
-> - **待做（2026-10-21 讨论，未实现）**：
->   1. [ ] **加练总上限（P1）**：每张卡每轮最多出现 3 次（首见 + 2 次加练），计数跨
+> - **待做（2026-10-21 讨论）**：
+>   1. [x] **加练总上限（P1）**：每张卡每轮最多出现 3 次（首见 + 2 次加练），计数跨
 >      `retryForgot` 保留，只在 `start` / 新一轮重置；通过释义门禁后，模糊/忘记只写 SRS，
 >      不再按同一张卡自动无限追加；「重练忘记的」每轮只发起一次；到上限给 toast
 >      （「本轮已练 3 次，按当前评分排期」）。**不自动把模糊/忘记改成认识，不篡改用户评分。**
->      现状：`useStudySession.ts:276` 的 cap 会在 `retryForgot()`（`:342`）被重置，存在循环。
->   2. [ ] **编辑时暂停计时（P1）**：`useStudyTimers` 增加 `paused`，`useStudySession` 传
+>      **2026-10-21 完成**：账本在 `core/vocab/extra`（`planExtra` / `planRetryForgot`，9 条测试），
+>      `useStudySession` 只在开新一轮时重置；小结页重练过就不再给按钮（`canRetryForgot`）。
+>   2. [x] **编辑时暂停计时（P1）**：`useStudyTimers` 增加 `paused`，`useStudySession` 传
 >      `editOpen`；单卡计时与本轮总时长都暂停，恢复不归零；暂停期间不推进锤炼阈值、不计学习时长。
->      验收：编辑 10 秒计时不变，保存/取消后继续。
+>      验收：编辑 10 秒计时不变，保存/取消后继续。**2026-10-21 完成**（5 + 1 条测试；
+>      归零与跑表拆成两个 effect，暂停前补记未落盘秒数）。
 >   3. [ ] **可选（暂不做，先观察）**：释义门禁通过后仍点「忘记」时，给排期一个 `hard` 下限
 >      （或二次确认），避免 `repetitions` 一直归零；先看 1–2 的实测再定。
 > - 本轮已完成：
+>   - **背单词加练上限 + 编辑暂停计时**（`core/vocab/extra` 9 条 + `useStudyTimers.paused` 2 条 +
+>     `useStudySession` 4 条；一轮最多 3 次出场，卡内编辑两只表都不走）
 >   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
 >   - **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）
 >   - **跟读模块瘦身**：`state/session` 1185 → **732**、`ui/App` 1191 → **624**、

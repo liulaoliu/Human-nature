@@ -72,6 +72,8 @@ types ← core ← adapters ← reader
 | 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
 | 面板 / 列表 / 对话框 | `src/reader/panels/*.tsx` | 不准塞领域判断；判断回 core |
 | 词库自动补全（例句/收藏…） | 加进 `src/core/libraryAutoFill.ts` | **不许再写第二个 effect 去读写词库**（见下） |
+| 背单词的「加练 / 重练忘记的」出场次数 | `src/core/vocab/extra.ts` | 每卡每轮最多 3 次（首见 + 2 次加练）、跨重练保留；过了释义门禁不再追加；「重练忘记的」每轮只发起一次。hook 只调 `planExtra` / `planRetryForgot`，到上限只提示、不改评分 |
+| 背单词计时（单卡 / 本轮总时长） | `src/reader/hooks/useStudyTimers.ts` | 归零只看换卡 / 换轮；`paused`（卡内编辑）只停表不归零，停表前把未落盘秒数补记 |
 
 ## 三、两条硬约定（都是踩过坑换来的）
 
@@ -99,6 +101,9 @@ types ← core ← adapters ← reader
   `ai` / `dict` / `manual`；手动改过的字段才锁，旧数据仍按 `edited` / `mastered` 整条锁）。
 - 背单词「标过不认识 → 复习/加练先选中文释义」：`core/vocab/review.ts`
   （`needsMeaningCheck` + `canQuizMeaning`）；视图只根据结果渲染，不再自己判断。
+- 背单词「加练 / 重练」的出场账本：`core/vocab/extra.ts`（`planExtra` / `planRetryForgot`）；
+  每卡每轮最多出场 3 次、跨重练保留，重练每轮只发起一次，hook 不许再自己数 `requeueRef`。
+- 背单词计时：`hooks/useStudyTimers`（`paused` 暂停、每 15s 落盘）；卡内编辑的时间不算学习时长。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
 

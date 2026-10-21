@@ -5,6 +5,8 @@ export interface StudyRoundDoneProps {
   counts: { know: number; fuzzy: number; forgot: number }
   liveSeconds: number
   forgotCount: number
+  /** 还能不能再点「重练忘记的」（每轮只发起一次）。 */
+  canRetryForgot?: boolean
   mode: StudyMode
   onRetryForgot: () => void
   onRestart: () => void
@@ -17,12 +19,14 @@ export default function StudyRoundDone({
   counts,
   liveSeconds,
   forgotCount,
+  canRetryForgot = true,
   mode,
   onRetryForgot,
   onRestart,
   onExam,
   onClose,
 }: StudyRoundDoneProps) {
+  const retryable = forgotCount > 0 && canRetryForgot
   return (
     <div className="study-done">
       <p>
@@ -30,12 +34,15 @@ export default function StudyRoundDone({
         {fmtDur(liveSeconds)}。
       </p>
       <div className="bar">
-        {forgotCount > 0 && (
+        {retryable && (
           <button className="primary" onClick={onRetryForgot}>
             重练忘记的 {forgotCount} 个
           </button>
         )}
-        <button className={forgotCount ? '' : 'primary'} onClick={onRestart}>
+        {forgotCount > 0 && !canRetryForgot && (
+          <span className="muted">本轮已重练过一次，先按当前评分排期</span>
+        )}
+        <button className={retryable ? '' : 'primary'} onClick={onRestart}>
           再来一轮（{mode === 'review' ? '复习' : '新学习'}）
         </button>
         <button onClick={onExam}>考试</button>

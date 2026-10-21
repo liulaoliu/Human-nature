@@ -131,6 +131,16 @@
     `manual`；AI 覆盖判断统一走 `isFieldLocked`，旧数据没有 `fieldSources` 时保持整条锁。
     词典只填空，因此只跳过 `fieldSources[字段] === 'manual'`（用户手动清空的不再补）。
     备份 / localStorage 的 `fieldSources` 先过 `core/vocabFields.ts` 的清洗。
+25. **「暂停」别和「归零」挤在同一个计时 effect 里**。加暂停时顺手把 `paused` 塞进 deps，
+    一开卡内编辑 effect 就重跑、顺手 `setCardSeconds(0)`：计时归零、锤炼阈值跟着倒退，
+    保存后从 0 重新「烫」。规矩：`useStudyTimers` 里拆成两个 effect ——
+    **换卡 / 换轮才归零**（deps 不含 `paused`），**跑表看 `paused`**；暂停前先把未落盘秒数补记，
+    暂停期间不推进锤炼阈值、不计学习时长。测试钉住「暂停 10 秒计时不变、恢复后接着走」。
+26. **加练计数不能在「重练忘记的」里清零**。过去 `retryForgot` 把 `requeueRef` 重置，
+    于是「忘记 → 加练 → 重练 → 忘记」可以无限套娃，一轮永远做不完。
+    规矩：出场账本只放 `core/vocab/extra`（每卡每轮最多 3 次、跨重练保留、重练每轮只发起一次），
+    hook 只在开新一轮时重置；到上限给提示但**照原样写 SRS**，不把模糊/忘记偷改成认识。
+    过释义门禁的卡只写排期、不再追加（那一关本身就是复习）。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -215,9 +225,12 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动；
   速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（12 条），
   面板 `SpeedReadPanel` 只留渲染（597 → 260 行）。
-  背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘，3 条）+
+  背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘/暂停停表/暂停补记，5 条）+
   `useStudyCardEdit`（卡内编辑/两步删除，3 条）；`StudyPanel` 再拆 `StudyToolbar` / `StudyEditForm` / `StudyRoundDone`
   （512 → 369 行，子组件 3 + 2 + 2 条）。
+  加练上限与编辑暂停计时落在 `core/vocab/extra`（9：每卡 3 次 / 模糊只一次 / 过门禁不追加 / 重练只一次 / 循环收敛）
+  + `useStudySession`（9：导航 / 门禁 / 牌组 / 朗读 / 加练 3 次封顶 / 重练跨轮计数 / 编辑暂停 10 秒不动表），
+  `StudyRoundDone` 钉住「重练过就不再给按钮」。
 - **阅读页装配层（`ReaderApp`）拆完也全有测试**：`useReaderPrefs`（8：18 个本机偏好默认值 / 写回原键 / 脏值兜底 /
   `newToday` 跨天归零 / 页面开着跨 04:00 定时归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、

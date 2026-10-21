@@ -7,6 +7,7 @@
  *   - `analysis.ts`：标词 / 粘回查词结果 / 混淆项 / 原形校正 / 辨析
  *   - `library.ts`：增删改 / 打印 / 优先重排 / 筛选分组排序
  *   - `review.ts`：SM-2 复习排期 / 背单词队列
+ *   - `extra.ts`：忘记 / 模糊的加练与「重练忘记的」出场账本（每轮次数上限）
  *
  * 外部统一从这里 import，避免各自记子模块路径；纯函数，不碰界面、不碰 IndexedDB。
  * 存储层（IndexedDB/SQLite）在 adapters/，界面在 reader/ 与 ui/。
@@ -17,3 +18,4 @@ export * from './vocab/merge'
 export * from './vocab/analysis'
 export * from './vocab/library'
 export * from './vocab/review'
+export * from './vocab/extra'
