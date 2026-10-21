@@ -28,6 +28,8 @@ export interface UseSpeedReadSessionOptions {
   onSpeak?: (text: string) => void
   /** 语言点编辑器打开时不抢键盘。 */
   langEditorOpen: boolean
+  /** 数字 1：切换「选词模式」（阅读页 / 速读页共用同一个状态）。 */
+  onToggleVocabMode?: () => void
 }
 
 /**
@@ -41,6 +43,7 @@ export function useSpeedReadSession({
   onFinishRead,
   onSpeak,
   langEditorOpen,
+  onToggleVocabMode,
 }: UseSpeedReadSessionOptions) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
@@ -238,6 +241,13 @@ export function useSpeedReadSession({
       const el = e.target as HTMLElement | null
       if (langEditorOpen) return
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
+      if (e.ctrlKey || e.metaKey || e.altKey) return
+      // 数字 1 = 选词模式（与阅读页一致）；拷打阶段 1–4 是选项，优先给选项。
+      if (e.code === 'Digit1' && phase !== 'drill' && onToggleVocabMode) {
+        e.preventDefault()
+        onToggleVocabMode()
+        return
+      }
       if (e.key === 'ArrowLeft') {
         e.preventDefault()
         go(-1)

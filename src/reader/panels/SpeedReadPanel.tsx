@@ -1,7 +1,6 @@
 import { useMemo, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { articleKey } from '../../core/docSignature'
-import { useLocalStorageState, persistentBool } from '../hooks/useLocalStorageState'
 import { useSpeedReadSession } from '../hooks/useSpeedReadSession'
 import { useSpeedReadWords } from '../hooks/useSpeedReadWords'
 import SpeedReadSentence from './SpeedReadSentence'
@@ -31,8 +30,10 @@ export interface SpeedReadPanelProps {
   wordsInSentence: (sentenceId: string) => string[]
   /** 把误加的词从生词本移除（调用方自行做两步确认 UI）。 */
   onRemoveWord: (word: string) => void
-  /** 阅读页「选词模式」是否开启：开启时禁用正文选中/复制（避免和点词打架）。 */
+  /** 阅读页「选词模式」是否开启：与阅读页共用同一个状态（开启时禁用正文选中/复制，避免和点词打架）。 */
   vocabMode: boolean
+  /** 切换「选词模式」——阅读页顶栏与速读按钮 / 数字 1 共用 `useVocabMode.toggleVocabMode`。 */
+  onToggleVocabMode: () => void
   /** 给这一句加/改语言点（复用阅读页的语言点编辑器）。 */
   onOpenLang: (sentence: Sentence) => void
   /** 语言点编辑器是否在速读之上打开（打开时不抢键盘）。 */
@@ -45,7 +46,7 @@ export interface SpeedReadPanelProps {
  *
  * 会话状态机在 `useSpeedReadSession`，选词/本页清单在 `useSpeedReadWords`；这里只做渲染装配。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, onCopyText, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, onCopyText, wordsInSentence, onRemoveWord, vocabMode, onToggleVocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
   /** 本机「按文章」键：标识 + 正文签名，游标与本页清单一处算好、两处共用。 */
   const articleKeyOf = useMemo(() => articleKey(docKey, sentences), [docKey, sentences])
   /** 读完进度 / 阶段 / 计时 / 拷打 / 快捷键（数据与操作都在 hook，面板只负责渲染）。 */
@@ -75,10 +76,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     chooseDrill,
     restart,
     close,
-  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, onSpeak, langEditorOpen })
-
-  /** 选词模式：开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点。 */
-  const [pickMode, setPickMode] = useLocalStorageState('reader:speedPickMode', false, persistentBool)
+  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, onSpeak, langEditorOpen, onToggleVocabMode })
 
   /** 选词 / 加词 / 本页清单（数据与操作都在这里，面板只负责渲染）。 */
   const {
@@ -125,23 +123,23 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       const known = isKnown(w.text)
       const sel = isSel(i)
       const meaning = known ? wordMeaning?.(w.text, sentence.id) ?? null : null
-      const hint = pickMode
+      const hint = vocabMode
         ? '点一下选中/取消（再点「加入清单」入库）；右键直接加入生词本'
-        : '选词模式未开（勾上顶栏「选词模式」才能点选 / 右键入库）'
+        : '选词模式未开（点顶栏「选词模式(1)」或按数字 1 才能点选 / 右键入库）'
       nodes.push(
         <span
           key={i}
-          className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '') + (pickMode ? ' pick' : '')}
+          className={'speed-w' + (sel ? ' sel' : '') + (known ? ' known' : '') + (vocabMode ? ' pick' : '')}
           title={meaning ? `含义：${meaning}\n${hint}` : hint}
           onClick={(e) => {
             e.stopPropagation()
-            if (pickMode) toggleSel(i)
-            else onHint?.('先勾上顶栏「选词模式」才能点选 / 右键入库')
+            if (vocabMode) toggleSel(i)
+            else onHint?.('先开顶栏「选词模式(1)」或按数字 1 才能点选 / 右键入库')
           }}
           onContextMenu={(e) => {
-            if (!pickMode) {
+            if (!vocabMode) {
               e.preventDefault()
-              onHint?.('先勾上顶栏「选词模式」才能右键入库')
+              onHint?.('先开顶栏「选词模式(1)」或按数字 1 才能右键入库')
               return
             }
             e.preventDefault()
@@ -156,7 +154,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     })
     if (pos < text.length) nodes.push(text.slice(pos))
     return nodes
-  }, [sentence, spans, isSel, toggleSel, isKnown, wordMeaning, addDirect, pickMode, onHint])
+  }, [sentence, spans, isSel, toggleSel, isKnown, wordMeaning, addDirect, vocabMode, onHint])
 
   return (
     <div className="study speed">
@@ -186,17 +184,17 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
           <input type="checkbox" checked={autoDrill} onChange={(e) => setAutoDrill(e.target.checked)} />
           超时拷打
         </label>
-        <label className="check-inline" title="开启后才能点词选中（配合「加入清单」）；默认关闭，避免误点">
-          <input
-            type="checkbox"
-            checked={pickMode}
-            onChange={(e) => {
-              setPickMode(e.target.checked)
-              if (!e.target.checked) clearSelection()
-            }}
-          />
-          选词模式
-        </label>
+        <button
+          className={'tb-vocab' + (vocabMode ? ' primary' : '')}
+          onClick={() => {
+            if (vocabMode) clearSelection()
+            onToggleVocabMode()
+          }}
+          aria-pressed={vocabMode}
+          title="选词模式（数字 1）：点词选中 → 「加入清单」或右键直接入库；与阅读页共用同一个开关"
+        >
+          选词模式(1){vocabMode ? ' · 开' : ''}
+        </button>
         <button
           onClick={() => sentence && onOpenLang(sentence)}
           disabled={!sentence}
@@ -234,7 +232,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             target={target}
             elapsed={elapsed}
             pace={pace}
-            pickMode={pickMode}
+            pickMode={vocabMode}
             vocabMode={vocabMode}
             autoDrill={autoDrill}
             drill={drill}

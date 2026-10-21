@@ -168,15 +168,24 @@ export function useSpeedReadWords({
     setMerged(true)
   }, [sentence, merged, selIdx, spans])
 
+  /** 删除一条词：生词本与本页清单**一起改**（两个入口共用，避免只删了一边）。 */
+  const deleteWord = useCallback(
+    (word: string) => {
+      const key = word.trim().toLowerCase()
+      onRemoveWord(word)
+      setCollected((prev) => prev.filter((x) => x.word.trim().toLowerCase() !== key))
+    },
+    [onRemoveWord],
+  )
+
   /** 从本页清单删除一条（同时从生词本移除，用于剔除误加）。 */
   const removeCollected = useCallback(
     (i: number) => {
       const it = collected[i]
       if (!it) return
-      onRemoveWord(it.word)
-      setCollected((prev) => prev.filter((_, k) => k !== i))
+      deleteWord(it.word)
     },
-    [collected, onRemoveWord],
+    [collected, deleteWord],
   )
 
   /** 删除（两步确认）：第一次点变红，3 秒内再点才真删。 */
@@ -205,18 +214,18 @@ export function useSpeedReadWords({
     return out
   }, [spans, isKnown, wordsInSentence, sentence])
 
-  /** 两步确认移出生词本。 */
+  /** 两步确认移出生词本（本页清单里的同名词一并清掉）。 */
   const tapRemove = useCallback(
     (word: string) => {
       if (confirmDel === word) {
-        onRemoveWord(word)
+        deleteWord(word)
         setConfirmDel('')
         return
       }
       setConfirmDel(word)
       window.setTimeout(() => setConfirmDel((cur) => (cur === word ? '' : cur)), 3000)
     },
-    [confirmDel, onRemoveWord],
+    [confirmDel, deleteWord],
   )
 
   return {

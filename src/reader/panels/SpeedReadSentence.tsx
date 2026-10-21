@@ -155,7 +155,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
             {phase !== 'drill' && (
               <div className="speed-addword">
                 <div className="speed-selbar">
-                  <span className="muted">勾顶栏「选词模式」后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
+                  <span className="muted">开顶栏「选词模式(1)」或按数字 1 后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
                   {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
                   {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
                 </div>

@@ -112,6 +112,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     writingOpen,
     startSiege,
     vocabMode,
+    toggleVocabMode,
   } = props.services
   const { speak, speakFromWord, startReadAll, stopReadAll, readingAll, resetSpeech } = props.speaking
   const {
@@ -191,6 +192,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           wordsInSentence,
           onRemoveWord: removeWordFromVocab,
           vocabMode,
+          onToggleVocabMode: toggleVocabMode,
           onOpenLang: openLangFor,
           langEditorOpen: langOpen,
         }}

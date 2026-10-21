@@ -29,6 +29,7 @@ function props(over: Partial<SpeedReadPanelProps> = {}): SpeedReadPanelProps {
     wordsInSentence: () => [],
     onRemoveWord: noop,
     vocabMode: false,
+    onToggleVocabMode: noop,
     onOpenLang: noop,
     langEditorOpen: false,
     ...over,
@@ -125,19 +126,27 @@ describe('SpeedReadPanel：逐句阅读', () => {
 })
 
 describe('SpeedReadPanel：加词与移出', () => {
-  it('选词模式：没开只提示；开了点词 → 加入清单并落盘', () => {
+  it('选词模式(1)：按钮交给阅读页同一个开关；没开只提示；开了点词 → 加入清单并落盘', () => {
     const onAddItems = vi.fn()
     const onHint = vi.fn()
-    const onClose = vi.fn()
-    render(<SpeedReadPanel {...props({ onAddItems, onHint, onClose })} />)
+    const onToggleVocabMode = vi.fn()
+    const view = render(<SpeedReadPanel {...props({ onAddItems, onHint, onToggleVocabMode })} />)
 
     expect((screen.getByRole('button', { name: /加入清单/ }) as HTMLButtonElement).disabled).toBe(true)
 
     // 没开选词模式：点词只提示
     fireEvent.click(screen.getByText('Run'))
-    expect(onHint).toHaveBeenCalledWith('先勾上顶栏「选词模式」才能点选 / 右键入库')
+    expect(onHint).toHaveBeenCalledWith('先开顶栏「选词模式(1)」或按数字 1 才能点选 / 右键入库')
 
-    fireEvent.click(screen.getByLabelText('选词模式'))
+    // 按钮与阅读页共用同一个开关（父级状态），这里只验证回调
+    const toggle = screen.getByRole('button', { name: '选词模式(1)' })
+    fireEvent.click(toggle)
+    expect(onToggleVocabMode).toHaveBeenCalledTimes(1)
+    fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+    expect(onToggleVocabMode).toHaveBeenCalledTimes(2)
+
+    // 父级把开关打开后：点词选中 → 加入清单
+    view.rerender(<SpeedReadPanel {...props({ onAddItems, onHint, onToggleVocabMode, vocabMode: true })} />)
     fireEvent.click(screen.getByText('Run'))
     const add = screen.getByRole('button', { name: '＋ 加入清单（1）' })
     expect((add as HTMLButtonElement).disabled).toBe(false)

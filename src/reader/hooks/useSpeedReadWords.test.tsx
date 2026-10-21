@@ -165,4 +165,39 @@ describe('useSpeedReadWords：本页清单', () => {
     expect(onRemoveWord).toHaveBeenCalledWith('run')
     expect(result.current.confirmDel).toBe('')
   })
+
+  it('从「本句已在生词本」移出时，本页加入清单同步删除（忽略大小写，重复条目一起清）', () => {
+    localStorage.setItem(
+      'reader:speedCollected:doc-1',
+      JSON.stringify([
+        { word: 'Run', sentenceId: 's1', sentenceText: 'Run fast.' },
+        { word: 'run', sentenceId: 's2', sentenceText: 'Run again.' },
+      ]),
+    )
+    const onRemoveWord = vi.fn()
+    const { result } = renderHook(() => useSpeedReadWords(options({ onRemoveWord })))
+    expect(result.current.collected).toHaveLength(2)
+
+    act(() => result.current.tapRemove('Run'))
+    act(() => result.current.tapRemove('Run'))
+    expect(onRemoveWord).toHaveBeenCalledWith('Run')
+    expect(result.current.collected).toEqual([])
+    expect(JSON.parse(localStorage.getItem('reader:speedCollected:doc-1') ?? '[]')).toEqual([])
+  })
+
+  it('从「本页加入」删除也走同一套：同词的多条一起清', () => {
+    localStorage.setItem(
+      'reader:speedCollected:doc-1',
+      JSON.stringify([
+        { word: 'Run', sentenceId: 's1', sentenceText: 'Run fast.' },
+        { word: 'run', sentenceId: 's2', sentenceText: 'Run again.' },
+      ]),
+    )
+    const onRemoveWord = vi.fn()
+    const { result } = renderHook(() => useSpeedReadWords(options({ onRemoveWord })))
+    act(() => result.current.tapDelete(0))
+    act(() => result.current.tapDelete(0))
+    expect(onRemoveWord).toHaveBeenCalledWith('Run')
+    expect(result.current.collected).toEqual([])
+  })
 })

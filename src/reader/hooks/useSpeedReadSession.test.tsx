@@ -24,6 +24,7 @@ function options(over: Partial<UseSpeedReadSessionOptions> = {}): UseSpeedReadSe
     onClose: vi.fn(),
     onFinishRead: vi.fn(),
     langEditorOpen: false,
+    onToggleVocabMode: vi.fn(),
     ...over,
   }
 }
@@ -156,6 +157,32 @@ describe('useSpeedReadSession：翻句与重开', () => {
     act(() => result.current.advance())
     expect(result.current.index).toBe(0)
     expect(onFinishRead).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useSpeedReadSession：数字 1 选词模式', () => {
+  it('主键盘 1 切换；输入框里 / 带修饰键时不抢', () => {
+    const onToggleVocabMode = vi.fn()
+    const { result } = renderHook(() => useSpeedReadSession(options({ onToggleVocabMode })))
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
+    })
+    expect(onToggleVocabMode).toHaveBeenCalledTimes(1)
+
+    const input = document.createElement('input')
+    document.body.appendChild(input)
+    act(() => {
+      fireEvent.keyDown(input, { key: '1', code: 'Digit1', bubbles: true })
+    })
+    expect(onToggleVocabMode).toHaveBeenCalledTimes(1)
+
+    act(() => {
+      fireEvent.keyDown(window, { key: '1', code: 'Digit1', ctrlKey: true })
+    })
+    expect(onToggleVocabMode).toHaveBeenCalledTimes(1)
+    input.remove()
+    expect(result.current.sentence?.id).toBe('s1')
   })
 })
 
