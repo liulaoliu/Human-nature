@@ -187,6 +187,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onFinishRead: markReadDone,
           onAddPhrases: addPhrasesToVocab,
           onHint: flash,
+          onCopyText: altCopyText,
           wordsInSentence,
           onRemoveWord: removeWordFromVocab,
           vocabMode,

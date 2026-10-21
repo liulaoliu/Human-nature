@@ -11,11 +11,16 @@ import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
  * 目录不存在 / 为空时自动不渲染（不报错）。
  *
  * 交互（都持久化，按「页面」存本机）：
+ *   - 图片上滚轮：缩放（向上放大、向下缩小，夹在 `FISH_SIZE_MIN`–`MAX`）
+ *   - 图片上按住左键：拖动改位置（悬停变「手」形，按住变抓取）
  *   - 左上角小手柄：拖动改位置
- *   - 右下角小手柄：拖动改大小、双击复位
+ *   - 右下角小手柄：拖动改大小
+ *   - 双击图片 / 任一手柄：复位
  * 存哪、存多大由 `state/fishPrefs` 负责，范围夹取在 `core/fishLayout`（都有测试）；
  * 这个组件只管拖拽手势与渲染。
- * 图片本身 pointer-events:none，不挡点击。
+ *
+ * 注意：图片现在是可交互的（`pointer-events: auto`），压在鱼身上的点击不会再落到
+ * 正文上——这是滚轮/拖动必须付出的代价；两个手柄之外没有扩大热区。
  */
 const FISH_BASE = '/fish'
 
@@ -34,8 +39,13 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
   const [url, setUrl] = useState('')
   const [size, setSize] = useState(() => readFishSize(pageKey))
   const [pos, setPos] = useState(() => readFishPos(pageKey))
+  /** 按住图片拖动时把光标切成「抓取」态。 */
+  const [grabbing, setGrabbing] = useState(false)
   const sizeRef = useRef(size)
   const posRef = useRef(pos)
+  const imgRef = useRef<HTMLImageElement | null>(null)
+  /** 滚轮缩放很密集，落盘做 200ms 防抖，别每格滚轮都写一次 localStorage。 */
+  const persistTimer = useRef<number | null>(null)
   const drag = useRef<
     | { kind: 'move'; x: number; y: number; startR: number; startB: number; moved: boolean }
     | { kind: 'size'; x: number; startW: number; moved: boolean }
@@ -54,33 +64,82 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
   }, [])
 
+  const viewport = () => ({
+    w: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    h: typeof window !== 'undefined' ? window.innerHeight : 800,
+  })
   const applySize = (w: number) => {
     const s = clampFishSize(w)
     sizeRef.current = s
     setSize(s)
+    // 尺寸变了要按新尺寸重新夹位置，否则放大后鱼可能顶出左/上边
+    const p = clampFishPos(posRef.current.right, posRef.current.bottom, s, viewport())
+    posRef.current = p
+    setPos(p)
   }
   const applyPos = (right: number, bottom: number) => {
-    const width = typeof window !== 'undefined' ? window.innerWidth : 1200
-    const height = typeof window !== 'undefined' ? window.innerHeight : 800
-    const p = clampFishPos(right, bottom, sizeRef.current, { w: width, h: height })
+    const p = clampFishPos(right, bottom, sizeRef.current, viewport())
     posRef.current = p
     setPos(p)
   }
   const persist = () => saveFishLayout(pageKey, sizeRef.current, posRef.current)
+  /** 滚轮/拖动结束后的防抖落盘。 */
+  const schedulePersist = () => {
+    if (persistTimer.current !== null) window.clearTimeout(persistTimer.current)
+    persistTimer.current = window.setTimeout(() => {
+      persistTimer.current = null
+      persist()
+    }, 200)
+  }
+
+  /**
+   * 滚轮缩放。必须用原生监听并 `passive: false`：React 的 onWheel 在根节点上是
+   * passive 的，`preventDefault` 无效，滚鱼的时候页面会跟着滚。
+   */
+  useEffect(() => {
+    const el = imgRef.current
+    if (!el || !url) return
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? viewport().h : 1
+      // 向上滚（deltaY < 0）放大；按比例缩放，触控板的小增量也不会跳
+      applySize(sizeRef.current * Math.exp(-e.deltaY * unit * 0.0015))
+      schedulePersist()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [url, pageKey])
+
+  /** 卸载前把还没落盘的缩放写回去。 */
+  useEffect(
+    () => () => {
+      if (persistTimer.current !== null) {
+        window.clearTimeout(persistTimer.current)
+        persistTimer.current = null
+        saveFishLayout(pageKey, sizeRef.current, posRef.current)
+      }
+    },
+    [pageKey],
+  )
 
   if (!url) return null
 
-  const onDown = (kind: 'move' | 'size') => (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onDown = (kind: 'move' | 'size') => (e: ReactPointerEvent<HTMLElement>) => {
+    // 只接左键（触屏 pointerType 不是 mouse，button 也是 0）
+    if (e.pointerType === 'mouse' && e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
     e.currentTarget.setPointerCapture(e.pointerId)
     if (kind === 'move') {
+      setGrabbing(true)
       drag.current = { kind, x: e.clientX, y: e.clientY, startR: posRef.current.right, startB: posRef.current.bottom, moved: false }
     } else {
       drag.current = { kind, x: e.clientX, startW: sizeRef.current, moved: false }
     }
   }
-  const onMove = (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onMove = (e: ReactPointerEvent<HTMLElement>) => {
     const d = drag.current
     if (!d) return
     if (d.kind === 'move') {
@@ -90,9 +149,10 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
     d.moved = true
   }
-  const onUp = (e: ReactPointerEvent<HTMLButtonElement>) => {
+  const onUp = (e: ReactPointerEvent<HTMLElement>) => {
     const d = drag.current
     drag.current = null
+    setGrabbing(false)
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {
@@ -133,9 +193,17 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
       }}
     >
       <img
+        ref={imgRef}
         className="fish"
         src={url}
         alt=""
+        draggable={false}
+        title="滚轮缩放 · 按住拖动 · 双击复位"
+        onPointerDown={onDown('move')}
+        onPointerMove={onMove}
+        onPointerUp={onUp}
+        onPointerCancel={onUp}
+        onDoubleClick={reset}
         style={{
           width: `${size}px`,
           height: 'auto',
@@ -143,6 +211,10 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
           opacity: 0.75,
           borderRadius: '10px',
           userSelect: 'none',
+          // 图片本身要能接滚轮 / 拖动（外层容器仍是 none，别扩大热区）
+          pointerEvents: 'auto',
+          cursor: grabbing ? 'grabbing' : 'grab',
+          touchAction: 'none',
         }}
       />
       <button

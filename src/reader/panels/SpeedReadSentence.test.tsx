@@ -37,6 +37,7 @@ function props(over: Partial<SpeedReadSentenceProps> = {}): SpeedReadSentencePro
     advance: vi.fn(),
     onClose: vi.fn(),
     onSpeak: vi.fn(),
+    onCopyText: vi.fn(),
     chooseDrill: vi.fn(),
     ...over,
   }

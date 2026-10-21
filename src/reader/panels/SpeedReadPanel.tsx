@@ -25,6 +25,8 @@ export interface SpeedReadPanelProps {
   onAddPhrases?: (items: string[], sentence: Sentence) => void
   /** 轻提示（如「先勾选词模式」）。 */
   onHint?: (msg: string) => void
+  /** 按住 Alt 点句子：复制整句（与阅读页共用同一个实现，见 `useArticleUiActions.altCopyText`）。 */
+  onCopyText: (text: string) => void
   /** 本句来源的词条（含短语），用于「本句已在生词本」行。 */
   wordsInSentence: (sentenceId: string) => string[]
   /** 把误加的词从生词本移除（调用方自行做两步确认 UI）。 */
@@ -43,7 +45,7 @@ export interface SpeedReadPanelProps {
  *
  * 会话状态机在 `useSpeedReadSession`，选词/本页清单在 `useSpeedReadWords`；这里只做渲染装配。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, onCopyText, wordsInSentence, onRemoveWord, vocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
   /** 本机「按文章」键：标识 + 正文签名，游标与本页清单一处算好、两处共用。 */
   const articleKeyOf = useMemo(() => articleKey(docKey, sentences), [docKey, sentences])
   /** 读完进度 / 阶段 / 计时 / 拷打 / 快捷键（数据与操作都在 hook，面板只负责渲染）。 */
@@ -255,6 +257,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             advance={advance}
             onClose={onClose}
             onSpeak={onSpeak}
+            onCopyText={onCopyText}
             chooseDrill={chooseDrill}
           />
         )

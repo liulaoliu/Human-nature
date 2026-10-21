@@ -25,6 +25,7 @@ function props(over: Partial<SpeedReadPanelProps> = {}): SpeedReadPanelProps {
     onFinishRead: noop,
     onAddPhrases: noop,
     onHint: noop,
+    onCopyText: noop,
     wordsInSentence: () => [],
     onRemoveWord: noop,
     vocabMode: false,
@@ -239,5 +240,26 @@ describe('SpeedReadPanel：键盘与空数据', () => {
     render(<SpeedReadPanel {...props({ sentences: [] })} />)
     expect(screen.getByText('完成')).toBeTruthy()
     expect(screen.queryByText('读完了（空格）')).toBeNull()
+  })
+})
+
+describe('SpeedReadPanel：Alt 点击复制整句', () => {
+  it('点中词 span（自身会 stopPropagation）也能复制整句', () => {
+    const onCopyText = vi.fn()
+    render(<SpeedReadPanel {...props({ onCopyText })} />)
+    const word = document.querySelector('.speed-w') as HTMLElement
+    expect(word).toBeTruthy()
+
+    fireEvent.click(word, { altKey: true })
+    expect(onCopyText).toHaveBeenCalledWith('Run fast.')
+  })
+
+  it('不按 Alt 时不复制，仍走原来的点词提示', () => {
+    const onCopyText = vi.fn()
+    const onHint = vi.fn()
+    render(<SpeedReadPanel {...props({ onCopyText, onHint })} />)
+    fireEvent.click(document.querySelector('.speed-w') as HTMLElement)
+    expect(onCopyText).not.toHaveBeenCalled()
+    expect(onHint).toHaveBeenCalled()
   })
 })

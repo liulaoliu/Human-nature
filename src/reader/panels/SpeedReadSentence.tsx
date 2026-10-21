@@ -39,6 +39,8 @@ export interface SpeedReadSentenceProps {
   advance: () => void
   onClose: () => void
   onSpeak: (text: string) => void
+  /** 按住 Alt 点句子：复制整句（与阅读页同一个实现）。 */
+  onCopyText: (text: string) => void
   chooseDrill: (opt: string) => void
 }
 
@@ -48,7 +50,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
     sentence, phase, sentenceParts, over, words, target, elapsed, pace, pickMode, vocabMode,
     autoDrill, drill, picked, drillOk, readMs, slow, selWords, addedWord, wordDraft, knownWords,
     confirmDel, ttsState, onAddPhrases, addSelected, mergePhrase, setWordDraft, addCustom,
-    tapRemove, advance, onClose, onSpeak, chooseDrill,
+    tapRemove, advance, onClose, onSpeak, onCopyText, chooseDrill,
   } = props
 
   return (
@@ -66,12 +68,20 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
 
               {/* 拷打时隐藏原文文字，但保留 div 占位，避免布局跳动 */}
               <div className="speed-sentence-slot">
-                <div
-                  className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
-                  style={{ userSelect: pickMode || vocabMode ? 'none' : 'text' }}
-                >
-                  {sentenceParts}
-                </div>
+              {/* 捕获阶段处理 Alt 点击：词 span 自己会 stopPropagation，冒泡阶段收不到 */}
+              <div
+                className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
+                style={{ userSelect: pickMode || vocabMode ? 'none' : 'text' }}
+                onClickCapture={(e) => {
+                  if (!e.altKey) return
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onCopyText(sentence.text)
+                }}
+                title="按住 Alt 点击 = 复制整句"
+              >
+                {sentenceParts}
+              </div>
                 {phase === 'drill' && (
                   <div className="speed-hidden-overlay">原文已隐藏 —— 只看挖空句，从选项里选</div>
                 )}
@@ -79,7 +89,8 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
 
               {phase === 'read' && (
                 <div className="speed-hint muted">
-                  先自己读一遍 → 按 <kbd>R</kbd> 朗读，<kbd>空格</kbd> 看释义与语言点
+                  先自己读一遍 → 按 <kbd>R</kbd> 朗读，<kbd>空格</kbd> 看释义与语言点；
+                  <kbd>Alt</kbd> + 点击可复制整句
                 </div>
               )}
 
