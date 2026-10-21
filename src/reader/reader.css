@@ -1945,6 +1945,12 @@ button.danger {
   gap: 10px;
 }
 .lang-editor-bar { display: flex; gap: 8px; align-items: baseline; }
+/* **别让列表被挤没**：`.lang-editor` 是定高（max-height: 86vh）的 flex 列，内容一超高，
+   子项按 flex-shrink 被压缩；列表没有 min-height，会被下面的表单压成 0 高 ——
+   表现就是标题写着「语言点（N）」却一条都看不见、以为「没回填」。
+   给所有直接子项禁止收缩，超出部分交给 .lang-editor 自己滚。 */
+.lang-editor > * { flex-shrink: 0; }
+.lang-editor.expanded .lang-form { flex-shrink: 1; }
 .lang-editor-bar .ellipsis { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .lang-editor label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
 /* 深色主题下 input/textarea 默认是浏览器白底，而全局文字色是浅色 —— 输入时几乎看不见。
@@ -1989,7 +1995,7 @@ button.danger {
 .lang-editor-actions { justify-content: flex-end; align-items: center; }
 .lang-editor-note { margin-right: auto; font-size: 12px; }
 .lang-editor-warn { font-size: 12px; color: #b7791f; margin: -2px 0 0; }
-.lang-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; overflow: auto; }
+.lang-list { display: flex; flex-direction: column; gap: 6px; max-height: 30vh; min-height: 40px; overflow: auto; }
 .lang-item { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; }
 /* 整条可点：AI 写的与手动的都能点开编辑，不用非去点那个小按钮 */
 .lang-item.clickable { cursor: pointer; transition: background 0.12s, border-color 0.12s; }
