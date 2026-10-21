@@ -1,5 +1,6 @@
 import type { JournalDay, JournalSummaryRow } from '../../core/journal'
 import type { Heatmap } from '../../core/activity'
+import LanguageLines from './LanguageLines'
 
 export interface JournalPanelProps {
   onClose: () => void
@@ -167,11 +168,7 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, su
                     {L.manual ? '手动' : 'AI'} · {L.articleTitle || L.articleId} · {L.at.slice(11, 16)}
                   </div>
                   <div className="jlang-sent">{L.sentence}</div>
-                  {L.structure && <div>结构：{L.structure}</div>}
-                  {L.grammar && <div>语法：{L.grammar}</div>}
-                  {L.idioms?.length ? <div>习语：{L.idioms.join('；')}</div> : null}
-                  {L.phrases?.length ? <div>词组：{L.phrases.join('；')}</div> : null}
-                  {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
+                  <LanguageLines lang={L} plain />
                 </div>
               ))}
             </div>

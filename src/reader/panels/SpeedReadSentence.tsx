@@ -1,9 +1,8 @@
 import type { ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { getSentenceLanguages } from '../../core/language'
-import { KIND_LABEL } from '../../core/entryKind'
 import type { SpeedReadDrill } from '../../core/speedRead'
-import LangPhrases from './LangPhrases'
+import LanguageLines from './LanguageLines'
 
 export type SpeedReadPhase = 'read' | 'reveal' | 'drill' | 'drill-answer'
 
@@ -100,11 +99,10 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
                   {getSentenceLanguages(sentence).map((L, li) => (
                     <div className="speed-lang" key={li}>
                       {L.source === 'manual' && <div className="muted">手动语言点</div>}
-                      {L.structure && <div>结构：{L.structure}</div>}
-                      {L.grammar && <div>语法：{L.grammar}</div>}
-                      <LangPhrases label={KIND_LABEL.idiom} items={L.idioms ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
-                      <LangPhrases label={KIND_LABEL.phrase} items={L.phrases ?? []} onAdd={onAddPhrases ? (x) => onAddPhrases(x, sentence) : undefined} />
-                      {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
+                      <LanguageLines
+                        lang={L}
+                        onAddPhrases={onAddPhrases ? (items) => onAddPhrases(items, sentence) : undefined}
+                      />
                     </div>
                   ))}
                   {sentence.collocations.length > 0 && <div className="muted">搭配：{sentence.collocations.join('；')}</div>}

@@ -2,8 +2,7 @@ import type { ReactNode, RefObject } from 'react'
 import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
 import { getSentenceLanguages } from '../../core/language'
-import { KIND_LABEL } from '../../core/entryKind'
-import LangPhrases from './LangPhrases'
+import LanguageLines from './LanguageLines'
 import type { Paragraph, Sentence } from '../../types/document'
 
 /** 把一句话渲染成「词 span（生词包成 .vw + 序号上标） + 标点文本」，选中的词加 .hl。
@@ -215,11 +214,10 @@ export default function ReaderBody({
                   getSentenceLanguages(s).map((L, li) => (
                     <span className="lang-block" key={li}>
                       {L.source === 'manual' && <div className="lang-src">手动</div>}
-                      {L.structure && <div>结构：{L.structure}</div>}
-                      {L.grammar && <div>语法：{L.grammar}</div>}
-                      <LangPhrases label={KIND_LABEL.idiom} items={L.idioms ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
-                      <LangPhrases label={KIND_LABEL.phrase} items={L.phrases ?? []} onAdd={onAddPhrase ? (x) => onAddPhrase(x, s) : undefined} />
-                      {L.usage?.length ? <div>用法：{L.usage.join('；')}</div> : null}
+                      <LanguageLines
+                        lang={L}
+                        onAddPhrases={onAddPhrase ? (items) => onAddPhrase(items, s) : undefined}
+                      />
                     </span>
                   ))}
               </span>

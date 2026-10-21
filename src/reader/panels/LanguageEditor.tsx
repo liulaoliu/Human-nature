@@ -1,6 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Sentence, SentenceLanguage } from '../../types/document'
-import { getSentenceLanguages } from '../../core/language'
+import { KIND_LABEL } from '../../core/entryKind'
+import {
+  EMPTY_LANGUAGE_FORM,
+  getSentenceLanguages,
+  languageFromForm,
+  languagePreview,
+  languageToForm,
+  type LanguageForm,
+} from '../../core/language'
 
 export interface LanguageEditorProps {
   sentence: Sentence | null
@@ -8,79 +16,55 @@ export interface LanguageEditorProps {
   onClose: () => void
 }
 
-interface Form {
-  structure: string
-  grammar: string
-  idioms: string
-  phrases: string
-  usage: string
-}
-
-const EMPTY: Form = { structure: '', grammar: '', idioms: '', phrases: '', usage: '' }
-
-function splitList(s: string): string[] {
-  return [...new Set(s.split(/[；;、\n]+/).map((x) => x.trim()).filter(Boolean))]
-}
-
-function toEntry(f: Form): SentenceLanguage {
-  const o: SentenceLanguage = {}
-  if (f.structure.trim()) o.structure = f.structure.trim()
-  if (f.grammar.trim()) o.grammar = f.grammar.trim()
-  const id = splitList(f.idioms)
-  const ph = splitList(f.phrases)
-  const us = splitList(f.usage)
-  if (id.length) o.idioms = id
-  if (ph.length) o.phrases = ph
-  if (us.length) o.usage = us
-  return o
-}
-
-function toForm(L?: SentenceLanguage): Form {
-  return {
-    structure: L?.structure ?? '',
-    grammar: L?.grammar ?? '',
-    idioms: (L?.idioms ?? []).join('；'),
-    phrases: (L?.phrases ?? []).join('；'),
-    usage: (L?.usage ?? []).join('；'),
-  }
-}
-
-function preview(L: SentenceLanguage): string {
-  return [L.structure, L.grammar, ...(L.idioms ?? []), ...(L.phrases ?? []), ...(L.usage ?? [])]
-    .filter(Boolean)
-    .join(' ｜ ')
-}
+/** 五个字段的标签 / 占位 / 初始行数；输入框统一用 textarea，可以换行。 */
+const FIELDS: { key: keyof LanguageForm; label: string; placeholder: string; rows: number }[] = [
+  { key: 'structure', label: '结构', placeholder: '句子主干 + 从句/非谓语/插入语…', rows: 3 },
+  { key: 'grammar', label: '语法', placeholder: '时态 / 语态 / 倒装 / 比较…', rows: 2 },
+  { key: 'idioms', label: KIND_LABEL.idiom, placeholder: '多个用「；」或换行分隔', rows: 2 },
+  { key: 'phrases', label: KIND_LABEL.phrase, placeholder: '多个用「；」或换行分隔', rows: 2 },
+  { key: 'usage', label: KIND_LABEL.usage, placeholder: '多个用「；」或换行分隔', rows: 2 },
+]
 
 /**
  * 语言点编辑（列表式）：**一句可多条**——可新增、逐条编辑/删除；AI 生成的那条标「AI」，手动的标「手动」。
  * 写回 `Sentence.languages`（兼容旧的单条 `language`）。
+ *
+ * 阅读页与速读页**共用这一个编辑器**（都由 `ReaderOverlaysHost` 打开）：表单规则在
+ * `core/language`，这里只负责渲染与本地草稿。**点遮罩不会关闭**——只有「保存 / 取消」才关闭，
+ * 避免填了一半误点把草稿弄丢。
  */
 export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEditorProps) {
   const [langs, setLangs] = useState<SentenceLanguage[]>(() => getSentenceLanguages(sentence))
   const [editIdx, setEditIdx] = useState<number | null>(null)
-  const [form, setForm] = useState<Form>(EMPTY)
+  const [form, setForm] = useState<LanguageForm>(EMPTY_LANGUAGE_FORM)
+  /** 当前展开的字段：点到哪个框，哪个框就长到对话框剩余高度；点框外收回。 */
+  const [expanded, setExpanded] = useState<keyof LanguageForm | null>(null)
 
   useEffect(() => {
     setLangs(getSentenceLanguages(sentence))
     setEditIdx(null)
-    setForm(EMPTY)
+    setForm(EMPTY_LANGUAGE_FORM)
+    setExpanded(null)
   }, [sentence])
 
   const startNew = () => {
     setEditIdx(null)
-    setForm(EMPTY)
+    setForm(EMPTY_LANGUAGE_FORM)
+    setExpanded(null)
   }
   const startEdit = (i: number) => {
     setEditIdx(i)
-    setForm(toForm(langs[i]))
+    setForm(languageToForm(langs[i]))
+    setExpanded(null)
   }
   const remove = (i: number) => {
     setLangs((l) => l.filter((_, k) => k !== i))
     setEditIdx((e) => (e === i ? null : e != null && e > i ? e - 1 : e))
-    setForm(EMPTY)
+    setForm(EMPTY_LANGUAGE_FORM)
+    setExpanded(null)
   }
   const commit = () => {
-    const entry = toEntry(form)
+    const entry = languageFromForm(form)
     if (!Object.keys(entry).length) return
     const now = new Date().toISOString()
     if (editIdx === null) {
@@ -91,11 +75,18 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
     startNew()
   }
 
-  const set = (patch: Partial<Form>) => setForm((f) => ({ ...f, ...patch }))
+  const setField = (key: keyof LanguageForm, value: string) => setForm((f) => ({ ...f, [key]: value }))
+
+  /** 点「正在展开的框」以外的地方：收回原高度（不关闭对话框；保存 / 取消仍走按钮）。 */
+  const collapseOutside = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (!expanded) return
+    if ((e.target as HTMLElement).closest('.lang-form label.expanded')) return
+    setExpanded(null)
+  }
 
   /** 保存：把「正在填的这条」也一并收进来再写回（避免只点了下面「保存」而漏掉表单内容）。 */
   const saveAll = () => {
-    const entry = toEntry(form)
+    const entry = languageFromForm(form)
     let list = langs
     if (Object.keys(entry).length) {
       const now = new Date().toISOString()
@@ -106,8 +97,17 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   }
 
   return (
-    <div className="lang-editor-overlay" onClick={onClose}>
-      <div className="lang-editor" onClick={(e) => e.stopPropagation()}>
+    <div className="lang-editor-overlay" onClick={() => setExpanded(null)}>
+      <div
+        className={'lang-editor' + (expanded ? ' expanded' : '')}
+        role="dialog"
+        aria-modal="true"
+        aria-label="语言点编辑"
+        onClick={(e) => {
+          e.stopPropagation()
+          collapseOutside(e)
+        }}
+      >
         <div className="bar lang-editor-bar">
           <b>语言点（{langs.length}）</b>
           <span className="muted ellipsis" title={sentence?.text}>
@@ -121,8 +121,8 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
               <div className={'lang-item' + (editIdx === i ? ' editing' : '')} key={i}>
                 <div className="lang-item-head">
                   <span className={'lang-tag' + (L.source === 'ai' ? ' ai' : '')}>{L.source === 'ai' ? 'AI' : '手动'}</span>
-                  <span className="muted ellipsis" title={preview(L)}>
-                    {preview(L)}
+                  <span className="muted ellipsis" title={languagePreview(L)}>
+                    {languagePreview(L)}
                   </span>
                   <button onClick={() => startEdit(i)} title="编辑这条">
                     编辑
@@ -138,26 +138,18 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
 
         <div className="lang-form">
           <div className="muted">{editIdx === null ? '＋ 新增一条' : `编辑第 ${editIdx + 1} 条`}</div>
-          <label>
-            结构
-            <input value={form.structure} onChange={(e) => set({ structure: e.target.value })} placeholder="句子主干 + 从句/非谓语/插入语…" />
-          </label>
-          <label>
-            语法
-            <input value={form.grammar} onChange={(e) => set({ grammar: e.target.value })} placeholder="时态 / 语态 / 倒装 / 比较…" />
-          </label>
-          <label>
-            习语
-            <input value={form.idioms} onChange={(e) => set({ idioms: e.target.value })} placeholder="多个用「；」分隔" />
-          </label>
-          <label>
-            词组
-            <input value={form.phrases} onChange={(e) => set({ phrases: e.target.value })} placeholder="多个用「；」分隔" />
-          </label>
-          <label>
-            用法
-            <input value={form.usage} onChange={(e) => set({ usage: e.target.value })} placeholder="多个用「；」分隔" />
-          </label>
+          {FIELDS.map((f) => (
+            <label key={f.key} className={expanded === f.key ? 'expanded' : undefined}>
+              {f.label}
+              <textarea
+                rows={f.rows}
+                value={form[f.key]}
+                onFocus={() => setExpanded(f.key)}
+                onChange={(e) => setField(f.key, e.target.value)}
+                placeholder={f.placeholder}
+              />
+            </label>
+          ))}
           <div className="bar">
             <button className="primary" onClick={commit}>
               {editIdx === null ? '＋ 加入列表' : '保存本条'}
@@ -167,6 +159,9 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
         </div>
 
         <div className="bar lang-editor-actions">
+          <span className="muted lang-editor-note">
+            {expanded ? '编辑中：点输入框外恢复高度' : '只有「保存」或「取消」会关闭'}
+          </span>
           <button className="primary" onClick={saveAll}>
             保存
           </button>

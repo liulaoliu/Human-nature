@@ -29,7 +29,7 @@ describe('LanguageEditor：已有语言点', () => {
   it('编辑一条：表单回填，保存后保留来源', () => {
     const { container } = render(<LanguageEditor {...props()} />)
     fireEvent.click(screen.getAllByRole('button', { name: '编辑' })[0])
-    expect((screen.getByDisplayValue('SV') as HTMLInputElement).value).toBe('SV')
+    expect((screen.getByDisplayValue('SV') as HTMLTextAreaElement).value).toBe('SV')
     fireEvent.change(screen.getByDisplayValue('一般现在时'), { target: { value: '现在进行时' } })
     fireEvent.click(screen.getByRole('button', { name: '保存本条' }))
     expect(screen.getByText(/现在进行时/)).toBeTruthy()
@@ -46,6 +46,29 @@ describe('LanguageEditor：已有语言点', () => {
   })
 })
 
+describe('LanguageEditor：旧数据兼容', () => {
+  it('只有单条 language（老结构）也能回填、编辑、保存', () => {
+    const onSave = vi.fn()
+    const legacy = sentenceFixture('s9', 'Old style.', {
+      language: { structure: '旧结构', grammar: '旧语法', idioms: ['run fast'], usage: ['旧用法'] },
+    })
+    render(<LanguageEditor sentence={legacy} onSave={onSave} onClose={vi.fn()} />)
+    expect(screen.getByText('语言点（1）')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    expect((screen.getByDisplayValue('旧结构') as HTMLTextAreaElement).value).toBe('旧结构')
+    fireEvent.change(screen.getByDisplayValue('旧结构'), { target: { value: '新结构\n第二行' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存本条' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(onSave.mock.calls[0][0][0]).toMatchObject({
+      structure: '新结构\n第二行',
+      grammar: '旧语法',
+      idioms: ['run fast'],
+      usage: ['旧用法'],
+      source: 'ai',
+    })
+  })
+})
+
 describe('LanguageEditor：新增与保存', () => {
   it('表单全空时「加入列表」不新增', () => {
     const { container } = render(<LanguageEditor {...props()} />)
@@ -56,7 +79,7 @@ describe('LanguageEditor：新增与保存', () => {
   it('新增一条：列表/去重（分号分隔）/来源标记为手动', () => {
     const { container } = render(<LanguageEditor {...props()} />)
     fireEvent.change(screen.getByPlaceholderText(/句子主干/), { target: { value: 'SVO' } })
-    fireEvent.change(screen.getAllByPlaceholderText(/多个用「；」分隔/)[0], { target: { value: 'a；b; a' } })
+    fireEvent.change(screen.getAllByPlaceholderText(/多个用「；」/)[0], { target: { value: 'a；b; a' } })
     fireEvent.click(screen.getByRole('button', { name: '＋ 加入列表' }))
     expect(screen.getByText('语言点（3）')).toBeTruthy()
     expect(container.querySelectorAll('.lang-item')).toHaveLength(3)
@@ -76,6 +99,18 @@ describe('LanguageEditor：新增与保存', () => {
     expect(langs[2]).toMatchObject({ grammar: '虚拟语气', source: 'manual' })
   })
 
+  it('五个字段都是可换行的 textarea；多行内容按换行拆成多条', () => {
+    const onSave = vi.fn()
+    const { container } = render(<LanguageEditor {...props({ onSave })} />)
+    expect(container.querySelectorAll('.lang-form textarea')).toHaveLength(5)
+    expect(container.querySelectorAll('.lang-form input')).toHaveLength(0)
+    fireEvent.change(screen.getByPlaceholderText(/句子主干/), { target: { value: 'SVO\n（主句）' } })
+    fireEvent.change(screen.getAllByPlaceholderText(/多个用「；」/)[0], { target: { value: 'run fast\nwalk slow' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    const langs = onSave.mock.calls[0][0]
+    expect(langs[2]).toMatchObject({ structure: 'SVO\n（主句）', idioms: ['run fast', 'walk slow'], source: 'manual' })
+  })
+
   it('没有语言点的句子从空列表开始；保存空列表传 []', () => {
     const onSave = vi.fn()
     render(
@@ -89,16 +124,43 @@ describe('LanguageEditor：新增与保存', () => {
   })
 })
 
+describe('LanguageEditor：点输入框展开 / 点框外收回', () => {
+  it('聚焦哪个字段哪个字段展开；点标题或遮罩恢复原高度，切换字段跟着换', () => {
+    const { container } = render(<LanguageEditor {...props()} />)
+    const editor = container.querySelector('.lang-editor') as HTMLElement
+    const structure = screen.getByPlaceholderText(/句子主干/)
+    const grammar = screen.getByPlaceholderText(/时态/)
+
+    fireEvent.focus(structure)
+    expect(editor.className).toContain('expanded')
+    expect((structure.closest('label') as HTMLElement).className).toContain('expanded')
+
+    fireEvent.click(screen.getByText('语言点（2）'))
+    expect(editor.className).not.toContain('expanded')
+    expect((structure.closest('label') as HTMLElement).className).not.toContain('expanded')
+
+    fireEvent.focus(grammar)
+    expect(editor.className).toContain('expanded')
+    expect((grammar.closest('label') as HTMLElement).className).toContain('expanded')
+
+    fireEvent.click(container.querySelector('.lang-editor-overlay') as HTMLElement)
+    expect(editor.className).not.toContain('expanded')
+  })
+})
+
 describe('LanguageEditor：关闭', () => {
-  it('点遮罩关闭；点面板本身不关闭；取消按钮关闭', () => {
+  it('点遮罩 / 点面板都不关闭；只有「取消」关闭（保存由调用方关）', () => {
     const onClose = vi.fn()
-    const { container } = render(<LanguageEditor {...props({ onClose })} />)
+    const onSave = vi.fn()
+    const { container } = render(<LanguageEditor {...props({ onClose, onSave })} />)
+    fireEvent.click(container.querySelector('.lang-editor-overlay') as HTMLElement)
     fireEvent.click(screen.getByText('语言点（2）'))
     expect(onClose).not.toHaveBeenCalled()
+
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(onClose).toHaveBeenCalledTimes(1)
 
-    fireEvent.click(container.querySelector('.lang-editor-overlay') as HTMLElement)
-    expect(onClose).toHaveBeenCalledTimes(2)
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(onSave).toHaveBeenCalledTimes(1)
   })
 })

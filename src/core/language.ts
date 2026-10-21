@@ -11,9 +11,44 @@ export interface LanguageRow extends SentenceLanguage {
   id: string
 }
 
-/** 语言点里是否真有内容（空对象 `{}` 视为没有）。 */
-function hasLangContent(L: SentenceLanguage): boolean {
-  return !!(L.structure || L.grammar || L.idioms?.length || L.phrases?.length || L.usage?.length)
+/** 老数据里列表字段可能是「；/换行」连成的字符串；统一成去重后的数组。 */
+function termsOf(v: unknown): string[] | undefined {
+  if (Array.isArray(v)) {
+    const out = v.map((x) => (typeof x === 'string' ? x.trim() : '')).filter(Boolean)
+    return out.length ? out : undefined
+  }
+  if (typeof v === 'string') {
+    const out = splitLanguageList(v)
+    return out.length ? out : undefined
+  }
+  return undefined
+}
+
+/**
+ * 一条语言点的兼容层：老数据（单条 `language`、列表字段是字符串、缺字段）与
+ * AI / 手动写入的新数据都归一成 `SentenceLanguage`；没内容的返回 null。
+ *
+ * **编辑旧数据就靠这里**：视图只吃归一后的结果，`languageToForm` 不用再判断老形状。
+ * 结构 / 语法只裁掉「全是空白」的，内部换行与行首缩进原样保留（粘贴格式要能显示）。
+ */
+function normalizeLanguage(raw: unknown): SentenceLanguage | null {
+  if (!raw || typeof raw !== 'object') return null
+  const o = raw as Record<string, unknown>
+  const structure = typeof o.structure === 'string' ? o.structure : ''
+  const grammar = typeof o.grammar === 'string' ? o.grammar : ''
+  const idioms = termsOf(o.idioms)
+  const phrases = termsOf(o.phrases)
+  const usage = termsOf(o.usage)
+  if (!structure.trim() && !grammar.trim() && !idioms && !phrases && !usage) return null
+  const out: SentenceLanguage = {}
+  if (structure.trim()) out.structure = structure
+  if (grammar.trim()) out.grammar = grammar
+  if (idioms) out.idioms = idioms
+  if (phrases) out.phrases = phrases
+  if (usage) out.usage = usage
+  if (o.source === 'ai' || o.source === 'manual') out.source = o.source
+  if (typeof o.at === 'string' && o.at) out.at = o.at
+  return out
 }
 
 /** 取该句所有语言点（兼容旧的单条 `language`；旧的按 AI 来源算；空对象不计）。 */
@@ -22,17 +57,97 @@ export function getSentenceLanguages(s: {
   languages?: SentenceLanguage[]
 } | null | undefined): SentenceLanguage[] {
   if (!s) return []
-  const list = s.languages?.length
+  const raw: unknown[] = s.languages?.length
     ? s.languages
     : s.language
       ? [{ ...s.language, source: s.language.source ?? 'ai' }]
       : []
-  return list.filter(hasLangContent)
+  return raw.map(normalizeLanguage).filter((x): x is SentenceLanguage => !!x)
 }
 
 /** 该句是否有语言点（AI 或手动）。 */
 export function hasSentenceLanguage(s: { language?: SentenceLanguage; languages?: SentenceLanguage[] } | null | undefined): boolean {
   return getSentenceLanguages(s).length > 0
+}
+
+// ── 手动编辑表单 ────────────────────────────────────────────────
+// 阅读页与速读页共用同一个编辑器；表单的「怎么拆 / 怎么写回」只在这里实现一次。
+
+/** 编辑器里的五个文本字段（与 `SentenceLanguage` 的文本字段一一对应）。 */
+export interface LanguageForm {
+  structure: string
+  grammar: string
+  idioms: string
+  phrases: string
+  usage: string
+}
+
+export const EMPTY_LANGUAGE_FORM: LanguageForm = {
+  structure: '',
+  grammar: '',
+  idioms: '',
+  phrases: '',
+  usage: '',
+}
+
+/** 列表字段：支持「；/;/、/换行」分隔，去空、去重（换行也算分隔，多行输入不用手动写分号）。 */
+export function splitLanguageList(s: string): string[] {
+  return [...new Set(s.split(/[；;、\n]+/).map((x) => x.trim()).filter(Boolean))]
+}
+
+/** 表单 → 一条语言点；空字段不写，全空返回 `{}`（调用方据此判断「没内容」）。
+ *  结构 / 语法保留原始换行与缩进，只把「全是空白」当没填。 */
+export function languageFromForm(f: LanguageForm): SentenceLanguage {
+  const o: SentenceLanguage = {}
+  const structure = f.structure
+  const grammar = f.grammar
+  const idioms = splitLanguageList(f.idioms)
+  const phrases = splitLanguageList(f.phrases)
+  const usage = splitLanguageList(f.usage)
+  if (structure.trim()) o.structure = structure
+  if (grammar.trim()) o.grammar = grammar
+  if (idioms.length) o.idioms = idioms
+  if (phrases.length) o.phrases = phrases
+  if (usage.length) o.usage = usage
+  return o
+}
+
+/** 表单控件显示用：老数据即使是字符串 / 缺字段，也返回可编辑的文本。 */
+function formText(v: unknown): string {
+  if (typeof v === 'string') return v
+  if (Array.isArray(v)) {
+    return v
+      .filter((x): x is string => typeof x === 'string')
+      .map((x) => x.trim())
+      .filter(Boolean)
+      .join('；')
+  }
+  return ''
+}
+
+/** 一条语言点 → 表单（列表用「；」连起来，编辑时仍可换成多行）。 */
+export function languageToForm(L?: SentenceLanguage): LanguageForm {
+  return {
+    structure: formText(L?.structure),
+    grammar: formText(L?.grammar),
+    idioms: formText(L?.idioms),
+    phrases: formText(L?.phrases),
+    usage: formText(L?.usage),
+  }
+}
+
+/** 列表里的一行摘要：结构/语法里的换行压成空格，避免把列表撑高。 */
+export function languagePreview(L: SentenceLanguage): string {
+  const oneLine = (s: unknown) => (typeof s === 'string' ? s : '').replace(/\s*\n+\s*/g, ' ').trim()
+  return [
+    oneLine(L.structure),
+    oneLine(L.grammar),
+    ...(termsOf(L.idioms) ?? []),
+    ...(termsOf(L.phrases) ?? []),
+    ...(termsOf(L.usage) ?? []),
+  ]
+    .filter(Boolean)
+    .join(' ｜ ')
 }
 
 /** 出题提示词：按句 id 逐句分析，严格 JSON。 */
