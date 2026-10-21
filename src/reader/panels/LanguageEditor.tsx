@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useRef, useState, type ClipboardEvent as ReactClipboardEvent, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Sentence, SentenceLanguage } from '../../types/document'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
   EMPTY_LANGUAGE_FORM,
+  cleanPastedText,
   getSentenceLanguages,
   languageFromForm,
   languagePreview,
@@ -86,6 +87,24 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
   }
 
   const setField = (key: keyof LanguageForm, value: string) => setForm((f) => ({ ...f, [key]: value }))
+
+  /**
+   * 粘贴进输入框：先清洗（去空行 / 去行首缩进），再按光标位置插入。
+   * 只在清洗后确实变短时才接管，否则走浏览器默认行为（比如粘一个单词不该有任何差别）。
+   */
+  const pasteInto = (key: keyof LanguageForm, e: ReactClipboardEvent<HTMLTextAreaElement>) => {
+    const raw = e.clipboardData?.getData('text/plain') ?? ''
+    if (!raw || !/\n/.test(raw)) return
+    const clean = cleanPastedText(raw)
+    if (clean === raw) return
+    e.preventDefault()
+    const el = e.currentTarget
+    const start = el.selectionStart ?? el.value.length
+    const end = el.selectionEnd ?? start
+    setField(key, el.value.slice(0, start) + clean + el.value.slice(end))
+    const caret = start + clean.length
+    window.requestAnimationFrame(() => el.setSelectionRange(caret, caret))
+  }
 
   /** 点「正在展开的框」以外的地方：收回原高度（不关闭对话框；保存 / 取消仍走按钮）。 */
   const collapseOutside = (e: ReactMouseEvent<HTMLDivElement>) => {
@@ -195,6 +214,7 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
                 value={form[f.key]}
                 onFocus={() => setExpanded(f.key)}
                 onChange={(e) => setField(f.key, e.target.value)}
+                onPaste={(e) => pasteInto(f.key, e)}
                 placeholder={f.placeholder}
               />
             </label>

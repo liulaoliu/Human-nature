@@ -95,6 +95,22 @@ export function splitLanguageList(s: string): string[] {
   return [...new Set(s.split(/[；;、\n]+/).map((x) => x.trim()).filter(Boolean))]
 }
 
+/**
+ * 粘贴清洗：**只去掉空行，保留每行的行首缩进与单换行**。
+ *
+ * 语言点大多从网页 / AI 回答里复制，常见「一行正文一行空行」，保存后正文里
+ * （`white-space: pre-wrap`）会把空行原样显示，行距被撑得很散；这里把空行吃掉。
+ * 行首缩进是用户有意保留的层级信息（列表 / 代码块），**只清行尾空白，不动行首**。
+ */
+export function cleanPastedText(raw: string): string {
+  return raw
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.replace(/[ \t]+$/, ''))
+    .filter((line) => line.trim() !== '')
+    .join('\n')
+}
+
 /** 表单 → 一条语言点；空字段不写，全空返回 `{}`（调用方据此判断「没内容」）。
  *  结构 / 语法保留原始换行与缩进，只把「全是空白」当没填。 */
 export function languageFromForm(f: LanguageForm): SentenceLanguage {
@@ -112,8 +128,7 @@ export function languageFromForm(f: LanguageForm): SentenceLanguage {
   return o
 }
 
-/** 表单控件显示用：老数据即使是字符串 / 缺字段，也返回可编辑的文本。 */
-function formText(v: unknown): string {
+/** 表单控件显示用：老数据即使是字符串 / 缺字段，也返回可编辑的文本。 */function formText(v: unknown): string {
   if (typeof v === 'string') return v
   if (Array.isArray(v)) {
     return v

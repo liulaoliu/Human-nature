@@ -3,6 +3,7 @@ import {
   EMPTY_LANGUAGE_FORM,
   applyLanguage,
   buildLanguagePrompt,
+  cleanPastedText,
   getSentenceLanguages,
   languageFromForm,
   languagePreview,
@@ -109,6 +110,17 @@ describe('语言点编辑表单（阅读 / 速读共用一份规则）', () => {
 
   it('列表摘要：结构里的换行压成空格', () => {
     expect(languagePreview({ structure: 'SVO\n主句', grammar: '现在时', idioms: ['x'] })).toBe('SVO 主句 ｜ 现在时 ｜ x')
+  })
+
+  it('粘贴清洗：吃掉空行，行首缩进与单换行原样保留', () => {
+    expect(cleanPastedText('主句\n\n  从句\n\n\n  非谓语')).toBe('主句\n  从句\n  非谓语')
+    expect(cleanPastedText('a\r\n\r\nb')).toBe('a\nb')
+    // 行尾空白清掉，行首空格不动
+    expect(cleanPastedText('  x  \n\n  y  ')).toBe('  x\n  y')
+  })
+
+  it('粘贴清洗：本来就没有空行时原样返回（不触发接管）', () => {
+    expect(cleanPastedText('a\n  b')).toBe('a\n  b')
   })
 })
 

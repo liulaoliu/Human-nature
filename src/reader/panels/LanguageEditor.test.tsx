@@ -239,3 +239,21 @@ describe('LanguageEditor：关闭', () => {
     expect(onSave).toHaveBeenCalledTimes(1)
   })
 })
+
+describe('LanguageEditor：粘贴清洗', () => {
+  it('粘贴多行：吃掉空行，行首缩进保留', () => {
+    const { container } = render(<LanguageEditor {...props()} />)
+    const ta = container.querySelectorAll('.lang-form textarea')[0] as HTMLTextAreaElement
+    fireEvent.paste(ta, { clipboardData: { getData: () => '主句\n\n  从句\n\n  非谓语' } })
+    expect(ta.value).toBe('主句\n  从句\n  非谓语')
+  })
+
+  it('粘在中间：按光标位置插入，不清掉已有的内容', () => {
+    const { container } = render(<LanguageEditor {...props()} />)
+    const ta = container.querySelectorAll('.lang-form textarea')[0] as HTMLTextAreaElement
+    fireEvent.change(ta, { target: { value: 'AB' } })
+    ta.setSelectionRange(1, 1)
+    fireEvent.paste(ta, { clipboardData: { getData: () => 'x\n\ny' } })
+    expect(ta.value).toBe('Ax\nyB')
+  })
+})

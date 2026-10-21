@@ -991,8 +991,10 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   padding-left: 10px;
 }
 .lang-summary { font-size: 12px; margin: 0 0 8px; }
-/* 语言点正文：粘贴进来的换行 / 空行原样保留（HTML 默认会把连续空白压成一个空格）。 */
-.lang-line { white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 语言点正文：粘贴进来的换行 / 空行原样保留（HTML 默认会把连续空白压成一个空格）。
+   显式左对齐：粘贴内容里的行首空格已在 core/cleanPastedText 清掉，这里再兜一层，
+   免得被父级的 justify / center 带偏。 */
+.lang-line { white-space: pre-wrap; overflow-wrap: anywhere; text-align: left; }
 
 /* 今日计划 */
 .plan-overlay {
