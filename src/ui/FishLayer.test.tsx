@@ -53,9 +53,9 @@ afterEach(() => {
 })
 
 describe('FishLayer：滚轮缩放', () => {
-  it('默认大小 + 悬停「手」形光标', async () => {
+  it('默认是最小档 + 悬停「手」形光标', async () => {
     const { img } = await renderFish()
-    expect(img.style.width).toBe('104px')
+    expect(img.style.width).toBe('40px')
     expect(img.style.cursor).toBe('grab')
     expect(img.style.pointerEvents).toBe('auto')
   })
@@ -65,7 +65,7 @@ describe('FishLayer：滚轮缩放', () => {
 
     fireEvent.wheel(img, { deltaY: -200 })
     const enlarged = Number.parseInt(img.style.width, 10)
-    expect(enlarged).toBeGreaterThan(104)
+    expect(enlarged).toBeGreaterThan(40)
 
     fireEvent.wheel(img, { deltaY: 200 })
     expect(Number.parseInt(img.style.width, 10)).toBeLessThan(enlarged)
@@ -105,34 +105,42 @@ describe('FishLayer：图片上拖动', () => {
     expect(JSON.parse(localStorage.getItem(POS_KEY) ?? '{}')).toEqual({ right: 54, bottom: 42 })
   })
 
-  it('双击循环：最小 → 50% → 最大 → 最小，位置不动', async () => {
+  it('默认最小；双击 50% → 最大 → 最小，位置不动', async () => {
     const { img } = await renderFish()
-    fireEvent.wheel(img, { deltaY: -200 })
+    expect(img.style.width).toBe('40px')
+
+    // 先把鱼拖到别处，验证双击只改大小
     fireEvent.pointerDown(img, { pointerId: 1, clientX: 500, clientY: 500 })
     fireEvent.pointerMove(img, { pointerId: 1, clientX: 420, clientY: 430 })
     fireEvent.pointerUp(img, { pointerId: 1 })
     const shell = shellOf(img)
     const pos = { right: shell.style.right, bottom: shell.style.bottom }
 
-    // 第一次双击（从滚轮后的任意尺寸）→ 最小
+    // 第一下：已经在最小档，直接去 50%（最大 380 的一半）
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('190px')
+    expect(localStorage.getItem(SIZE_KEY)).toBe('190')
+
+    // 第二下 → 最大
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('380px')
+
+    // 第三下回到最小
     fireEvent.doubleClick(img)
     expect(img.style.width).toBe('40px')
     expect(localStorage.getItem(SIZE_KEY)).toBe('40')
 
-    // 第二次 → 50%（最大 380 的一半）
-    fireEvent.doubleClick(img)
-    expect(img.style.width).toBe('190px')
-
-    // 第三次 → 最大
-    fireEvent.doubleClick(img)
-    expect(img.style.width).toBe('380px')
-
-    // 第四次回到最小
-    fireEvent.doubleClick(img)
-    expect(img.style.width).toBe('40px')
-
     // 只改大小，不动位置
     expect(shell.style.right).toBe(pos.right)
     expect(shell.style.bottom).toBe(pos.bottom)
+  })
+
+  it('滚轮停在档与档之间时，双击第一下先回最小', async () => {
+    const { img } = await renderFish()
+    fireEvent.wheel(img, { deltaY: -200 })
+    expect(Number.parseInt(img.style.width, 10)).toBeGreaterThan(40)
+
+    fireEvent.doubleClick(img)
+    expect(img.style.width).toBe('40px')
   })
 })

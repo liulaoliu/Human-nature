@@ -35,10 +35,17 @@ describe('nextFishSize：双击循环', () => {
     expect(nextFishSize(FISH_SIZE_MAX)).toBe(FISH_SIZE_MIN)
   })
 
-  it('不在这三档时先回最小（默认 / 滚轮后的任意尺寸都算）', () => {
-    expect(nextFishSize(FISH_SIZE_DEFAULT)).toBe(FISH_SIZE_MIN)
+  it('默认就是最小档：刚出现时双击第一下去 50%', () => {
+    expect(FISH_SIZE_DEFAULT).toBe(FISH_SIZE_MIN)
+    expect(nextFishSize(FISH_SIZE_DEFAULT)).toBe(FISH_SIZE_HALF)
+  })
+
+  it('滚轮 / 拖拽停在档与档之间时先回最小', () => {
     expect(nextFishSize(123)).toBe(FISH_SIZE_MIN)
-    expect(nextFishSize(Number.NaN)).toBe(FISH_SIZE_MIN)
+  })
+
+  it('脏值按默认（最小）处理，第一下同样去 50%', () => {
+    expect(nextFishSize(Number.NaN)).toBe(FISH_SIZE_HALF)
   })
 
   it('50% = 最大值的一半', () => {
