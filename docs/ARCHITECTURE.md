@@ -97,6 +97,8 @@ types ← core ← adapters ← reader
 - 易混项来源：`core/vocabConfusables.ts`（`ai` / `dict`；旧数据没有来源就不标，不按内容猜）。
 - 词条核心字段来源/锁定：`core/vocabFields.ts`（音标 / 词性 / 中文释义 / 英英释义；
   `ai` / `dict` / `manual`；手动改过的字段才锁，旧数据仍按 `edited` / `mastered` 整条锁）。
+- 背单词「标过不认识 → 复习/加练先选中文释义」：`core/vocab/review.ts`
+  （`needsMeaningCheck` + `canQuizMeaning`）；视图只根据结果渲染，不再自己判断。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
 

@@ -3,8 +3,10 @@ import {
   buildLearnQueue,
   buildReviewQueue,
   buildStudyQueue,
+  canQuizMeaning,
   dueItems,
   isDue,
+  needsMeaningCheck,
   nextDayIso,
   review,
   reviewItem,
@@ -70,6 +72,41 @@ describe('出错加权（lapses）', () => {
     expect(review({ ease: 2.5, due: null, interval: 1, repetitions: 1 }, 'again').lapses).toBe(1)
   })
 })
+describe('不认识 → 复习/加练先选释义', () => {
+  const unknown = item({
+    tags: ['不认识'],
+    reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0, lapses: 1 },
+  })
+
+  it('没标过「不认识」不触发', () => {
+    expect(needsMeaningCheck(item({ tags: [] }))).toBe(false)
+    expect(needsMeaningCheck(item({ tags: [], reviewState: { ...unknown.reviewState } }))).toBe(false)
+  })
+
+  it('标过「不认识」且记忆未重建 → 复习要选释义', () => {
+    expect(needsMeaningCheck(unknown)).toBe(true)
+  })
+
+  it('已经评过认识/模糊（repetitions > 0）→ 普通复习不再强制', () => {
+    const learned = { ...unknown, reviewState: { ...unknown.reviewState, repetitions: 1 } }
+    expect(needsMeaningCheck(learned)).toBe(false)
+  })
+
+  it('本轮加练 / 收尾重练 → 即使 repetitions > 0 也要选', () => {
+    const learned = { ...unknown, reviewState: { ...unknown.reviewState, repetitions: 1 } }
+    expect(needsMeaningCheck(learned, { extra: true })).toBe(true)
+    expect(needsMeaningCheck(learned, { retrying: true })).toBe(true)
+  })
+
+  it('词库够 4 个释义才出题；不够就退回普通卡片', () => {
+    const target = item({ id: 'a', meaning: '跑' })
+    const others = ['走', '说', '看'].map((meaning, i) => item({ id: `o${i}`, meaning }))
+    expect(canQuizMeaning(target, [target, ...others])).toBe(true)
+    expect(canQuizMeaning(target, [target, ...others.slice(0, 2)])).toBe(false)
+    expect(canQuizMeaning(item({ id: 'n', meaning: null }), [target, ...others])).toBe(false)
+  })
+})
+
 describe('优先重排（答错 → 次日排最前）', () => {
   const now = new Date('2026-10-02T00:00:00Z')
   const due = (id: string) =>

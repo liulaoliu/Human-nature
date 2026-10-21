@@ -87,6 +87,42 @@ describe('useStudySession：单词之间切换', () => {
   })
 })
 
+describe('useStudySession：标过「不认识」的复习门禁', () => {
+  it('先过选释义；门禁期间 1/空格 不评分，放行后恢复', () => {
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({
+            id: 'w1',
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            tags: ['不认识'],
+            reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0, lapses: 1 },
+          }),
+          vocabItem({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+          vocabItem({ id: 'w3', word: 'say', lemma: 'say', meaning: '说' }),
+          vocabItem({ id: 'w4', word: 'see', lemma: 'see', meaning: '看' }),
+        ])}
+      />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    expect(api!.card?.id).toBe('w1')
+    expect(api!.meaningGate).toBe(true)
+
+    // 门禁期间快捷键交给 MeaningQuiz，不能直接翻面/评分
+    fireEvent.keyDown(window, { key: '1' })
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(api!.revealed).toBe(false)
+
+    act(() => api!.clearMeaningGate())
+    expect(api!.meaningGate).toBe(false)
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(api!.revealed).toBe(true)
+    unmount()
+  })
+})
+
 describe('useStudySession：背单词 / 背搭配分牌组', () => {  it('背单词只组单词，切到背搭配只组词组/习语', () => {
     const { unmount } = render(
       <Harness

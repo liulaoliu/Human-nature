@@ -1,5 +1,6 @@
 import type { ReviewState, VocabItem, VocabLibrary } from '../../types/document'
 import { isPriority, sortItems } from './library'
+import { displayMeaning } from './word'
 
 /**
  * 复习排期（SM-2 变体）与背单词队列。
@@ -61,6 +62,36 @@ export function reviewItem(
 
 export function isDue(item: VocabItem, now: Date = new Date()): boolean {
   return item.reviewState.due !== null && new Date(item.reviewState.due) <= now
+}
+
+/**
+ * 这个词要不要在复习 / 加练时先做「选中文释义」。
+ *
+ * 起因：第一次学习就点「不认识」的词，第二次及以上如果仍然模糊或继续标不认识，
+ * 只翻面看释义记不住。规则只在**已经标过不认识**的词上生效：
+ *   - 记忆还没重新建立（repetitions = 0）→ 每次出场先选释义；
+ *   - 本轮加练 / 收尾重练 → 即使刚评过模糊（repetitions 已 +1）也要先选。
+ *
+ * 不按 lapses 猜：lapses 只记「忘记」，普通第一次忘记不等于「不认识」。
+ */
+export function needsMeaningCheck(
+  item: VocabItem,
+  opts: { extra?: boolean; retrying?: boolean } = {},
+): boolean {
+  if (!item.tags.includes('不认识')) return false
+  return item.reviewState.repetitions === 0 || !!opts.extra || !!opts.retrying
+}
+
+/**
+ * 词库够不够出「正确释义 + 3 个干扰项」。
+ * 与 `needsMeaningCheck` 分开：规则说该考，但词库太小出不了题时退回普通卡片。
+ */
+export function canQuizMeaning(item: VocabItem, items: VocabItem[]): boolean {
+  const correct = displayMeaning(item)
+  if (!correct) return false
+  const others = new Set(items.filter((it) => it.id !== item.id).map((it) => displayMeaning(it)).filter(Boolean))
+  others.delete(correct)
+  return others.size >= 3
 }
 
 /** 到期（含逾期）的词条，按到期时间升序。 */

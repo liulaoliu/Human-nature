@@ -15,7 +15,7 @@ import { fmtDue, fmtInterval } from '../format'
 import type { StudyDraft } from '../hooks/useStudyCardEdit'
 import type { StudyScope } from '../hooks/useStudyPool'
 import VocabBlocks from './VocabBlocks'
-import DrillBoard from './StudyDrill'
+import DrillBoard, { MeaningQuiz } from './StudyDrill'
 import StudyEditForm from './StudyEditForm'
 import StudyRoundDone from './StudyRoundDone'
 import StudyToolbar from './StudyToolbar'
@@ -55,6 +55,8 @@ export interface StudyPanelProps {
   forgotCount: number
   /** 超过 drillAfter 秒未评分 → 强制锤炼（拼写/选义/搭配/听写），完成后才能评分。 */
   drillOn: boolean
+  /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
+  meaningGate: boolean
   drillAfter: number
 
   onClose: () => void
@@ -80,6 +82,7 @@ export interface StudyPanelProps {
   onNext: () => void
   onMarkUnknown: () => void
   onDrillCleared: () => void
+  onMeaningCleared: () => void
   onRetryForgot: () => void
   onRestart: () => void
 }
@@ -113,6 +116,7 @@ export default function StudyPanel({
   delArmed,
   forgotCount,
   drillOn,
+  meaningGate,
   drillAfter,
   onClose,
   onExam,
@@ -137,12 +141,15 @@ export default function StudyPanel({
   onNext,
   onMarkUnknown,
   onDrillCleared,
+  onMeaningCleared,
   onRetryForgot,
   onRestart,
 }: StudyPanelProps) {
   const spellingFront = spelling && !checked
   const canGrade = spelling ? checked : revealed
   const correct = card ? input.trim().toLowerCase() === card.word.trim().toLowerCase() : false
+  /** 规则由 core 判断，这里只负责显示。 */
+  const showMeaningGate = !!card && meaningGate
 
   // 自动朗读：每张卡（每个位置）读一次；拼写模式不读（会剧透）
   const speakRef = useRef(onSpeak)
@@ -195,7 +202,17 @@ export default function StudyPanel({
 
       {card ? (
         <>
-          {!drillOn && (
+          {!drillOn && (showMeaningGate ? (
+            <MeaningQuiz
+              card={card}
+              items={items}
+              onSpeak={onSpeak}
+              onPass={() => {
+                onMeaningCleared()
+                onReveal()
+              }}
+            />
+          ) : (
           <div className={'study-card heat-' + heat} onClick={spellingFront ? undefined : onReveal}>
             {spellingFront ? (
               <div className="study-prompt">
@@ -294,12 +311,12 @@ export default function StudyPanel({
               </>
             )}
           </div>
-          )}
+          ))}
 
           {/* 超时未评分 → 强制锤炼 */}
           {drillOn ? (
             <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} />
-          ) : (
+          ) : showMeaningGate ? null : (
             <>
               {/* 卡内维护：改词形/释义、删误加的词 */}
               <div className="bar study-tools">

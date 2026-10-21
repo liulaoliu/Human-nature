@@ -1,7 +1,16 @@
 import { useCallback, useRef, useState } from 'react'
 import { useHotkeys } from '../useHotkeys'
 import { inStudyDeck, type StudyDeck } from '../../core/entryKind'
-import { buildLearnQueue, buildReviewQueue, reviewItem, sortItems, type ReviewGrade, type StudyMode } from '../../core/vocab'
+import {
+  buildLearnQueue,
+  buildReviewQueue,
+  canQuizMeaning,
+  needsMeaningCheck,
+  reviewItem,
+  sortItems,
+  type ReviewGrade,
+  type StudyMode,
+} from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fmtInterval } from '../format'
@@ -90,19 +99,34 @@ export function useStudySession(params: UseStudySessionParams) {
   const [roundTotal, setRoundTotal] = useState(0)
   /** 忘记/模糊触发的「加练」次数（单独计数，不计入分母）。 */
   const [extraCount, setExtraCount] = useState(0)
+  /** 收尾「重练忘记的」：也按加练处理，标过不认识的词要先选释义。 */
+  const [retrying, setRetrying] = useState(false)
+  /** 本卡是否已经通过「选中文释义」这一关（换卡/评分时重置）。 */
+  const [meaningCleared, setMeaningCleared] = useState(false)
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
 
   /** 当前卡：优先取词库最新（评分/编辑后立刻反映），队列快照兜底。 */
   const card =
     queue && index < queue.length ? (library.items.find((it) => it.id === queue[index].id) ?? queue[index]) : null
+  /** 本轮加练（忘记/模糊后被追加到队尾）的卡；收尾重练另有 retrying 标记。 */
+  const isExtraCard = !!queue && roundTotal > 0 && index >= roundTotal
+  /** 标过「不认识」的词，在复习 / 加练时要先选中文释义（规则在 core）。 */
+  const meaningRequired =
+    !!card && needsMeaningCheck(card, { extra: isExtraCard, retrying }) && canQuizMeaning(card, library.items)
+  const meaningGate = meaningRequired && !meaningCleared
 
   /** 单卡计时 + 本轮总时长（每 15s / 退出时落盘）。 */
   const { liveSeconds, cardSeconds, unflushedSeconds } = useStudyTimers({ queue, index, addStudyTime })
 
   /** 本卡是否处于「强制锤炼」（超时且还没锤炼过）。 */
   const drillOn = !!queue && !!card && drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
-  const clearDrill = useCallback(() => setDrillCleared(true), [])
+  const clearDrill = useCallback(() => {
+    setDrillCleared(true)
+    // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
+    setMeaningCleared(true)
+  }, [])
+  const clearMeaningGate = useCallback(() => setMeaningCleared(true), [])
 
   /** 卡内编辑 / 两步删除（队列与进度仍由本 hook 推进）。 */
   const {
@@ -139,6 +163,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setDraft(null)
     setDelArmed(false)
     setDrillCleared(false)
+    setMeaningCleared(false)
   }, [])
 
   const resetSession = useCallback(() => {
@@ -147,6 +172,7 @@ export function useStudySession(params: UseStudySessionParams) {
     bumpedRef.current = new Set()
     setForgotCount(0)
     setExtraCount(0)
+    setRetrying(false)
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     resetCardUi()
   }, [resetCardUi])
@@ -262,6 +288,7 @@ export function useStudySession(params: UseStudySessionParams) {
       setEditOpen(false)
       setDelArmed(false)
       setDrillCleared(false)
+      setMeaningCleared(false)
       setIndex((i) => i + 1)
     },
     [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity],
@@ -324,6 +351,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     setQueue(items)
     setRoundTotal(items.length)
+    setRetrying(true)
     setIndex(0)
     resetCardUi()
   }, [library.items, resetCardUi])
@@ -371,7 +399,7 @@ export function useStudySession(params: UseStudySessionParams) {
         forward()
       } else if (e.key === 'Escape') close()
     },
-    !!queue && !editOpen && !drillOn,
+    !!queue && !editOpen && !drillOn && !meaningGate,
     40,
   )
 
@@ -409,9 +437,11 @@ export function useStudySession(params: UseStudySessionParams) {
     dueCount,
     newCount,
     drillOn,
+    meaningGate,
     drillAfter,
     setDrillAfter,
     clearDrill,
+    clearMeaningGate,
     /** 本轮尚未落盘的秒数（用于「累计时长」显示）。 */
     unflushedSeconds,
     start,

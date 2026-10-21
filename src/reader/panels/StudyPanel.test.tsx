@@ -45,6 +45,7 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     delArmed: false,
     forgotCount: 0,
     drillOn: false,
+    meaningGate: false,
     drillAfter: 45,
     onClose: noop,
     onExam: noop,
@@ -69,6 +70,7 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     onNext: noop,
     onMarkUnknown: noop,
     onDrillCleared: noop,
+    onMeaningCleared: noop,
     onRetryForgot: noop,
     onRestart: noop,
     ...over,
@@ -130,6 +132,33 @@ describe('StudyPanel：卡片与评分', () => {
   it('超时锤炼：隐藏评分按钮，交给 DrillBoard', () => {
     render(<StudyPanel {...props({ revealed: true, drillOn: true })} />)
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
+  })
+
+  it('标过不认识的复习卡：先选中文释义，选对才放行评分', () => {
+    const onReveal = vi.fn()
+    const onMeaningCleared = vi.fn()
+    const items = [
+      card,
+      vocabItem({ id: 'v2', word: 'walk', lemma: 'walk', meaning: '走' }),
+      vocabItem({ id: 'v3', word: 'say', lemma: 'say', meaning: '说' }),
+      vocabItem({ id: 'v4', word: 'see', lemma: 'see', meaning: '看' }),
+    ]
+    const { rerender } = render(
+      <StudyPanel {...props({ items, meaningGate: true, onReveal, onMeaningCleared })} />,
+    )
+    expect(screen.getByText('🧠 选中文释义')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /走/ }))
+    expect(onMeaningCleared).not.toHaveBeenCalled()
+    expect(screen.getByText('✘ 不对，再来一次')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /跑/ }))
+    expect(onMeaningCleared).toHaveBeenCalled()
+    expect(onReveal).toHaveBeenCalled()
+
+    rerender(<StudyPanel {...props({ items, revealed: true, onReveal, onMeaningCleared })} />)
+    expect(screen.getByRole('button', { name: /^认识/ })).toBeTruthy()
   })
 })
 

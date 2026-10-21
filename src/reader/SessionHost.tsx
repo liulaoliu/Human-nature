@@ -102,6 +102,7 @@ export default function SessionHost({
           delArmed={study.api.delArmed}
           forgotCount={study.api.forgotCount}
           drillOn={study.api.drillOn}
+          meaningGate={study.api.meaningGate}
           drillAfter={study.api.drillAfter}
           onClose={study.api.close}
           onExam={() => {
@@ -137,6 +138,7 @@ export default function SessionHost({
           onNext={study.api.forward}
           onMarkUnknown={study.api.markUnknown}
           onDrillCleared={study.api.clearDrill}
+          onMeaningCleared={study.api.clearMeaningGate}
           onRetryForgot={study.api.retryForgot}
           onRestart={() => study.api.start()}
         />
