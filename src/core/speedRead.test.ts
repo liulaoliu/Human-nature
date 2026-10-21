@@ -35,6 +35,15 @@ describe('speedRead', () => {
     expect(checkDrill(d!, d!.answer)).toBe(true)
   })
 
+  it('语言点在 languages[] 里（新结构 / 手动改过的旧数据）同样优先挖搭配', () => {
+    const s = S('Investments in renewables are ramping up.', {
+      languages: [{ phrases: ['ramp up'], source: 'ai' }],
+    })
+    const d = pickDrill(s)
+    expect(d?.via).toBe('phrase')
+    expect(d?.answer.toLowerCase()).toBe('ramping')
+  })
+
   it('没有语言点时挖生词', () => {
     const s = S('The generator transforms rotation into power.', { vocab: ['rotation'] })
     const d = pickDrill(s)

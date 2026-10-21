@@ -1,4 +1,5 @@
 import { blankWord, normalizeAnswer, shuffleQuiz } from './quiz'
+import { getSentenceLanguages } from './language'
 import { lemmaOf } from './vocab'
 import { wordSpans } from './wordSelect'
 import type { Sentence } from '../types/document'
@@ -69,8 +70,10 @@ function pickTargetBlank(
 ): { blanked: string; surface: string; via: SpeedReadDrill['via'] } | null {
   const text = sentence.text.trim()
   if (!text) return null
-  if (sentence.language?.phrases?.length) {
-    for (const p of sentence.language.phrases) {
+  // 语言点可能是旧的单条 `language`，也可能是 `languages[]`（手动改过之后就走后者）
+  const phrases = getSentenceLanguages(sentence).flatMap((L) => L.phrases ?? [])
+  if (phrases.length) {
+    for (const p of phrases) {
       const toks = p
         .split(/\s+/)
         .map((t) => t.replace(/[^A-Za-z'-]/g, ''))

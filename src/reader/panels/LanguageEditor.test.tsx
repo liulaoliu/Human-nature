@@ -47,6 +47,38 @@ describe('LanguageEditor：已有语言点', () => {
 })
 
 describe('LanguageEditor：旧数据兼容', () => {
+  it('库里真实老数据（单条 language、无 source/at、五个字段都填满）能回填并改', () => {
+    const onSave = vi.fn()
+    const real = sentenceFixture('s001', 'Investments in renewables are ramping up.', {
+      language: {
+        structure: '主句为主谓结构 Investments ... are ramping up；介词短语 in renewables 作后置定语修饰 Investments。',
+        grammar: '现在进行时 are ramping up 表正在加剧的趋势；ramp up 为可分短语动词。',
+        idioms: ['ramp up'],
+        phrases: ['investments in', 'ramp up'],
+        usage: ['renewables 恒用复数，指可再生能源', 'ramp up 多用于商业/经济语境，表示迅速增加'],
+      },
+    })
+    render(<LanguageEditor sentence={real} onSave={onSave} onClose={vi.fn()} />)
+    expect(screen.getByText('语言点（1）')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: '编辑' }))
+    // 列表字段用「；」连起来回填，结构 / 语法原样
+    expect((screen.getByDisplayValue('investments in；ramp up') as HTMLTextAreaElement).value).toBe('investments in；ramp up')
+    expect((screen.getByDisplayValue(/主句为主谓结构/) as HTMLTextAreaElement).value).toContain('in renewables 作后置定语')
+
+    fireEvent.change(screen.getByDisplayValue(/主句为主谓结构/), { target: { value: '改过的结构' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存本条' }))
+    fireEvent.click(screen.getByRole('button', { name: '保存' }))
+    expect(onSave.mock.calls[0][0][0]).toMatchObject({
+      structure: '改过的结构',
+      grammar: expect.stringContaining('现在进行时'),
+      idioms: ['ramp up'],
+      phrases: ['investments in', 'ramp up'],
+      usage: ['renewables 恒用复数，指可再生能源', 'ramp up 多用于商业/经济语境，表示迅速增加'],
+      source: 'ai',
+    })
+  })
+
   it('只有单条 language（老结构）也能回填、编辑、保存', () => {
     const onSave = vi.fn()
     const legacy = sentenceFixture('s9', 'Old style.', {

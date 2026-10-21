@@ -161,8 +161,12 @@ export default function SidePick({
               {t.label}
             </button>
           ))}
-          <button onClick={onOpenLang} disabled={!target} title="手动给这句加语言点（结构 / 语法 / 习语 / 词组 / 用法）">
-            ＋ 语言点
+          <button
+            onClick={onOpenLang}
+            disabled={!target}
+            title="编辑这句的语言点（结构 / 语法 / 习语 / 词组 / 用法）：已有的会带出来，没有就是新增"
+          >
+            语言点
           </button>
         </div>
         <div className="muted">

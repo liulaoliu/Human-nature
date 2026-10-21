@@ -129,6 +129,11 @@ describe('旧语言点兼容（编辑要能回填）', () => {
     const legacy = { structure: 'SVO', idioms: 'a；b' as unknown as string[], phrases: undefined }
     expect(languageToForm(legacy as unknown as SentenceLanguage)).toEqual({ structure: 'SVO', grammar: '', idioms: 'a；b', phrases: '', usage: '' })
   })
+
+  it('languages 是空数组时回落到单条 language（编辑不丢旧内容）', () => {
+    const legacy = { language: { structure: 'SV' }, languages: [] as SentenceLanguage[] }
+    expect(getSentenceLanguages(legacy)).toEqual([{ structure: 'SV', source: 'ai' }])
+  })
 })
 
 describe('applyLanguage', () => {

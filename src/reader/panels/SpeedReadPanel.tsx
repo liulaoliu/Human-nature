@@ -198,9 +198,9 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         <button
           onClick={() => sentence && onOpenLang(sentence)}
           disabled={!sentence}
-          title="给这一句加/改语言点（结构 / 语法 / 习语 / 词组 / 用法）"
+          title="编辑这一句的语言点（结构 / 语法 / 习语 / 词组 / 用法）：已有的会带出来，没有就是新增"
         >
-          ＋ 语言点
+          语言点
         </button>
         <span className="muted">平均 {summary.avgWpm} 词/分 · 超时 {summary.slow}</span>
       </div>

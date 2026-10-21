@@ -163,7 +163,7 @@ describe('SidePick：选区任务与粘回', () => {
     expect(onPrompt).toHaveBeenCalledWith('translate')
 
     rerender(<SidePick {...props({ target: '', onPrompt, onOpenLang })} />)
-    expect((screen.getByRole('button', { name: '＋ 语言点' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '语言点' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('粘贴框受控；应用/重发缺项按状态启用', () => {
