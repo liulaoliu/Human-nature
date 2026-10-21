@@ -72,10 +72,11 @@ types ← core ← adapters ← reader
 | 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
 | 面板 / 列表 / 对话框 | `src/reader/panels/*.tsx` | 不准塞领域判断；判断回 core |
 | 词库自动补全（例句/收藏…） | 加进 `src/core/libraryAutoFill.ts` | **不许再写第二个 effect 去读写词库**（见下） |
-| 背单词的「加练 / 重练忘记的」出场次数 | `src/core/vocab/extra.ts` | 每卡每轮最多 3 次（首见 + 2 次加练）、跨重练保留；过了释义门禁不再追加；「重练忘记的」每轮只发起一次。hook 只调 `planExtra` / `planRetryForgot`，到上限只提示、不改评分 |
+| 背单词的「加练 / 重练忘记的」出场次数 | `src/core/vocab/extra.ts` | 评「忘记了」就追加到队尾，**不封顶**，直到评「认识 / 模糊」；模糊即收尾、不再追加；「重练忘记的」每轮只发起一次。hook 只调 `planExtra` / `planRetryForgot`，不改评分 |
 | 背单词计时（单卡 / 本轮总时长） | `src/reader/hooks/useStudyTimers.ts` | 归零只看换卡 / 换轮；`paused`（卡内编辑）只停表不归零，停表前把未落盘秒数补记 |
 | 单词「学过没有 / 要不要复习」 | `src/core/vocab/review.ts` 的 `isFresh` / `hasReviewHistory` / `isRelearning` | 别再看 `repetitions === 0`：答错后它也会归零；新词 = 从未排期（interval 0 + due null + 非重学） |
 | 拼写判错 → 判为「不认识」 | `src/core/vocab/spelling.ts`（`spellingMatches` / `markSpellingMiss`） | 一次判定：SRS again + `relearn + 1` + 「不认识」标签；会话负责重排与锁导航，视图不算规则 |
+| 刚过释义关却点「忘记了」 | `src/core/vocab/review.ts` 的 `needsForgotConfirm` | 先确认再落库；确认前不写 SRS、评分快捷键停用；确认后仍按 again，**不偷偷降成 hard** |
 
 ## 三、两条硬约定（都是踩过坑换来的）
 
@@ -104,7 +105,9 @@ types ← core ← adapters ← reader
 - 背单词「标过不认识 → 复习/加练先选中文释义」：`core/vocab/review.ts`
   （`needsMeaningCheck` + `canQuizMeaning`）；视图只根据结果渲染，不再自己判断。
 - 背单词「加练 / 重练」的出场账本：`core/vocab/extra.ts`（`planExtra` / `planRetryForgot`）；
-  每卡每轮最多出场 3 次、跨重练保留，重练每轮只发起一次，hook 不许再自己数 `requeueRef`。
+  评「忘记了」就重排到队尾，**不设次数上限**（练到用户自己评认识/模糊为止）；「模糊」是收尾条件，
+  不再追加；「重练忘记的」每轮只发起一次。复习侧靠 `ReviewState.relearn` 把它排进下次复习队列最前，
+  hook 不许再自己数出场次数。
 - 背单词计时：`hooks/useStudyTimers`（`paused` 暂停、每 15s 落盘）；卡内编辑的时间不算学习时长。
 - 复习状态分类：`core/vocab/review.ts` 的 `isFresh` / `hasReviewHistory` / `isRelearning`；
   `ReviewState.relearn` 是进入重学的唯一标记（again 时 +1，连续两次答对才清零）。
@@ -113,6 +116,9 @@ types ← core ← adapters ← reader
 - 拼写判错：`core/vocab/spelling.ts`。`spellingMatches` 只忽略大小写/空白，不做词形兜底；
   `markSpellingMiss` 写 again + `relearn` + 「不认识」。会话（背单词 / 考试）判定后必须锁住
   「再输一次 / 下一题 / 退出」，确认后才允许继续；重排由 `useStudySession.applySpellingMiss` 做。
+- 「刚选对释义又点忘记」：`core/vocab/review.ts` 的 `needsForgotConfirm`。释义关 / 锤炼刚考过
+  词义，紧接着评「忘记」是矛盾输入：先停在确认条（确实忘了 → again；其实记得 → hard），
+  确认前不落库。**规则只决定「要不要问」，不替用户改分**；「不认识」按钮是显式标签动作，不走这条。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
 

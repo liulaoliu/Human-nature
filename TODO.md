@@ -3,9 +3,10 @@
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
-> - schema **v7**；`npm run gates` 全绿：**215 个测试文件，2007 passed / 1 skipped**（2026-10-21 Windows 本机实测，约 100 秒）。
->   （本机 `TEMP` 已在 I 盘；并行 worker 往工作区外的临时目录写缓存会被沙箱拦，属工具环境问题；
->   跑门禁可把 `TEMP/TMP` 指到 `I:/Examples/.tmp-gates`，跑完删掉）
+> - schema **v7**；`npm run gates` 全绿：**216 个测试文件，2020 passed / 1 skipped**（2026-10-21 Windows 本机实测，约 100 秒）。
+>   （本机 `TEMP` 已在 I 盘；并行 worker 往工作区外的临时目录写 vitest 转换缓存会被沙箱拦
+>   （`EPERM`，会静默掉一个 worker、少跑一个文件）。跑门禁加 `--cache=false`，并把
+>   `TEMP/TMP` 指到工作区内的 `node_modules/.tmp-vitest`，跑完即可）
 > - 数据不在 git 里：换电脑先看 [`docs/HANDOFF.md`](docs/HANDOFF.md) 的「换电脑怎么把数据带走」。
 > - **2026-10-21 来源标记进展**：本篇生词 `via`、易混项 `confusablesSource`、词条字段 `fieldSources`、
 >   本篇语境释义 `meaningSource`、已保存文章 `origin` 已落地；合法值/标签分别在 `core/vocabVia.ts` /
@@ -14,18 +15,21 @@
 > - **背单词复习门禁**：标过「不认识」的词，复习/加练时先选中文释义；规则在
 >   `core/vocab/review.ts`（`needsMeaningCheck` + `canQuizMeaning`），词库不够出题时退回普通卡片。
 > - **待做（2026-10-21 讨论）**：
->   1. [x] **加练总上限（P1）**：每张卡每轮最多出现 3 次（首见 + 2 次加练），计数跨
->      `retryForgot` 保留，只在 `start` / 新一轮重置；通过释义门禁后，模糊/忘记只写 SRS，
->      不再按同一张卡自动无限追加；「重练忘记的」每轮只发起一次；到上限给 toast
->      （「本轮已练 3 次，按当前评分排期」）。**不自动把模糊/忘记改成认识，不篡改用户评分。**
->      **2026-10-21 完成**：账本在 `core/vocab/extra`（`planExtra` / `planRetryForgot`，9 条测试），
+>   1. [x] **忘记一直重排，直到认识 / 模糊（P1，2026-10-21 改版）**：每张卡评「忘记了」就追加到
+>      队尾，**不设次数上限**（旧规则「最多 3 次」会把一直记不住的词放过，等于替用户决定「可以了」）；
+>      「模糊 / 认识」都是收尾，不再追加；「重练忘记的」每轮只发起一次。
+>      复习侧靠 `ReviewState.relearn` 把词排进下次复习队列最前。
+>      **不自动把模糊/忘记改成认识，不篡改用户评分。**
+>      **2026-10-21 完成**：账本在 `core/vocab/extra`（`planExtra` / `planRetryForgot`，7 条测试），
 >      `useStudySession` 只在开新一轮时重置；小结页重练过就不再给按钮（`canRetryForgot`）。
 >   2. [x] **编辑时暂停计时（P1）**：`useStudyTimers` 增加 `paused`，`useStudySession` 传
 >      `editOpen`；单卡计时与本轮总时长都暂停，恢复不归零；暂停期间不推进锤炼阈值、不计学习时长。
 >      验收：编辑 10 秒计时不变，保存/取消后继续。**2026-10-21 完成**（5 + 1 条测试；
 >      归零与跑表拆成两个 effect，暂停前补记未落盘秒数）。
->   3. [ ] **可选（暂不做，先观察）**：释义门禁通过后仍点「忘记」时，给排期一个 `hard` 下限
->      （或二次确认），避免 `repetitions` 一直归零；先看 1–2 的实测再定。
+>   3. [x] **刚过释义关点「忘记」先确认（P1）**：`needsForgotConfirm` 只在「本卡刚证明认识词义
+>      （释义关 / 锤炼选义）+ 评忘记」时为真；确认条给「确实忘了 → again」「其实记得 → hard」
+>      「返回重评」，确认前不写 SRS、评分快捷键停用。**仍不篡改用户评分**（不静默降级）。
+>      **2026-10-21 完成**（core 1 + hook 4 + 面板 1 条测试）。
 >   4. [x] **「记住过又忘」的重学闭环（P1）**：`ReviewState.relearn` 显式标记重学；
 >      again 时 +1（上限 3），答对走 1 天 → 3 天阶梯、连续两次答对才清零；
 >      队列改用 `isFresh` / `hasReviewHistory` 分类，答错的词留在复习队列最前，
@@ -36,8 +40,12 @@
 >      背单词 / 锤炼 / 考试都不给第二次输入，判定未确认前锁住下一题与退出。
 >      **2026-10-21 完成**（`core/vocab/spelling` 5 条 + 会话 / 面板 7 条）。
 > - 本轮已完成：
->   - **背单词加练上限 + 编辑暂停计时**（`core/vocab/extra` 9 条 + `useStudyTimers.paused` 2 条 +
->     `useStudySession` 4 条；一轮最多 3 次出场，卡内编辑两只表都不走）
+>   - **背单词忘记不封顶 + 编辑暂停计时**（`core/vocab/extra` 7 条 + `useStudyTimers.paused` 2 条 +
+>     `useStudySession` 6 条；忘记一直重排到认识/模糊，卡内编辑两只表都不走）
+>   - **鱼的交互**：滚轮缩放 + 图片上按住拖动（悬停变手形），保留原两个手柄与双击复位，
+>     `ui/FishLayer` 5 条测试
+>   - **速读 Alt+点击复制整句**：复用阅读页的 `altCopyText`，面板捕获阶段处理（词 span 会
+>     stopPropagation），`SpeedReadPanel` 2 条测试
 >   - **统计页「重建并核对」**（`core/learningCheck` + `hooks/useLearningRebuild`）
 >   - **列表无障碍**（重复动作按钮带条目名 + toast `aria-live`）
 >   - **跟读模块瘦身**：`state/session` 1185 → **732**、`ui/App` 1191 → **624**、
