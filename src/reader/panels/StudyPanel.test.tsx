@@ -47,6 +47,7 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     canRetryForgot: true,
     drillOn: false,
     meaningGate: false,
+    pendingForgot: false,
     relearning: false,
     spellMiss: null,
     navLocked: false,
@@ -70,6 +71,9 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     onSaveEdit: noop,
     onCancelEdit: noop,
     onGrade: noop,
+    onConfirmForgot: noop,
+    onSoftenForgot: noop,
+    onCancelForgot: noop,
     onBack: noop,
     onNext: noop,
     onMarkUnknown: noop,
@@ -229,5 +233,28 @@ describe('StudyPanel：维护与本轮小结', () => {
     expect(onRetryForgot).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: /再来一轮/ }))
     expect(onRestart).toHaveBeenCalled()
+  })
+})
+
+describe('StudyPanel：刚过释义关点「忘记了」', () => {
+  it('不直接落库：给出「确实忘了 / 其实记得 / 返回」三个出口', () => {
+    const onConfirmForgot = vi.fn()
+    const onSoftenForgot = vi.fn()
+    const onCancelForgot = vi.fn()
+    render(
+      <StudyPanel
+        {...props({ revealed: true, pendingForgot: true, onConfirmForgot, onSoftenForgot, onCancelForgot })}
+      />,
+    )
+
+    expect(screen.getByText(/刚选对了释义，却又点了「忘记了」/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /其实记得 · 按模糊/ }))
+    fireEvent.click(screen.getByRole('button', { name: /确实忘了 · 从头重学/ }))
+    fireEvent.click(screen.getByRole('button', { name: '返回重评' }))
+    expect(onSoftenForgot).toHaveBeenCalledTimes(1)
+    expect(onConfirmForgot).toHaveBeenCalledTimes(1)
+    expect(onCancelForgot).toHaveBeenCalledTimes(1)
   })
 })

@@ -6,6 +6,7 @@ import {
   canQuizMeaning,
   dueItems,
   isDue,
+  needsForgotConfirm,
   needsMeaningCheck,
   nextDayIso,
   review,
@@ -248,5 +249,14 @@ describe('重学（记住过又忘记 / 拼错）', () => {
   it('正在重学的词即使没打「不认识」标签，也要先选释义', () => {
     const rel = item({ tags: [], reviewState: { ease: 2.5, due: '2026-10-02T00:00:00Z', interval: 1, repetitions: 0, relearn: 1 } })
     expect(needsMeaningCheck(rel)).toBe(true)
+  })
+})
+
+describe('释义关通过后的「忘记」确认', () => {
+  it('只有「刚证明认识词义 + 评忘记」才要求确认', () => {
+    expect(needsForgotConfirm({ grade: 'again', meaningProven: true })).toBe(true)
+    expect(needsForgotConfirm({ grade: 'again', meaningProven: false })).toBe(false)
+    expect(needsForgotConfirm({ grade: 'hard', meaningProven: true })).toBe(false)
+    expect(needsForgotConfirm({ grade: 'good', meaningProven: true })).toBe(false)
   })
 })

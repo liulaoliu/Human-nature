@@ -879,6 +879,17 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */
 .study-tools { justify-content: center; gap: 10px; }
 .grade-preview { text-align: center; font-size: 12px; margin: 2px 0 6px; }
+.forgot-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(224, 138, 60, 0.5);
+  border-radius: var(--radius-lg);
+  background: rgba(224, 138, 60, 0.08);
+  text-align: center;
+}
 .grade-info { color: var(--accent); font-size: 13px; font-weight: 600; }
 .study-srs { margin-top: 12px; font-size: 12px; }
 .study-conf { margin-top: 10px; font-size: 13px; }

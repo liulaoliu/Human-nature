@@ -66,6 +66,8 @@ export interface StudyPanelProps {
   drillOn: boolean
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
   meaningGate: boolean
+  /** 刚过释义关却点了「忘记了」：等用户确认按哪个排期（确认前不落库）。 */
+  pendingForgot: boolean
   drillAfter: number
 
   onClose: () => void
@@ -87,6 +89,12 @@ export interface StudyPanelProps {
   onSaveEdit: () => void
   onCancelEdit: () => void
   onGrade: (grade: ReviewGrade) => void
+  /** 「确实忘了」：确认按 again 落库（进入重学）。 */
+  onConfirmForgot: () => void
+  /** 「其实记得」：改按 hard 排期，不把进度清零。 */
+  onSoftenForgot: () => void
+  /** 返回重评（什么都不写）。 */
+  onCancelForgot: () => void
   onBack: () => void
   onNext: () => void
   onMarkUnknown: () => void
@@ -131,6 +139,7 @@ export default function StudyPanel({
   canRetryForgot,
   drillOn,
   meaningGate,
+  pendingForgot,
   relearning,
   spellMiss,
   navLocked,
@@ -154,6 +163,9 @@ export default function StudyPanel({
   onSaveEdit,
   onCancelEdit,
   onGrade,
+  onConfirmForgot,
+  onSoftenForgot,
+  onCancelForgot,
   onBack,
   onNext,
   onMarkUnknown,
@@ -376,7 +388,20 @@ export default function StudyPanel({
                 <StudyEditForm draft={draft} onDraftChange={onDraftChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
               )}
 
-              {canGrade ? (
+              {pendingForgot ? (
+                <div className="forgot-confirm">
+                  <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>
+                  <div className="bar study-actions">
+                    <button className="danger" onClick={onConfirmForgot}>
+                      确实忘了 · 从头重学
+                    </button>
+                    <button className="primary" onClick={onSoftenForgot}>
+                      其实记得 · 按模糊（{fmtInterval(review(card.reviewState, 'hard').interval)}）
+                    </button>
+                    <button onClick={onCancelForgot}>返回重评</button>
+                  </div>
+                </div>
+              ) : canGrade ? (
                 <>
                   <div className="muted grade-preview">
                     预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}

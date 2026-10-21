@@ -104,6 +104,7 @@ export default function SessionHost({
           canRetryForgot={study.api.canRetryForgot}
           drillOn={study.api.drillOn}
           meaningGate={study.api.meaningGate}
+          pendingForgot={study.api.pendingForgot}
           relearning={study.api.relearning}
           spellMiss={study.api.spellMiss}
           navLocked={study.api.navLocked}
@@ -138,6 +139,9 @@ export default function SessionHost({
             study.api.setDraft(null)
           }}
           onGrade={study.api.grade}
+          onConfirmForgot={study.api.confirmForgot}
+          onSoftenForgot={study.api.softenForgot}
+          onCancelForgot={study.api.cancelForgot}
           onBack={study.api.back}
           onNext={study.api.forward}
           onMarkUnknown={study.api.markUnknown}

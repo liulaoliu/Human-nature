@@ -8,7 +8,7 @@ import {
   isFresh,
   isRelearning,
   markSpellingMiss,
-  MAX_CARD_APPEARANCES,
+  needsForgotConfirm,
   needsMeaningCheck,
   planExtra,
   planRetryForgot,
@@ -128,6 +128,8 @@ export function useStudySession(params: UseStudySessionParams) {
   const [meaningCleared, setMeaningCleared] = useState(false)
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
+  /** 本卡刚过释义关却点了「忘记了」：等用户确认按哪个排期（不偷偷改分）。 */
+  const [pendingForgot, setPendingForgot] = useState(false)
 
   /** 当前卡：优先取词库最新（评分/编辑后立刻反映），队列快照兜底。 */
   const card =
@@ -205,6 +207,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setDelArmed(false)
     setDrillCleared(false)
     setMeaningCleared(false)
+    setPendingForgot(false)
     setSpellMiss(null)
   }, [])
 
@@ -252,8 +255,6 @@ export function useStudySession(params: UseStudySessionParams) {
         setExtraRound(decision.round)
         setQueue((q) => (q ? [...q, cur] : q))
         setExtraCount((n) => n + 1)
-      } else if (decision.blocked === 'cap') {
-        flash(`本轮已练 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
       }
       setGradeInfo('拼写错误 · 判为不认识 · 已从零重学')
       window.setTimeout(() => setGradeInfo(''), 2000)
@@ -387,7 +388,8 @@ export function useStudySession(params: UseStudySessionParams) {
     [library.items, flash, closeQuiz, resetSession],
   )
 
-  const grade = useCallback(
+  /** 真正落库的评分（对外入口是下面的 `grade`，会先处理「忘记确认」）。 */
+  const applyGrade = useCallback(
     (g: ReviewGrade) => {
       if (spellMiss) return
       if (!queue) return
@@ -416,18 +418,14 @@ export function useStudySession(params: UseStudySessionParams) {
         forgotRef.current.push(cur.id)
         setForgotCount(forgotRef.current.length)
       }
-      // 帮记忆：忘记 / 模糊的词本轮末尾再加练（规则在 core/vocab/extra：
-      // 每卡每轮最多出场 3 次、跨「重练忘记的」保留、过了释义门禁就不再追加）
+      // 帮记忆：忘记的词本轮末尾再出现（不封顶，直到评认识/模糊）；模糊即收尾。
+      // 规则在 core/vocab/extra。
       if (g === 'again' || g === 'hard') {
-        const decision = planExtra(extraRound, cur.id, g, { gated: meaningRequired })
+        const decision = planExtra(extraRound, cur.id, g)
         if (decision.append) {
           setExtraRound(decision.round)
           setQueue((q) => (q ? [...q, cur] : q))
           setExtraCount((n) => n + 1)
-        } else if (decision.blocked === 'cap') {
-          flash(`本轮已练 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
-        } else if (decision.blocked === 'gate') {
-          flash('已过释义关，这张卡按当前评分排期')
         }
       }
       setRevealed(false)
@@ -437,10 +435,40 @@ export function useStudySession(params: UseStudySessionParams) {
       setDelArmed(false)
       setDrillCleared(false)
       setMeaningCleared(false)
+      setPendingForgot(false)
       setIndex((i) => i + 1)
     },
-    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, meaningRequired, flash, spellMiss],
+    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, flash, spellMiss],
   )
+
+  /**
+   * 评分入口：这张卡刚选对释义（释义关 / 锤炼里的选义题）却点「忘记了」，
+   * 说明两个信号矛盾，先拦成一次显式确认；确认后仍按用户原意写 again，不偷改分。
+   */
+  const grade = useCallback(
+    (g: ReviewGrade) => {
+      if (needsForgotConfirm({ grade: g, meaningProven: meaningCleared })) {
+        setPendingForgot(true)
+        return
+      }
+      applyGrade(g)
+    },
+    [applyGrade, meaningCleared],
+  )
+
+  /** 确认「确实忘了」：按 again 落库（repetitions 归零、进入重学）。 */
+  const confirmForgot = useCallback(() => {
+    setPendingForgot(false)
+    applyGrade('again')
+  }, [applyGrade])
+
+  /** 改按「模糊」：刚选对释义，多半只是没把握，不必把进度清零。 */
+  const softenForgot = useCallback(() => {
+    setPendingForgot(false)
+    applyGrade('hard')
+  }, [applyGrade])
+
+  const cancelForgot = useCallback(() => setPendingForgot(false), [])
 
   const close = useCallback(() => {
     // 拼错后必须先确认「判为不认识」，不给直接退出把这次判罚吞掉
@@ -507,10 +535,9 @@ export function useStudySession(params: UseStudySessionParams) {
     }
     setExtraRound(plan.round)
     if (!plan.ids.length) {
-      flash(`这些词本轮已练满 ${MAX_CARD_APPEARANCES} 次，按当前评分排期`)
+      flash('没有可重练的词')
       return
     }
-    if (plan.capped > 0) flash(`${plan.capped} 个词本轮已练满 ${MAX_CARD_APPEARANCES} 次，不再重练`)
     const keep = new Set(plan.ids)
     const retryItems = items.filter((it) => keep.has(it.id))
     forgotRef.current = []
@@ -528,7 +555,7 @@ export function useStudySession(params: UseStudySessionParams) {
   // 快捷键：空格/回车 翻面/判卷/认识，1/2/3 = 认识/模糊/忘记了，Q/E = 上一个/下一个单词，Esc 退出
   useHotkeys(
     (e) => {
-      if (!queue || editOpen || drillOn || spellMiss) return
+      if (!queue || editOpen || drillOn || spellMiss || pendingForgot) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
@@ -568,7 +595,7 @@ export function useStudySession(params: UseStudySessionParams) {
         forward()
       } else if (e.key === 'Escape') close()
     },
-    !!queue && !editOpen && !drillOn && !meaningGate && !spellMiss,
+    !!queue && !editOpen && !drillOn && !meaningGate && !spellMiss && !pendingForgot,
     40,
   )
 
@@ -613,6 +640,8 @@ export function useStudySession(params: UseStudySessionParams) {
     relearning,
     /** 拼写错误的判定提示；非空时禁止切卡 / 退出，必须先确认。 */
     spellMiss,
+    /** 刚过释义关却点「忘记了」，等确认（确认前不落库）。 */
+    pendingForgot,
     /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
     navLocked: !!spellMiss,
     drillAfter,
@@ -627,6 +656,9 @@ export function useStudySession(params: UseStudySessionParams) {
     startArticleAll,
     startRelearn,
     grade,
+    confirmForgot,
+    softenForgot,
+    cancelForgot,
     back,
     forward,
     markUnknown,
