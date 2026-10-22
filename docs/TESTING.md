@@ -284,6 +284,20 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   **踩坑**：`advance` 曾在 `setIndex` 的 updater 里嵌套 `setWords` + `onDone`（→ 主 hook 再 `setIndex`），
   React 渲染期嵌套更新在 jsdom 下只报一个被 sourcemap 吞掉的神秘错误（`column must be >= 0`）——
   **updater 必须纯**：先用当前值算好下一步，再分头更新，最后才回调。
+- **背单词「锤炼门禁 + 两列布局」（2026-10-22 第四批）**：`core/vocab/drill`（5：没在背 / 拼错判定 /
+  释义关不锤炼、超时触发、重学卡摊开释义触发、已判停卡两者都不抢）、
+  `hooks/useStudySession.drill.test`（3：学习选错释义 → 点「继续」要见到单词卡 / 复习判「忘记了」停卡看答案 /
+  下一条重学卡摊开释义才锤炼）、`StudyPanel` 补 2 条（工具条只能在自己的左栏、拼错页空格提示）。
+  **踩坑 1**：锤炼是**评分门禁**，判完停在卡上的卡不能再门禁一次——学习模式选错释义判 again 后，
+  这个词当场成了 `isRelearning`，点「继续（看单词卡）」的同一帧就命中「重学摊释义 → 锤炼」分支，
+  单词卡一帧都没露；复习模式按「忘记了」同样。
+  **踩坑 2**：grid 行高默认 `auto` 会被内容撑开，`flex: 1 / min-height: 0` 全白写，
+  按钮照样被顶出屏幕；要显式 `grid-template-rows: minmax(0, 1fr)` 才锁得住一屏。
+  **踩坑 3**：夹具 `Harness` 的 library 是静态的，判完 again 不会真的变成 `isRelearning`——
+  要测这条路径得用回灌版（`onPersist` → `setLibrary`，见 `useStudySession.drill.test` 里的 `Live`）。
+  **踩坑 4**：`R`（朗读）原来写在最后那条「普通卡」分支里，前面 5 个状态分支全是 `return`——
+  学习模式判完停在 `learnGraded`（几乎是常态）时按 R 毫无反应。**全局动作要放在状态分支之前**，
+  只保留「拼写未判卷（防剧透）」「光标在输入框里」两个例外；补了 2 条用例（判完停卡能读 / 释义题能读且拼写判卷前不读）。
 - **背单词「复习三键 + 快捷键」（2026-10-22 第三批）**：`core/vocab/reviewStep`（7：认识/easy 直接推进 /
   模糊不落库只摊卡 / 忘记立刻 again 停卡 / 模糊两个出口 / 一次只写一次库）、
   `hooks/useStudyReviewStep`（10：复习模式才给三键 / 学习模式与门禁占住时不给 /
