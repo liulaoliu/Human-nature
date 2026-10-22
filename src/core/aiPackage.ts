@@ -2,9 +2,14 @@
  * AI 工作包：把「复制提示词 → 贴到网页版 AI → 把结果粘回来」这一串手工活，
  * 打成一个文件整包交给 AI（或本机 agent），再把结果文件导回，一次应用全部。
  *
- * 这里只放**不依赖 DOM / React 的纯逻辑**：类型、打包、解析、分块，以及
- * 「由当前数据推导出所有待办」的 `buildAiJobs`。
+ * 这里只放**不依赖 DOM / React 的纯逻辑**：由当前数据推导待办、数待办、拼任务名。
  * 具体的解析与应用（apply*）仍在 ReaderApp 里组装。
+ *
+ * 分层（本文件是门面，调用方 import 不用改）：
+ *   - `aiJobTypes.ts`：任务清单、job / result / pack 的类型
+ *   - `aiPackIO.ts`：包的序列化 / 宽容解析 / 稳定 id
+ *   - `aiTodos.ts`：待办筛选与分块（build 与 count 共用，避免两处条件漂移）
+ *   - `aiWebPack.ts`：网页版提示词与 `@@@ANSWER` 回读
  */
 import {
   buildAutoVocabPrompt,
@@ -18,241 +23,29 @@ import {
   buildTranslateAllPrompt,
   type VocabLevel,
 } from './analyzer'
-import { isWordEntry } from './entryKind'
+import {
+  confusableChunks,
+  lookupChunks,
+  pickContextLookup,
+  pickExamples,
+  pickLemmas,
+  pickMarks,
+  pickPhrases,
+  pickPos,
+  pickTodoBase,
+  sentenceChunks,
+} from './aiTodos'
+import { makeJobId } from './aiPackIO'
+import { AI_TASK_LABEL } from './aiJobTypes'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
-import { isMarkablePos, needsAiExamples, normalizeWord } from './vocab'
+import type { AiJob, AiJobTask } from './aiJobTypes'
 import type { Sentence, VocabItem } from '../types/document'
 
-/** 可以打包的 AI 任务类型（与 ReaderApp 的 lastTask 对齐）。 */
-export const AI_JOB_TASKS = [
-  'lookup',
-  'translate',
-  'auto_vocab',
-  'confusable',
-  'example',
-  'phrase',
-  'lemma',
-  'pos',
-  'grammar_mark',
-  'listening',
-  'language',
-  'imitation',
-  'feedback',
-] as const
-
-export type AiJobTask = (typeof AI_JOB_TASKS)[number]
-
-export function isAiJobTask(value: unknown): value is AiJobTask {
-  return typeof value === 'string' && (AI_JOB_TASKS as readonly string[]).includes(value)
-}
-
-/** 任务类型的中文名（进度面板分组显示用）。 */
-export const AI_TASK_LABEL: Record<AiJobTask, string> = {
-  lookup: '查词/补齐',
-  translate: '翻译',
-  auto_vocab: '自动标词',
-  confusable: '混淆项',
-  example: '例句',
-  phrase: '词组/习语',
-  lemma: '原形',
-  pos: '-ing/-ed',
-  grammar_mark: '语法标记',
-  listening: '听力',
-  language: '语言点',
-  imitation: '仿写',
-  feedback: '批改',
-}
-
-/** 工作包里的一个待办：一条提示词 + 应用它时需要的上下文（问过哪些词/句）。 */
-export interface AiJob {
-  id: string
-  task: AiJobTask
-  /** 人看的一行说明，例如「生成混淆项（60）」。 */
-  label: string
-  /** 回执里用于判断「AI 没返回哪些」的词。 */
-  askedWords: string[]
-  /** 同上，句子 id（翻译 / 语言点）。 */
-  askedIds: string[]
-  /** 要原样发给 AI 的完整提示词。 */
-  prompt: string
-}
-
-export interface AiJobPack {
-  version: 1
-  exportedAt: string
-  /**
-   * 给 AI / 本机 agent 的结果格式说明：直接把它当系统提示，就能产出可导入的 results 包。
-   * 导出包带上它，agent 就不会只回裸答案（那样导入会报「缺少 results 数组」）。
-   */
-  instructions?: string
-  jobs: AiJob[]
-}
-
-/** AI 返回包里的单条结果：按 id 对应一个 job，raw 是 AI 的原始返回文本。 */
-export interface AiResultEntry {
-  id: string
-  /** 可选：id 对不上时兜底用任务类型。 */
-  task?: AiJobTask
-  /** 可选：id 对不上时兜底用（一般是 job 的 askedWords / askedIds）。 */
-  askedWords?: string[]
-  askedIds?: string[]
-  raw: string
-}
-
-export const AI_JOB_PACK_VERSION = 1
-
-/**
- * 运行时校验一批 AI 结果：服务端版本漂移 / 代理返回异常时，
- * 不能让 `results` 直接进 `applyTaskResult`（那里第一行就是 `raw.trim()`）。
- * 返回能用的条目 + 丢弃数；非数组整体丢弃（缺省 = 0 条）。
- */
-export function normalizeAiResults(raw: unknown): { results: AiResultEntry[]; dropped: number } {
-  if (!Array.isArray(raw)) return { results: [], dropped: raw == null ? 0 : 1 }
-  const results: AiResultEntry[] = []
-  let dropped = 0
-  for (const it of raw) {
-    if (!it || typeof it !== 'object') {
-      dropped++
-      continue
-    }
-    const rec = it as Record<string, unknown>
-    const rawText =
-      typeof rec.raw === 'string'
-        ? rec.raw
-        : typeof rec.text === 'string'
-          ? rec.text
-          : typeof rec.content === 'string'
-            ? rec.content
-            : ''
-    if (!rawText.trim()) {
-      dropped++
-      continue
-    }
-    const entry: AiResultEntry = {
-      id: typeof rec.id === 'string' ? rec.id : '',
-      raw: rawText,
-    }
-    if (isAiJobTask(rec.task)) entry.task = rec.task
-    if (Array.isArray(rec.askedWords)) entry.askedWords = rec.askedWords.filter((w): w is string => typeof w === 'string')
-    if (Array.isArray(rec.askedIds)) entry.askedIds = rec.askedIds.filter((w): w is string => typeof w === 'string')
-    results.push(entry)
-  }
-  return { results, dropped }
-}
-
-/** 稳定短哈希（FNV-1a → base36），用于由内容生成任务 id。 */
-function fnv1a(s: string): string {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return (h >>> 0).toString(36)
-}
-
-/**
- * 由「任务 + 内容指纹」生成**稳定** id：同一逻辑任务（同样的词/句）重建后 id 不变，
- * 这样网页版进度（按 id 记 done）才能跨刷新 / 数据变动保持。
- */
-export function makeJobId(task: AiJobTask, key: string): string {
-  return `${task}-${fnv1a(key)}`
-}
-
-/**
- * 导出包里附带的「结果格式说明」。给本机 agent / 任意 AI 看：照它做就能直接产出
- * 可导入的 `ai-results` 包，不用再猜格式。
- */
-export const AI_RESULT_FORMAT_INSTRUCTIONS = [
-  '你是「学吧老哥」的 AI 批处理引擎。下面 jobs 数组里每个元素是一条独立任务：请阅读它的 prompt 并作答。',
-  '把**所有回答**包成**一个**结果 JSON，并且**只输出这个 JSON**（不要解释、不要 Markdown 代码围栏）：',
-  '',
-  '{',
-  '  "version": 1,',
-  '  "results": [',
-  '    { "id": "<job 的 id，原样照抄>", "task": "<job 的 task>", "raw": "<该 job 的回答文本>" }',
-  '  ]',
-  '}',
-  '',
-  '规则：',
-  '1. 每个 job 对应一条 result；id 必须与 jobs[].id 完全一致（导入靠它匹配，错了会被跳过）。',
-  '2. raw 是字符串：内容本身若是 JSON / 表格，照原样放进去（转义进字符串）。',
-  '3. 一次放不下就宁可少答几个、之后再补，绝不省略或用省略号。',
-  '4. 不要复述任务、不要总结；只输出上面的结果 JSON。',
-].join('\n')
-
-export function buildJobPack(jobs: AiJob[], now: Date = new Date()): AiJobPack {
-  return {
-    version: AI_JOB_PACK_VERSION,
-    exportedAt: now.toISOString(),
-    instructions: AI_RESULT_FORMAT_INSTRUCTIONS,
-    jobs,
-  }
-}
-
-/** 把数组切成每块最多 size 个（size<=0 表示不切）。 */
-export function chunk<T>(items: T[], size: number): T[][] {
-  if (size <= 0) return items.length ? [items] : []
-  const out: T[][] = []
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
-  return out
-}
-
-/**
- * 解析 AI 结果文件。宽容三种写法：
- *   { results: [{ id, raw, ... }] }
- *   [{ id, raw }]
- *   { id, raw }            // 只有一条时
- * 只保留有非空 raw 的条目；`task`/`askedWords`/`askedIds` 可选。
- */
-export function parseAiResultPack(text: string): { results: AiResultEntry[]; error: string } {
-  let obj: unknown
-  try {
-    obj = JSON.parse(text)
-  } catch {
-    return { results: [], error: '不是合法 JSON' }
-  }
-
-  let arr: unknown[] | null = null
-  if (Array.isArray(obj)) arr = obj
-  else if (obj && typeof obj === 'object') {
-    const results = (obj as { results?: unknown }).results
-    if (Array.isArray(results)) arr = results
-    else if ('raw' in (obj as object)) arr = [obj] // 单条对象
-  }
-  if (!arr) return { results: [], error: '缺少 results 数组' }
-
-  const { results } = normalizeAiResults(arr)
-  if (!results.length) return { results: [], error: '没有有效的 raw 文本' }
-  return { results, error: '' }
-}
-
-/** 解析已导出的工作包（用于导入结果时按 id 找 askedWords/askedIds）。 */
-export function parseJobPack(text: string): AiJobPack | null {
-  try {
-    const obj = JSON.parse(text) as {
-      version?: unknown
-      exportedAt?: unknown
-      jobs?: unknown
-    }
-    if (!obj || !Array.isArray(obj.jobs)) return null
-    const jobs: AiJob[] = []
-    for (const it of obj.jobs) {
-      if (!it || typeof it !== 'object') continue
-      const rec = it as Record<string, unknown>
-      if (typeof rec.id !== 'string' || !isAiJobTask(rec.task)) continue
-      jobs.push({
-        id: rec.id,
-        task: rec.task,
-        label: typeof rec.label === 'string' ? rec.label : rec.task,
-        askedWords: Array.isArray(rec.askedWords) ? rec.askedWords.filter((w): w is string => typeof w === 'string') : [],
-        askedIds: Array.isArray(rec.askedIds) ? rec.askedIds.filter((w): w is string => typeof w === 'string') : [],
-        prompt: typeof rec.prompt === 'string' ? rec.prompt : '',
-      })
-    }
-    if (!jobs.length) return null
-    return { version: 1, exportedAt: typeof obj.exportedAt === 'string' ? obj.exportedAt : '', jobs }
-  } catch {
-    return null
-  }
-}
+export * from './aiJobTypes'
+export * from './aiPackIO'
+export * from './aiTodos'
+export * from './aiWebPack'
 
 /** 推导 AI 待办所需的当前数据（全部只读，便于单测）。 */
 export interface AiJobsInput {
@@ -280,15 +73,6 @@ export interface AiJobsInput {
   listenCount: number
 }
 
-const LOOKUP_CHUNK = 30
-/** 翻译 / 语言点每次带多少句（一条太长会在网页端被截断）。 */
-const SENTENCE_CHUNK = 6
-
-/** 含 -ing / -ed 形式的词（用于语法辨析候选）。 */
-function hasIngEd(s: string): boolean {
-  return s.split(/\s+/).some((t) => /(ing|ed)$/i.test(t))
-}
-
 /**
  * 由当前数据推导出所有「待办」：每条 = 一条完整提示词 + 应用时需要的上下文。
  * 覆盖：待选查词 / 补音标释义 / 混淆项 / 原形 / -ing-ed / 翻译 / 语言点 / 听力。
@@ -311,6 +95,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     jobs.push({ id: makeJobId(task, key), task, label, askedWords, askedIds, prompt })
   }
 
+  const base = pickTodoBase(input)
+
   // 待选清单 → 批量查词
   if (input.batch.length) {
     push(
@@ -331,12 +117,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       ),
     )
   }
-  // 生词本缺音标/释义 → 批量查词（只看「从未查过」的词：查过一次就不再自动重排，
-  // 免得「模型只补了释义没给音标」这种半成品被无限重试；剩下的可离线「补齐生词本」）
-  // 词组/习语/用法笔记不参与词级任务（它们从语言点直接收来，已带释义）
-  const base = (input.scope === 'article' ? input.articleWords : input.items).filter(isWordEntry)
-  const needInfo = base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning))
-  for (const part of chunk(needInfo, LOOKUP_CHUNK)) {
+  // 生词本缺音标/释义 → 批量查词
+  for (const part of lookupChunks(base)) {
     push(
       'lookup',
       `补齐音标/释义（${part.length}）`,
@@ -345,9 +127,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 缺混淆项 → 生成混淆项（按设置分批）
-  const confusableTodo = base.filter((it) => it.meaning && !it.confusables?.length)
-  const confSize = input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1
-  for (const part of chunk(confusableTodo, confSize)) {
+  for (const part of confusableChunks(base, input.confusableBatchSize)) {
     push(
       'confusable',
       `生成混淆项（${part.length}）`,
@@ -356,7 +136,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 例句（还没「AI 例句」就生成；离线例句不算数，AI 仍会给一份带中文的）
-  const exampleTodo = base.filter((it) => it.meaning && needsAiExamples(it)).slice(0, 30)
+  const exampleTodo = pickExamples(base)
   if (exampleTodo.length) {
     push(
       'example',
@@ -365,8 +145,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       exampleTodo.map((it) => it.word),
     )
   }
-  // 缺词组 → 生成「词组 / 习语」（有释义、但还没标注过词组；空数组也算标注过）
-  const phraseTodo = base.filter((it) => it.meaning && it.phrases === undefined).slice(0, 30)
+  // 缺词组 → 生成「词组 / 习语」（有释义、但还没标注过；空数组也算标注过）
+  const phraseTodo = pickPhrases(base)
   if (phraseTodo.length) {
     push(
       'phrase',
@@ -375,11 +155,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       phraseTodo.map((it) => it.word),
     )
   }
-  // 本篇里刚选中的词（手动或自动标词都算）、但「本篇语境」还没释义 → 按**本篇上下文**重查一次。
-  // 查完会把释义写进该语境 → 不再是待办（天然的终结标记，不会无限重跑）。
-  const ctxTodo = base
-    .filter((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === input.articleId && !c.meaning))
-    .slice(0, 30)
+  // 本篇里刚选中的词、但「本篇语境」还没释义 → 按**本篇上下文**重查一次
+  const ctxTodo = pickContextLookup(base, input.articleId)
   if (ctxTodo.length) {
     push(
       'lookup',
@@ -396,7 +173,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 疑似非原型 → 校正原形
-  const lemmaCandidates = base.filter((it) => normalizeWord(it.word) !== it.lemma).slice(0, 100)
+  const lemmaCandidates = pickLemmas(base)
   if (lemmaCandidates.length) {
     push(
       'lemma',
@@ -406,9 +183,7 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // -ing/-ed → 语法辨析
-  const posCandidates = base
-    .filter((it) => (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma) && !it.note.includes('辨析'))
-    .slice(0, 60)
+  const posCandidates = pickPos(base)
   if (posCandidates.length) {
     push(
       'pos',
@@ -417,11 +192,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       posCandidates.map((it) => it.word),
     )
   }
-  // 名词/动词/形容词缺语法标记（可数/不可数、及物/不及物…）→ 标注。
-  // 判「标注过」看字段**是否存在**（空数组也算标注过），否则「查过但无可标」的词会永远重复跑。
-  const markTodo = base
-    .filter((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined)
-    .slice(0, 30)
+  // 名词/动词/形容词缺语法标记（可数/不可数、及物/不及物…）→ 标注
+  const markTodo = pickMarks(base)
   if (markTodo.length) {
     push(
       'grammar_mark',
@@ -431,9 +203,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 缺译文 → 全文翻译（按句分块：一条塞几十句最容易在网页端被截断）
-  const noTrans = input.sentences.filter((s) => !s.translation)
   let tPos = 0
-  for (const part of chunk(noTrans, SENTENCE_CHUNK)) {
+  for (const part of sentenceChunks(input.sentences.filter((s) => !s.translation))) {
     const from = tPos + 1
     tPos += part.length
     push(
@@ -445,9 +216,8 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 缺语言点 → 逐句语言点（同样按句分块）
-  const noLang = input.sentences.filter((s) => !hasSentenceLanguage(s))
   let lPos = 0
-  for (const part of chunk(noLang, SENTENCE_CHUNK)) {
+  for (const part of sentenceChunks(input.sentences.filter((s) => !hasSentenceLanguage(s)))) {
     const from = lPos + 1
     lPos += part.length
     push(
@@ -469,127 +239,22 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
   return jobs
 }
 
-/** 网页版结果里，每个任务的答案用这行开头。 */
-export const WEB_ANSWER_TAG = '@@@ANSWER'
-/** 网页版结果里，每个任务的答案用这行结束（可省略）。 */
-export const WEB_END_TAG = '@@@END'
-
-/**
- * 把若干待办拼成**一条**可直接发给网页版 AI（chat.deepseek.com 等）的提示词。
- *
- * 网页版和本机 agent 不一样：它不知道我们是谁、要什么格式，也容易截断/漏答。
- * 所以这里显式说明：任务数、逐个作答、固定分隔符、宁可分批也别省略。
- */
-export function buildWebPackPrompt(
-  jobs: AiJob[],
-  meta?: { batchIndex?: number; batchCount?: number; remaining?: number },
-): string {
-  const head: string[] = []
-  head.push('你是英语学习工具「学吧老哥」的批处理引擎。')
-  if (meta && meta.batchCount && meta.batchCount > 1) {
-    head.push(
-      `现在给你**第 ${meta.batchIndex} / ${meta.batchCount} 批**共 ${jobs.length} 个任务（每个任务是一段已经写好的提示词）。只处理本批。`,
-    )
-  } else {
-    head.push(`现在给你共 ${jobs.length} 个任务（每个任务是一段已经写好的提示词）。`)
-  }
-  head.push('请**逐个**作答，严格按下面的格式输出：')
-  head.push('')
-  head.push(`${WEB_ANSWER_TAG} 任务id`)
-  head.push('（这个任务的答案，按它自己的要求输出）')
-  head.push(WEB_END_TAG)
-  head.push('')
-  head.push('规则：')
-  head.push('1. 每个任务一行 `' + WEB_ANSWER_TAG + ' 它的id` 开头，`' + WEB_END_TAG + '` 结尾；id 原样照抄，不要改、不要漏。')
-  head.push('2. 只输出答案本身，不要开场白、不要总结、不要合并多个任务。')
-  head.push('3. 内容太多放不下时，**宁可这次少答几个**，也绝对不要省略或省略号；我会再问没答完的。')
-  head.push('')
-  head.push('===== 任务开始 =====')
-
-  const body = jobs.map((j) => {
-    return `\n----- 任务 ${j.id}（${j.task} · ${j.label}）-----\n${j.prompt.trim()}`
-  })
-  head.push(body.join('\n'))
-  head.push('\n===== 任务结束 =====')
-  if (meta && meta.remaining && meta.remaining > 0) {
-    head.push(`（本批之外还有 ${meta.remaining} 个任务，先不用管。）`)
-  }
-  return head.join('\n')
-}
-
-/** 去掉答案两端的代码围栏 ```。 */
-function stripFence(s: string): string {
-  const t = s.trim()
-  const m = t.match(/^```[a-zA-Z]*\s*\n([\s\S]*?)\n```$/)
-  return (m ? m[1] : t).trim()
-}
-
-/**
- * 解析网页版 AI 的回复（可能被截断、可能带围栏/废话）。
- * 优先按 `@@@ANSWER <id>` 分隔符切；没有则退回严格 JSON（results 数组）。
- * 只返回解析出答案的条目；缺失的 id 由调用方与任务列表比对。
- */
-export function parseWebPackResults(text: string): AiResultEntry[] {
-  const src = text.replace(/\r\n/g, '\n')
-  // 收集所有 “@@@ANSWER <id>” 标记行的位置
-  const re = /^[ \t>*-]*@@@\s*ANSWER\s+([A-Za-z0-9_-]+)[^\n]*$/gim
-  const marks: { id: string; from: number; markerStart: number }[] = []
-  let m: RegExpExecArray | null
-  while ((m = re.exec(src))) {
-    marks.push({ id: m[1], from: m.index + m[0].length, markerStart: m.index })
-  }
-  if (marks.length) {
-    const out: AiResultEntry[] = []
-    for (let i = 0; i < marks.length; i++) {
-      const from = marks[i].from
-      const to = i + 1 < marks.length ? marks[i + 1].markerStart : src.length
-      let raw = src.slice(from, to)
-      // 去掉结尾的 @@@END（可能后面还有换行）
-      raw = raw.replace(/[ \t]*@@@\s*END[ \t]*\s*$/i, '')
-      raw = stripFence(raw)
-      if (raw.trim()) out.push({ id: marks[i].id, raw })
-    }
-    if (out.length) return out
-  }
-  // 退回严格 JSON
-  return parseAiResultPack(text).results
-}
-
-/** 任务里哪些 id 没在结果里出现（网页端截断时用）。 */
-export function missingJobIds(jobs: AiJob[], results: { id: string }[]): string[] {
-  const got = new Set(results.map((r) => r.id))
-  return jobs.filter((j) => !got.has(j.id)).map((j) => j.id)
-}
-
-/** 待办任务数（只数，不生成提示词，便宜）。 */
+/** 待办任务数（只数，不生成提示词，便宜）。筛选条件与 `buildAiJobs` 共用 `aiTodos`。 */
 export function countAiJobs(input: AiJobsInput): number {
-  const base = (input.scope === 'article' ? input.articleWords : input.items).filter(isWordEntry)
+  const base = pickTodoBase(input)
   let n = 0
   if (input.batch.length) n++
-  n += chunk(
-    base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning)),
-    LOOKUP_CHUNK,
-  ).length
-  const confusableTodo = base.filter((it) => it.meaning && !it.confusables?.length)
-  n += chunk(
-    confusableTodo,
-    input.confusableBatchSize > 0 ? input.confusableBatchSize : confusableTodo.length || 1,
-  ).length
-  if (base.some((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === input.articleId && !c.meaning))) n++
-  if (base.some((it) => it.meaning && needsAiExamples(it))) n++
-  if (base.some((it) => it.meaning && it.phrases === undefined)) n++
+  n += lookupChunks(base).length
+  n += confusableChunks(base, input.confusableBatchSize).length
+  if (pickContextLookup(base, input.articleId).length) n++
+  if (pickExamples(base).length) n++
+  if (pickPhrases(base).length) n++
   if (!input.autoVocabDone && input.sentences.length) n++
-  if (base.some((it) => normalizeWord(it.word) !== it.lemma)) n++
-  if (base.some((it) => (hasIngEd(it.word) || normalizeWord(it.word) !== it.lemma) && !it.note.includes('辨析'))) n++
-  if (base.some((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined)) n++
-  n += chunk(
-    input.sentences.filter((s) => !s.translation),
-    SENTENCE_CHUNK,
-  ).length
-  n += chunk(
-    input.sentences.filter((s) => !hasSentenceLanguage(s)),
-    SENTENCE_CHUNK,
-  ).length
+  if (pickLemmas(base).length) n++
+  if (pickPos(base).length) n++
+  if (pickMarks(base).length) n++
+  n += sentenceChunks(input.sentences.filter((s) => !s.translation)).length
+  n += sentenceChunks(input.sentences.filter((s) => !hasSentenceLanguage(s))).length
   if (input.sentences.length && !input.hasListenQuiz) n++
   return n
 }
