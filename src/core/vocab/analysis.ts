@@ -17,6 +17,7 @@ import { defaultReviewState } from '../../types/document'
 import type { PosRow } from '../analyzer'
 import { addArticleEntry } from '../articleVocab'
 import { VOCAB_FIELDS, isFieldLocked } from '../vocabFields'
+import { reconcileSense } from './sense'
 import { canRewriteTo, lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
 import {
   betterSource,
@@ -269,16 +270,19 @@ export function applyWordAnalysis(
     }
     let partOfSpeech = cur.partOfSpeech
     if (!isFieldLocked(cur, 'partOfSpeech')) {
-      if (meaningReplaced) {
-        // 释义被换成另一条结果，词性必须跟它一起走：
-        // 词典补的词性是**词头最常用**义项，AI 给的释义是**语境**义项，
-        // 留着旧的就会出现「n. 交往；厮混」这种自相矛盾的卡（consort 真实病例）。
-        partOfSpeech = incoming.partOfSpeech
-        if (incoming.partOfSpeech) fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
-        else delete fieldSources.partOfSpeech
-      } else if (!cur.partOfSpeech && incoming.partOfSpeech) {
+      // 词典补的词性是**词头首义**，AI 给的是**语境义项**，两者不是一回事
+      // （consort → n. 交往；厮混）。词典那条只能算占位，不能挡住 AI：
+      // rival 重查时返回的释义和上一版一字不差，旧逻辑「释义没变就不动词性」，
+      // 于是 dict 的 n. 一直压着语境里的 v.。
+      const dictPlaceholder = fieldSources.partOfSpeech === 'dict'
+      if (incoming.partOfSpeech && (meaningReplaced || dictPlaceholder || !cur.partOfSpeech)) {
+        // 释义和词性来自同一行答案，必须一起采纳
         partOfSpeech = incoming.partOfSpeech
         fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
+      } else if (meaningReplaced) {
+        // 换了说法却没给词性：宁可空着，也不能留着上一版的词性凑一对
+        partOfSpeech = null
+        delete fieldSources.partOfSpeech
       }
     }
     let definition = cur.definition
@@ -288,7 +292,7 @@ export function applyWordAnalysis(
     }
 
     const ctxMeaning = incoming.meaning ?? undefined
-    const merged: VocabItem = {
+    const merged: VocabItem = reconcileSense({
       ...cur,
       id: identityLocked ? cur.id : `vocab:${newLemma}`,
       word: newWord,
@@ -304,7 +308,7 @@ export function applyWordAnalysis(
       contexts: defaultSource ? upsertContext(cur.contexts, contextFromSource(defaultSource, iso, ctxMeaning)) : cur.contexts,
       status: identityLocked ? cur.status : 'queried',
       updatedAt: iso,
-    }
+    })
     items = items.map((it, i) => (i === idx ? merged : it))
   }
 

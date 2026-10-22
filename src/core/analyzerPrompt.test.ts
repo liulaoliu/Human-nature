@@ -44,6 +44,13 @@ describe('analyzerPrompt 提示词构建', () => {
     expect(p).toContain('- dog')
   })
 
+  it('batchLookup 强调词性按上下文定，五样必须同属一个义项', () => {
+    const p = buildBatchLookupPrompt([{ word: 'rival', context: 'a class to rival America’s' }])
+    expect(p).toContain('按这个词在上下文里的实际用法定')
+    expect(p).toContain('这五样必须同属一个义项')
+    expect(p).toContain('rival')
+  })
+
   it('cleanup 明确要求原样保留【…】标记', () => {
     expect(buildCleanupPrompt('【标题】\nBody text.')).toContain('【……】')
   })

@@ -158,6 +158,20 @@ types ← core ← adapters ← reader
   AI 查词给的是**语境义**。所以 `applyWordAnalysis` 在释义被换掉时让词性跟着换（AI 没给就清空），
   `dictEnrich` 只在同批补释义时才补词性，`ecdict.glossForPos` 按词性挑释义行。
   卡内编辑只提交**改过的**字段（`editItem` 会把传入的每个字段标 `manual`，全传＝整条锁死）。
+- **词典给的词性只是占位，AI 看过语境就由 AI 定**。`fieldSources.partOfSpeech === 'dict'` 表示
+  这个词性是词头首义、不是语境义，此时 AI 重查只要给了词性就覆盖它——**哪怕释义一字未变**
+  （`rival` 真实病例：义项早就是「与……匹敌」，但 dict 的 `n.` 一直压着，因为旧逻辑
+  「释义没变就不动词性」，重查多少次都改不回来）。反过来，释义换了而 AI 没给词性时**宁可清空**，
+  不允许「旧词性 + 新释义」凑一对。  查词提示词里把这条写死：词性按上下文用法定，
+  词性/中文含义/搭配/例句/英文释义**五样同属一个义项**。
+- **这条不变量由 `core/vocab/sense.ts` 守，不靠各写入方自觉**：
+  - `reconcileSense(item)`：释义自带词性标记（`n. 誓约` / `vt. 引起`）时词性跟它走，用户手填的不动；
+    `applyWordAnalysis` / `enrichWithDict` / 词库自动补全出门前都过一遍；
+  - `useApplyTaskResult` 的回填：**AI 给了释义却没给词性时，词性留空**，绝不拿词典词头首义顶上；
+  - `tool/check_vocab_sense.mjs`（在 `npm run gates` 里）把两类硬矛盾判为失败：
+    ① 词性与释义首标打架、② 单词条目的 word 被污染（`term ... ...`）；
+    「词典占位词性 + AI 语境释义」只告警（可能对，也可能像 `rival` 那样错），需要重查确认。
+  - 词组 / 用法笔记（`kind` 非空或 word 带空格）不参与这套判断——它们没有「词性」这回事。
 - 存量数据用 `tool/audit-vocab.mjs` 体检（A 词形被改成派生词 / B 词性与释义首标打架 /
   C 英英是动词义却标名形）；`--fix` 走和线上一样的 `openStore → saveVocab` 事务路径。
 

@@ -145,6 +145,28 @@ describe('applyWordAnalysis', () => {
     expect(lib.items[0].partOfSpeech).toBe('v.')
   })
 
+  it('释义一字未变、只有词性不同，也要改成 AI 的（词典给的词性只是占位）', () => {
+    // rival 真实病例：词典先把词性补成 n.，AI 的语境义「与……匹敌」落库后，
+    // 重查返回的内容和上一版一字不差 —— 旧逻辑「释义没变就不动词性」，
+    // 于是 dict 的 n. 一直压着语境里的 v.
+    let lib = markWord(createLibrary(), { word: 'rival', articleId: 'a1' }, NOW).library
+    lib = {
+      ...lib,
+      items: [{ ...lib.items[0], partOfSpeech: 'n.', meaning: '与……匹敌', fieldSources: { partOfSpeech: 'dict', meaning: 'ai' } }],
+    }
+    lib = applyWordAnalysis(lib, [{ word: 'rival', partOfSpeech: 'v.', meaning: '与……匹敌' }], NOW)
+    expect(lib.items[0].partOfSpeech).toBe('v.')
+    expect(lib.items[0].fieldSources?.partOfSpeech).toBe('ai')
+  })
+
+  it('手动改过的词性不被 AI 覆盖', () => {
+    let lib = markWord(createLibrary(), { word: 'rival', articleId: 'a1' }, NOW).library
+    lib = editItem(lib, lib.items[0].id, { partOfSpeech: 'n.' }, NOW)
+    lib = applyWordAnalysis(lib, [{ word: 'rival', partOfSpeech: 'v.', meaning: '与……匹敌' }], NOW)
+    expect(lib.items[0].partOfSpeech).toBe('n.')
+    expect(lib.items[0].fieldSources?.partOfSpeech).toBe('manual')
+  })
+
   it('释义变了但 AI 没给词性 → 旧的词典词性清掉，别硬凑', () => {
     let lib = markWord(createLibrary(), { word: 'dwarf', articleId: 'a1' }, NOW).library
     lib = applyWordAnalysis(lib, [{ word: 'dwarf', partOfSpeech: 'n.', meaning: '矮子', fieldSources: { partOfSpeech: 'dict', meaning: 'dict' } }], NOW)

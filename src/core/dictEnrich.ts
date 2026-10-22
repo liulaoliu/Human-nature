@@ -11,6 +11,7 @@
 import type { VocabFieldSources, VocabItem, VocabLibrary } from '../types/document'
 import type { Ecdict } from './ecdict'
 import { glossForPos, resolveWord } from './ecdict'
+import { reconcileSense } from './vocab/sense'
 import { cleanGloss, normalizePos } from './vocab'
 
 /** 英英释义（M-W 学习词典）查询：给词形返回一条；没有就 null。 */
@@ -68,7 +69,8 @@ export function enrichWithDict(
     changed = true
     if (it.status === 'unqueried' && (patch.meaning || it.meaning)) patch.status = 'queried'
     patch.fieldSources = fieldSources
-    return { ...it, ...patch, updatedAt: iso }
+    // 词典自己补出来的词性/释义也可能对不上（zh 多行、行首标记不同），出门前对齐一次
+    return reconcileSense({ ...it, ...patch, updatedAt: iso })
   })
   return { library: changed ? { ...library, items } : library, filled }
 }

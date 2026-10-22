@@ -24,6 +24,7 @@ import {
   type EcdictLevel,
 } from '../../core/ecdict'
 import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
+import { normalizePos, posFromGloss } from '../../core/vocab'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 
@@ -301,10 +302,16 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
           const fieldSources: VocabFieldSources = {}
           const ph = mw?.phonetic || e?.phonetic
           const phonetic = w.phonetic || (ph ? `/${ph.replace(/^\/+|\/+$/g, '')}/` : undefined)
-          const partOfSpeech = w.partOfSpeech || mw?.pos || e?.pos || undefined
+          // 词性 / 释义 / 英英必须同源：AI 给了释义却没给词性时**不能**拿词典的词性顶上，
+          // 词典给的是词头首义（rival 一定是 n.），AI 给的是语境义，凑一起就是「n. 与……匹敌」。
+          let partOfSpeech = w.partOfSpeech || undefined
           // 词典释义是多行的，每行自带词性标记；按词性挑，别硬取第一行
           // （否则 vow 会变成「v. n. 誓约」，卡上两个词性打架）
           const meaning = w.meaning || (e?.zh ? glossForPos(e.zh, partOfSpeech || '') : undefined)
+          if (!w.partOfSpeech) {
+            // 释义来自词典时，词性取同一行的标记；释义来自 AI 时，词性只认 AI 自己给的
+            partOfSpeech = w.meaning ? undefined : (posFromGloss(meaning) || normalizePos(mw?.pos || e?.pos || '') || undefined)
+          }
           const definition = w.definition || mw?.en || (e?.en ? glossForPos(e.en, partOfSpeech || '') : undefined)
           if (phonetic) fieldSources.phonetic = w.phonetic ? 'ai' : 'dict'
           if (partOfSpeech) fieldSources.partOfSpeech = w.partOfSpeech ? 'ai' : 'dict'

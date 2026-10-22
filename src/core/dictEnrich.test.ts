@@ -10,7 +10,7 @@ import { TEST_NOW, vocabItem } from './testFixtures'
 const dict = parseEcdict(
   [
     'word\tphonetic\tpos\ten\tzh\ttag\tcollins\toxford\tbnc\tfrq',
-    'run\trʌn\t\tv. move fast\tn. 跑\tcet4\t5\t1\t100\t100',
+    'run\trʌn\t\tv. move fast\tv. 跑\tcet4\t5\t1\t100\t100',
     'hobble\t\'hɒbl\t\tvt. prevent\tt. 阻碍\tky\t2\t0\t5000\t6000',
     'ensconce\tɪn\'skɒns\t\tvt. settle comfortably\tv. 使安顿\tgre\t1\t0\t9000\t9000',
   ].join('\n'),

@@ -323,6 +323,19 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   释义来自 AI 语境义」的错配（`consort` 卡上的「n. 交往；厮混」）：释义换来源时词性必须跟着换，
   词典也只在同批补释义时才补词性。存量脏数据用 `tool/audit-vocab.mjs` 体检 + `--fix` 回改
   （证据是 `note` 里的 `[辨析] <原词形>`，以及英英以 `to …` 开头却标成名/形的词条）。
+- **词典词性只是占位，AI 看过语境就归 AI（2026-10-22 rival 案例）**：`vocab/analysis` 补 2 条
+  （`fieldSources.partOfSpeech === 'dict'` 时，AI 重查给的词性即使**释义一字未变**也要覆盖
+  `/ 手动改过的词性不被 AI 覆盖`），`analyzerPrompt` 补 1 条（查词提示词里写着「词性按上下文用法定」
+  与「五样同属一个义项」）。**为什么**：`rival` 的义项早就是「与……匹敌」，但词典占位的 `n.`
+  一直压着语境里的 `v.`——旧逻辑只在「释义变了」时才让词性跟换，重查多少次都改不回来。
+- **义项一致性不能只靠各写入方自觉（2026-10-22 rival/term 案例）**：新增 `core/vocab/sense`
+  补 9 条（`posClassOf` 认缩写/全称/并写、`posFromGloss` 认「n. 誓约」这类首标、
+  `reconcileSense` 让词性跟释义首标走且不动 manual、`senseConflict` 认出两类矛盾）、
+  `useApplyTaskResult.sense` 补 3 条（AI 给释义不给词性 → 词性留空 / AI 给词性就用 AI 的 /
+  AI 没给释义时词性取词典同一行的标记），`analyzerPrompt` 补 1 条（提示词写明「五样同属一个义项」）。
+  **为什么**：`term` 卡上是 `n. 把……称为……`、`rival` 卡上是 `n. 与……匹敌`——词性来自词典词头首义，
+  释义来自 AI 的语境义，两个义项被拼在一张卡上。之前只在「释义变了」时才让词性跟换，
+  所以重查多少次都改不回来。现在由 `tool/check_vocab_sense.mjs` 在 `npm run gates` 里守着。
 - **卡内编辑只提交改过的字段（2026-10-22）**：`useStudyCardEdit` 补 2 条（只改释义时词性
   `fieldSources` 仍是 `dict` / 一个字没改不写库）。`editItem` 会把手上的每个字段都标成 `manual`，
   全都传一遍＝「点一次保存、整条卡锁死」，之后词典/AI 再也纠不了它（`dwarf` 卡的
