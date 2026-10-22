@@ -1,5 +1,19 @@
 # TODO
 
+> **2026-10-22 优化进行中（目标：>600 行的文件都拆）**
+>
+> - 已完成：`src/reader/reader.css` 2229 → 入口 + 8 个功能分片（`src/reader/styles/`，
+>   引入顺序与原文一致，拼接逐字节相同）；`src/core/quiz.ts` 706 → 516
+>   （答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌 → `core/quizParts.ts`，新增 11 条测试，
+>   公开 API 仍从 `quiz.ts` 导出）。
+> - 待拆（按风险从低到高）：`core/aiPackage.ts` 605、`core/analyzer.ts` 673（这两个的
+>   共享类型与解析函数交错，直接抽会循环依赖，需先抽 `*Core` 共享模块）、
+>   `tools/tts-core.mjs` 647、`server/sqliteLearning.js` 615、`server/sqliteStore.js` 698、
+>   `ui/App.tsx` 624、`state/session.ts` 760（可抽 `RecordingController`，参照 `CycleRunner`）、
+>   `reader/hooks/useStudySession.ts` 769、`reader/ReaderApp.tsx` 796。
+> - 硬约束：`core/` 新模块必须配同名 `.test.ts`（架构门禁 R7）；每拆一个主题单独 commit，
+>   提交前 `tsc -b` + 定向测试 + 架构门禁；拆完同步降 `tool/check_god_file.mjs` 的基线（若有）。
+
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
 > - 分支 `main`，最后提交见 `git log -1`；工作树干净。
