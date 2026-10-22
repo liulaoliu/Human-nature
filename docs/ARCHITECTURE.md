@@ -198,9 +198,12 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 已降到 781 行（出基线了，不再是大文件）；视图在 `ReaderScreen.tsx`（211 行）+ `screen/` 三个槽位**：
+- **`ReaderApp.tsx` 已降到 732 行（出基线了，不再是大文件）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
   它现在只做装配：状态声明、hook 接线、把结果拍平成 `ReaderScreen` 的 props。**两种"分叉"要警惕**：
   同一份数据两个写入方、同一套规则两处实现 —— 都拆到下面列出的 hook / core 里。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
+  **props 只在两处还是平铺的**：`prefs`（18 个本机偏好）与 `articleVocab`（本篇生词口径）走整包
+  （`prefs={prefs}` / `articleVocab={articleVocab}`），由 zone 自己取 —— 平铺过一遍的代价是
+  `ReaderScreenProps` 得把这两个 hook 的每个类型再抄一遍，抄漏一处就是两套类型；其余字段仍是平铺。
   练习面板路由在 `SessionHost`，侧栏接线在 `ReaderSidebarHost`，顶栏接线在 `ReaderToolbarHost`，
   `screen/ReaderToolbarZone` / `ReaderSidebarZone` / `ReaderBodyZone` 只做「props → host」映射（不读存储），
   学习记录「重建并核对」在 `hooks/useLearningRebuild`（挂进 `hooks/useLearningData` 一起返回，避免再多一个装配点），

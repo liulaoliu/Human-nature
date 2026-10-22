@@ -8,6 +8,20 @@ import type { ReaderScreenProps } from '../ReaderScreen'
 export default function ReaderToolbarZone(props: ReaderScreenProps) {
   const {
     readingView,
+    book,
+    saved,
+    doc,
+    selectedId,
+    ttsAccents,
+    ttsState,
+    studiedTodayIds,
+    library,
+    setComposing,
+    setIntensiveOpen,
+    setJournalOpen,
+    setGoalOpen,
+  } = props
+  const {
     fontSize,
     bold,
     serif,
@@ -20,10 +34,6 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
     setEye,
     setToolbarWidth,
     setToolbarRows,
-    book,
-    saved,
-    doc,
-    selectedId,
     vocabLevel,
     setVocabLevel,
     translateView,
@@ -32,16 +42,8 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
     setAutoSpeak,
     ttsVoice,
     setTtsVoice,
-    ttsAccents,
-    ttsState,
     dailyGoal,
-    studiedTodayIds,
-    library,
-    setComposing,
-    setIntensiveOpen,
-    setJournalOpen,
-    setGoalOpen,
-  } = props
+  } = props.prefs
   const { docApi, edition, setEdition, currentValue, editing, draft, savedId, copyCleanupPrompt, confirmDelSave } =
     props.workspace
   const { speak, startReadAll, stopReadAll, readingAll } = props.speaking

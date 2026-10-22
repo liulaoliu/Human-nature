@@ -100,13 +100,11 @@ export default function ReaderApp() {
   const { ctrlHeld, altHeld } = useModifierKeys()
   /** 阅读字号 / 字重、主题、译文、音色、词汇标准、面板持久开关… —— 18 个本机偏好全在 hooks/useReaderPrefs */
   const prefs = useReaderPrefs()
+  // 整包也直接交给 ReaderScreen（各 zone 自己取）；这里只解出本文件要用的几个
   const {
-    fontSize, bold, serif, eye, toolbarWidth, toolbarRows, sideTab, translateView, autoSpeak, ttsVoice,
-    vocabLevel, vocabView, vocabSort, dailyGoal, showLanguage, confusableBatchSize,
-    aiPackScope, autoVocabDirect, newLimit, newToday,
-    setFontSize, setBold, setSerif, setEye, setToolbarWidth, setToolbarRows, setSideTab, setTranslateView, setAutoSpeak,
-    setTtsVoice, setVocabLevel, setVocabView, setVocabSort, setDailyGoal, setShowLanguage,
-    setConfusableBatchSize, setAiPackScope, setAutoVocabDirect, setNewLimit, setNewToday,
+    fontSize, bold, serif, eye, autoSpeak, ttsVoice, vocabLevel, vocabSort,
+    confusableBatchSize, aiPackScope, autoVocabDirect, newLimit, newToday,
+    setSideTab, setNewToday,
   } = prefs
   /** 每日统计面板是否展开 */
   const [statsOpen, setStatsOpen] = useState(false)
@@ -201,26 +199,13 @@ export default function ReaderApp() {
     setters: learningSetters,
   } = learning
 
-  /** 本篇生词 / 编号 / 语言点句数 / 打印情况：口径都在 hooks/useArticleVocabView */
-  const {
-    articleWords,
-    articleWordItems,
-    knownLemmas,
-    articleOrigins,
-    articleVias,
-    articleMeaningSources,
-    languageSentCount,
-    wordsInSentence,
-    articleNums,
-    articleFirst,
-    meaningOf,
-    articlePrintedAt,
-    articleAllPrinted,
-  } = useArticleVocabView({
+  /** 本篇生词 / 编号 / 语言点句数 / 打印情况：口径都在 hooks/useArticleVocabView（整包也给 ReaderScreen） */
+  const articleVocab = useArticleVocabView({
     library,
     articleIdentity,
     sentences: doc?.sentences ?? null,
   })
+  const { articleWords, articleWordItems } = articleVocab
 
   /** 正文里哪些词算生词（本篇条目；不拿整库去标新文章）—— 见 hooks/useDocVocabSets */
   const { docLemmas, libraryLemmas, vocabSidSet } = useDocVocabSets({
@@ -652,26 +637,13 @@ export default function ReaderApp() {
 
   return (
     <ReaderScreen
-      fontSize={fontSize}
-      bold={bold}
-      serif={serif}
+      prefs={prefs}
       examActive={examActive}
-      sideTab={sideTab}
-      onSideTabChange={setSideTab}
       sideRef={sideRef}
       onMouseDown={onMouseDown}
       onMouseUp={onMouseUp}
       onContextMenu={onContextMenu}
       toast={toast}
-      setFontSize={setFontSize}
-      setBold={setBold}
-      setSerif={setSerif}
-      eye={eye}
-      setEye={setEye}
-      toolbarWidth={toolbarWidth}
-      setToolbarWidth={setToolbarWidth}
-      toolbarRows={toolbarRows}
-      setToolbarRows={setToolbarRows}
       readingView={readingView}
       saved={saved}
       book={book}
@@ -689,20 +661,9 @@ export default function ReaderApp() {
       target={target}
       sentence={sentence}
       batchCount={batch.length}
-      articleWords={articleWords}
-      articleNums={articleNums}
-      articleOrigins={articleOrigins}
-      articleVias={articleVias}
-      articleMeaningSources={articleMeaningSources}
-      articleFirst={articleFirst}
-      articleAllPrinted={articleAllPrinted}
-      articlePrintedAt={articlePrintedAt}
-      languageSentCount={languageSentCount}
-      knownLemmas={knownLemmas}
+      articleVocab={articleVocab}
       libraryLemmas={libraryLemmas}
       vocabSidSet={vocabSidSet}
-      wordsInSentence={wordsInSentence}
-      meaningOf={meaningOf}
       allList={allList}
       studiedTodayIds={studiedTodayIds}
       pasted={pasted}
@@ -711,35 +672,10 @@ export default function ReaderApp() {
       setPasteReport={setPasteReport}
       pasteMissing={pasteMissing}
       setPasteMissing={setPasteMissing}
-      aiPackScope={aiPackScope}
-      setAiPackScope={setAiPackScope}
-      autoVocabDirect={autoVocabDirect}
-      setAutoVocabDirect={setAutoVocabDirect}
-      confusableBatchSize={confusableBatchSize}
-      setConfusableBatchSize={setConfusableBatchSize}
-      translateView={translateView}
-      setTranslateView={setTranslateView}
-      autoSpeak={autoSpeak}
-      setAutoSpeak={setAutoSpeak}
-      vocabLevel={vocabLevel}
-      setVocabLevel={setVocabLevel}
-      ttsVoice={ttsVoice}
-      setTtsVoice={setTtsVoice}
       ttsAccents={ttsAccents}
       ttsState={ttsState}
-      newLimit={newLimit}
-      setNewLimit={setNewLimit}
-      newToday={newToday}
       studyGrandSeconds={studyGrandSeconds}
       articleQuizCount={articleQuizCount}
-      dailyGoal={dailyGoal}
-      setDailyGoal={setDailyGoal}
-      showLanguage={showLanguage}
-      setShowLanguage={setShowLanguage}
-      vocabView={vocabView}
-      setVocabView={setVocabView}
-      vocabSort={vocabSort}
-      setVocabSort={setVocabSort}
       statsOpen={statsOpen}
       setStatsOpen={setStatsOpen}
       focusLemma={focusLemma}

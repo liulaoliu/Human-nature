@@ -2,7 +2,7 @@ import { useMemo, type ComponentProps } from 'react'
 import { articleKey } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
-import type { Sentence, VocabItem, VocabLibrary, VocabMeaningSource, VocabVia } from '../types/document'
+import type { Sentence, VocabItem, VocabLibrary } from '../types/document'
 import type { ReaderDoc } from './hooks/useReaderDoc'
 import ReaderShell from './ReaderShell'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -10,10 +10,11 @@ import ReaderSidebarHost from './ReaderSidebarHost'
 import ReaderOverlaysHost from './ReaderOverlaysHost'
 import SessionHost from './SessionHost'
 import ReaderArticle from './ReaderArticle'
-import type { ReaderSideTab } from './panels/ReaderSidebar'
 import ReaderToolbarZone from './screen/ReaderToolbarZone'
 import ReaderSidebarZone from './screen/ReaderSidebarZone'
 import ReaderBodyZone from './screen/ReaderBodyZone'
+import type { ReaderPrefs } from './hooks/useReaderPrefs'
+import type { useArticleVocabView } from './hooks/useArticleVocabView'
 import type { useArticleWorkspace } from './hooks/useArticleWorkspace'
 import type { useSessionServices } from './hooks/useSessionServices'
 import type { useAiServices } from './hooks/useAiServices'
@@ -38,28 +39,19 @@ type ArticleP = ComponentProps<typeof ReaderArticle>
 
 export interface ReaderScreenProps {
   // ---- 外壳 / 字号 / 主题 ----
-  fontSize: ShellP['fontSize']
-  bold: boolean
-  serif: boolean
+  /**
+   * 18 个本机偏好整包（字号 / 主题 / 译文 / 音色 / 词汇标准 / 顶栏档位 / 面板持久开关…）。
+   *
+   * 原来一条条平铺进来，这个接口得把 `useReaderPrefs` 的每个类型再抄一遍 ——
+   * 抄漏一处、改了一边，就是两套类型。整包传，取哪几个由 zone 自己决定。
+   */
+  prefs: ReaderPrefs
   examActive: boolean
-  sideTab: ReaderSideTab
-  onSideTabChange: (tab: ReaderSideTab) => void
   sideRef: ShellP['sideRef']
   onMouseDown: ShellP['onMouseDown']
   onMouseUp: ShellP['onMouseUp']
   onContextMenu: ShellP['onContextMenu']
   toast: string
-  setFontSize: (v: string) => void
-  setBold: (v: boolean) => void
-  setSerif: (v: boolean) => void
-  eye: boolean
-  setEye: (v: boolean) => void
-  /** 顶栏按钮区宽度档位（自适应 / 窄 / 宽 / 铺满），选择存在本机 */
-  toolbarWidth: ToolbarP['display']['toolbarWidth']
-  setToolbarWidth: ToolbarP['display']['onToolbarWidthChange']
-  /** 顶栏按钮区占几行（4 / 3 / 2），选择存在本机 */
-  toolbarRows: ToolbarP['display']['toolbarRows']
-  setToolbarRows: ToolbarP['display']['onToolbarRowsChange']
   readingView: boolean
 
   // ---- 文章 / 词库 / 选区状态 ----
@@ -79,22 +71,10 @@ export interface ReaderScreenProps {
   target: string
   sentence: Sentence | null
   batchCount: number
-  articleWords: VocabItem[]
-  articleNums: Map<string, number>
-  articleOrigins: Map<string, 'auto' | 'manual'>
-  articleVias: Map<string, VocabVia>
-  /** 本篇语境释义来源：lemma → 手动/语境/词典/AI（没条目释义的不放） */
-  articleMeaningSources: Map<string, VocabMeaningSource>
-  articleFirst: ArticleP['articleFirst']
-  articleAllPrinted: boolean
-  articlePrintedAt: string | null
-  languageSentCount: number
-  knownLemmas: Set<string>
+  /** 本篇生词与对齐口径整包（条目 / 编号 / 来源 / 语境释义 / 打印情况…），见 useArticleVocabView */
+  articleVocab: ReturnType<typeof useArticleVocabView>
   libraryLemmas: Set<string>
   vocabSidSet: Set<string>
-  wordsInSentence: (sid: string) => string[]
-  /** 本篇语境释义（悬浮提示；`sentenceId` 用于优先同句语境） */
-  meaningOf: (word: string, sentenceId?: string | null) => string | null
   allList: VocabItem[]
   studiedTodayIds: string[]
 
@@ -105,37 +85,12 @@ export interface ReaderScreenProps {
   setPasteReport: (v: string[]) => void
   pasteMissing: Parameters<typeof useAiServices>[0]['pasteMissing']
   setPasteMissing: (v: Parameters<typeof useAiServices>[0]['pasteMissing']) => void
-  aiPackScope: SidebarP['pick']['scope']
-  setAiPackScope: (v: SidebarP['pick']['scope']) => void
-  autoVocabDirect: boolean
-  setAutoVocabDirect: (v: boolean) => void
-  confusableBatchSize: number
-  setConfusableBatchSize: (v: number) => void
-  translateView: ToolbarP['vocab']['translateView']
-  setTranslateView: (v: ToolbarP['vocab']['translateView']) => void
-  autoSpeak: boolean
-  setAutoSpeak: (v: boolean) => void
-  vocabLevel: ToolbarP['vocab']['level']
-  setVocabLevel: (v: ToolbarP['vocab']['level']) => void
-  ttsVoice: ToolbarP['tts']['voice']
-  setTtsVoice: (v: ToolbarP['tts']['voice']) => void
   ttsAccents: ToolbarP['tts']['accents']
   ttsState: SessionP['ttsState']
 
   // ---- 学习配额 / 生词本视图 ----
-  newLimit: number
-  setNewLimit: (v: number) => void
-  newToday: number
   studyGrandSeconds: number
   articleQuizCount: number
-  dailyGoal: number
-  setDailyGoal: (v: number) => void
-  showLanguage: boolean
-  setShowLanguage: (v: boolean) => void
-  vocabView: 'card' | 'table'
-  setVocabView: (v: 'card' | 'table') => void
-  vocabSort: SidebarP['vocab']['sortBy']
-  setVocabSort: (v: SidebarP['vocab']['sortBy']) => void
   statsOpen: boolean
   setStatsOpen: (updater: boolean | ((prev: boolean) => boolean)) => void
   focusLemma: string | null
@@ -200,7 +155,8 @@ export interface ReaderScreenProps {
  * 方便单独调布局与条件渲染。
  */
 export default function ReaderScreen(props: ReaderScreenProps) {
-  const { fontSize, bold, serif, examActive, sideTab, sideRef, onMouseDown, onMouseUp, onContextMenu, toast } = props
+  const { examActive, sideRef, onMouseDown, onMouseUp, onContextMenu, toast } = props
+  const { fontSize, bold, serif, sideTab } = props.prefs
   /**
    * 滚动进度按「文章标识 + 正文签名」存：标识可能是空标题 / 同名 / 「未命名」，
    * 只按标识存会让另一篇同标识的文章继承这里的滚动位置。
