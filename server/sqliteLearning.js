@@ -1,4 +1,6 @@
 import { list, nowIso, num, text } from './sqliteUtil.js'
+import { writeSections } from './sqliteLearningWrite.js'
+import { LEARNING_SECTIONS, LEARNING_TABLES } from './sqliteLearningSections.js'
 
 /**
  * 学习记录的 SQLite 读写。
@@ -7,23 +9,7 @@ import { list, nowIso, num, text } from './sqliteUtil.js'
  * 偏好/会话状态不在这里，仍留在 localStorage。
  */
 
-export const LEARNING_SECTION_TABLES = {
-  practice: ['practice_records'],
-  mistakes: ['mistake_records'],
-  readDone: ['reading_progress'],
-  writingHistory: ['writing_records'],
-  retells: ['retell_records'],
-  activity: ['activity_days'],
-  studyDays: ['study_days'],
-  sessions: ['pick_sessions'],
-  studiedDays: ['study_word_days'],
-  skimmed: ['skimmed_articles'],
-  kindStats: ['kind_stats'],
-  answerEvents: ['answer_events'],
-}
-
-export const LEARNING_SECTIONS = Object.keys(LEARNING_SECTION_TABLES)
-export const LEARNING_TABLES = [...new Set(Object.values(LEARNING_SECTION_TABLES).flat())]
+export { LEARNING_SECTIONS, LEARNING_SECTION_TABLES, LEARNING_TABLES } from './sqliteLearningSections.js'
 
 export function emptyLearning() {
   return {
@@ -89,191 +75,6 @@ function assertLearning(data) {
   }
 }
 
-function clearLearningSections(db, sections) {
-  const tables = new Set()
-  for (const section of sections) {
-    // 答题事件是 append-only 审计：同步只追加/去重，不因整份保存或旧快照恢复而删除。
-    if (section === 'answerEvents') continue
-    for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
-  }
-  for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()
-}
-
-function writePractice(db, data) {
-  const insert = db.prepare(
-    'INSERT INTO practice_records (at, kind, total, correct, seconds, article_id) VALUES (?, ?, ?, ?, ?, ?)',
-  )
-  for (const r of list(data.practice)) {
-    if (!r || typeof r !== 'object') continue
-    insert.run(
-      text(r.at) ?? nowIso(),
-      text(r.kind) ?? 'quiz',
-      num(r.total),
-      num(r.correct),
-      Number.isFinite(Number(r.seconds)) ? Number(r.seconds) : null,
-      text(r.articleId),
-    )
-  }
-}
-
-function writeMistakes(db, data) {
-  const insert = db.prepare(`
-    INSERT OR REPLACE INTO mistake_records
-      (id, kind, at, count, label, item_id, question_json, article_id, text)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  for (const r of list(data.mistakes)) {
-    if (!r || typeof r !== 'object' || typeof r.id !== 'string') continue
-    insert.run(
-      r.id,
-      text(r.kind) ?? 'vocab',
-      text(r.at) ?? nowIso(),
-      Math.max(1, num(r.count, 1)),
-      text(r.label) ?? '',
-      text(r.itemId),
-      jsonText(r.question),
-      text(r.articleId),
-      text(r.text),
-    )
-  }
-}
-
-function writeReadDone(db, data) {
-  const insert = db.prepare(
-    'INSERT OR REPLACE INTO reading_progress (article_id, day, title, at) VALUES (?, ?, ?, ?)',
-  )
-  for (const r of list(data.readDone)) {
-    if (!r || typeof r !== 'object' || typeof r.articleId !== 'string' || !r.articleId) continue
-    insert.run(r.articleId, text(r.day) ?? '', text(r.title) ?? '', text(r.at) ?? nowIso())
-  }
-}
-
-function writeWriting(db, data) {
-  const insert = db.prepare(`
-    INSERT INTO writing_records (at, article_id, article_title, model, text, feedback_json, task_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `)
-  for (const r of list(data.writingHistory)) {
-    if (!r || typeof r !== 'object') continue
-    insert.run(
-      text(r.at) ?? nowIso(),
-      text(r.articleId) ?? '',
-      text(r.articleTitle),
-      text(r.model) ?? '',
-      text(r.text) ?? '',
-      jsonText(r.feedback) ?? '{}',
-      jsonText(r.task),
-    )
-  }
-}
-
-function writeRetells(db, data) {
-  const insert = db.prepare(
-    'INSERT INTO retell_records (at, article_id, text, words) VALUES (?, ?, ?, ?)',
-  )
-  for (const r of list(data.retells)) {
-    if (!r || typeof r !== 'object' || typeof r.articleId !== 'string') continue
-    insert.run(text(r.at) ?? nowIso(), r.articleId, text(r.text) ?? '', num(r.words))
-  }
-}
-
-function writeActivity(db, data) {
-  const insert = db.prepare(
-    'INSERT OR REPLACE INTO activity_days (day, cat, count) VALUES (?, ?, ?)',
-  )
-  for (const day of list(data.activity)) {
-    if (!day || typeof day !== 'object' || typeof day.day !== 'string') continue
-    const counts = day.counts && typeof day.counts === 'object' ? day.counts : {}
-    for (const [cat, count] of Object.entries(counts)) insert.run(day.day, cat, num(count))
-  }
-}
-
-function writeStudyDays(db, data) {
-  const insert = db.prepare(
-    'INSERT OR REPLACE INTO study_days (day, seconds, cards) VALUES (?, ?, ?)',
-  )
-  for (const r of list(data.studyDays)) {
-    if (!r || typeof r !== 'object' || typeof r.day !== 'string') continue
-    insert.run(r.day, num(r.seconds), num(r.cards))
-  }
-}
-
-function writeSessions(db, data) {
-  const insert = db.prepare('INSERT INTO pick_sessions (at, seconds, picked) VALUES (?, ?, ?)')
-  for (const r of list(data.sessions)) {
-    if (!r || typeof r !== 'object') continue
-    insert.run(text(r.at) ?? nowIso(), num(r.seconds), num(r.picked))
-  }
-}
-
-function writeStudiedDays(db, data) {
-  const insert = db.prepare(
-    'INSERT OR IGNORE INTO study_word_days (day, word_id, ordinal) VALUES (?, ?, ?)',
-  )
-  for (const r of list(data.studiedDays)) {
-    if (!r || typeof r !== 'object' || typeof r.day !== 'string') continue
-    list(r.ids).forEach((id, ordinal) => {
-      if (typeof id === 'string' && id) insert.run(r.day, id, ordinal)
-    })
-  }
-}
-
-function writeSkimmed(db, data) {
-  const insert = db.prepare('INSERT OR IGNORE INTO skimmed_articles (article_id) VALUES (?)')
-  for (const id of list(data.skimmed)) {
-    if (typeof id === 'string' && id) insert.run(id)
-  }
-}
-
-function writeKindStats(db, data) {  const insert = db.prepare(
-    'INSERT OR REPLACE INTO kind_stats (article_id, kind, total, correct) VALUES (?, ?, ?, ?)',
-  )
-  if (!data.kindStats || typeof data.kindStats !== 'object') return
-  for (const [articleId, byKind] of Object.entries(data.kindStats)) {
-    if (!byKind || typeof byKind !== 'object') continue
-    for (const [kind, stat] of Object.entries(byKind)) {
-      if (!stat || typeof stat !== 'object') continue
-      insert.run(articleId, kind, num(stat.total), num(stat.correct))
-    }
-  }
-}
-
-function writeAnswerEvents(db, data) {
-  const insert = db.prepare(`
-    INSERT OR IGNORE INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `)
-  for (const ev of list(data.answerEvents)) {
-    if (!ev || typeof ev !== 'object') continue
-    if (typeof ev.at !== 'string' || typeof ev.source !== 'string') continue
-    if (typeof ev.kind !== 'string' || typeof ev.cat !== 'string') continue
-    insert.run(
-      ev.at,
-      text(ev.day) ?? '',
-      text(ev.articleId) ?? '',
-      ev.source,
-      ev.kind,
-      ev.cat,
-      ev.correct ? 1 : 0,
-      text(ev.questionId),
-    )
-  }
-}
-
-const WRITERS = {
-  practice: writePractice,
-  mistakes: writeMistakes,
-  readDone: writeReadDone,
-  writingHistory: writeWriting,
-  retells: writeRetells,
-  activity: writeActivity,
-  studyDays: writeStudyDays,
-  sessions: writeSessions,
-  studiedDays: writeStudiedDays,
-  skimmed: writeSkimmed,
-  kindStats: writeKindStats,
-  answerEvents: writeAnswerEvents,
-}
 
 export const LEARNING_SNAPSHOT_KEEP = 30
 
@@ -390,8 +191,7 @@ export function writeLearning(db, data, only) {
   // 增量写（答题后防抖同步）非常频繁；每次都整份快照会放大 IO。
   // 整份替换必留快照；增量最多每 5 分钟留一份，足够回退又不拖慢输入。
   if (!only || shouldSnapshotPartial(db)) snapshotLearning(db, only ? 'before-partial' : 'before-write')
-  clearLearningSections(db, sections)
-  for (const section of sections) WRITERS[section](db, data)
+  writeSections(db, data, sections)
 }
 
 export function hasLearningRows(db) {
