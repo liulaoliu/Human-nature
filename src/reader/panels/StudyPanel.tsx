@@ -256,7 +256,8 @@ export default function StudyPanel({
 
   return (
     // 左侧一列放工具条、右侧一列放卡片与评分按钮：卡片不会被工具条挤到折叠线以下
-    <div className="study study-split">
+    // editing：编辑表单很高，右栏临时改成可滚（卡片让出高度），否则保存/取消被裁在屏幕外
+    <div className={'study study-split' + (editOpen ? ' editing' : '')}>
       <aside className="study-side">
         <StudyToolbar
           index={index}
@@ -450,6 +451,32 @@ export default function StudyPanel({
             </div>
             ))}
 
+            {/* 卡内维护：改词形/释义、删误加的词。
+                只要停在单词卡上就可用——判完等「下一词」、模糊待定、复习已判也都是在这张卡上。
+                （之前只在「还没评分」那条分支里渲染，结果学习模式判完就没有编辑入口了。） */}
+            {!drillOn && !learnQuizOn && !showMeaningGate && (
+              <>
+                <div className="bar study-tools">
+                  <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
+                    ✎ 编辑
+                  </button>
+                  <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
+                    {delArmed ? '确认删除' : '删除'}
+                  </button>
+                  {(!card.meaning || card.usage.length === 0) && (
+                    <button className="primary" onClick={onOpenEdit} title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题">
+                      ＋ 补全释义/用法
+                    </button>
+                  )}
+                  {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+                </div>
+
+                {editOpen && draft && (
+                  <StudyEditForm draft={draft} onDraftChange={onDraftChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
+                )}
+              </>
+            )}
+
             {/* 超时未评分 → 强制锤炼 */}
             {drillOn ? (
               <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
@@ -491,26 +518,6 @@ export default function StudyPanel({
               </div>
             ) : showMeaningGate ? null : (
               <>
-                {/* 卡内维护：改词形/释义、删误加的词 */}
-                <div className="bar study-tools">
-                  <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
-                    ✎ 编辑
-                  </button>
-                  <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
-                    {delArmed ? '确认删除' : '删除'}
-                  </button>
-                  {(!card.meaning || card.usage.length === 0) && (
-                    <button className="primary" onClick={onOpenEdit} title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题">
-                      ＋ 补全释义/用法
-                    </button>
-                  )}
-                  {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-                </div>
-
-                {editOpen && draft && (
-                  <StudyEditForm draft={draft} onDraftChange={onDraftChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
-                )}
-
                 {pendingForgot ? (
                   <div className="forgot-confirm">
                     <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>

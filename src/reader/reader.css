@@ -808,6 +808,20 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .study-main > .drill { min-height: 0; overflow: auto; }
 .study-main > .bar { flex: 0 0 auto; margin-bottom: 0; }
 
+/* 卡内编辑：表单比一屏高，右栏临时改成可滚 + 卡片让出高度，
+   保存/取消贴在右栏底部（sticky），不用 Tab 摸黑找 */
+.study-main > .study-edit { flex: 0 0 auto; }
+.study-main > .study-edit .bar {
+  position: sticky;
+  bottom: 0;
+  margin: 0;
+  padding: 8px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.study-split.editing .study-main { overflow-y: auto; }
+.study-split.editing .study-main > .study-card { flex: 0 0 auto; min-height: 120px; max-height: 34vh; }
+
 /* 窄屏：工具条回到卡片上方，恢复成可滚动的普通文档流 */
 @media (max-width: 1080px) {
   .reader.studying .reader-main { display: block; overflow: auto; }
@@ -821,6 +835,8 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
   .study-side .study-bar .muted,
   .study-side .study-bar .study-timer { margin-left: 10px; font-size: 13px; }
   .study-main { overflow: visible; }
+  .study-split.editing .study-main { overflow: visible; }
+  .study-split.editing .study-main > .study-card { min-height: 260px; max-height: none; }
   .study-main > .study-card { flex: 0 0 auto; min-height: 260px; margin: 10px 0; padding: 32px 24px; overflow: visible; }
   .study-main > .study-card .study-word { font-size: 42px; }
   .study-main > .study-card .study-back { margin-top: 22px; padding-top: 16px; }

@@ -232,6 +232,28 @@ describe('StudyPanel：维护与本轮小结', () => {
     expect(screen.getByRole('button', { name: '确认删除' })).toBeTruthy()
   })
 
+  it('判完停在卡上（学习等「下一词」/ 复习已判）也留着编辑入口', () => {
+    const onOpenEdit = vi.fn()
+    const { rerender } = render(<StudyPanel {...props({ mode: 'learn', learnGraded: true, onOpenEdit })} />)
+    fireEvent.click(screen.getByRole('button', { name: /编辑/ }))
+    expect(onOpenEdit).toHaveBeenCalled()
+
+    onOpenEdit.mockClear()
+    rerender(<StudyPanel {...props({ mode: 'review', revealed: true, reviewGraded: true, onOpenEdit })} />)
+    fireEvent.click(screen.getByRole('button', { name: /编辑/ }))
+    expect(onOpenEdit).toHaveBeenCalled()
+  })
+
+  it('编辑表单打开时：根节点带 editing（右栏可滚），保存/取消都在', () => {
+    const { container } = render(
+      <StudyPanel {...props({ editOpen: true, draft: { word: 'run', phonetic: '', partOfSpeech: '', meaning: '跑', definition: '', usage: '', phrases: '', idioms: '', grammarMarks: '' } })} />,
+    )
+    expect(container.querySelector('.study.editing')).not.toBeNull()
+    expect(container.querySelector('.study-main > .study-edit')).not.toBeNull()
+    expect(screen.getByRole('button', { name: '保存' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '取消' })).toBeTruthy()
+  })
+
   it('没有卡片时显示小结与重练入口', () => {
     const onRetryForgot = vi.fn()
     const onRestart = vi.fn()
