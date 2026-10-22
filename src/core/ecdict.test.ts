@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { dictLemmaOf, dictLemmaPairs, isAboveLevel, isDictWord, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
+import { dictLemmaOf, dictLemmaPairs, glossForPos, isAboveLevel, isDictWord, levelVerdict, parseEcdict, pickAboveLevelWords, resolveWord } from './ecdict'
 import { applyLemmaMap, createLibrary, dedupeLibrary } from './vocab'
 import { upsertLanguagePoints } from './langPoints'
 
@@ -46,6 +46,29 @@ describe('parseEcdict / resolveWord / dictLemmaOf', () => {
     expect(dictLemmaOf(dict, 'zzzz')).toBeNull()
     // 启发式会错成 ensconc 的，词典能给对的（加载时会据此自动纠正）
     expect(dictLemmaOf(dict, 'ensconced')).toBe('ensconce')
+  })
+})
+
+describe('glossForPos：释义按词性挑行', () => {
+  const zh = 'n. 誓约, 誓言\\nvi. 起誓, 发誓\\nvt. 立誓, 起誓要'
+
+  it('动词词性挑动词那条（不是永远取第一行）', () => {
+    expect(glossForPos(zh, 'v.')).toBe('vi. 起誓, 发誓')
+    expect(glossForPos(zh, 'verb')).toBe('vi. 起誓, 发誓')
+    expect(glossForPos(zh, 'vt.')).toBe('vi. 起誓, 发誓')
+  })
+
+  it('名词词性挑名词那条', () => {
+    expect(glossForPos(zh, 'n.')).toBe('n. 誓约, 誓言')
+  })
+
+  it('挑不到 / 没有词性 → 退回第一行', () => {
+    expect(glossForPos(zh, 'adj.')).toBe('n. 誓约, 誓言')
+    expect(glossForPos(zh, '')).toBe('n. 誓约, 誓言')
+  })
+
+  it('空释义返回空串', () => {
+    expect(glossForPos('', 'v.')).toBe('')
   })
 })
 

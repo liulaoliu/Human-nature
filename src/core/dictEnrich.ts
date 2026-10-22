@@ -10,13 +10,11 @@
  */
 import type { VocabFieldSources, VocabItem, VocabLibrary } from '../types/document'
 import type { Ecdict } from './ecdict'
-import { resolveWord } from './ecdict'
+import { glossForPos, resolveWord } from './ecdict'
 import { cleanGloss, normalizePos } from './vocab'
 
 /** 英英释义（M-W 学习词典）查询：给词形返回一条；没有就 null。 */
 export type MwldLookup = (word: string) => { phonetic?: string; pos?: string; en?: string } | null
-
-const firstLine = (s: string | undefined) => (s ?? '').split(/\\n|\n/).map((x) => x.trim()).filter(Boolean)[0] ?? ''
 
 export interface EnrichResult {
   library: VocabLibrary
@@ -46,16 +44,21 @@ export function enrichWithDict(
       fieldSources.phonetic = 'dict'
     }
     const pos = normalizePos(mw?.pos || hit?.entry.pos || '')
-    if (it.fieldSources?.partOfSpeech !== 'manual' && !it.partOfSpeech && pos) {
+    // 词性只在「这条还没有释义」时补：词典给的词性是**词头最常用**的那个义项，
+    // 而 AI 查词给的是**语境里**那个义项。两者不是一回事——`consort` 卡上出现
+    // 「n. 交往；厮混」就是这么来的（释义是动词义、词性被词典补成名词）。
+    // 宁可少一个词性，也不能让卡上自相矛盾。
+    const meaningFromDict = !it.meaning && !!(hit?.entry.zh || mw?.en)
+    if (it.fieldSources?.partOfSpeech !== 'manual' && !it.partOfSpeech && pos && meaningFromDict) {
       patch.partOfSpeech = pos
       fieldSources.partOfSpeech = 'dict'
     }
-    const meaning = hit?.entry.zh ? cleanGloss(firstLine(hit.entry.zh)) : ''
+    const meaning = hit?.entry.zh ? cleanGloss(glossForPos(hit.entry.zh, pos || hit.entry.pos)) : ''
     if (it.fieldSources?.meaning !== 'manual' && !it.meaning && meaning) {
       patch.meaning = meaning
       fieldSources.meaning = 'dict'
     }
-    const definition = cleanGloss(mw?.en || firstLine(hit?.entry.en || ''))
+    const definition = cleanGloss(mw?.en || glossForPos(hit?.entry.en || '', pos))
     if (it.fieldSources?.definition !== 'manual' && !it.definition && definition) {
       patch.definition = definition
       fieldSources.definition = 'dict'

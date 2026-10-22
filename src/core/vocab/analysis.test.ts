@@ -134,6 +134,31 @@ describe('applyWordAnalysis', () => {
     lib = applyWordAnalysis(lib, [{ word: 'running', usage: ['run out', 'run late'] }], NOW)
     expect(lib.items[0].usage).toEqual(['run a business', 'run out', 'run late'])
   })
+
+  it('释义被换掉时词性跟着换（不能一个来自词典首义、一个来自 AI 语境义）', () => {
+    // consort 真实病例：先被词典补成「n. 配偶」，AI 查词给动词义「交往；厮混」→ 卡上成了「n. 交往；厮混」
+    let lib = markWord(createLibrary(), { word: 'consort', articleId: 'a1' }, NOW).library
+    lib = applyWordAnalysis(lib, [{ word: 'consort', partOfSpeech: 'n.', meaning: '配偶', fieldSources: { partOfSpeech: 'dict', meaning: 'dict' } }], NOW)
+    expect(lib.items[0].partOfSpeech).toBe('n.')
+    lib = applyWordAnalysis(lib, [{ word: 'consort', partOfSpeech: 'v.', meaning: '交往；厮混' }], NOW)
+    expect(lib.items[0].meaning).toBe('交往；厮混')
+    expect(lib.items[0].partOfSpeech).toBe('v.')
+  })
+
+  it('释义变了但 AI 没给词性 → 旧的词典词性清掉，别硬凑', () => {
+    let lib = markWord(createLibrary(), { word: 'dwarf', articleId: 'a1' }, NOW).library
+    lib = applyWordAnalysis(lib, [{ word: 'dwarf', partOfSpeech: 'n.', meaning: '矮子', fieldSources: { partOfSpeech: 'dict', meaning: 'dict' } }], NOW)
+    lib = applyWordAnalysis(lib, [{ word: 'dwarf', meaning: '使相形见绌' }], NOW)
+    expect(lib.items[0].meaning).toBe('使相形见绌')
+    expect(lib.items[0].partOfSpeech).toBeNull()
+  })
+
+  it('释义没变就只补空（不无谓改词性）', () => {
+    let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1' }, NOW).library
+    lib = applyWordAnalysis(lib, [{ word: 'run', partOfSpeech: 'v.', meaning: '跑', fieldSources: { partOfSpeech: 'dict', meaning: 'dict' } }], NOW)
+    lib = applyWordAnalysis(lib, [{ word: 'run', meaning: '跑' }], NOW)
+    expect(lib.items[0].partOfSpeech).toBe('v.')
+  })
 })
 describe('markWord 词组 / 带释义 / -ed 还原', () => {
   it('markWord 可带释义（词组 — 中文 拆出来的），并直接标 queried', () => {
@@ -238,5 +263,31 @@ describe('applyPosAnalysis', () => {
     lib = applyPosAnalysis(lib, [row], NOW)
     expect(lib.items[0].word).toBe('sliding oil price')
     expect(lib.items[0].note).toContain('辨析')
+  })
+
+  it('派生词当原形时**不改词形**（unchallenged 不能被改成 challenge）', () => {
+    // 真实病例：辨析说 unchallenged 的原形是 challenge，改完 challenge 卡上挂着
+    // unchallenged 的词典释义（a. 未引起争论的）→ 词性释义全错位
+    let lib = markWord(createLibrary(), { word: 'unchallenged', articleId: 'a1' }, NOW).library
+    lib = applyPosAnalysis(
+      lib,
+      [{ ...row, lemma: 'challenge', surface: 'unchallenged', pos: 'adj.', meaning: '未受质疑的' }],
+      NOW,
+    )
+    const it = lib.items[0]
+    expect(it.word).toBe('unchallenged')
+    expect(it.lemma).toBe('unchalleng') // 启发性 lemma，但**没有**被改成 challenge
+    expect(it.partOfSpeech).toBe('adj.')
+    expect(it.note).toContain('未改词形')
+  })
+
+  it('真屈折照旧改词形（running → run）', () => {
+    let lib = markWord(createLibrary(), { word: 'running', articleId: 'a1' }, NOW).library
+    lib = applyPosAnalysis(
+      lib,
+      [{ ...row, lemma: 'run', surface: 'running', pos: 'v.', meaning: '跑' }],
+      NOW,
+    )
+    expect(lib.items[0].word).toBe('run')
   })
 })

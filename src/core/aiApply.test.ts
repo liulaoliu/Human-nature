@@ -120,6 +120,18 @@ describe('applyTableTask：改词形类（lemma / pos）', () => {
     expect(out.report[1]).toBe('合并去重 1 个')
   })
 
+  it('lemma：派生词当原形一律拒绝，并在回执里点名', () => {
+    // 真实病例：AI 说 unchallenged 的原形是 challenge，改完 challenge 卡上挂着
+    // unchallenged 的释义（a. 未引起争论的）
+    const lib: VocabLibrary = { ...createLibrary(), items: [item('unchallenged', 'unchallenged')] }
+    const out = applyTableTask('lemma', 'unchallenged | challenge', lib, ['unchallenged'])
+    expect(out.next!.items[0].word).toBe('unchallenged')
+    expect(out.report[0]).toBe('校正 0 个词形（共 1 行）')
+    expect(out.report.some((r) => r.includes('拒绝 1 个「派生词当原形」') && r.includes('unchallenged→challenge'))).toBe(
+      true,
+    )
+  })
+
   it('pos：辨析写进 note，未覆盖的词进 missing', () => {
     const raw = 'run | running | v. | 谓语动词 | 主语 | 跑 | 主语执行动作 | v.'
     const out = applyTableTask('pos', raw, libOf('running'), ['run'])

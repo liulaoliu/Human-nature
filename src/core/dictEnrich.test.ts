@@ -66,6 +66,18 @@ describe('enrichWithDict', () => {
     expect(out.library.items[0].fieldSources).toMatchObject({ definition: 'dict', partOfSpeech: 'dict' })
   })
 
+  it('已有释义时不补词性：词典给的是词头最常用义项，会和语境释义打架', () => {
+    // consort 真实病例：AI 查词给动词义「交往；厮混」，词典 M-W 首义是名词 → 卡上「n. 交往；厮混」
+    const lib = {
+      ...createLibrary(),
+      items: [vocabItem({ word: 'consort', lemma: 'consort', meaning: '交往；厮混', fieldSources: { meaning: 'ai' } })],
+    }
+    const out = enrichWithDict(lib, dict, (w) => (w === 'consort' ? { pos: 'noun', en: 'to keep company with' } : null), TEST_NOW)
+    const it = out.library.items[0]
+    expect(it.meaning).toBe('交往；厮混')
+    expect(it.partOfSpeech).toBeNull()
+  })
+
   it('手动清空的字段不再被词典补回（只锁该字段，别的字段照补）', () => {
     const lib = {
       ...createLibrary(),

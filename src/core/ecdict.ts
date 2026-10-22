@@ -5,7 +5,7 @@
  * 网络加载放在 adapters/dictionary.ts（这里不碰浏览器 API，便于单测）。
  */
 import { kindOf } from './entryKind'
-import { normalizeWord } from './vocab'
+import { normalizePos, normalizeWord } from './vocab'
 import type { VocabKind } from '../types/document'
 
 export interface EcdictEntry {
@@ -195,13 +195,49 @@ export function isAboveLevel(dict: Ecdict, word: string, level: EcdictLevel): bo
   return levelVerdict(dict, word, level) === 'above'
 }
 
-/** 首行非空文本（ECDICT 的中英释义都是多行）。 */
+/** 首行非空文本（ECDICT 的中英释义都是多行）。转义 `\n` 与真换行都切。 */
 export function firstLine(s: string): string {
-  for (const line of s.split('\n')) {
+  for (const line of s.split(/\\n|\n/)) {
     const t = line.trim()
     if (t) return t
   }
   return ''
+}
+
+/** 释义行开头的词性标记 → 粗类（`vt.`/`vi.`/`t.` 都算动词，`s.` 是 WordNet 的形容词卫星）。 */
+const LINE_POS: [RegExp, string][] = [
+  [/^(n|noun)\.?\s/i, 'n'],
+  [/^(v|vt|vi|verb|t)\.?\s/i, 'v'],
+  [/^(a|adj|s|satellite)\.?\s/i, 'adj'],
+  [/^(ad|adv|adverb)\.?\s/i, 'adv'],
+  [/^(prep|preposition)\.?\s/i, 'prep'],
+]
+
+function posClass(pos: string): string {
+  const p = normalizePos(pos)
+  if (!p) return ''
+  const hit = LINE_POS.find(([re]) => re.test(p + ' '))
+  return hit ? hit[1] : ''
+}
+
+/**
+ * 按词性挑一条中文释义（挑不到再退回第一行）。
+ *
+ * 为什么要挑：ECDICT 的释义是多行的，每行自带词性标记（`vow` → `n. 誓约` / `vi. 起誓` /
+ * `vt. 立誓`），而词性是从 M-W / 词典 pos 列拿的（`vow` 是动词）。只取第一行就会出现
+ * 「v. n. 誓约, 誓言」这种卡上自相矛盾的词条（2026-10-22 用户报的那批）。
+ */
+export function glossForPos(zh: string, pos: string): string {
+  const cls = posClass(pos)
+  if (!cls) return firstLine(zh)
+  // 数据里可能是真换行，也可能是构建脚本留下来的转义 `\n`，两种都切开
+  for (const line of zh.split(/\\n|\n/)) {
+    const t = line.trim()
+    if (!t) continue
+    const hit = LINE_POS.find(([re]) => re.test(t))
+    if (hit && hit[1] === cls) return t
+  }
+  return firstLine(zh)
 }
 
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g

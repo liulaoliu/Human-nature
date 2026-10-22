@@ -66,6 +66,52 @@ export function lemmaOf(raw: string): string {
   return s
 }
 
+/** 屈折后缀：加上它只是同一个词的变形，不是另一个词。 */
+const INFLECTION = new Set(['s', 'es', 'd', 'ed', 'ing', 'n', 'en'])
+
+/**
+ * AI 说「A 的原形是 B」时，能不能真把词条从 A 改名成 B。
+ *
+ * 2026-10-22 的血案：`-ing/-ed 辨析` 拿 AI 给的原形直接改词条的 word，
+ * 而 AI 会把**加前缀派生出来的另一个词**当成词形变化：
+ * `unchallenged → challenge`、`unarticulated → articulate`、`inarticulate → articulate`。
+ * 改名只动 word/lemma/id，**释义、用法、例句都不动**，于是
+ * 「challenge」这张卡上挂着 unchallenged 的词典释义（n./adj. 张冠李戴）。
+ *
+ * 所以这里只认**屈折**，不认派生：
+ *   - 不规则表（went→go、better→good）；
+ *   - 在词干后面接屈折后缀（runs→run、watched→watch、swelling→swell）；
+ *   - 双写尾辅音（running→run）、去 e 加 -ing/-ed（expunging→expunge）；
+ *   - y→ies（companies→company）、-ses→-sis（analyses→analysis）。
+ * 加/去任何**派生**词缀一律拒绝：un-/in-/im-/ir-/il-/dis-/non-/anti-/mis-（前缀），
+ * -ly/-ness/-less/-ful/-ment/-tion/-able/-ity/-ism/-ist/-er/-or/-al/-ic/-ous（后缀）。
+ * 拒绝的代价只是「词形没被规整」，误改的代价是整张卡的释义张冠李戴——宁严不宽。
+ */
+export function canRewriteTo(from: string, to: string): boolean {
+  const f = normalizeWord(from)
+  const t = normalizeWord(to)
+  if (!f || !t) return false
+  if (f === t) return true
+  if (IRREGULAR[f] === t) return true
+  // 只处理单词：短语（含空格）不做改名判断，交给原来的「同形才改」
+  if (f.includes(' ') || t.includes(' ')) return false
+
+  // 词干 + 屈折后缀（含词尾变化）
+  if (f.startsWith(t)) {
+    const rest = f.slice(t.length)
+    if (INFLECTION.has(rest)) return true
+    // 双写尾辅音：run → running / plan → planned（词干末尾那个字母再写一遍）
+    if (rest === t.slice(-1) + 'ing' || rest === t.slice(-1) + 'ed') return true
+  }
+  // 去 e 再加 -ing/-ed：expunge → expunging / expunged
+  if (t.endsWith('e') && (f === t.slice(0, -1) + 'ing' || f === t.slice(0, -1) + 'ed')) return true
+  // 辅音 + y → ies：company → companies
+  if (t.endsWith('y') && f === t.slice(0, -1) + 'ies') return true
+  // -sis → -ses：analysis → analyses
+  if (t.endsWith('sis') && f === t.slice(0, -2) + 'es') return true
+  return false
+}
+
 /** 词性全称 → 缩写（离线词典/AI 有时给 "noun" 全称）。 */
 const POS_ABBR: Record<string, string> = {
   noun: 'n.',

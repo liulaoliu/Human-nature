@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { cleanGloss, displayMeaning, lemmaOf, normalizePos, normalizeWord } from './word'
+import { canRewriteTo, cleanGloss, displayMeaning, lemmaOf, normalizePos, normalizeWord } from './word'
 
 describe('释义/词性清洗', () => {
   it('cleanGloss 去掉行尾反斜杠与多余空白', () => {
@@ -61,5 +61,42 @@ describe('lemmaOf 短语', () => {
   it('含空格的短语不做词形还原，保持原样（小写）', () => {
     expect(lemmaOf('human rights')).toBe('human rights')
     expect(lemmaOf('Climate Change')).toBe('climate change')
+  })
+})
+
+describe('canRewriteTo：只有屈折能改名，派生词不行', () => {
+  it('屈折变化放行', () => {
+    expect(canRewriteTo('runs', 'run')).toBe(true)
+    expect(canRewriteTo('running', 'run')).toBe(true) // 双写尾辅音
+    expect(canRewriteTo('watched', 'watch')).toBe(true)
+    expect(canRewriteTo('swelling', 'swell')).toBe(true)
+    expect(canRewriteTo('expunging', 'expunge')).toBe(true) // 去 e 加 -ing
+    expect(canRewriteTo('companies', 'company')).toBe(true) // y → ies
+    expect(canRewriteTo('analyses', 'analysis')).toBe(true) // -ses → -sis
+    expect(canRewriteTo('went', 'go')).toBe(true) // 不规则表
+    expect(canRewriteTo('children', 'child')).toBe(true)
+    expect(canRewriteTo('same', 'same')).toBe(true)
+  })
+
+  it('否定/反义前缀派生出来的词不是词形变化（2026-10-22 的 bug）', () => {
+    expect(canRewriteTo('unchallenged', 'challenge')).toBe(false)
+    expect(canRewriteTo('unarticulated', 'articulate')).toBe(false)
+    expect(canRewriteTo('inarticulate', 'articulate')).toBe(false)
+    expect(canRewriteTo('discouraged', 'courage')).toBe(false)
+    expect(canRewriteTo('nonviolent', 'violent')).toBe(false)
+  })
+
+  it('其它派生后缀也不改名（teacher ≠ teach 的变形）', () => {
+    expect(canRewriteTo('teacher', 'teach')).toBe(false)
+    expect(canRewriteTo('quickly', 'quick')).toBe(false)
+    expect(canRewriteTo('kindness', 'kind')).toBe(false)
+    expect(canRewriteTo('creation', 'create')).toBe(false)
+    expect(canRewriteTo('beautiful', 'beauty')).toBe(false)
+  })
+
+  it('短语与空串不放行', () => {
+    expect(canRewriteTo('fall back on', 'fall back')).toBe(false)
+    expect(canRewriteTo('', 'run')).toBe(false)
+    expect(canRewriteTo('run', '')).toBe(false)
   })
 })

@@ -17,7 +17,7 @@ import { defaultReviewState } from '../../types/document'
 import type { PosRow } from '../analyzer'
 import { addArticleEntry } from '../articleVocab'
 import { VOCAB_FIELDS, isFieldLocked } from '../vocabFields'
-import { lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
+import { canRewriteTo, lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
 import {
   betterSource,
   contextFromSource,
@@ -254,21 +254,32 @@ export function applyWordAnalysis(
     const newLemma = identityLocked ? cur.lemma : lemmaOf(newWord) || cur.lemma
     const fieldSources: VocabFieldSources = { ...cur.fieldSources }
 
-    // 音标 / 词性只补空；释义 / 英英释义允许 AI 刷新（该字段手动锁住时除外）
+    // 音标只补空；词性与释义要**同源**（释义换了说法，词性就必须跟着换，见下）
     let phonetic = cur.phonetic
     if (!isFieldLocked(cur, 'phonetic') && !cur.phonetic && incoming.phonetic) {
       phonetic = incoming.phonetic
       fieldSources.phonetic = sourceOf(wa, 'phonetic')
     }
-    let partOfSpeech = cur.partOfSpeech
-    if (!isFieldLocked(cur, 'partOfSpeech') && !cur.partOfSpeech && incoming.partOfSpeech) {
-      partOfSpeech = incoming.partOfSpeech
-      fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
-    }
     let meaning = cur.meaning
+    let meaningReplaced = false
     if (!isFieldLocked(cur, 'meaning') && incoming.meaning) {
+      meaningReplaced = incoming.meaning !== cur.meaning
       meaning = incoming.meaning
       fieldSources.meaning = sourceOf(wa, 'meaning')
+    }
+    let partOfSpeech = cur.partOfSpeech
+    if (!isFieldLocked(cur, 'partOfSpeech')) {
+      if (meaningReplaced) {
+        // 释义被换成另一条结果，词性必须跟它一起走：
+        // 词典补的词性是**词头最常用**义项，AI 给的释义是**语境**义项，
+        // 留着旧的就会出现「n. 交往；厮混」这种自相矛盾的卡（consort 真实病例）。
+        partOfSpeech = incoming.partOfSpeech
+        if (incoming.partOfSpeech) fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
+        else delete fieldSources.partOfSpeech
+      } else if (!cur.partOfSpeech && incoming.partOfSpeech) {
+        partOfSpeech = incoming.partOfSpeech
+        fieldSources.partOfSpeech = sourceOf(wa, 'partOfSpeech')
+      }
     }
     let definition = cur.definition
     if (!isFieldLocked(cur, 'definition') && incoming.definition) {
@@ -397,7 +408,10 @@ export function applyPosAnalysis(
     const cur = items[idx]
     const single = !cur.word.trim().includes(' ')
     const locked = cur.status === 'edited' || cur.status === 'mastered'
-    const rewrite = single && !locked && !!row.lemma.trim()
+    const asked = single && !locked && !!row.lemma.trim() && normalizeWord(row.lemma) !== normalizeWord(cur.word)
+    // AI 给的原形只在**确认是屈折**时才用来改词形（见 `canRewriteTo`）：
+    // 否则 unchallenged 会被改成 challenge，而释义/用法/例句原地不动 → 张冠李戴。
+    const rewrite = single && !locked && !!row.lemma.trim() && canRewriteTo(cur.word, row.lemma)
     const nextWord = rewrite ? row.lemma.trim() : cur.word
     const nextLemma = rewrite ? lemmaOf(nextWord) || cur.lemma : cur.lemma
     const fieldSources: VocabFieldSources = { ...cur.fieldSources }
@@ -410,7 +424,9 @@ export function applyPosAnalysis(
     if (meaning !== cur.meaning) fieldSources.meaning = 'ai'
     const noteLine = `[辨析] ${row.surface} — ${row.syntax || ''}${row.role ? `；${row.role}` : ''}${
       row.reason ? `；${row.reason}` : ''
-    }${row.label || row.pos ? ` → ${row.label || row.pos}` : ''}`
+    }${row.label || row.pos ? ` → ${row.label || row.pos}` : ''}${
+      asked && !rewrite ? `（未改词形：${row.lemma} 是派生词，不是它的词形变化）` : ''
+    }`
     items[idx] = {
       ...cur,
       id: rewrite ? `vocab:${nextLemma}` : cur.id,

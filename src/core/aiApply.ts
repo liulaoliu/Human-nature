@@ -22,6 +22,7 @@ import {
   applyLemmaMap,
   applyPhrases,
   applyPosAnalysis,
+  canRewriteTo,
   dedupeLibrary,
   lemmaOf,
   normalizeWord,
@@ -137,15 +138,26 @@ function applyGrammarMark(text: string, lib: VocabLibrary, askedWords: string[])
 
 /** 原形校正：改 word/lemma，再合并重复。 */
 function applyLemma(text: string, lib: VocabLibrary, askedWords: string[]): ApplyTableOutcome {
-  const pairs = parseLemmaTable(text)
-  if (!pairs.length) return notParsed('没解析出原形（格式：原词形 | 原形）')
+  const parsed = parseLemmaTable(text)
+  if (!parsed.length) return notParsed('没解析出原形（格式：原词形 | 原形）')
+  // AI 会把「加前缀派生的另一个词」当成词形变化（unchallenged → challenge），
+  // 改 word 不改释义 → 整张卡张冠李戴。只放行屈折，见 `canRewriteTo`。
+  const pairs = parsed.filter((p) => canRewriteTo(p.from, p.to))
+  const refused = parsed.filter((p) => !canRewriteTo(p.from, p.to))
   const before = lib.items.length
   const next = dedupeLibrary(applyLemmaMap(lib, pairs))
   const changed = pairs.filter((p) => normalizeWord(p.from) !== normalizeWord(p.to)).length
   const merged = before - next.items.length
-  const report: string[] = [`校正 ${changed} 个词形（共 ${pairs.length} 行）`]
+  const report: string[] = [`校正 ${changed} 个词形（共 ${parsed.length} 行）`]
   if (merged > 0) report.push(`合并去重 ${merged} 个`)
-  const missing = missingWords(askedWords, pairs.map((p) => p.from))
+  if (refused.length)
+    report.push(
+      `拒绝 ${refused.length} 个「派生词当原形」：${head(
+        refused.map((p) => `${p.from}→${p.to}`),
+        MISSING_PREVIEW,
+      )}`,
+    )
+  const missing = missingWords(askedWords, parsed.map((p) => p.from))
   if (missing.length) report.push(`AI 未返回 ${missing.length} 个：${head(missing, MISSING_PREVIEW)}`)
   return { next, report, missing: missing.length ? { task: 'lemma', words: missing } : null, ok: true }
 }

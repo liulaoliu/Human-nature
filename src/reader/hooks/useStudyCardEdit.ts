@@ -1,7 +1,6 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import { editItem, removeItem } from '../../core/vocab'
-
 /** 卡内编辑草稿。 */
 export interface StudyDraft {
   word: string
@@ -78,19 +77,40 @@ export function useStudyCardEdit({
         .split(/[;；\n]/)
         .map((x) => x.trim())
         .filter(Boolean)
-    persist(
-      editItem(library, card.id, {
-        word: draft.word.trim() || card.word,
-        phonetic: draft.phonetic.trim() || null,
-        partOfSpeech: draft.partOfSpeech.trim() || null,
-        meaning: draft.meaning.trim() || null,
-        definition: draft.definition.trim() || null,
-        usage: split(draft.usage),
-        phrases: split(draft.phrases),
-        idioms: split(draft.idioms),
-        grammarMarks: split(draft.grammarMarks),
-      }),
-    )
+    const next = {
+      word: draft.word.trim() || card.word,
+      phonetic: draft.phonetic.trim() || null,
+      partOfSpeech: draft.partOfSpeech.trim() || null,
+      meaning: draft.meaning.trim() || null,
+      definition: draft.definition.trim() || null,
+      usage: split(draft.usage),
+      phrases: split(draft.phrases),
+      idioms: split(draft.idioms),
+      grammarMarks: split(draft.grammarMarks),
+    }
+    // **只提交真正改过的字段**：`editItem` 会把手上的每个字段都标成 manual，
+    // 全都传一遍就等于「点一次保存、整条卡锁死」——词性没动也被锁，
+    // 之后词典/AI 再也纠不了它（dwarf 卡上「n. 使相形见绌」就是这么冻住的）。
+    const same = (a: readonly string[] | null | undefined, b: readonly string[] | null | undefined) =>
+      (a ?? []).join('\u0001') === (b ?? []).join('\u0001')
+    const patch: Partial<Omit<VocabItem, 'id' | 'lemma'>> = {}
+    if (next.word !== card.word) patch.word = next.word
+    if (next.phonetic !== (card.phonetic ?? null)) patch.phonetic = next.phonetic
+    if (next.partOfSpeech !== (card.partOfSpeech ?? null)) patch.partOfSpeech = next.partOfSpeech
+    if (next.meaning !== (card.meaning ?? null)) patch.meaning = next.meaning
+    if (next.definition !== (card.definition ?? null)) patch.definition = next.definition
+    if (!same(next.usage, card.usage)) patch.usage = next.usage
+    if (!same(next.phrases, card.phrases)) patch.phrases = next.phrases
+    if (!same(next.idioms, card.idioms)) patch.idioms = next.idioms
+    if (!same(next.grammarMarks, card.grammarMarks)) patch.grammarMarks = next.grammarMarks
+    if (!Object.keys(patch).length) {
+      // 一个字都没改：不写库（否则凭空把 status 推到 edited、锁掉后续查词）
+      setEditOpen(false)
+      setDraft(null)
+      flash('没有改动')
+      return
+    }
+    persist(editItem(library, card.id, patch))
     setEditOpen(false)
     setDraft(null)
     flash('已保存修改')

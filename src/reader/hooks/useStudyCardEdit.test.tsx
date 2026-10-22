@@ -77,6 +77,29 @@ describe('useStudyCardEdit：编辑', () => {
     expect(result.current.editOpen).toBe(false)
     expect(result.current.draft).toBeNull()
   })
+
+  it('只改释义时，词性等没动的字段不被标成 manual（否则以后再也纠不了）', () => {
+    const withPos = [
+      vocabItem({ id: 'w1', word: 'consort', lemma: 'consort', partOfSpeech: 'n.', meaning: '配偶', fieldSources: { partOfSpeech: 'dict', meaning: 'dict' } }),
+    ]
+    const lib: VocabLibrary = { ...createLibrary(), items: withPos }
+    const { result } = renderHook(() => useHarness({ card: withPos[0], library: lib }))
+    act(() => result.current.openEdit())
+    act(() => result.current.setDraft({ ...result.current.draft!, meaning: '交往；厮混' }))
+    act(() => result.current.saveEdit())
+
+    const edited = (persist.mock.calls[0][0] as VocabLibrary).items[0]
+    expect(edited.meaning).toBe('交往；厮混')
+    expect(edited.fieldSources).toEqual({ meaning: 'manual', partOfSpeech: 'dict' })
+  })
+
+  it('一个字都没改 → 不写库', () => {
+    const { result } = renderHook(() => useHarness())
+    act(() => result.current.openEdit())
+    act(() => result.current.saveEdit())
+    expect(persist).not.toHaveBeenCalled()
+    expect(flash).toHaveBeenCalledWith('没有改动')
+  })
 })
 
 describe('useStudyCardEdit：两步删除', () => {

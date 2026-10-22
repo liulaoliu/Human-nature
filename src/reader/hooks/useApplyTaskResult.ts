@@ -17,7 +17,7 @@ import type { Sentence, VocabFieldSources, VocabLibrary, VocabVia } from '../../
 import type { ActivityCat } from '../../core/activity'
 import {
   dictLemmaOf,
-  firstLine,
+  glossForPos,
   levelVerdict,
   pickAboveLevelWords,
   resolveWord,
@@ -302,8 +302,10 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams) {
           const ph = mw?.phonetic || e?.phonetic
           const phonetic = w.phonetic || (ph ? `/${ph.replace(/^\/+|\/+$/g, '')}/` : undefined)
           const partOfSpeech = w.partOfSpeech || mw?.pos || e?.pos || undefined
-          const meaning = w.meaning || (e?.zh ? firstLine(e.zh) : undefined)
-          const definition = w.definition || mw?.en || (e?.en ? firstLine(e.en) : undefined)
+          // 词典释义是多行的，每行自带词性标记；按词性挑，别硬取第一行
+          // （否则 vow 会变成「v. n. 誓约」，卡上两个词性打架）
+          const meaning = w.meaning || (e?.zh ? glossForPos(e.zh, partOfSpeech || '') : undefined)
+          const definition = w.definition || mw?.en || (e?.en ? glossForPos(e.en, partOfSpeech || '') : undefined)
           if (phonetic) fieldSources.phonetic = w.phonetic ? 'ai' : 'dict'
           if (partOfSpeech) fieldSources.partOfSpeech = w.partOfSpeech ? 'ai' : 'dict'
           if (meaning) fieldSources.meaning = w.meaning ? 'ai' : 'dict'
