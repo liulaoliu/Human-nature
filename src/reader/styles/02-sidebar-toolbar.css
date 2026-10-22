@@ -1,0 +1,260 @@
+/* 右侧面板 Tab：选词/分析 ↔ 生词本/学习 */
+.side-brand { display: flex; justify-content: center; margin: 0 0 8px; }
+.side-brand img {
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  box-shadow: var(--shadow-1);
+  object-fit: cover;
+}
+.side-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 10px;
+  position: sticky;
+  top: 0;
+  background: var(--panel);
+  padding: 4px 0;
+  z-index: 2;
+}
+.side-tabs button { flex: 1; }
+.side-label { margin: 12px 0 4px; font-size: 12px; color: var(--dim); font-weight: 600; }
+.reader-side.tab-pick .side-sec[data-sec='vocab'] { display: none; }
+.reader-side.tab-vocab .side-sec[data-sec='pick'] { display: none; }
+.reader-side:not(.tab-overview) .side-sec[data-sec='overview'] { display: none; }
+.reader-side.tab-overview .side-sec[data-sec='pick'],
+.reader-side.tab-overview .side-sec[data-sec='vocab'] { display: none; }
+.reader-side.tab-stats .side-sec[data-sec='overview'],
+.reader-side.tab-stats .side-sec[data-sec='pick'],
+.reader-side.tab-stats .side-sec[data-sec='vocab'] { display: none; }
+.reader-side:not(.tab-stats) .side-sec[data-sec='stats'] { display: none; }
+.reader-side:not(.tab-mastery) .side-sec[data-sec='mastery'] { display: none; }
+.reader-side.tab-mastery .side-sec[data-sec='overview'],
+.reader-side.tab-mastery .side-sec[data-sec='pick'],
+.reader-side.tab-mastery .side-sec[data-sec='vocab'],
+.reader-side.tab-mastery .side-sec[data-sec='stats'] { display: none; }
+
+/* 掌握度面板 */
+.mastery-score { display: flex; align-items: baseline; gap: 10px; margin: 6px 0 10px; }
+.mastery-num { font-size: 34px; font-weight: 800; line-height: 1; }
+.mastery-grade { font-size: 13px; font-weight: 700; padding: 2px 9px; border-radius: 999px; border: 1px solid var(--line); }
+.mastery-grade.g4 { color: #1f7a4d; border-color: rgba(47, 143, 91, 0.5); background: rgba(47, 143, 91, 0.12); }
+.mastery-grade.g3 { color: #2f8f5b; border-color: rgba(47, 143, 91, 0.4); background: rgba(47, 143, 91, 0.08); }
+.mastery-grade.g2 { color: #a06a1e; border-color: rgba(224, 138, 60, 0.5); background: rgba(224, 138, 60, 0.12); }
+.mastery-grade.g1 { color: #b3403a; border-color: rgba(192, 57, 43, 0.5); background: rgba(192, 57, 43, 0.12); }
+.mastery-dims { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+.mastery-dim-row { display: flex; justify-content: space-between; font-size: 13px; }
+.mastery-bar { height: 6px; border-radius: 999px; background: var(--panel-3); overflow: hidden; margin: 3px 0; }
+.mastery-bar > div { height: 100%; background: linear-gradient(90deg, var(--accent-2), var(--accent)); }
+.mastery-detail { font-size: 12px; }
+.mastery-next { margin: 8px 0; padding: 8px 10px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); font-size: 13px; }
+.mastery-tip { margin-bottom: 6px; }
+
+/* 学习统计 */
+.stat-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 12px; padding: 4px 0; }
+.stat-name { width: 40px; color: var(--dim); }
+.stat-cat { color: var(--fg); }
+.stat-total { margin-left: auto; font-variant-numeric: tabular-nums; }
+.heat { margin: 6px 0; }
+.heat-months {
+  display: grid;
+  grid-template-columns: repeat(13, 1fr);
+  gap: 3px;
+  font-size: 10px;
+  color: var(--dim);
+  margin-bottom: 3px;
+}
+.heat-grid {
+  display: grid;
+  grid-auto-flow: column;
+  grid-template-columns: repeat(13, 1fr);
+  grid-template-rows: repeat(7, 1fr);
+  gap: 3px;
+}
+.heat-cell { aspect-ratio: 1 / 1; border-radius: 2px; background: var(--panel-3); }
+.heat-cell.future { background: transparent; }
+.heat-cell.lv1 { background: color-mix(in srgb, var(--green) 30%, var(--panel-3)); }
+.heat-cell.lv2 { background: color-mix(in srgb, var(--green) 55%, var(--panel-3)); }
+.heat-cell.lv3 { background: color-mix(in srgb, var(--green) 78%, var(--panel-3)); }
+.heat-cell.lv4 { background: var(--green); }
+.heat-legend { display: flex; align-items: center; gap: 3px; margin-top: 4px; }
+.heat-legend .heat-cell { display: inline-block; width: 11px; height: 11px; aspect-ratio: auto; }
+/* 「重建并核对」：结论一行、颜色区分一致 / 有差异 */
+.stat-rebuild { width: 100%; margin-top: 6px; }
+.stat-note { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--dim); }
+.stat-note.bad { color: #d9a12b; }
+
+/* 仪表盘 */
+.board { display: flex; flex-direction: column; gap: 12px; }
+.board-group { display: flex; flex-direction: column; gap: 6px; }
+.board-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.board-row .dot { width: 8px; height: 8px; border-radius: 50%; margin-top: 5px; flex: none; background: var(--green); }
+.board-row.partial .dot { background: #d9a12b; }
+.board-row.blocked .dot { background: var(--dim); }
+.board-body { flex: 1; min-width: 0; }
+.board-head { display: flex; gap: 8px; align-items: baseline; justify-content: space-between; }
+.board-head b { font-size: 13px; }
+.board-head .muted { font-size: 12px; }
+.board-hint { font-size: 12px; color: var(--dim); margin-top: 2px; line-height: 1.5; }
+.board-act { flex: none; font-size: 12px; padding: 3px 8px; }
+
+/* 顶部「显示 ⚙」下拉，收拢字号/加粗/衬线/护眼 */
+/* 「显示」放在顶栏最后一格：弹层从右边缘向左开，不会溢出视窗 */
+.tb-settings { position: relative; }
+.tb-settings > summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 2px 9px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.tb-settings > summary::-webkit-details-marker { display: none; }
+.tb-settings[open] > summary { border-color: var(--accent); color: var(--accent); }
+.tb-settings-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--shadow-2);
+  min-width: 170px;
+  max-width: min(320px, calc(100vw - 48px));
+  max-height: min(60vh, 420px);
+  overflow: auto;
+}
+
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px; }
+/* 数字用等宽数字，避免统计数字跳动时挤动后面的按钮 */
+.reader-toolbar { font-variant-numeric: tabular-nums; }
+.bar .check-inline { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 13px; cursor: pointer; }
+.bar .check-inline input { width: 15px; height: 15px; accent-color: var(--accent); }
+
+/* 精读顶栏：滚动时固定在视窗顶端（像 Excel 冻结标题行）。
+   负 margin 撑满 .reader-main 的 padding，滚动时正文不会从边缘/上方露出。 */
+.reader-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  /* 负 margin 撑满 .reader-main 的 padding：背景条始终占满视窗宽，
+     sticky 时正文不会从左右两侧露出来（只有里面的按钮区是有宽度的）。 */
+  margin: -24px -34px 16px;
+  /* 左右各留 34px：按钮区的左边缘和正文、标题落在同一条竖线上 */
+  padding: 14px 34px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+/* 按钮区宽度：默认取「内容宽度」（fit-content），给 800 的下限、视窗减留白的上限。
+   于是窗口 1080 → 800、1366/1920/2560 都还是这一块 800–900 的宽度居中排，
+   按钮位置不会随窗口拉伸而浮动。用户可在「显示 ⚙」里改成窄/宽/铺满（存本机）。 */
+.tb-inner {
+  /* 兜底值，和 core/toolbarWidth 的 auto 档一致（真实宽度走 inline style）。
+     内容多宽就多宽 + 800 下限：窗口从 1080 拉到 2560，这一块位置不动。 */
+  width: fit-content;
+  min-width: min(800px, 100%);
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tb-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 31px;
+  flex-wrap: wrap;
+}
+/* 行内控件一律不收缩：宽度说什么就是什么（下拉框默认会跟着挤扁，
+   挤扁之后同一行的按钮就会互相推挤——不定宽正是「按钮乱跑」的来源）。
+   宽度不够时只在自己这一行换行，不会跨到别行去。 */
+.tb-row > * { flex: 0 0 auto; }
+/* 合并行（3 行 / 2 行档）里的组间分隔：一条细竖线，说明这两组本来各占一行。
+   用 --line 而不是 --line-soft：后者在背景上几乎看不见。 */
+.reader-toolbar .tb-sep {
+  width: 1px;
+  height: 18px;
+  background: var(--line);
+  margin: 0 2px;
+}
+/* 显示设置固定在行的最后：弹层从顶栏右边缘往里开，不会再被挤出视窗 */
+
+/* 尾部统计：给个最小宽度（配等宽数字），数字变大时不会把后面的按钮推来推去 */
+.reader-toolbar .lib-count { min-width: 84px; text-align: right; }
+.reader-toolbar .goal-chip { min-width: 108px; text-align: right; }
+.reader-toolbar .timer { min-width: 340px; }
+/* 顶栏里宽度会变的东西（下拉文字长短、状态文案、数字）统一固定宽度：
+   按钮排列不再随文章标题 / 选中状态 / 计数变化而变。 */
+.reader-toolbar .tb-edition,
+.reader-toolbar .tb-level,
+.reader-toolbar .tb-view,
+.reader-toolbar .tb-voice,
+.reader-toolbar .tb-speak,
+.reader-toolbar .tb-readall,
+.reader-toolbar .tb-pregen {
+  white-space: nowrap;
+  overflow: hidden;
+}
+.reader-toolbar .tb-edition { width: 148px; }
+.reader-toolbar .tb-level { width: 112px; }
+.reader-toolbar .tb-view { width: 98px; }
+.reader-toolbar .tb-voice { width: 138px; }
+/* 按钮也全给固定宽度：文案会变（选词模式 · 开 / 生成中 3/40 / 停止朗读），
+   宽度不跟着变，才不会把同一行的按钮推来推去。 */
+/* 宽度取「最长文案」实测值 + 余量（14px 字：4 汉字 = 56 + 左右 padding 24） */
+.reader-toolbar .tb-save { width: 78px; }
+.reader-toolbar .tb-new { width: 96px; }
+.reader-toolbar .tb-del { width: 104px; }
+.reader-toolbar .tb-edit { width: 78px; }
+.reader-toolbar .tb-vocab { width: 106px; }
+.reader-toolbar .tb-translate { width: 74px; }
+.reader-toolbar .tb-autovocab { width: 74px; }
+.reader-toolbar .tb-speak { width: 98px; }
+.reader-toolbar .tb-readall { width: 98px; }
+.reader-toolbar .tb-pregen { width: 124px; }
+.reader-toolbar .tb-speed { width: 70px; }
+.reader-toolbar .tb-intensive { width: 70px; }
+.reader-toolbar .tb-journal { width: 70px; }
+.reader-toolbar .tb-goals { width: 70px; }
+.reader-toolbar .tb-clean { width: 118px; }
+.reader-toolbar .tb-done,
+.reader-toolbar .tb-cancel { width: 50px; }
+.reader-toolbar .tb-autospeak { width: 84px; }
+/* 定宽之后必须配合不换行，否则文字会折成两行；内边距也收窄，20 个控件才排得下 */
+.reader-toolbar .tb-row button { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
+.reader-toolbar .tb-tts-note { flex: 0 0 auto; font-size: 11px; white-space: nowrap; }
+.reader-toolbar select { text-overflow: ellipsis; }
+
+.article { max-width: none; }
+.article h1 { font-size: 25px; font-weight: 700; line-height: 1.3; margin: 0 0 6px; }
+.meta { color: var(--dim); font-size: 13px; margin-bottom: 18px; }
+.para {
+  margin: 0 0 18px;
+  font-size: var(--read);
+  font-weight: var(--read-weight);
+  line-height: 1.95;
+  letter-spacing: 0.1px;
+}
+.reader.font-serif .para { font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif; }
+.sent { border-radius: 5px; cursor: pointer; padding: 1px 2px; }
+.sent:hover { background: rgba(242, 181, 68, 0.12); }
+.sent.sel {
+  background: rgba(242, 181, 68, 0.42);
+  box-shadow: inset 0 0 0 1.5px rgba(242, 181, 68, 0.8);
+}

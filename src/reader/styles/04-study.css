@@ -1,0 +1,313 @@
+/* 背单词模式 */
+.study { max-width: 760px; margin: 0 auto; }
+.study-bar { justify-content: space-between; }
+
+/* 背单词主界面：工具条独立成左栏，卡片 + 评分按钮在右栏。
+   整页锁在一屏内（卡片自己滚、按钮永远贴底），避免工具条把「下一词」挤到折叠线以下。 */
+.reader.studying .reader-main { display: flex; flex-direction: column; overflow: hidden; }
+.study.study-split {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 780px);
+  /* 行高必须显式锁成 1fr：默认 auto 会被卡片内容撑开，
+     下面所有 min-height: 0 / flex 收缩就都白写了（按钮会被顶到折叠线以下） */
+  grid-template-rows: minmax(0, 1fr);
+  justify-content: center;
+  align-items: stretch;
+  gap: 20px;
+  /* 撑满 .reader-main 的剩余高度：靠 flex 而不是百分比高度，少一层祖先就失效 */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-width: none;
+}
+.study-side { min-width: 0; min-height: 0; overflow: auto; }
+.study-side .study-bar { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 0; }
+.study-side .study-bar > button,
+.study-side .study-bar > select { width: 100%; }
+.study-side .study-bar .view-toggle { margin-left: 0; display: flex; gap: 6px; }
+.study-side .study-bar .view-toggle button { flex: 1 1 0; }
+.study-side .study-bar .muted,
+.study-side .study-bar .study-timer { margin-left: 0; font-size: 12px; line-height: 1.6; }
+.study-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: hidden; }
+/* 卡片吃掉剩下的高度（内容多就在卡内滚），动作条不参与伸缩 → 始终可见 */
+.study-main > .study-card {
+  flex: 1 1 auto;
+  min-height: 140px;
+  margin: 0;
+  padding: 18px 22px;
+  overflow: auto;
+}
+/* 卡内竖向留白在「锁一屏」下压小，一屏能多放两行释义/例句 */
+.study-main > .study-card .study-back { margin-top: 12px; padding-top: 10px; }
+.study-main > .study-card .study-word { font-size: 34px; }
+.study-main > .study-done { flex: 1 1 auto; overflow: auto; }
+.study-main > .drill { min-height: 0; overflow: auto; }
+.study-main > .bar { flex: 0 0 auto; margin-bottom: 0; }
+
+/* 卡内编辑：表单比一屏高，右栏临时改成可滚 + 卡片让出高度，
+   保存/取消贴在右栏底部（sticky），不用 Tab 摸黑找 */
+.study-main > .study-edit { flex: 0 0 auto; }
+.study-main > .study-edit .bar {
+  position: sticky;
+  bottom: 0;
+  margin: 0;
+  padding: 8px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
+.study-split.editing .study-main { overflow-y: auto; }
+.study-split.editing .study-main > .study-card { flex: 0 0 auto; min-height: 120px; max-height: 34vh; }
+
+/* 窄屏：工具条回到卡片上方，恢复成可滚动的普通文档流 */
+@media (max-width: 1080px) {
+  .reader.studying .reader-main { display: block; overflow: auto; }
+  .study.study-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; flex: 0 0 auto; height: auto; }
+  .study-side { overflow: visible; }
+  .study-side .study-bar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .study-side .study-bar > button,
+  .study-side .study-bar > select { width: auto; }
+  .study-side .study-bar .view-toggle { margin-left: 8px; display: inline-flex; }
+  .study-side .study-bar .view-toggle button { flex: 0 0 auto; }
+  .study-side .study-bar .muted,
+  .study-side .study-bar .study-timer { margin-left: 10px; font-size: 13px; }
+  .study-main { overflow: visible; }
+  .study-split.editing .study-main { overflow: visible; }
+  .study-split.editing .study-main > .study-card { min-height: 260px; max-height: none; }
+  .study-main > .study-card { flex: 0 0 auto; min-height: 260px; margin: 10px 0; padding: 32px 24px; overflow: visible; }
+  .study-main > .study-card .study-word { font-size: 42px; }
+  .study-main > .study-card .study-back { margin-top: 22px; padding-top: 16px; }
+}
+
+/* 拼写判错页：按钮下方的键位提示 */
+.spell-miss-hint { margin-top: 8px; font-size: 13px; }
+.study-card {
+  background: linear-gradient(180deg, var(--panel-2), var(--panel));
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-2);
+  padding: 32px 24px;
+  min-height: 260px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  cursor: pointer;
+  margin: 10px 0;
+}
+.study-word { font-size: 42px; font-weight: 700; line-height: 1.2; }
+.study-phon { color: var(--dim); font-size: 18px; margin-top: 6px; }
+.study-back { margin-top: 22px; border-top: 1px dashed var(--line); padding-top: 16px; width: 100%; }
+.study-meaning { font-size: 20px; margin-bottom: 8px; }
+.study-def { font-size: 14px; color: var(--dim); font-style: italic; margin: -2px 0 8px; }
+.study-back .ex { font-size: 14px; color: var(--dim); margin-top: 6px; }
+.study-back .src { margin-top: 10px; }
+
+/* 卡片上「带小标题的内容块」：用法 / 词组 / 习语 / 例句 / 来源 / 易混 */
+.vblocks { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+.vblock { display: flex; gap: 8px; align-items: baseline; }
+.vblock-label {
+  flex: none;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.vblock-label::after { content: '：'; }
+.vblock-lines { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vblock-line { font-size: 14px; line-height: 1.6; }
+.lang-phrases { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px; }
+.phrase-add {
+  font-size: 12.5px;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px dashed var(--line);
+  background: transparent;
+  color: inherit;
+}
+.phrase-add:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); border-style: solid; }
+.phrase-add:disabled { cursor: default; opacity: 0.9; }
+.phrase-add .phrase-plus { margin-left: 5px; color: var(--accent); font-weight: 700; }
+.phrase-add.all { border-style: solid; }
+.vblock-source .vblock-line,
+.vblock-confusables .vblock-line { color: var(--dim); font-size: 13px; }
+.study-blocks .vblock { justify-content: center; text-align: left; }
+.study-def-label {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--dim);
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+.study-def-label::after { content: '：'; }
+
+/* 语法标记徽章：可数 / 不可数 / 及物 / 不及物 / 可分级 / 不可分级 */
+.grammar-marks { display: inline-flex; gap: 4px; margin-left: 6px; vertical-align: middle; }
+.gmark {
+  font-size: 11px;
+  line-height: 1.5;
+  padding: 0 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  background: var(--panel-2);
+  white-space: nowrap;
+}
+.study-actions { justify-content: center; }
+
+/* 卡片随时间"变烫"：绿→黄→橙→红（越久越难记） */
+.study-card.heat-0 { border-color: var(--line); }
+.study-card.heat-1 { border-color: #cfe3b8; box-shadow: 0 0 0 1px #cfe3b8, var(--shadow-2); }
+.study-card.heat-2 { border-color: #e6c96a; box-shadow: 0 0 0 2px #e6c96a, var(--shadow-2); }
+.study-card.heat-3 { border-color: #e08a3c; box-shadow: 0 0 0 3px #e08a3c66, var(--shadow-2); background: linear-gradient(180deg, rgba(224, 138, 60, 0.16), var(--panel)); }
+.study-card.heat-4 { border-color: var(--red); box-shadow: 0 0 0 4px #c0392b33, var(--shadow-2); background: linear-gradient(180deg, rgba(255, 90, 82, 0.16), var(--panel)); }
+
+/* 释义边的「不认识（全新词）」 */
+.unknown-btn {
+  margin-left: 10px;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+/* 超时「强制锤炼」：默认深色暖调（非护眼主题），护眼主题另见下方覆盖 */
+.drill {
+  margin-top: 12px;
+  padding: 14px 16px;
+  border: 2px solid #e08a3c;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(180deg, rgba(224, 138, 60, 0.12), rgba(224, 138, 60, 0.04)), var(--panel);
+  color: var(--fg);
+}
+.drill-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.drill-head b { color: #f0a94a; }
+.drill-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.drill .study-input { width: 100%; max-width: 460px; }
+.drill .quiz-options { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
+.drill .quiz-options button.focused { border-color: var(--accent); box-shadow: var(--ring); }
+.drill .quiz-options button.wrong-choice { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255, 90, 82, 0.25); }
+/* 学习模式揭示答案：正确项浅绿、你选错的那项浅红（Spec：看答案 / 选错都判不认识） */
+.drill .quiz-options button.right-pick {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(53, 201, 138, 0.25);
+  background: rgba(53, 201, 138, 0.12);
+}
+.drill .quiz-options button.wrong-choice { background: rgba(255, 90, 82, 0.12); }
+.drill .reveal-btn { margin-top: 4px; }
+.drill-keys { font-size: 12px; margin-top: 2px; }
+/* 组末拼写测试：拼错后展示的英文原文（大字；一开始重新输入就消失） */
+.spelling-round .spelling-answer {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--accent-2);
+  margin: 4px 0;
+}
+.drill .study-result.bad { margin-top: 4px; }
+.study-done { text-align: center; padding: 40px 0; }
+
+/* 背单词：卡内维护（编辑 / 删除）与反馈 */
+.study-tools { justify-content: center; gap: 10px; }
+.grade-preview { text-align: center; font-size: 12px; margin: 2px 0 6px; }
+.forgot-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 6px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid rgba(224, 138, 60, 0.5);
+  border-radius: var(--radius-lg);
+  background: rgba(224, 138, 60, 0.08);
+  text-align: center;
+}
+.grade-info { color: var(--accent); font-size: 13px; font-weight: 600; }
+.study-srs { margin-top: 12px; font-size: 12px; }
+.study-conf { margin-top: 10px; font-size: 13px; }
+.study-edit {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  padding: 16px;
+  margin: 4px 0 8px;
+  text-align: left;
+}
+.study-edit label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--dim); }
+.study-edit label.wide { grid-column: 1 / -1; }
+.study-edit input,
+.study-edit textarea {
+  width: 100%;
+  padding: 7px 9px;
+  font-size: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--fg);
+}
+.study-edit .bar { grid-column: 1 / -1; }
+
+/* 背单词：拼写 / 朗读 */
+.study-prompt { width: 100%; display: flex; flex-direction: column; gap: 14px; align-items: center; }
+.study-input {
+  width: min(440px, 100%);
+  font-size: 22px;
+  text-align: center;
+  padding: 10px 12px;
+  background: #0f1115;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--fg);
+}
+.study-result { margin-top: 12px; font-size: 15px; font-weight: 600; }
+.study-result.ok { color: var(--green); }
+.study-result.bad { color: var(--red); }
+.study-word { display: inline-flex; align-items: center; gap: 10px; }
+.speak {
+  padding: 2px 9px;
+  font-size: 16px;
+  background: transparent;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  cursor: pointer;
+}
+.speak:hover { background: var(--panel); }
+
+/* 新建文章：书名输入框窄一点 */
+.book-input { flex: 0 1 180px; min-width: 140px; }
+
+/* 每日选词统计 */
+.stats { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 8px 0; }
+.stats-bars { display: flex; gap: 6px; align-items: flex-end; height: 72px; margin-top: 8px; }
+.stats-day { flex: 1; display: flex; flex-direction: column; align-items: center; height: 100%; }
+.stats-col { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+.stats-bar { width: 100%; background: var(--accent); border-radius: 3px 3px 0 0; min-height: 2px; }
+.stats-label { font-size: 11px; color: var(--dim); margin-top: 3px; }
+
+/* 统计：按文章看产出 */
+.stats-articles { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.stats-article { display: flex; justify-content: space-between; gap: 8px; font-size: 12.5px; line-height: 1.7; }
+.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats-article .ellipsis { min-width: 0; }
+
+/* 全文翻译：保持段落流，原文一行、译文另起一行在下面 */
+.s-pair { display: contents; }
+.tr-block {
+  display: block;
+  color: #b7bfcc;
+  font-size: 0.86em;
+  line-height: 1.7;
+  margin: 1px 0 8px 2px;
+  cursor: pointer;
+}
+.tr-block.sel {
+  background: rgba(242, 181, 68, 0.32);
+  border-radius: 4px;
+  box-shadow: inset 0 0 0 1px rgba(242, 181, 68, 0.6);
+}
+/* 只看译文：隐藏英文，段落流不变 */
+.article.tr-only .sent { display: none; }
+.article.tr-only .tr-block { font-size: var(--read); color: #d3d8e2; margin: 0 0 12px; }
+
