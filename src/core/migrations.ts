@@ -67,6 +67,7 @@ function looksCurrent(o: Record<string, unknown>): boolean {
     typeof rs.interval === 'number' &&
     typeof rs.repetitions === 'number' &&
     (rs.relearn === undefined || (typeof rs.relearn === 'number' && rs.relearn >= 0)) &&
+    (rs.meaningPasses === undefined || (typeof rs.meaningPasses === 'number' && rs.meaningPasses >= 0)) &&
     (rs.due === null || typeof rs.due === 'string' || rs.due === undefined)
   )
 }
@@ -166,6 +167,9 @@ function migrateItem(raw: unknown, now: string): VocabItem | null {
       repetitions: typeof rs.repetitions === 'number' && rs.repetitions >= 0 ? rs.repetitions : 0,
       lapses: typeof rs.lapses === 'number' && rs.lapses >= 0 ? rs.lapses : undefined,
       relearn: typeof rs.relearn === 'number' && rs.relearn > 0 ? rs.relearn : undefined,
+      // 「没看答案就选对释义」的次数：老数据没有，按 0（首次选对只判模糊）
+      meaningPasses:
+        typeof rs.meaningPasses === 'number' && rs.meaningPasses > 0 ? rs.meaningPasses : undefined,
     },
     createdAt: iso(o.createdAt, now),
     updatedAt: iso(o.updatedAt, now),
