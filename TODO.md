@@ -1,18 +1,31 @@
 # TODO
 
-> **2026-10-22 优化进行中（目标：>600 行的文件都拆）**
+> **2026-10-22 优化完成（原目标：>600 行的文件都拆）**
 >
-> - 已完成：`src/reader/reader.css` 2229 → 入口 + 8 个功能分片（`src/reader/styles/`，
->   引入顺序与原文一致，拼接逐字节相同）；`src/core/quiz.ts` 706 → 516
->   （答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌 → `core/quizParts.ts`，新增 11 条测试，
->   公开 API 仍从 `quiz.ts` 导出）。
-> - 待拆（按风险从低到高）：`core/aiPackage.ts` 605、`core/analyzer.ts` 673（这两个的
->   共享类型与解析函数交错，直接抽会循环依赖，需先抽 `*Core` 共享模块）、
->   `tools/tts-core.mjs` 647、`server/sqliteLearning.js` 615、`server/sqliteStore.js` 698、
->   `ui/App.tsx` 624、`state/session.ts` 760（可抽 `RecordingController`，参照 `CycleRunner`）、
->   `reader/hooks/useStudySession.ts` 769、`reader/ReaderApp.tsx` 796。
-> - 硬约束：`core/` 新模块必须配同名 `.test.ts`（架构门禁 R7）；每拆一个主题单独 commit，
->   提交前 `tsc -b` + 定向测试 + 架构门禁；拆完同步降 `tool/check_god_file.mjs` 的基线（若有）。
+> 9 个文件拆完，每块单独 commit；全量 **239 文件 / 2231 通过 / 1 skipped**，两项门禁全绿。
+>
+> | 文件 | 前 | 后 | 做法 |
+> |---|---:|---:|---|
+> | `core/analyzer.ts` | 673 | 18 | 共享底座 / 提示词 / 解析三层 |
+> | `core/aiPackage.ts` | 605 | 270 | 类型 / 包 IO / 待办筛选 / 网页包四层；`buildAiJobs` 与 `countAiJobs` 不再各写一遍筛选 |
+> | `state/session.ts` | 760 | 559 | 录音 / 块编辑 / 播放三个控制器 |
+> | `server/sqliteStore.js` | 698 | 532 | 派生投影 `sqliteProjection.js` |
+> | `tools/tts-core.mjs` | 647 | 421 | 本机引擎（SAPI / Piper）`tts-local.mjs` |
+> | `server/sqliteLearning.js` | 615 | 415 | 读 / 写分家，表名单独一个模块解循环依赖 |
+> | `ui/App.tsx` | 624 | 408 | 六个区块组件（列表 / 提示条 / 连续跟读 / 播放控制 / 对齐 / 录制） |
+> | `reader/hooks/useStudySession.ts` | 769 | 699 | 判分账本 `useStudyGrading`（原来四处各抄一遍） |
+> | `reader/ReaderApp.tsx` | 796 | 732 | `prefs` / `articleVocab` 整包传，不再平铺 51 个字段 |
+>
+> **剩下这 2 个（699 / 732）不打算再切**，它们都在门禁线（800）内，且是纯装配/编排层：
+> `ReaderApp` 是 20 个 hook 的接线 + `ReaderScreen` 的 props（zone 的约定就是「props → host」映射）；
+> `useStudySession` 是 9 个子 hook 的门面 + 70 个返回字段。再往下切只能把 `revealed` / `checked`
+> 这类被 4 个子 hook 共用的状态搬来搬去，要靠更多 ref 桥接，反而更难读 —— 见 `docs/ARCHITECTURE.md` 四。
+>
+> 上一批（同一天早先）：`reader/reader.css` 2229 → 入口 + 8 个功能分片（拼接逐字节相同）；
+> `core/quiz.ts` 706 → 516（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌 → `core/quizParts.ts`）。
+>
+> 硬约束（照旧）：`core/` 新模块必须配同名 `.test.ts`（门禁 R7）；每拆一个主题单独 commit，
+> 提交前 `tsc -b` + 定向测试 + 架构门禁。跑全量测试：`TEMP/TMP` 指到工作区内 + `--cache=false`。
 
 > **2026-10-21 最新交接（换电脑先看这段）**
 >
@@ -524,13 +537,16 @@ nothing new;` 出现在**第 4 块** —— 音频前面有文本里没有的引
 - [ ] R 朗读：释义题 / 看答案高亮页 / 判完等「下一词」三个屏各按一下
 - [ ] 组末拼写节奏 + 拼错卡的空格确认手感
 
-### 代码债：超过 600 行的文件还剩 6 个
-- [ ] `src/reader/ReaderApp.tsx`（796）
-- [ ] `src/state/session.ts`（755）
-- [ ] `src/core/quiz.ts`（706）
-- [ ] `src/core/analyzer.ts`（673）
-- [ ] `src/ui/App.tsx`（624）
-- [ ] `src/core/aiPackage.ts`（605）
+### 代码债：超过 600 行的文件（2026-10-22 清理后剩 2 个，都不在门禁线上）
+- [x] `src/core/aiPackage.ts` 605 → 270
+- [x] `src/core/analyzer.ts` 673 → 18
+- [x] `src/ui/App.tsx` 624 → 408
+- [x] `src/core/quiz.ts` 706 → 516
+- [x] `src/state/session.ts` 755 → 559
+- [x] `src/reader/hooks/useStudySession.ts` 769 → 699（判分账本抽出，见顶部表格）
+- [x] `src/reader/ReaderApp.tsx` 796 → 732（props 收包，见顶部表格）
+- [ ] `ReaderApp` / `useStudySession` 这两个**故意不再切**：纯装配与门面层，再切要加 ref 桥接。
+      真要动，先涨门禁线或改 `ReaderScreen` 的平铺 props 约定，别硬拆
 
 > 拆法沿用本轮：纯规则进 `core/`（带同名测试）、状态机进 `hooks/`、视图只收 props；
 > 每拆一块单独 commit，拆完跑 `npm run gates`。`SideVocab.tsx`（553）没超 600，先不动。
