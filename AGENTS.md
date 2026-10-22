@@ -8,6 +8,30 @@
 分层、依赖方向、新代码放哪里：见 **`docs/ARCHITECTURE.md`**（那份是可执行的约定）。
 测试分层、门禁、踩坑清单：见 **`docs/TESTING.md`**。
 
+## 运行环境：WorkBuddy Agent（本项目就是这么做开发的，不是普通终端）
+
+本项目**由 WorkBuddy 里的 AI agent 开发**：模型靠工具调用读写文件、跑命令、跑测试。
+**换环境（手敲终端 / CI / 别的 AI 客户端）时不要照搬下面这几条**：
+
+- **工具优先于 shell**：读用 Read、改用 Edit/Write、找用 Glob/Grep；只有跑命令才动 Bash / PowerShell
+  （Windows 上 Bash 是 Git Bash，路径用 `/`；PowerShell 是 5.1，别写 `&&`、`??`、三元）。
+- **命令有硬超时**：前台默认 2 分钟、上限 10 分钟，超时**自动转后台**（不杀进程）。
+  构建 / 全量测试 / 批量 AI 一律用后台任务启动，收到完成通知再汇报；命令里不写 `sleep` 轮询。
+- **沙箱限制**（跟普通终端最大的差别）：
+  - `wmic` 在程序黑名单里，调它直接 "PROGRAM BLOCKED BY SECURITY POLICY"——
+    查进程 / 内存用 PowerShell 的 `Get-CimInstance Win32_Process`；
+  - 删文件走 node-safe-delete 垫片：**单次批量删超过 50 个会被拒**（`Permission denied`），
+    别 `rm -rf` 整棵树，按 ≤40 个一批、每批新起进程。
+- **工具输出会被折叠**：用户看不到命令日志。**结论、报错原文、改了哪些文件、跑了几项测试，
+  必须写进最终回复**，不能只丢一句「已完成」。
+- **机器只有 16GB 物理内存**：并发别开满。全量测试固定
+  `--pool=forks --maxWorkers=4 --minWorkers=1`（串行的 `--no-file-parallelism` 要 10 分钟，并行 2 分半）；
+  tsc 内存吃紧时加 `--max-old-space-size=2048`。
+  ⚠️ Windows 的「提交上限」= 物理内存 + 页面文件（本机约 60GB），**那不是内存**；
+  报内存只说物理值（`Win32_OperatingSystem` 的 TotalVisibleMemorySize / FreePhysicalMemory）。
+- **上下文会被压缩**：跨轮次还要用的决定（约定、结论、踩坑）写进 `docs/` 或
+  `.workbuddy/memory/YYYY-MM-DD.md`，别指望下一轮还记得。
+
 ## 工作流（硬规则）
 
 - **说做就做，不反问**：用户指出问题就改代码/跑命令，不要先问「要我改吗」再等。
