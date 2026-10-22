@@ -14,6 +14,7 @@ import {
   beginExtraRound,
   displayMeaning,
   emptyExtraRound,
+  shouldDrill,
   type ExtraRound,
   type ReviewGrade,
 } from '../../core/vocab'
@@ -459,15 +460,8 @@ export function useStudySession(params: UseStudySessionParams) {
 
   const { learnPhase, learnReveal, learnGraded } = learn
 
-  /** 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。 */
-  const drillOn =
-    !!queue &&
-    !!card &&
-    !spellMiss &&
-    // 学习模式正在做「4 条释义」时不要插进来锤炼：那一步自己就是一次释义考试，
-    // 再叠一遍「强制锤炼」等于同一个词连考两次（锤炼本身完整保留，只是不在这个阶段触发）。
-    !learnPhase &&
-    ((drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared) || (relearning && revealed && !drillCleared))
+  /** 卡停超时（本轮这一卡还没锤炼过）。「该不该真锤炼」还要看是不是已经判完停着，见下面的 `drillOn`。 */
+  const drillTimedOut = drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
 
   /**
    * 评分入口：这张卡刚选对释义（释义关 / 锤炼里的选义题）却点「忘记了」，
@@ -509,7 +503,7 @@ export function useStudySession(params: UseStudySessionParams) {
   const reviewStep = useStudyReviewStep({
     mode,
     active: !!queue && !!card,
-    ready: !relearning && !meaningGate && !drillOn && !learnPhase && !spellMiss && !(spelling && !checked),
+    ready: !relearning && !meaningGate && !drillTimedOut && !learnPhase && !spellMiss && !(spelling && !checked),
     judge: (g, advance) => {
       if (needsForgotConfirm({ grade: g, meaningProven: meaningCleared })) {
         setPendingForgot(true)
@@ -520,6 +514,22 @@ export function useStudySession(params: UseStudySessionParams) {
     showCard: () => setRevealed(true),
   })
   reviewResetRef.current = reviewStep.reset
+
+  /**
+   * 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。
+   *
+   * 规则在 `core/vocab/drill`：**已经判完停着等「下一词」的卡不锤炼**——
+   * 打分都落库了，再考一次也解锁不了什么，但会把「看一眼单词卡」顶掉
+   * （选错释义 → 判 again → 这词立刻进重学，点「继续」就会撞上重学分支）。
+   */
+  const drillOn = shouldDrill({
+    active: !!queue && !!card,
+    spellMiss: !!spellMiss,
+    learnPhase,
+    parked: learnGraded || reviewStep.graded || reviewStep.fuzzy,
+    timedOut: drillTimedOut,
+    relearnRevealed: relearning && revealed,
+  })
 
   /** 面板「认识 / 模糊 / 忘记了」按钮的入口：复习模式走三键状态机，其它模式走原来的评分。 */
   const pressGrade = useCallback(
