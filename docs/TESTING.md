@@ -415,3 +415,9 @@ npm test                      # 全部（约 800 项，几秒）
 npx vitest run src/core/langPoints.test.ts   # 定向：开发循环用这个
 npm run gates                 # 收尾门禁（提交前必跑）
 ```
+
+- **别加 `--no-file-parallelism`**：全量 242 个文件串行要 ~10 分钟（jsdom 环境是大头），
+  并行只要 **2 分半**。要限并发就 `--pool=forks --maxWorkers=4 --minWorkers=1`
+  （只给 `--maxWorkers` 会和默认的 minForks 打架，报 `options.minThreads and options.maxThreads must not conflict`）。
+- 机器内存紧张时 tsc 会 `Fatal process out of memory: Zone`——那是系统提交内存见底，
+  不是配置问题；等一会儿或 `--max-old-space-size=2048` 再跑。
