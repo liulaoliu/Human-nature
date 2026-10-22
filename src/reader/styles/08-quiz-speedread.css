@@ -336,3 +336,52 @@
 .edit-inline .bar { grid-column: 1 / -1; margin-bottom: 0; }
 .edit-row > td { background: var(--panel); }
 .vtable .cell-act { white-space: nowrap; }
+
+/* ── 速读：顶栏吸顶 / 底部按键吸底 ──────────────────────────────
+   滚的是 .reader-main（overflow:auto; padding:24px 34px），sticky 就参照它。
+   顶栏和卡片同为 760 宽，不用负 margin 撑满；底色必须不透明，正文从下面过才不会透出来。 */
+.study.speed > .study-bar {
+  position: sticky;
+  top: 0;
+  z-index: 25;
+  margin: 0 0 8px;
+  padding: 10px 0 8px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+}
+.study.speed > .study-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 25;
+  /* .bar 默认 margin-bottom:16px：不抹掉的话吸底时下面会漏一条正文 */
+  margin: 8px 0 0;
+  padding: 10px 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line-soft);
+}
+
+/* ── 语言点编辑器：标题 + 已有条目吸顶 / 保存·取消吸底 ────────────
+   .lang-editor 自己是滚动容器（max-height:86vh; overflow:auto; padding:14px 16px），
+   负 margin 抵消它的内边距：滚动时内容不会从上下缝里露出来，按钮也贴到边上。 */
+.lang-editor-head {
+  position: sticky;
+  top: -14px;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -14px -16px 0;
+  padding: 14px 16px 8px;
+  background: var(--panel);
+}
+.lang-editor-head .lang-editor-bar { margin-bottom: 0; }
+.lang-editor-head .lang-list { margin-bottom: 0; }
+.lang-editor-actions {
+  position: sticky;
+  bottom: -14px;
+  z-index: 2;
+  margin: 0 -16px -14px;
+  padding: 10px 16px 14px;
+  background: var(--panel);
+  border-top: 1px solid var(--line-soft);
+}

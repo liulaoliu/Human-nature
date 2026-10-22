@@ -145,51 +145,54 @@ export default function LanguageEditor({ sentence, onSave, onClose }: LanguageEd
           collapseOutside(e)
         }}
       >
-        <div className="bar lang-editor-bar">
-          <b>语言点（{langs.length}）</b>
-          <span className="muted ellipsis" title={sentence?.text}>
-            {sentence?.text}
-          </span>
-        </div>
-
-        {langs.length > 0 && (
-          <div className="lang-list">
-            {langs.map((L, i) => (
-              <div
-                className={'lang-item clickable' + (editIdx === i ? ' editing' : '')}
-                key={i}
-                title="点一下编辑这条（AI 写的也能改）"
-                onClick={() => startEdit(i)}
-              >
-                <div className="lang-item-head">
-                  <span className={'lang-tag' + (L.source === 'ai' ? ' ai' : '')}>{L.source === 'ai' ? 'AI' : '手动'}</span>
-                  <span className="muted ellipsis" title={languagePreview(L)}>
-                    {languagePreview(L)}
-                  </span>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      startEdit(i)
-                    }}
-                    title="编辑这条"
-                  >
-                    编辑
-                  </button>
-                  <button
-                    className="danger"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      remove(i)
-                    }}
-                    title="删除这条"
-                  >
-                    删除
-                  </button>
-                </div>
-              </div>
-            ))}
+        {/* 标题 + 已有条目一起吸顶：往下填表单时还能看见「这句已经有哪些语言点」 */}
+        <div className="lang-editor-head">
+          <div className="bar lang-editor-bar">
+            <b>语言点（{langs.length}）</b>
+            <span className="muted ellipsis" title={sentence?.text}>
+              {sentence?.text}
+            </span>
           </div>
-        )}
+
+          {langs.length > 0 && (
+            <div className="lang-list">
+              {langs.map((L, i) => (
+                <div
+                  className={'lang-item clickable' + (editIdx === i ? ' editing' : '')}
+                  key={i}
+                  title="点一下编辑这条（AI 写的也能改）"
+                  onClick={() => startEdit(i)}
+                >
+                  <div className="lang-item-head">
+                    <span className={'lang-tag' + (L.source === 'ai' ? ' ai' : '')}>{L.source === 'ai' ? 'AI' : '手动'}</span>
+                    <span className="muted ellipsis" title={languagePreview(L)}>
+                      {languagePreview(L)}
+                    </span>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        startEdit(i)
+                      }}
+                      title="编辑这条"
+                    >
+                      编辑
+                    </button>
+                    <button
+                      className="danger"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        remove(i)
+                      }}
+                      title="删除这条"
+                    >
+                      删除
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* key 跟着「编辑哪条」变：切换条目时表单重新挂载，播一次进场高亮，
             让「点了一下」有肉眼可见的反馈（否则只改值，用户以为没反应）。 */}
