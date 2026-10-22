@@ -54,9 +54,9 @@ describe('SpeedReadPanel：逐句阅读', () => {
     render(<SpeedReadPanel {...props({ onClose })} />)
     expect(screen.getByText('第 1 / 2 句')).toBeTruthy()
 
-    fireEvent.click(screen.getByTitle('下一句（→）'))
+    fireEvent.click(screen.getByTitle('下一句（D / →）'))
     expect(screen.getByText('第 2 / 2 句')).toBeTruthy()
-    fireEvent.click(screen.getByTitle('上一句（←）'))
+    fireEvent.click(screen.getByTitle('上一句（A / ←）'))
     expect(screen.getByText('第 1 / 2 句')).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: '结束（Esc）' }))

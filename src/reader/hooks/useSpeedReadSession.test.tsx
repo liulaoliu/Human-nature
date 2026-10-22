@@ -261,3 +261,50 @@ describe('useSpeedReadSession：换篇不串进度', () => {
     expect(result.current.index).toBe(1)
   })
 })
+
+describe('useSpeedReadSession：W/S 翻页、A/D 换句', () => {
+  /** jsdom 没有 scrollBy / 布局：塞一个假的滚动容器，把 clientHeight 和 scrollBy 都补上。 */
+  function fakeScrollBox() {
+    const box = document.createElement('div')
+    box.className = 'reader-main'
+    Object.defineProperty(box, 'clientHeight', { value: 600, configurable: true })
+    const scrollBy = vi.fn()
+    ;(box as unknown as { scrollBy: typeof scrollBy }).scrollBy = scrollBy
+    document.body.appendChild(box)
+    return { box, scrollBy }
+  }
+
+  it('W/S 只滚动不换句，A/D 才换句（W 不再抢「上一句」）', () => {
+    const { box, scrollBy } = fakeScrollBox()
+    const { result } = renderHook(() => useSpeedReadSession(options()))
+    expect(result.current.sentence?.id).toBe('s1')
+
+    act(() => fireEvent.keyDown(window, { key: 'w' }))
+    expect(scrollBy).toHaveBeenCalledTimes(1)
+    expect(scrollBy.mock.calls[0][0].top).toBeLessThan(0) // 向上翻
+    expect(result.current.sentence?.id).toBe('s1')
+
+    act(() => fireEvent.keyDown(window, { key: 's' }))
+    expect(scrollBy).toHaveBeenCalledTimes(2)
+    expect(scrollBy.mock.calls[1][0].top).toBeGreaterThan(0) // 向下翻
+    expect(result.current.sentence?.id).toBe('s1')
+
+    act(() => fireEvent.keyDown(window, { key: 'd' }))
+    expect(result.current.sentence?.id).toBe('s2')
+    act(() => fireEvent.keyDown(window, { key: 'a' }))
+    expect(result.current.sentence?.id).toBe('s1')
+    box.remove()
+  })
+
+  it('方向键与 PageUp/PageDown 也翻页（滚的是 .reader-main）', () => {
+    const { box, scrollBy } = fakeScrollBox()
+    const { result } = renderHook(() => useSpeedReadSession(options()))
+
+    act(() => fireEvent.keyDown(window, { key: 'ArrowDown' }))
+    expect(scrollBy.mock.calls[0][0].top).toBeGreaterThan(0)
+    act(() => fireEvent.keyDown(window, { key: 'PageUp' }))
+    expect(scrollBy.mock.calls[1][0].top).toBeLessThan(0)
+    expect(result.current.sentence?.id).toBe('s1') // 都不换句
+    box.remove()
+  })
+})

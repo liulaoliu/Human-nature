@@ -89,7 +89,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
               {phase === 'read' && (
                 <div className="speed-hint muted">
                   先自己读一遍 → 按 <kbd>R</kbd> 朗读，<kbd>空格</kbd> 看释义与语言点；
-                  <kbd>Alt</kbd> + 点击可复制整句
+                  <kbd>W</kbd>/<kbd>S</kbd> 上下翻页，<kbd>A</kbd>/<kbd>D</kbd> 换句；<kbd>Alt</kbd> + 点击可复制整句
                 </div>
               )}
 

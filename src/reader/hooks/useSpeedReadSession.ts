@@ -242,6 +242,27 @@ export function useSpeedReadSession({
       if (langEditorOpen) return
       if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      /**
+       * 翻页滚动：速读的正文可以很长，只手够鼠标太别扭。
+       * W/S 与 ↑/↓/PageUp/PageDown 都走这里 —— **滚的是 `.reader-main`**（真正的滚动容器，
+       * 和吸顶吸底同一套口径），不是窗口；没有它才退回 window。
+       */
+      const scrollPage = (dir: -1 | 1, page: boolean) => {
+        const box = document.querySelector<HTMLElement>('.reader-main')
+        const step = page ? (box?.clientHeight ?? window.innerHeight) * 0.85 : 120
+        if (box) box.scrollBy({ top: dir * step, behavior: 'smooth' })
+        else window.scrollBy({ top: dir * step, behavior: 'smooth' })
+      }
+      if (e.key === 'ArrowUp' || e.key === 'PageUp' || e.code === 'PageUp') {
+        e.preventDefault()
+        scrollPage(-1, e.key === 'PageUp' || e.code === 'PageUp')
+        return
+      }
+      if (e.key === 'ArrowDown' || e.key === 'PageDown' || e.code === 'PageDown') {
+        e.preventDefault()
+        scrollPage(1, e.key === 'PageDown' || e.code === 'PageDown')
+        return
+      }
       // 数字 1 = 选词模式（与阅读页一致）；拷打阶段 1–4 是选项，优先给选项。
       if (e.code === 'Digit1' && phase !== 'drill' && onToggleVocabMode) {
         e.preventDefault()
@@ -264,7 +285,18 @@ export function useSpeedReadSession({
         onSpeak(sentence.text)
         return
       }
-      if (k === 'w' || k === 'a') {
+      // W/S 翻页滚动（W 原本也绑了「上一句」，和 W/S 上下滚的直觉打架，已让出）
+      if (k === 'w') {
+        e.preventDefault()
+        scrollPage(-1, true)
+        return
+      }
+      if (k === 's') {
+        e.preventDefault()
+        scrollPage(1, true)
+        return
+      }
+      if (k === 'a') {
         e.preventDefault()
         go(-1)
         return

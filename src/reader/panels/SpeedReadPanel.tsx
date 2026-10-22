@@ -161,11 +161,11 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
       <div className="bar study-bar">
         <button onClick={close}>结束（Esc）</button>
         <span className="speed-nav">
-          <button onClick={() => go(-1)} disabled={index <= 0} title="上一句（←）">
+          <button onClick={() => go(-1)} disabled={index <= 0} title="上一句（A / ←）">
             ‹
           </button>
           <span className="muted">{done ? '完成' : `第 ${index + 1} / ${n} 句`}</span>
-          <button onClick={() => go(1)} disabled={done} title="下一句（→）">
+          <button onClick={() => go(1)} disabled={done} title="下一句（D / →）">
             ›
           </button>
         </span>
