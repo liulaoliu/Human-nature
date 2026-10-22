@@ -1,5 +1,30 @@
 # TODO
 
+> **2026-10-22 两个报障修完（锤炼退不出去 / 词性释义错位）**
+>
+> 1. **锤炼做完退不出去**：重学卡摊开释义后 `relearnRevealed` 一直是真，过完面板原地重开。
+>    `shouldDrill` 加 `cleared`（本卡本轮已锤炼完），`useStudySession` 传 `drillCleared`。
+>    超时那条原本就有 `!drillCleared` 兜着，只有重学这条漏了。测试：drill 1 + `useStudySession.drill` 1 +
+>    `StudyDrill` 2（写搭配答对只回调一次 `onDone`）。
+> 2. **词性 / 释义张冠李戴**（`dwarf` / `consort` / `challenge` / `articulate`）。两条根因：
+>    - `-ing/-ed 辨析` 与「原形校正」直接拿 AI 给的「原形」改词条 `word`，而 AI 会把
+>      **加前缀造出来的另一个词**当词形变化（`unchallenged → challenge`、`unarticulated → articulate`）。
+>      改名不动释义 → `challenge` 卡上挂 `a. 未引起争论的`。
+>      **修**：`core/vocab/word.ts` 的 `canRewriteTo` 只认屈折（含双写尾辅音、去 e、y→ies、-ses→-sis、不规则表），
+>      派生词一律拒绝；`applyPosAnalysis` 拒绝改名时在 `note` 里记一句；`aiApply` 回执里点名拒绝了几条；
+>      两个提示词加「加前缀/后缀是另一个词，原样返回」的反例。
+>    - 词性来自词典/M-W 的**词头首义**，释义来自 AI 的**语境义** → 「n. 交往；厮混」。
+>      **修**：`applyWordAnalysis` 释义换来源时词性必须跟着换（AI 没给就清掉）；`dictEnrich` 只在同批补释义时才补词性；
+>      `ecdict.glossForPos` 按词性挑释义行（`vow` 不再拿名词那条）；卡内编辑只提交**改过的**字段，
+>      不再一次保存就把整条卡锁成 `manual`。
+> 3. **存量体检**：`tool/audit-vocab.mjs`（默认只读；`--fix` 才写，走 `openStore` 同一事务路径）。
+>    本机实测 8302 条 → A 类（词形被改成派生词）4、B 类（词性与释义首标打架）7、C 类（英英是动词义却标名/形）5；
+>    已全部修完（回改 4 + 拆分 4 + 对齐 12），复检 A/B/C 全 0，词条 8302 → 8306（拆回来的词各自独立）。
+>    少数只能人工看一眼：`taxpayer-funded` 的中文释义仍是 fund 的（ECDICT 没收录这个词），
+>    `self-described` 的英英被清空（同上），在卡里重查一次即可。
+>
+> 全量：**240 文件 / 2260 通过 / 1 skipped**，`tsc -b` 与两项门禁全绿。
+
 > **2026-10-22 优化完成（原目标：>600 行的文件都拆）**
 >
 > 9 个文件拆完，每块单独 commit；全量 **239 文件 / 2231 通过 / 1 skipped**，两项门禁全绿。

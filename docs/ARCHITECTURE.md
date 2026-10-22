@@ -140,6 +140,26 @@ types ← core ← adapters ← reader
   踩过的坑：学习模式选错释义 → 判 again → 这个词立刻成了 `isRelearning`，
   点「继续（看单词卡）」的同一帧就命中「重学卡摊开释义 → 锤炼」分支，
   单词卡一帧都没露就被锤炼接管；复习模式按「忘记了」同样。**判完的卡不需要再门禁一次**。
+  第二个坑（2026-10-22）：重学卡的「摊开过释义」一旦为真就一直为真，过完面板会**原地重开**，
+  用户写完搭配也退不出去。所以「本卡本轮已锤炼完」由 `cleared` 统一兜，两条触发各自不用再记。
+
+### 2.4.1) 词形只做屈折还原，派生词是另一个词
+
+- `core/vocab/word.ts` 的 `canRewriteTo(from, to)` 是**改词条 word/lemma/id 的唯一闸门**：
+  只放行屈折（-s/-es/-ies/-ed/-d/-ing/-n/-en、双写尾辅音、去 e、y→ies、-ses→-sis、不规则表），
+  加/去**派生**词缀（un-/in-/dis-/non-… 前缀，-ly/-ness/-tion/-er/-al… 后缀）一律拒绝。
+- 为什么：`-ing/-ed 辨析`（`applyPosAnalysis`）与「原形校正」（`applyLemmaMap`）都会拿 AI 给的「原形」
+  改词条 `word`。改名**只动 word/lemma/id，不动释义/用法/例句**，AI 又常把
+  `unchallenged` 的「原形」写成 `challenge` —— 于是 `challenge` 卡上挂着
+  `a. 未引起争论的`，词性和释义全错位（2026-10-22 用户报的四个词）。
+  拒绝的代价只是「词形没被规整」，误改的代价是整张卡张冠李戴，所以宁严不宽。
+  `applyLemmaMap` 本身是哑映射（离线词典的词形表也要用它），**过滤放在 `core/aiApply` 的 AI 边界**。
+- 同一类问题的另一半：**词性与释义必须同源**。词典（ECDICT / M-W）给的是词头**首义**的词性，
+  AI 查词给的是**语境义**。所以 `applyWordAnalysis` 在释义被换掉时让词性跟着换（AI 没给就清空），
+  `dictEnrich` 只在同批补释义时才补词性，`ecdict.glossForPos` 按词性挑释义行。
+  卡内编辑只提交**改过的**字段（`editItem` 会把传入的每个字段标 `manual`，全传＝整条锁死）。
+- 存量数据用 `tool/audit-vocab.mjs` 体检（A 词形被改成派生词 / B 词性与释义首标打架 /
+  C 英英是动词义却标名形）；`--fix` 走和线上一样的 `openStore → saveVocab` 事务路径。
 
 视图里**不许**再出现这些规则的第二份实现（门禁 R5/R6 会拦）。
 

@@ -311,6 +311,28 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   「背哪些词」搬到 `hooks/useStudyStarts`。
   **踩坑**：复习模式判完停卡时，「下一词」必须走 `choose('next')`（写 hard + 推进），
   不能走 `forward()`——后者只切卡不落库，模糊那一次就悄悄丢了。
+- **词形只做屈折还原，派生词不改名（2026-10-22 词性/释义错位批）**：`vocab/word` 补 4 条
+  （`canRewriteTo`：屈折放行 / 否定前缀派生不放行 / 其它派生后缀不放行 / 短语与空串不放行）、
+  `vocab/analysis` 补 5 条（`applyPosAnalysis` 遇到 `unchallenged → challenge` 只记笔记不改名 /
+  真屈折照旧改名 / 释义被换掉时词性跟着换 / 释义变了但 AI 没给词性就清掉旧的 / 释义没变只补空）、
+  `aiApply` 补 1 条（原形校正拒绝派生词并在回执里点名）、`dictEnrich` 补 1 条（已有释义时不补词性）、
+  `ecdict` 补 4 条（`glossForPos` 按词性挑释义行）。
+  **为什么**：`-ing/-ed 辨析` 拿 AI 给的「原形」直接改词条 `word`，而 AI 把加前缀造出来的**另一个词**
+  当词形变化（`unchallenged → challenge`）——改名不动释义，于是 `challenge` 卡上挂着
+  `a. 未引起争论的`（用户 2026-10-22 报的四个词就是这样）。同一批还修了「词性来自词典首义、
+  释义来自 AI 语境义」的错配（`consort` 卡上的「n. 交往；厮混」）：释义换来源时词性必须跟着换，
+  词典也只在同批补释义时才补词性。存量脏数据用 `tool/audit-vocab.mjs` 体检 + `--fix` 回改
+  （证据是 `note` 里的 `[辨析] <原词形>`，以及英英以 `to …` 开头却标成名/形的词条）。
+- **卡内编辑只提交改过的字段（2026-10-22）**：`useStudyCardEdit` 补 2 条（只改释义时词性
+  `fieldSources` 仍是 `dict` / 一个字没改不写库）。`editItem` 会把手上的每个字段都标成 `manual`，
+  全都传一遍＝「点一次保存、整条卡锁死」，之后词典/AI 再也纠不了它（`dwarf` 卡的
+  「n. 使相形见绌」就是这么冻住的）。
+- **锤炼做完就退出去（2026-10-22）**：`vocab/drill` 补 1 条（`cleared: true` 时即便重学卡摊着释义也不拦）、
+  `useStudySession.drill` 补 1 条端到端（重学卡摊释义 → `drillOn` 为真 → `clearDrill()` → 变假）、
+  `StudyDrill` 补 2 条（最后一步「写搭配」答对只回调一次 `onDone` / 写错留在本步给参考）。
+  **坑**：重学卡的 `relearnRevealed` 一旦摊开就一直为真，审完面板会原地重开——用户写完搭配
+  正确也退不出去。超时那条有 `!drillCleared` 兜着，只有重学这条没有，所以「过没过」改由
+  `shouldDrill` 的 `cleared` 统一兜。
 - **判分的账本单独一个 hook（2026-10-22 优化批）**：`hooks/useStudyGrading`（8：评「忘记」写库 + 计数 + 计时 +
   记活动 + 进忘记账本 + 排到队尾 / 新词「今天已引入」只记一次 / 评「认识」不动忘记账本且不重排 /
   `resetLedger` 归零 / 拼错判 again 并返回「已排到队尾」/ 组末拼错只记账不重排 /
