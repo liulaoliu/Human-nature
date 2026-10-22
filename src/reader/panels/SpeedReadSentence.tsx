@@ -152,79 +152,83 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
               )}
             </div>
 
-            {phase !== 'drill' && (
-              <div className="speed-addword">
-                <div className="speed-selbar">
-                  <span className="muted">开顶栏「选词模式(1)」或按数字 1 后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
-                  {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
-                  {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
-                </div>
-                <div className="speed-addword-row">
-                  <button className="primary" disabled={!selWords.length} onClick={addSelected}>
-                    ＋ 加入清单{selWords.length ? `（${selWords.length}）` : ''}
-                  </button>
-                  {selWords.length > 1 && (
-                    <button
-                      onClick={mergePhrase}
-                      title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入；同一个词的不同位置互不影响）"
-                    >
-                      ＋ 合成本句词组
-                    </button>
-                  )}
-                  <input
-                    className="speed-addword-input"
-                    placeholder="也可手打词 / 词组，回车加入"
-                    value={wordDraft}
-                    onChange={(e) => setWordDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault()
-                        addCustom(wordDraft)
-                      }
-                    }}
-                  />
-                  <button disabled={!wordDraft.trim()} onClick={() => addCustom(wordDraft)}>
-                    加入
-                  </button>
-                </div>
-                {knownWords.length > 0 && (
-                  <div className="speed-known">
-                    <span className="muted">本句已在生词本（点两下移出）：</span>
-                    {knownWords.map((w) => (
-                      <button
-                        key={w}
-                        className={'speed-known-chip' + (confirmDel === w ? ' danger' : '')}
-                        onClick={() => tapRemove(w)}
-                        title={confirmDel === w ? '再点一次确认移出' : '移出生词本（两步确认）'}
-                      >
-                        {confirmDel === w ? `确认移出「${w}」` : w}
-                      </button>
-                    ))}
+            {/* 加词条 + 操作按钮一起吸底：滚的是 .reader-main，整块钉住比只钉按钮更好用
+                （选词模式开了以后经常一边读一边加词，滚下去就够不着了） */}
+            <div className="speed-foot">
+              {phase !== 'drill' && (
+                <div className="speed-addword">
+                  <div className="speed-selbar">
+                    <span className="muted">开顶栏「选词模式(1)」或按数字 1 后：点词选中 → 「加入清单」或右键入库；右上角清单可删除误加。</span>
+                    {selWords.length > 0 && <b>已选：{selWords.join(' · ')}</b>}
+                    {addedWord && <span className="speed-added">✔ 已加入：{addedWord}</span>}
                   </div>
-                )}
-              </div>
-            )}
+                  <div className="speed-addword-row">
+                    <button className="primary" disabled={!selWords.length} onClick={addSelected}>
+                      ＋ 加入清单{selWords.length ? `（${selWords.length}）` : ''}
+                    </button>
+                    {selWords.length > 1 && (
+                      <button
+                        onClick={mergePhrase}
+                        title="把本句选中的词按顺序合成一个词组（中间夹着的词不加入；同一个词的不同位置互不影响）"
+                      >
+                        ＋ 合成本句词组
+                      </button>
+                    )}
+                    <input
+                      className="speed-addword-input"
+                      placeholder="也可手打词 / 词组，回车加入"
+                      value={wordDraft}
+                      onChange={(e) => setWordDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addCustom(wordDraft)
+                        }
+                      }}
+                    />
+                    <button disabled={!wordDraft.trim()} onClick={() => addCustom(wordDraft)}>
+                      加入
+                    </button>
+                  </div>
+                  {knownWords.length > 0 && (
+                    <div className="speed-known">
+                      <span className="muted">本句已在生词本（点两下移出）：</span>
+                      {knownWords.map((w) => (
+                        <button
+                          key={w}
+                          className={'speed-known-chip' + (confirmDel === w ? ' danger' : '')}
+                          onClick={() => tapRemove(w)}
+                          title={confirmDel === w ? '再点一次确认移出' : '移出生词本（两步确认）'}
+                        >
+                          {confirmDel === w ? `确认移出「${w}」` : w}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
 
-            <div className="bar study-actions">
-              <button onClick={() => onSpeak(sentence.text)} title="朗读本句（R；已缓存则秒播）">
-                {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
-              </button>
-              {phase === 'read' && (
-                <button className="primary" onClick={advance}>
-                  读完了（空格）
+              <div className="bar study-actions">
+                <button onClick={() => onSpeak(sentence.text)} title="朗读本句（R；已缓存则秒播）">
+                  {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
                 </button>
-              )}
-              {phase === 'reveal' && (
-                <button className="primary" onClick={advance}>
-                  {slow && autoDrill && drill ? '来一道（空格）' : '下一句（空格）'}
-                </button>
-              )}
-              {phase === 'drill-answer' && (
-                <button className="primary" onClick={advance}>
-                  下一句（空格）
-                </button>
-              )}
-              <button onClick={onClose}>退出</button>
+                {phase === 'read' && (
+                  <button className="primary" onClick={advance}>
+                    读完了（空格）
+                  </button>
+                )}
+                {phase === 'reveal' && (
+                  <button className="primary" onClick={advance}>
+                    {slow && autoDrill && drill ? '来一道（空格）' : '下一句（空格）'}
+                  </button>
+                )}
+                {phase === 'drill-answer' && (
+                  <button className="primary" onClick={advance}>
+                    下一句（空格）
+                  </button>
+                )}
+                <button onClick={onClose}>退出</button>
+              </div>
             </div>
     </>
   )
