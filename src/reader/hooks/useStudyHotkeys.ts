@@ -72,6 +72,20 @@ export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions):
 
       const key = e.key.toLowerCase()
       const main = e.key === ' ' || e.key === 'Enter'
+      const t = e.target as HTMLElement | null
+      const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+
+      /**
+       * R = 朗读：跟「停在哪一屏」无关——释义题、看答案的高亮页、判完等「下一词」、
+       * 模糊待定、复习已判，都是同一张卡，都该能读。
+       * 两个例外：拼写模式判卷前读出来就剧透；光标在输入框里时 R 是打字。
+       */
+      if (key === 'r' && !inField && !(ctx.spelling && !ctx.checked)) {
+        if (!ctx.word) return
+        e.preventDefault()
+        if (!e.repeat) actions.speak(ctx.word)
+        return
+      }
 
       if (ctx.learnPhase) {
         if (main || key === 'h') {
@@ -115,8 +129,6 @@ export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions):
         return
       }
 
-      const t = e.target as HTMLElement | null
-      const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       // 复习模式看见单词就能判（不用先翻面）；其它模式要「翻面」或「判完拼写」才给分
       const canGrade = ctx.mode === 'review' ? ctx.reviewKeys : ctx.spelling ? ctx.checked : ctx.revealed
       const gradeKeys: Record<string, ReviewGrade> = { '1': 'good', '2': 'hard', '3': 'again' }
@@ -151,11 +163,6 @@ export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions):
         if (!ctx.revealed || (ctx.mode === 'learn' && ctx.learnGraded)) return
         e.preventDefault()
         actions.markUnknown()
-      } else if (key === 'r') {
-        // 拼写模式判卷前读出来就剧透了（自动朗读也为此关掉）
-        if (!ctx.word || (ctx.spelling && !ctx.checked)) return
-        e.preventDefault()
-        if (!e.repeat) actions.speak(ctx.word)
       } else if (key === 'q') {
         e.preventDefault()
         actions.back()

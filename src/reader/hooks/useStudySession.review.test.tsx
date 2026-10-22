@@ -269,4 +269,56 @@ describe('useStudySession：快捷键覆盖面板上的每个按钮', () => {
     expect(api!.reviewGraded).toBe(true)
     unmount()
   })
+
+  it('R = 朗读：判完停在卡上（学习等「下一词」）也照样能读', () => {
+    const speak = vi.fn()
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({ id: 'n1', word: 'run', lemma: 'run', meaning: '跑' }),
+          vocabItem({ id: 'n2', word: 'walk', lemma: 'walk', meaning: '走' }),
+          vocabItem({ id: 'n3', word: 'say', lemma: 'say', meaning: '说' }),
+          vocabItem({ id: 'n4', word: 'see', lemma: 'see', meaning: '看' }),
+        ])}
+        speak={speak}
+      />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.revealLearnAnswer()) // 看答案 → 判完 → 停在卡上等「下一词」
+    expect(api!.learnGraded).toBe(true)
+
+    speak.mockClear()
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).toHaveBeenCalledWith('run')
+    unmount()
+  })
+
+  it('R = 朗读：释义题阶段能读；拼写判卷前不读（防剧透）', () => {
+    const speak = vi.fn()
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({ id: 'n1', word: 'run', lemma: 'run', meaning: '跑' }),
+          vocabItem({ id: 'n2', word: 'walk', lemma: 'walk', meaning: '走' }),
+          vocabItem({ id: 'n3', word: 'say', lemma: 'say', meaning: '说' }),
+          vocabItem({ id: 'n4', word: 'see', lemma: 'see', meaning: '看' }),
+        ])}
+        speak={speak}
+      />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    expect(api!.learnPhase).toBe(true)
+    speak.mockClear()
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).toHaveBeenCalledWith('run') // 题面就是这个单词，读出来不算剧透
+
+    act(() => api!.revealLearnAnswer())
+    act(() => api!.continueLearn())
+    act(() => api!.setSpelling(true))
+    expect(api!.checked).toBe(false)
+    speak.mockClear()
+    fireEvent.keyDown(window, { key: 'r' })
+    expect(speak).not.toHaveBeenCalled() // 拼写还没判卷，读出来就剧透了
+    unmount()
+  })
 })
