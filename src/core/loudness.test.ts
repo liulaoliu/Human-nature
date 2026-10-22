@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { speechRms, matchGain, applyGain, peakSafeGain } from './loudness'
+import { applyGain, matchGain, peakSafeGain, speechBounds, speechRms } from './loudness'
 import { buildSignal } from './testSignals'
 
 /** 恒定振幅的方波，方便精确断言 RMS = amplitude */
@@ -87,6 +87,38 @@ describe('applyGain / peakSafeGain', () => {
 
   it('peakSafeGain 对全静音不设限', () => {
     expect(peakSafeGain([new Float32Array(8)], 8)).toBe(8)
+  })
+})
+
+describe('speechBounds', () => {
+  it('掐掉首尾静音，只留中间说话那段（两侧各留一点余量）', () => {
+    const { samples, sampleRate } = buildSignal([
+      ['silence', 0.6],
+      ['speech', 1.2],
+      ['silence', 1.4],
+    ])
+    const b = speechBounds(samples, sampleRate)
+    expect(b.from).toBeGreaterThan(0.4)
+    expect(b.from).toBeLessThanOrEqual(0.6)
+    expect(b.to).toBeGreaterThanOrEqual(1.8)
+    expect(b.to).toBeLessThan(2.2)
+  })
+
+  it('整段都在说话就不裁', () => {
+    const { samples, sampleRate } = buildSignal([['speech', 1]])
+    const b = speechBounds(samples, sampleRate)
+    expect(b.from).toBe(0)
+    expect(b.to).toBeCloseTo(1, 1)
+  })
+
+  it('整段静音不裁（避免回放变成空响）', () => {
+    const { samples, sampleRate } = buildSignal([['silence', 1]])
+    expect(speechBounds(samples, sampleRate)).toEqual({ from: 0, to: 1 })
+  })
+
+  it('空采样 / 非法采样率不炸', () => {
+    expect(speechBounds(new Float32Array(0), 8000)).toEqual({ from: 0, to: 0 })
+    expect(speechBounds(new Float32Array(10), 0)).toEqual({ from: 0, to: 0 })
   })
 })
 

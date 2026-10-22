@@ -1,5 +1,5 @@
 import type { AudioPlayerPort, MicOptions, RecorderPort, Take } from '../core/ports'
-import { applyGain, matchGain, peakSafeGain, speechRms } from '../core/loudness'
+import { applyGain, matchGain, peakSafeGain, speechBounds, speechRms } from '../core/loudness'
 import { floatToWav } from '../core/wav'
 import { Lru } from '../core/lru'
 
@@ -11,6 +11,13 @@ const END_EPSILON = 0.02
  * 而实际同时只用到「当前块 + 对比里的那一条」，8 条足够覆盖来回切换。
  */
 const TAKE_BLOB_CACHE_MAX = 8
+
+/** 归一化后的回放素材：缩放好的 WAV + 这次该播的区间（秒） */
+interface NormalizedTake {
+  blob: Blob
+  from: number
+  to?: number
+}
 
 /**
  * 全局复用一个 AudioContext。
@@ -64,7 +71,7 @@ export class BrowserPlayer implements AudioPlayerPort {
   /** 录音回放的额外放大倍数（在响度对齐之后再乘） */
   private takeBoost = 1
   /** 按增益缩放后重编码的 WAV（LRU，换增益/换文件时作废），回放用它 */
-  private takeBlobs = new Lru<string, Blob>(TAKE_BLOB_CACHE_MAX)
+  private takeBlobs = new Lru<string, NormalizedTake>(TAKE_BLOB_CACHE_MAX)
 
   constructor() {
     this.el = new Audio()
@@ -149,14 +156,14 @@ export class BrowserPlayer implements AudioPlayerPort {
     this.pause()
     // 先把「我的录音」缩放到和标准音一样响，重编码成 WAV 再播。
     // 归一化那份播不了就退回原始录音再试一次（重建 object URL），实在不行才放弃。
-    const blob = await this.normalizedTake(take)
+    const norm = await this.normalizedTake(take)
     try {
-      await this.playBlob(blob, rate)
+      await this.playBlob(norm.blob, rate, norm.from, norm.to)
     } catch (e) {
-      if (blob !== take.blob) {
+      if (norm.blob !== take.blob) {
         console.warn('[shadowing] 归一化录音回放失败，退回原始录音重试', e)
         try {
-          await this.playBlob(take.blob, rate)
+          await this.playBlob(take.blob, rate, norm.from, norm.to)
           return
         } catch (e2) {
           console.warn('[shadowing] 原始录音回放也失败', e2)
@@ -167,24 +174,58 @@ export class BrowserPlayer implements AudioPlayerPort {
     }
   }
 
-  /** 播一个音频 Blob；播完 resolve，`play()` 失败 reject（好让上层重试）。 */
-  private playBlob(blob: Blob, rate: number): Promise<void> {
+  /**
+   * 播一个音频 Blob；播完 resolve，`play()` 失败 reject（好让上层重试）。
+   * 给了 `to` 就只播 `[from, to)` —— 录音首尾的静音不进回放。
+   */
+  private playBlob(blob: Blob, rate: number, from = 0, to?: number): Promise<void> {
     if (this.takeUrl) URL.revokeObjectURL(this.takeUrl)
     this.takeUrl = URL.createObjectURL(blob)
     this.takeEl.src = this.takeUrl
     this.takeEl.playbackRate = rate
     setPreservesPitch(this.takeEl)
     return new Promise<void>((resolve, reject) => {
-      this.endPending = resolve
-      this.takeEl.onended = () => {
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        this.takeEl.pause()
         cancelAnimationFrame(this.raf)
-        this.endPending?.()
         this.endPending = null
+        resolve()
       }
-      this.takeEl.play().catch((e) => {
-        this.endPending = null
-        reject(e)
-      })
+      this.endPending = finish
+      this.takeEl.onended = finish
+
+      const startAt = () => {
+        this.takeEl.onloadedmetadata = null
+        if (settled) return
+        if (from > 0) {
+          try {
+            this.takeEl.currentTime = from
+          } catch {
+            // 元数据还没到，从头播也比分毫不放强
+          }
+        }
+        this.takeEl.play().catch((e) => {
+          if (settled) return
+          settled = true
+          this.endPending = null
+          reject(e)
+        })
+        // 到 `to` 就收：`currentTime` 是媒体时间，变速时也是对的
+        if (to !== undefined && to > from) {
+          const tick = () => {
+            if (settled) return
+            if (this.takeEl.currentTime >= to - END_EPSILON) return finish()
+            this.raf = requestAnimationFrame(tick)
+          }
+          this.raf = requestAnimationFrame(tick)
+        }
+      }
+
+      if (this.takeEl.readyState >= 1) startAt()
+      else this.takeEl.onloadedmetadata = startAt
     })
   }
 
@@ -195,25 +236,44 @@ export class BrowserPlayer implements AudioPlayerPort {
    * 结果进 LRU 缓存：每条 WAV 几百 KB，练一整篇（几十块）就是几十 MB，
    * 而实际同时只会用到最近几条。
    */
-  private async normalizedTake(take: Take): Promise<Blob> {
+  private async normalizedTake(take: Take): Promise<NormalizedTake> {
     const cached = this.takeBlobs.get(take.id)
     if (cached) return cached
+    const fallback: NormalizedTake = {
+      blob: take.blob,
+      from: take.speechFrom ?? 0,
+      to: take.speechTo,
+    }
     try {
       const ctx = audioCtx()
-      if (!ctx) return take.blob
+      if (!ctx) return fallback
       const buf = await decodeAudio(ctx, take.blob)
+      const mono = toMono(buf)
+      const monoDuration = buf.sampleRate > 0 ? mono.length / buf.sampleRate : 0
+      // 首尾静音：优先用录音时算好的；老记录没有这两个字段就按采样现算一次
+      const bounds =
+        take.speechFrom !== undefined && take.speechTo !== undefined
+          ? { from: take.speechFrom, to: take.speechTo }
+          : speechBounds(mono, buf.sampleRate)
+      // 头尾本来就有声（几乎没裁）就整段播，别为几毫秒启动区间计时
+      const trimmed = bounds.from > 0.01 || bounds.to < monoDuration - 0.01
       const channels: Float32Array[] = []
       for (let c = 0; c < buf.numberOfChannels; c++) channels.push(buf.getChannelData(c))
       const wanted =
-        (this._refLevel > 0 ? matchGain(this._refLevel, speechRms(toMono(buf), buf.sampleRate)) : 1) *
+        (this._refLevel > 0 ? matchGain(this._refLevel, speechRms(mono, buf.sampleRate)) : 1) *
         this.takeBoost
       const gain = peakSafeGain(channels, wanted)
       const wav = floatToWav(channels.map((ch) => applyGain(ch, gain)), buf.sampleRate)
-      this.takeBlobs.set(take.id, wav)
-      return wav
+      const entry: NormalizedTake = {
+        blob: wav,
+        from: trimmed ? bounds.from : 0,
+        to: trimmed ? bounds.to : undefined,
+      }
+      this.takeBlobs.set(take.id, entry)
+      return entry
     } catch (e) {
       console.warn('[shadowing] 录音解码失败，退回原始音频', e)
-      return take.blob
+      return fallback
     }
   }
 
@@ -338,7 +398,13 @@ export class BrowserRecorder implements RecorderPort {
     this.startMeter()
   }
 
-  async stop(): Promise<{ blob: Blob; mimeType: string; durationSec: number }> {
+  async stop(): Promise<{
+    blob: Blob
+    mimeType: string
+    durationSec: number
+    speechFrom?: number
+    speechTo?: number
+  }> {
     const rec = this.rec
     if (!rec) throw new Error('没有在录音')
     const mimeType = rec.mimeType || pickRecordingMime() || 'audio/webm'
@@ -349,7 +415,29 @@ export class BrowserRecorder implements RecorderPort {
       rec.stop()
     })
     this.teardown()
-    return { blob, mimeType, durationSec }
+
+    // 首尾静音：解码能力只在录音器手里（模型层没有 AudioContext），
+    // 所以停录时就顺手算好说话区间存进 Take，回放只放这一段。
+    // 解不出来就省略，回放退回整段。
+    let speechFrom: number | undefined
+    let speechTo: number | undefined
+    const ctx = audioCtx()
+    if (ctx) {
+      try {
+        const buf = await decodeAudio(ctx, blob)
+        const mono = toMono(buf)
+        const monoDuration = buf.sampleRate > 0 ? mono.length / buf.sampleRate : 0
+        const b = speechBounds(mono, buf.sampleRate)
+        // 头尾本来就有声（一点没裁）就不存，省得占两个没用的字段
+        if (b.from > 0.01 || b.to < monoDuration - 0.01) {
+          speechFrom = b.from
+          speechTo = b.to
+        }
+      } catch {
+        // 解码失败：不裁，整段回放
+      }
+    }
+    return { blob, mimeType, durationSec, speechFrom, speechTo }
   }
 
   private startMeter() {

@@ -36,6 +36,9 @@ new/
 # 本机删除文件时留下的回收站目录（tools/safe-delete 之类的守护进程会建），不进仓库
 .Trash-*/
 
+# 跑测试时的临时转换缓存（TEMP/TMP 指到工作区内，避免沙箱 EPERM）
+.tmp-vitest/
+
 # 本机私密配置：放 API key 的地方，绝不进仓库！
 # （config.json 是被跟踪的，别把 key 写进去）
 config.local.json

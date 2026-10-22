@@ -86,6 +86,9 @@ export class FakeRecorder implements RecorderPort {
   startCount = 0
   stopCount = 0
   shouldFail = false
+  /** 测试注入：停录时报告的「真正在说话的区间」 */
+  speechFrom?: number
+  speechTo?: number
   /** 测试注入：让 start() 挂住，模拟「正在等麦克风」 */
   holdStart = false
   private releaseStart: (() => void) | null = null
@@ -112,12 +115,20 @@ export class FakeRecorder implements RecorderPort {
     this.levelCb?.(v)
   }
 
-  async stop() {
+  async stop(): Promise<{
+    blob: Blob
+    mimeType: string
+    durationSec: number
+    speechFrom?: number
+    speechTo?: number
+  }> {
     this.stopCount++
     return {
       blob: new Blob(['x']),
       mimeType: 'audio/webm',
       durationSec: 3.2,
+      speechFrom: this.speechFrom,
+      speechTo: this.speechTo,
     }
   }
 

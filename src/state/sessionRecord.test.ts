@@ -118,6 +118,20 @@ describe('SessionStore 录音', () => {
     expect(t.endSec).toBeCloseTo(c.end, 6)
   })
 
+  it('录音带上「真正在说话」的首尾区间，落库也带着（回放只放这段）', async () => {
+    const { store, recorder, repo } = makeStore()
+    await store.load(blob, 'a.mp3')
+    recorder.speechFrom = 0.6
+    recorder.speechTo = 2.4
+    await store.toggleRecording()
+    await store.toggleRecording()
+    const t = store.getState().takes[0]
+    expect(t.speechFrom).toBe(0.6)
+    expect(t.speechTo).toBe(2.4)
+    expect(repo.map.get(t.id)?.speechFrom).toBe(0.6)
+    expect(repo.map.get(t.id)?.speechTo).toBe(2.4)
+  })
+
   it('撕开前面的块后，录音按时间留在原来那一块（不串块）', async () => {
     const { store } = makeStore()
     await store.load(blob, 'a.mp3')

@@ -160,6 +160,26 @@ describe('BrowserPlayer：录音回放', () => {
     await second
     expect(decodeAudioData.mock.calls.length).toBe(decodes)
   })
+
+  it('playTake：按 speechFrom/speechTo 从说话处起播，到说话尾就停', async () => {
+    const p = new BrowserPlayer()
+    await p.load(fakeBlob()) // 建立参考响度
+    const takeEl = FakeAudio.instances[1]
+    const take = { id: 't2', blob: fakeBlob('take'), speechFrom: 0.5, speechTo: 1 } as never
+
+    let done = false
+    const playing = p.playTake(take, 1).then(() => {
+      done = true
+    })
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    expect(takeEl.currentTime).toBe(0.5) // 跳过开头静音
+    expect(done).toBe(false)
+
+    takeEl.currentTime = 1.01
+    rafCallbacks[rafCallbacks.length - 1](0)
+    await playing
+    expect(done).toBe(true) // 说话一结束就收，不等文件放完
+  })
 })
 
 describe('BrowserPlayer：release', () => {

@@ -467,6 +467,8 @@ export class SessionStore {
       chunkIndex: -1,
       mimeType: t.mimeType,
       durationSec: t.durationSec,
+      speechFrom: t.speechFrom,
+      speechTo: t.speechTo,
       createdAt: Date.now(),
       blob: t.blob,
     })
@@ -643,6 +645,9 @@ export class SessionStore {
       endSec: c?.end,
       mimeType: take.mimeType,
       durationSec: take.durationSec,
+      // 首尾静音区间：录音器解码时算好的，回放只放这段（老录音没有，播放器现算）
+      speechFrom: take.speechFrom,
+      speechTo: take.speechTo,
       createdAt: Date.now(),
       blob: take.blob,
     }

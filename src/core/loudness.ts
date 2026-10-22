@@ -58,6 +58,72 @@ export function applyGain(samples: Float32Array, gain: number): Float32Array {
   return out
 }
 
+/** 一段音频里「真正在说话」的起止（秒，相对录音起点） */
+export interface SpeechBounds {
+  from: number
+  to: number
+}
+
+/**
+ * 找出首尾静音之外那段「真在说话」的范围，用来让录音回放不空等。
+ *
+ * 跟读录音两头一定有空档：按下录音到开口、读完到松手。A/B 对比时
+ * 把这些静音一起放出来，听感上就是「怎么还没声 / 怎么还不结束」。
+ *
+ * 判法跟 `speechRms` 同源：20ms 一帧算 RMS，阈值取「最大帧的 10%」和
+ * 绝对下限 0.006 里大的那个（避开底噪），取第一帧和最后一帧过阈值的；
+ * 两侧各留 `padSec` 余量，别把字头的气口、字尾的尾音切掉。
+ *
+ * 返回整段（from=0, to=时长）表示「没把握，别裁」：全静音、太短、
+ * 或者裁完只剩不到 0.15 秒，都按没裁处理。
+ */
+export function speechBounds(
+  samples: Float32Array,
+  sampleRate: number,
+  frameMs = 20,
+  padSec = 0.12,
+): SpeechBounds {
+  const duration = sampleRate > 0 ? samples.length / sampleRate : 0
+  const whole: SpeechBounds = { from: 0, to: duration }
+  if (samples.length === 0 || sampleRate <= 0) return whole
+
+  const frameLen = Math.max(1, Math.round((sampleRate * frameMs) / 1000))
+  if (samples.length < frameLen * 2) return whole
+
+  const rms: number[] = []
+  let maxR = 0
+  for (let start = 0; start + frameLen <= samples.length; start += frameLen) {
+    let acc = 0
+    for (let i = 0; i < frameLen; i++) {
+      const v = samples[start + i]
+      acc += v * v
+    }
+    const r = Math.sqrt(acc / frameLen)
+    rms.push(r)
+    if (r > maxR) maxR = r
+  }
+  // 整段几乎没声音：不裁（裁了会让回放变成空响）
+  if (maxR < 0.004) return whole
+
+  const threshold = Math.max(maxR * 0.1, 0.006)
+  let first = -1
+  let last = -1
+  for (let i = 0; i < rms.length; i++) {
+    if (rms[i] >= threshold) {
+      if (first < 0) first = i
+      last = i
+    }
+  }
+  if (first < 0) return whole
+
+  const frameSec = frameLen / sampleRate
+  const from = Math.max(0, first * frameSec - padSec)
+  const to = Math.min(duration, (last + 1) * frameSec + padSec)
+  // 剩下太短说明阈值判错了（比如只有一声咳嗽），保持原样
+  if (to - from < 0.15) return whole
+  return { from, to }
+}
+
 /** 峰值（多声道取最大绝对值的那个） */
 export function peakOf(channels: Float32Array[]): number {
   let peak = 0

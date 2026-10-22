@@ -31,6 +31,14 @@ export interface Take {
   blob: Blob
   mimeType: string
   durationSec: number
+  /**
+   * 真正在说话的区间（秒，相对录音起点）。
+   * 按下录音到开口、读完到松手都是一段静音，A/B 对比时连着放出来很难受，
+   * 所以回放只放这一段（见 `core/loudness.speechBounds`）。
+   * 老记录没有这两个字段 → 播放器按采样现算，算不出来就整段播。
+   */
+  speechFrom?: number
+  speechTo?: number
   createdAt: number
 }
 
@@ -72,7 +80,18 @@ export interface AudioPlayerPort {
 
 export interface RecorderPort {
   start(): Promise<void>
-  stop(): Promise<{ blob: Blob; mimeType: string; durationSec: number }>
+  /**
+   * 停录。实现方最好顺手标出「真正在说话的区间」——
+   * 录音器手里才有解码能力，模型层（`state/session`）没有 AudioContext。
+   * 标不出来就省略这两个字段，回放退回整段。
+   */
+  stop(): Promise<{
+    blob: Blob
+    mimeType: string
+    durationSec: number
+    speechFrom?: number
+    speechTo?: number
+  }>
   /** 0..1，输入电平 */
   onLevel(cb: (v: number) => void): void
   /**
