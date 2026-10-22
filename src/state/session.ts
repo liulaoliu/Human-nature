@@ -1,22 +1,22 @@
 import { detectSpeechSpans } from '../core/vad'
-import { applyChunkEdits, MIN_PIECE_SEC } from '../core/chunkEdits'
-import { addSplit, editCount, mergeAt, type ChunkEditLog } from '../core/chunkEditLog'
+import { applyChunkEdits } from '../core/chunkEdits'
 import { latestTakePerChunk, remapTakes } from '../core/takeChunk'
 import { alignScript, resolveScriptAnchors, scriptWords, type ScriptLayout } from '../core/scriptAlign'
-import { AUTO_CYCLE_GAP_MS, NOISE_FLOOR_INIT, VOICE_LEVEL, voiceThreshold } from '../core/recording'
+import { AUTO_CYCLE_GAP_MS } from '../core/recording'
 import {
   GRANULARITY_MS,
   type Chunk,
   type Granularity,
   type MicOptions,
-  type RecorderPort,
   type Take,
 } from '../core/ports'
 import { CalibrationLedger } from './calibrationLedger'
 import { LevelMeter } from './levelMeter'
 import { AnchorEditor } from './anchorEditor'
 import { CycleRunner } from './cycleRunner'
-import { recordLocalActivity } from './localActivity'
+import { ChunkEditor } from './chunkEditor'
+import { PlaybackController } from './playbackController'
+import { RecordingController } from './recordingController'
 import { INITIAL, type SessionDeps, type SessionState } from './sessionConfig'
 
 export type { SessionDeps, SessionState } from './sessionConfig'
@@ -26,10 +26,12 @@ export type { SessionDeps, SessionState } from './sessionConfig'
  * React 通过 useSyncExternalStore 订阅。
  *
  * 这一层只做**编排**：状态机、播放/录音的时序、竞态守卫。
- * 三块容易膨胀的逻辑已经各归各位：
+ * 容易膨胀的逻辑已经各归各位：
  * - 每篇的手动校准（平移/起点/锚点/撕合）→ `state/calibrationLedger`
  * - 「原文怎么摊到块上」的规则 → `core/scriptAlign`
  * - 录音与块的对应、判定阈值与兜底时长 → `core/takeChunk` / `core/recording`
+ * - 一次录音的全流程（开麦→统计→落库→淘汰旧录音）→ `state/recordingController`
+ * - 手动撕开/合并（含「快路径 vs 重跑 VAD」的取舍）→ `state/chunkEditor`
  */
 export class SessionStore {
   private state: SessionState = INITIAL
@@ -41,10 +43,12 @@ export class SessionStore {
   private anchors: AnchorEditor
   /** 连续跟读的那一轮（轮次号 / 录音定时器 / 说过话没有），见 state/cycleRunner */
   private cycle: CycleRunner
-  /** 噪声底：录音期间见过的最低电平，用来自适应说话阈值（不同麦克风增益差很多） */
-  private noiseFloor = NOISE_FLOOR_INIT
-  /** 这次录音见过的最高电平，用完判断「麦克风是不是太小声」 */
-  private recPeak = 0
+  /** 一次录音：开麦、电平统计、落库、淘汰旧录音，见 state/recordingController */
+  private rec: RecordingController
+  /** 手动撕开 / 合并块，见 state/chunkEditor */
+  private edits: ChunkEditor
+  /** 导航与参考音播放（切块 / 空格 / 整篇 / 试听），见 state/playbackController */
+  private play: PlaybackController
   /**
    * 电平上报的节流（~25/s）：电平表每帧都回调，直接进 state 就是 60fps 整页重渲染。
    * 判定「说完没有」用**原始值**（不受节流影响），只有给 UI 看的 level 才节流。
@@ -74,14 +78,42 @@ export class SessionStore {
       alignedWordRange: (i) => this.state.aligned[i]?.wordRange ?? null,
       persist: () => this.cal.persist(this.state.fileName),
     })
+    this.rec = new RecordingController({
+      state: () => this.state,
+      set: (patch) => this.set(patch),
+      chunk: () => this.chunk(),
+      player: deps.player,
+      recorder: deps.recorder,
+      repo: deps.repo,
+      level: this.level,
+      voiceLevel: () => deps.voiceLevel,
+      abortCycle: () => this.abortCycle(),
+      stopAb: () => this.stopAb(),
+      playTake: (take) => this.playTake(take),
+    })
+    this.edits = new ChunkEditor({
+      state: () => this.state,
+      chunk: () => this.chunk(),
+      cal: this.cal,
+      anchors: this.anchors,
+      deriveAt: (g, fileName) =>
+        this.derive(this.deps.player.samples, this.deps.player.sampleRate, g, fileName),
+      realign: (patch) => this.realign(patch),
+    })
+    this.play = new PlaybackController({
+      state: () => this.state,
+      set: (patch) => this.set(patch),
+      chunk: () => this.chunk(),
+      player: deps.player,
+      stopAb: () => this.stopAb(),
+      abortCycle: () => this.abortCycle(),
+      runAutoCycle: () => this.runAutoCycle(),
+    })
     this.deps.recorder.onLevel((v) => {
-      if (this.state.recording) {
-        if (v > this.recPeak) this.recPeak = v
-        // 噪声底只取「见过的最低电平」，单调不增 —— 连续朗读时也不会被自己的语音抬高
-        if (v < this.noiseFloor) this.noiseFloor = v
-        const thr = voiceThreshold(this.noiseFloor, this.deps.voiceLevel ?? VOICE_LEVEL)
-        this.cycle.noteLevel(v, thr)
-      }
+      // 阈值只在录音期间有意义（noteLevel 内部也只在那时统计），
+      // 连续跟读的「说完没有」用它判定。
+      const thr = this.rec.noteLevel(v)
+      this.cycle.noteLevel(v, thr)
       this.level.accept(v)
     })
   }
@@ -168,19 +200,6 @@ export class SessionStore {
     }
   }
 
-  /** 这一篇记过的撕/合（账本形状 → core 认的 `ChunkEditLog`） */
-  private editLog(): ChunkEditLog {
-    return {
-      splits: this.cal.splitsOf(this.state.fileName),
-      merges: this.cal.mergesOf(this.state.fileName),
-    }
-  }
-
-  private applyEditLog(log: ChunkEditLog): void {
-    this.cal.setSplits(this.state.fileName, log.splits)
-    this.cal.setMerges(this.state.fileName, log.merges)
-  }
-
   /** 只跑 VAD，得到原始块（不含手动撕/合） */
   private detect(samples: Float32Array, sampleRate: number, g: Granularity): Chunk[] {
     if (samples.length === 0 || sampleRate === 0) return []
@@ -199,15 +218,7 @@ export class SessionStore {
   setGranularity(g: Granularity) {
     if (g === this.state.granularity || this.state.status !== 'ready') return
     // 锚点/撕合都按音频时间记，块变了照样能找回是哪一块
-    this.rederive({ granularity: g })
-  }
-
-  /** 重跑 VAD + 手动撕合，然后把 current 夹进新块数里，再重算对齐 */
-  private rederive(patch: Partial<SessionState> = {}): void {
-    const g = patch.granularity ?? this.state.granularity
-    const chunks = this.derive(this.deps.player.samples, this.deps.player.sampleRate, g)
-    const current = Math.min(patch.current ?? this.state.current, Math.max(0, chunks.length - 1))
-    this.realign({ ...patch, chunks, current })
+    this.edits.rederive({ granularity: g })
   }
 
   setRate(rate: number) {
@@ -349,85 +360,19 @@ export class SessionStore {
     return { samples: this.deps.player.samples, sampleRate: this.deps.player.sampleRate }
   }
 
-  /**
-   * 在第 t 秒把当前块撕成两段。t 会被夹进当前块、并离两端留出最小片段。
-   * 如果当前块有手动锚点，锚点按刀口比例一分为二 —— 不拆的话后半块会显示出
-   * 下一块的文字，更乱；拆开后用户可以再各自微调。
-   */
+  /** 在第 t 秒把当前块撕成两段（夹在块内、离两端留最小片段；锚点按刀口一分为二）。 */
   splitCurrentChunk(t: number) {
-    const c = this.chunk()
-    if (!c) return
-    const lo = c.start + MIN_PIECE_SEC
-    const hi = c.end - MIN_PIECE_SEC
-    if (hi <= lo) return
-    const at = Math.min(Math.max(t, lo), hi)
-    const fileName = this.state.fileName
-
-    // 「撕 = 抵消合并」「同一刀口不重复记」都在 core/chunkEditLog（有测试）
-    const next = addSplit(this.editLog(), at)
-    if (!next) return
-    this.applyEditLog(next)
-
-    this.anchors.splitAtStart(c, at)
-    this.cal.persist(fileName)
-    this.rederiveFromEdits()
-  }
-
-  /**
-   * 把一次手动切分（撕/合）应用到**现有**块上，不重跑 VAD。
-   *
-   * 之前每次都 `detect()` 重跑一遍：长 Briefing 约 350ms，连着撕十几刀就是好几秒等待，
-   * 而这些刀口都是毫秒级的交互，延迟直接顶在手上。
-   *
-   * `applyChunkEdits` 对已经存在的边界是幂等的（切点正好落在已有边界上时，
-   * 两侧都不满足最小片段、不产生新切点），所以在「已经切好的块」上重复套用安全。
-   */
-  private applyEditsToCurrent(): Chunk[] {
-    return applyChunkEdits(
-      this.state.chunks,
-      this.cal.splitsOf(this.state.fileName),
-      this.cal.mergesOf(this.state.fileName),
-    )
-  }
-
-  /**
-   * 「撕开」之后的重算：块 = 现有块 + 刀口，然后重跑对齐。
-   *
-   * 只在**新增刀口**时能用这个快路径。**合并/撤销不行**：把一条 split 从列表里
-   * 删掉，并不会让已经切开的两半重新合上（`applyChunkEdits` 只负责加切点、
-   * 和删「起点等于某时间」的边界，而撤销之后那条边界已经不在切点列表里了）。
-   * 所以 merge/reset 仍走完整重算 —— 它们是低频的纠错操作，代价可以接受。
-   */
-  private rederiveFromEdits(): void {
-    const chunks = this.applyEditsToCurrent()
-    this.realign({
-      chunks,
-      current: Math.min(this.state.current, Math.max(0, chunks.length - 1)),
-    })
+    this.edits.splitCurrent(t)
   }
 
   /** 把当前块和下一块合并（等于删掉两条之间的边界）。可以拿来撤销一次撕开 */
   mergeCurrentWithNext() {
-    const c = this.chunk()
-    const next = this.state.chunks[this.state.current + 1]
-    if (!c || !next) return
-    const boundary = next.start
-    const fileName = this.state.fileName
-
-    // 「合并 = 撤销撕开」的规则在 core/chunkEditLog（有测试）
-    this.applyEditLog(mergeAt(this.editLog(), boundary))
-    this.anchors.joinAcross(boundary)
-    this.cal.persist(fileName)
-    this.rederive() // 撤销要真正合上两半，必须从 VAD 结果重算（见 rederiveFromEdits）
+    this.edits.mergeCurrentWithNext()
   }
 
   /** 清掉这一篇全部手动撕/合，回到纯 VAD 切块（这个必须重跑 VAD：要把刀口全丢掉） */
   resetChunkEdits() {
-    const fileName = this.state.fileName
-    if (editCount(this.editLog()) === 0) return
-    this.cal.clearEdits(fileName)
-    this.cal.persist(fileName)
-    this.rederive()
+    this.edits.reset()
   }
 
 
@@ -447,72 +392,22 @@ export class SessionStore {
    * 试录几秒并回放，只为听音色/排查发闷，不落盘、不占当前块的录音。
    */
   async testMic(ms = 2500): Promise<void> {
-    if (this.state.recording || this.state.status !== 'ready') return
-    this.abortCycle()
-    this.deps.player.pause()
-    try {
-      await this.deps.recorder.start()
-    } catch (e) {
-      this.set({ error: e instanceof Error ? e.message : String(e) })
-      return
-    }
-    this.set({ recording: true, level: 0 })
-    await sleep(ms)
-    const t = await this.deps.recorder.stop()
-    this.set({ recording: false, level: 0 })
-    if (t.durationSec < 0.2) return
-    await this.playTake({
-      id: crypto.randomUUID(),
-      fileName: this.state.fileName,
-      chunkIndex: -1,
-      mimeType: t.mimeType,
-      durationSec: t.durationSec,
-      speechFrom: t.speechFrom,
-      speechTo: t.speechTo,
-      createdAt: Date.now(),
-      blob: t.blob,
-    })
+    await this.rec.test(ms)
   }
 
   // ---- 导航 ----
 
-  /**
-   * 只改当前块，不播。列表里点某一行用它 ——
-   * 点一下未必是想听，可能只是想看看这块的文字和时间。
-   */
+  /** 只改当前块，不播（点列表某一行的行为，规则在 playbackController）。 */
   select(index: number) {
-    if (index < 0 || index >= this.state.chunks.length) return
-    this.stopAb()
-    // 换块了：上次的暂停位置不算数，正在跑的那一轮也别继续了
-    if (this.state.cycleStep !== 'idle') this.abortCycle()
-    this.set({ current: index, pausedChunk: null })
-  }
-
-  /**
-   * 切块并直接跑「空格键那一套」。上一块/下一块用它。
-   * 挪过去就当你按了空格：没开连续跟读就是播标准音，开了就跑一整圈。
-   * 这样手动按 ↓ 和按空格是同一个入口，不会有两套行为。
-   */
-  private async selectAndPlay(index: number): Promise<void> {
-    if (index < 0 || index >= this.state.chunks.length) return
-    if (index === this.state.current) return   // 已经在边界上，别重放
-    this.select(index)
-    // 录音时不能放参考音，会被麦克风录进去
-    if (this.state.recording) return
-    // 上一块可能还在播：先停干净，免得空格那条路看到 playing=true 反而去暂停
-    if (this.state.playing) {
-      this.deps.player.pause()
-      this.set({ playing: false })
-    }
-    await this.toggleChunkPlay()
+    this.play.select(index)
   }
 
   next() {
-    void this.selectAndPlay(this.state.current + 1)
+    this.play.next()
   }
 
   prev() {
-    void this.selectAndPlay(this.state.current - 1)
+    this.play.prev()
   }
 
   private chunk(): Chunk | null {
@@ -522,60 +417,31 @@ export class SessionStore {
   // ---- 播放 ----
 
   async playChunk(): Promise<void> {
-    const c = this.chunk()
-    if (!c) return
-    this.stopAb()
-    // 暂停过（而且是同一块）就接着播，否则从头 —— 否则「暂停再播」等于重播
-    const p = this.deps.player.position
-    const resumable =
-      this.state.pausedChunk === c.index && p > c.start + 0.05 && p < c.end - 0.15
-    this.set({ playing: true, pausedChunk: null })
-    try {
-      await this.deps.player.playRange(resumable ? p : c.start, c.end, this.state.rate)
-    } finally {
-      // 播完（或在别处被 pause 掉）都要把状态收回来，不然按钮一直显示「暂停」
-      this.set({ playing: false })
-    }
+    await this.play.playChunk()
   }
 
-  /**
-   * 空格键：没在播就播，在播就暂停。
-   * 暂停会记住位置和是哪一块，所以再按一下是**接着**播，不是从头重来。
-   */
+  /** 空格键：没在播就播，在播就暂停（连续跟读开着时整轮交给 CycleRunner） */
   async toggleChunkPlay(): Promise<void> {
-    if (this.state.autoCycle) {
-      await this.runAutoCycle()
-      return
-    }
-    if (this.state.playing) {
-      this.deps.player.pause()
-      this.set({ playing: false, pausedChunk: this.state.current })
-      return
-    }
-    await this.playChunk()
+    await this.play.toggleChunkPlay()
   }
 
   async playWhole(): Promise<void> {
-    this.stopAb()
-    // 整篇连播会把位置带到别处，之前那个「暂停点」就不再是暂停点了
-    this.set({ pausedChunk: null })
-    await this.deps.player.playWhole(this.state.rate)
+    await this.play.playWhole()
   }
 
   /** 试听任意区间（波形刀口定位用），不碰当前块和播放状态 */
   auditionRange(start: number, end: number): Promise<void> {
-    this.deps.player.pause()
-    return this.deps.player.playRange(start, end, this.state.rate)
+    return this.play.auditionRange(start, end)
   }
 
   /** 停掉试听 */
   stopPreview(): void {
-    this.deps.player.pause()
+    this.play.stopPreview()
   }
 
   /** 参考音当前播到哪一秒（波形面板画进度线用） */
   playbackPosition(): number {
-    return this.deps.player.position
+    return this.play.playbackPosition()
   }
 
   // ---- 连续跟读（可选） ----
@@ -604,79 +470,12 @@ export class SessionStore {
   // ---- 录音 ----
 
   async startRecording(): Promise<void> {
-    if (this.state.recording || !this.chunk()) return
-    this.deps.player.pause()
-    this.stopAb()
-    try {
-      await this.deps.recorder.start()
-      this.noiseFloor = NOISE_FLOOR_INIT
-      this.recPeak = 0
-      this.level.resetThrottle() // 让第一帧电平立刻进 state
-      this.set({ recording: true })
-    } catch (e) {
-      this.set({ error: e instanceof Error ? e.message : String(e) })
-    }
+    await this.rec.start()
   }
 
   /** 停止并保存；返回存下的那条（太短被丢掉时返回 null） */
   async stopRecording(): Promise<Take | null> {
-    if (!this.state.recording) return null
-    const c = this.chunk()
-    this.set({ recording: false, level: 0 })
-    this.level.flush(0) // 电平归零 + 清掉可能还挂着的节流定时器
-    let take: Awaited<ReturnType<RecorderPort['stop']>>
-    try {
-      take = await this.deps.recorder.stop()
-    } catch (e) {
-      this.set({ error: `停止录音失败：${e instanceof Error ? e.message : String(e)}` })
-      return null
-    }
-    if (take.durationSec < 0.2) return null // 手滑了
-
-    // 峰值太低多半是麦克风增益没调起来：提示去系统里调大（别让它一直又小又难判定）
-    this.set({ lowMic: this.recPeak < 0.03 })
-
-    const record: Take = {
-      id: crypto.randomUUID(),
-      fileName: this.state.fileName,
-      chunkIndex: this.state.current,
-      // 记下参考音的时间区间：块号会变（切块档位/手动撕开），时间不会
-      startSec: c?.start,
-      endSec: c?.end,
-      mimeType: take.mimeType,
-      durationSec: take.durationSec,
-      // 首尾静音区间：录音器解码时算好的，回放只放这段（老录音没有，播放器现算）
-      speechFrom: take.speechFrom,
-      speechTo: take.speechTo,
-      createdAt: Date.now(),
-      blob: take.blob,
-    }
-    // 先存新的，成功了再删旧的：存储满 / 隐私模式下 save 失败时，旧录音还在。
-    try {
-      await this.deps.repo.save(record)
-    } catch (e) {
-      this.set({
-        error: `录音保存失败（存储空间可能已满）：${e instanceof Error ? e.message : String(e)}。旧录音已保留。`,
-      })
-      return null
-    }
-
-    // 旧录音不留：同一块只保留最新的一条，够「复读」用就行，
-    // 不然一遍遍练下来会堆一大堆没用的历史。别的块不动。
-    const stale = this.state.takes.filter((t) => t.chunkIndex === record.chunkIndex)
-    for (const t of stale) {
-      try {
-        await this.deps.repo.remove(t.id)
-      } catch (e) {
-        // 新录音已经落盘，删旧失败只是多占空间，不该让整次录音失败。
-        console.warn('[录音] 删除旧 take 失败', e)
-      }
-    }
-    recordLocalActivity('speak')
-    this.set({
-      takes: [...this.state.takes.filter((t) => t.chunkIndex !== record.chunkIndex), record],
-    })
-    return record
+    return this.rec.stop()
   }
 
   /** 放一条录音（会先把参考音/上一条停掉） */
