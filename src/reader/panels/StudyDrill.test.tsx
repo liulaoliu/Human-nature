@@ -113,3 +113,53 @@ describe('DrillBoard：拼写只判一次', () => {
     expect(screen.queryByText('✘ 不对，再来一次')).toBeNull()
   })
 })
+
+describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
+  const withUsage = vocabItem({
+    id: 'c5',
+    word: 'abandon',
+    lemma: 'abandon',
+    meaning: '放弃',
+    usage: ['abandon ship'],
+    phrases: ['abandon oneself to'],
+  })
+
+  it('写出用法 / 词组任意一条 → onDone 只调一次（用户报「写完搭配退不出去」）', () => {
+    const onDone = vi.fn()
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
+
+    // 拼写 → 选义 → 写搭配
+    const spell = screen.getByPlaceholderText('拼出这个英文单词')
+    fireEvent.change(spell, { target: { value: 'abandon' } })
+    fireEvent.keyDown(spell, { key: 'Enter' })
+
+    const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
+    fireEvent.keyDown(window, { key: String(correctIndex + 1) })
+    expect(onDone).not.toHaveBeenCalled()
+
+    // 词组也行，不必原样抄用法
+    const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
+    fireEvent.change(usageInput, { target: { value: 'Abandon Oneself To' } })
+    fireEvent.keyDown(usageInput, { key: 'Enter' })
+
+    expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('写错留在本步，给出参考搭配', () => {
+    const onDone = vi.fn()
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
+
+    const spell = screen.getByPlaceholderText('拼出这个英文单词')
+    fireEvent.change(spell, { target: { value: 'abandon' } })
+    fireEvent.keyDown(spell, { key: 'Enter' })
+    const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
+    fireEvent.keyDown(window, { key: String(correctIndex + 1) })
+
+    const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
+    fireEvent.change(usageInput, { target: { value: 'abandon the car' } })
+    fireEvent.keyDown(usageInput, { key: 'Enter' })
+
+    expect(onDone).not.toHaveBeenCalled()
+    expect(screen.getByText(/参考：abandon ship/)).toBeTruthy()
+  })
+})

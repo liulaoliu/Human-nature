@@ -465,6 +465,9 @@ export function useStudySession(params: UseStudySessionParams) {
    * 规则在 `core/vocab/drill`：**已经判完停着等「下一词」的卡不锤炼**——
    * 打分都落库了，再考一次也解锁不了什么，但会把「看一眼单词卡」顶掉
    * （选错释义 → 判 again → 这词立刻进重学，点「继续」就会撞上重学分支）。
+   *
+   * `cleared` 兜的是「本卡本轮已经锤炼完」：重学卡的 `relearnRevealed` 一旦摊开就一直为真，
+   * 过完面板会原地重开（2026-10-22 用户报「写完搭配正确也退不出去」）。
    */
   const drillOn = shouldDrill({
     active: !!queue && !!card,
@@ -473,6 +476,7 @@ export function useStudySession(params: UseStudySessionParams) {
     parked: learnGraded || reviewStep.graded || reviewStep.fuzzy,
     timedOut: drillTimedOut,
     relearnRevealed: relearning && revealed,
+    cleared: drillCleared,
   })
 
   /** 面板「认识 / 模糊 / 忘记了」按钮的入口：复习模式走三键状态机，其它模式走原来的评分。 */

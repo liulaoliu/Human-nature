@@ -28,9 +28,17 @@ export interface DrillInput {
   timedOut: boolean
   /** 重学卡已经摊开释义：要先过一道题才算过。 */
   relearnRevealed: boolean
+  /**
+   * 这一卡**本轮已经锤炼过**（全过、解锁了评分）。过完就收工，别再拦。
+   *
+   * 2026-10-22 修的坑：重学卡的 `relearnRevealed` 只看「摊开过释义」，而摊开之后就一直是 true ——
+   * 过完锤炼面板会立刻原地重开，用户写完搭配也退不出去（超时那条有 `!drillCleared` 兜着，
+   * 只有重学这条没有）。所以「过没过」必须由这里兜，而不是让两条触发各自记得。
+   */
+  cleared: boolean
 }
 
 export function shouldDrill(input: DrillInput): boolean {
-  if (!input.active || input.spellMiss || input.learnPhase || input.parked) return false
+  if (!input.active || input.spellMiss || input.learnPhase || input.parked || input.cleared) return false
   return input.timedOut || input.relearnRevealed
 }

@@ -102,4 +102,29 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
     expect(api!.drillOn).toBe(true) // 重学卡摊开 → 先做题才能评分
     unmount()
   })
+
+  it('锤炼做完（clearDrill）就退出去：重学卡摊着也不再原地重开', () => {
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({
+            id: 'x1',
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+          }),
+        ])}
+      />,
+    )
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    act(() => api!.setRevealed(true))
+    expect(api!.drillOn).toBe(true)
+
+    act(() => api!.clearDrill())
+    // ← 回归点：摊开释义的标记还在（`revealed` 仍为 true），但不能因此把面板又拉回来
+    expect(api!.revealed).toBe(true)
+    expect(api!.drillOn).toBe(false)
+    unmount()
+  })
 })
