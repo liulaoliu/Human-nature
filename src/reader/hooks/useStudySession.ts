@@ -12,6 +12,7 @@ import {
   needsMeaningCheck,
   planExtra,
   planRetryForgot,
+  recordLearnPass,
   reviewItem,
   sortItems,
   spellingMatches,
@@ -26,6 +27,7 @@ import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fmtInterval } from '../format'
 import { useStudyCardEdit } from './useStudyCardEdit'
+import { useStudyLearnStep } from './useStudyLearnStep'
 import { useStudyPool, type StudyScope } from './useStudyPool'
 import { useStudyTimers } from './useStudyTimers'
 
@@ -130,6 +132,11 @@ export function useStudySession(params: UseStudySessionParams) {
   const [drillCleared, setDrillCleared] = useState(false)
   /** 本卡刚过释义关却点了「忘记了」：等用户确认按哪个排期（不偷偷改分）。 */
   const [pendingForgot, setPendingForgot] = useState(false)
+  /**
+   * 学习模式「4 条释义」那一关的状态（做题 / 揭示 / 等待下一词）。
+   * 定义在 `resetCardUi` 之后也没关系：换卡时通过这个 ref 调它的 `reset`。
+   */
+  const learnResetRef = useRef<() => void>(() => {})
 
   /** 当前卡：优先取词库最新（评分/编辑后立刻反映），队列快照兜底。 */
   const card =
@@ -185,12 +192,6 @@ export function useStudySession(params: UseStudySessionParams) {
     paused: editOpen,
   })
 
-  /** 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。 */
-  const drillOn =
-    !!queue &&
-    !!card &&
-    !spellMiss &&
-    ((drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared) || (relearning && revealed && !drillCleared))
   const clearDrill = useCallback(() => {
     setDrillCleared(true)
     // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
@@ -209,6 +210,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setMeaningCleared(false)
     setPendingForgot(false)
     setSpellMiss(null)
+    learnResetRef.current()
   }, [])
 
   const resetSession = useCallback(() => {
@@ -388,15 +390,22 @@ export function useStudySession(params: UseStudySessionParams) {
     [library.items, flash, closeQuiz, resetSession],
   )
 
-  /** 真正落库的评分（对外入口是下面的 `grade`，会先处理「忘记确认」）。 */
+  /**
+   * 真正落库的评分（对外入口是下面的 `grade`，会先处理「忘记确认」）。
+   *
+   * `opts.advance = false`：只写库不跳下一张（学习模式判完要停在单词卡等「下一词」）。
+   * `opts.learnPass`：学习模式里把「这次有没有没看答案就选对」一起写进
+   * `ReviewState.meaningPasses`——两次 persist 会互相覆盖，所以必须一次算完。
+   */
   const applyGrade = useCallback(
-    (g: ReviewGrade) => {
+    (g: ReviewGrade, opts?: { advance?: boolean; learnPass?: boolean }) => {
       if (spellMiss) return
       if (!queue) return
       const queued = queue[index]
       if (!queued) return
       const cur = library.items.find((it) => it.id === queued.id) ?? queued
-      const nextLibrary = reviewItem(library, cur.id, g)
+      const reviewed = reviewItem(library, cur.id, g)
+      const nextLibrary = opts?.learnPass == null ? reviewed : recordLearnPass(reviewed, cur.id, opts.learnPass)
       persist(nextLibrary)
       if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
         bumpedRef.current.add(cur.id)
@@ -436,10 +445,39 @@ export function useStudySession(params: UseStudySessionParams) {
       setDrillCleared(false)
       setMeaningCleared(false)
       setPendingForgot(false)
-      setIndex((i) => i + 1)
+      if (opts?.advance !== false) setIndex((i) => i + 1)
     },
     [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, flash, spellMiss],
   )
+
+  /**
+   * 学习模式「4 条中文释义」这一关：做题 → 判定 → 揭示停留 → 进单词卡 → 等「下一词」。
+   *
+   * 判定规则在 `core/vocab/learnStep`，卡片状态机在 `hooks/useStudyLearnStep`；
+   * 这里只负责把它接上：落库仍走 `applyGrade`（`advance: false`——判完要停在单词卡，
+   * 由用户点「下一词」才推进，见 Spec）。
+   */
+  const learn = useStudyLearnStep({
+    mode,
+    card,
+    items: library.items,
+    active: !!queue && !!card,
+    judge: (g, learnPass) => applyGrade(g, { advance: false, learnPass }),
+    showCard: () => setRevealed(true),
+  })
+  learnResetRef.current = learn.reset
+
+  const { learnPhase, learnReveal, learnGraded } = learn
+
+  /** 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。 */
+  const drillOn =
+    !!queue &&
+    !!card &&
+    !spellMiss &&
+    // 学习模式正在做「4 条释义」时不要插进来锤炼：那一步自己就是一次释义考试，
+    // 再叠一遍「强制锤炼」等于同一个词连考两次（锤炼本身完整保留，只是不在这个阶段触发）。
+    !learnPhase &&
+    ((drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared) || (relearning && revealed && !drillCleared))
 
   /**
    * 评分入口：这张卡刚选对释义（释义关 / 锤炼里的选义题）却点「忘记了」，
@@ -557,6 +595,30 @@ export function useStudySession(params: UseStudySessionParams) {
     (e) => {
       if (!queue || editOpen || drillOn || spellMiss || pendingForgot) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      // 学习模式：正在做「4 条释义」时，空格/回车 = 「看答案」（不是直接翻面偷看）
+      if (learnPhase) {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault()
+          learn.revealAnswer()
+        }
+        return
+      }
+      // 揭示答案的停留期间：空格/回车立即进单词卡（打断，不用等满 0.6s）
+      if (learnReveal) {
+        if (e.key === ' ' || e.key === 'Enter') {
+          e.preventDefault()
+          learn.continueNow()
+        }
+        return
+      }
+      // 学习模式判完之后只等「下一词」：不要再让 1/2/3 二次评分
+      if (mode === 'learn' && learnGraded) {
+        if (e.key === ' ' || e.key === 'Enter' || e.key === 'Escape') {
+          e.preventDefault()
+          forward()
+        }
+        return
+      }
       const t = e.target as HTMLElement | null
       const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
       const canGrade = spelling ? checked : revealed
@@ -636,6 +698,15 @@ export function useStudySession(params: UseStudySessionParams) {
     newCount,
     drillOn,
     meaningGate,
+    /** 学习模式：这一卡正在过「4 条中文释义」这一关（判完才进单词卡）。 */
+    learnPhase,
+    /** 揭示答案后的高亮（正确项 / 选错项；auto = 停留后自动进卡）。 */
+    learnReveal,
+    /** 学习模式：这一卡已经判过，停在单词卡等「下一词」。 */
+    learnGraded,
+    revealLearnAnswer: learn.revealAnswer,
+    answerLearn: learn.answer,
+    continueLearn: learn.continueNow,
     /** 当前卡正在重学（拼错 / 记住过又忘）：从「看词」开始，揭示后强制锤炼。 */
     relearning,
     /** 拼写错误的判定提示；非空时禁止切卡 / 退出，必须先确认。 */

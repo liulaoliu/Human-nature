@@ -16,7 +16,7 @@ import { fmtDue, fmtInterval } from '../format'
 import type { StudyDraft } from '../hooks/useStudyCardEdit'
 import type { StudyScope } from '../hooks/useStudyPool'
 import VocabBlocks from './VocabBlocks'
-import DrillBoard, { MeaningQuiz } from './StudyDrill'
+import DrillBoard, { MeaningQuiz, type MeaningReveal } from './StudyDrill'
 import StudyEditForm from './StudyEditForm'
 import StudyRoundDone from './StudyRoundDone'
 import StudyToolbar from './StudyToolbar'
@@ -66,6 +66,12 @@ export interface StudyPanelProps {
   drillOn: boolean
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
   meaningGate: boolean
+  /** 学习模式：这一卡正在过「4 条中文释义」这一关（判完才进单词卡）。 */
+  learnPhase: boolean
+  /** 学习模式揭示答案后的高亮（正确项浅绿 / 选错项浅红；auto = 停留后自动进卡）。 */
+  learnReveal: MeaningReveal | null
+  /** 学习模式：这一卡已判过，停在单词卡等「下一词」（不再评分）。 */
+  learnGraded: boolean
   /** 刚过释义关却点了「忘记了」：等用户确认按哪个排期（确认前不落库）。 */
   pendingForgot: boolean
   drillAfter: number
@@ -100,6 +106,12 @@ export interface StudyPanelProps {
   onMarkUnknown: () => void
   onDrillCleared: () => void
   onMeaningCleared: () => void
+  /** 学习模式「看答案」：判不认识并高亮正确项。 */
+  onLearnReveal: () => void
+  /** 学习模式选了某一项：判定 + 写库（选错会停在高亮页等「继续」）。 */
+  onLearnPick: (index: number, correct: boolean) => void
+  /** 打断「看答案」的停留，或选错后点「继续」：立刻进单词卡。 */
+  onLearnContinue: () => void
   /** 拼错后确认「判为不认识」，继续下一张（这个词已重排到队尾）。 */
   onAckSpellMiss: () => void
   /** 锤炼里拼错：立即判为不认识（不提供第二次输入）。 */
@@ -139,6 +151,9 @@ export default function StudyPanel({
   canRetryForgot,
   drillOn,
   meaningGate,
+  learnPhase,
+  learnReveal,
+  learnGraded,
   pendingForgot,
   relearning,
   spellMiss,
@@ -171,6 +186,9 @@ export default function StudyPanel({
   onMarkUnknown,
   onDrillCleared,
   onMeaningCleared,
+  onLearnReveal,
+  onLearnPick,
+  onLearnContinue,
   onAckSpellMiss,
   onSpellMiss,
   onRetryForgot,
@@ -182,6 +200,8 @@ export default function StudyPanel({
   const correct = card ? spellingMatches(input, card.word) : false
   /** 规则由 core 判断，这里只负责显示。 */
   const showMeaningGate = !!card && meaningGate
+  /** 学习模式的「4 条释义」页：做题阶段 + 揭示答案后的停留，都停在这一页。 */
+  const learnQuizOn = !!card && (learnPhase || !!learnReveal)
 
   // 自动朗读：每张卡（每个位置）读一次；拼写模式不读（会剧透），但重学卡要读
   const speakRef = useRef(onSpeak)
@@ -251,7 +271,16 @@ export default function StudyPanel({
         </div>
       ) : card ? (
         <>
-          {!drillOn && (showMeaningGate ? (
+          {!drillOn && (learnQuizOn ? (
+            <MeaningQuiz
+              card={card}
+              items={items}
+              onSpeak={onSpeak}
+              onPick={onLearnPick}
+              onReveal={onLearnReveal}
+              reveal={learnReveal}
+            />
+          ) : showMeaningGate ? (
             <MeaningQuiz
               card={card}
               items={items}
@@ -330,16 +359,19 @@ export default function StudyPanel({
                           ))}
                         </span>
                       ) : null}
-                      <button
-                        className="unknown-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          onMarkUnknown()
-                        }}
-                        title="我不认识这个词（标为全新词，稍后重练）"
-                      >
-                        不认识
-                      </button>
+                      {/* 学习模式已经判过了：这里再点「不认识」会二次写库，直接不给 */}
+                      {!(mode === 'learn' && learnGraded) && (
+                        <button
+                          className="unknown-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            onMarkUnknown()
+                          }}
+                          title="我不认识这个词（标为全新词，稍后重练）"
+                        >
+                          不认识
+                        </button>
+                      )}
                     </div>
                     {cleanGloss(card.definition) && (
                       <div className="study-def">
@@ -366,6 +398,23 @@ export default function StudyPanel({
           {/* 超时未评分 → 强制锤炼 */}
           {drillOn ? (
             <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
+          ) : learnQuizOn ? (
+            // 选错后停在释义页：正确项浅绿、你选的那项浅红，点「继续」才进单词卡
+            learnReveal && !learnReveal.auto ? (
+              <div className="bar study-actions">
+                <button className="primary" onClick={onLearnContinue}>
+                  继续（看单词卡）
+                </button>
+              </div>
+            ) : null
+          ) : learnGraded && mode === 'learn' ? (
+            // 学习模式判完了：只等「下一词」，不再显示三档评分（避免二次评分）
+            <div className="bar study-actions">
+              <button className="primary" onClick={onNext}>
+                下一词 <kbd>空格</kbd>
+              </button>
+              {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+            </div>
           ) : showMeaningGate ? null : (
             <>
               {/* 卡内维护：改词形/释义、删误加的词 */}

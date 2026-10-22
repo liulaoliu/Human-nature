@@ -91,6 +91,11 @@ describe('useStudySession：单词之间切换', () => {
 })
 
 describe('useStudySession：标过「不认识」的复习门禁', () => {
+  /**
+   * 用「学过但排期后又忘了」的词（有 due、repetitions 仍是 0）而不是新词：
+   * 新词在学习模式里走「4 条释义」那条路（见下一个 describe），
+   * 只有有学习记录的词才走复习门禁。
+   */
   it('先过选释义；门禁期间 1/空格 不评分，放行后恢复', () => {
     const { unmount } = render(
       <Harness
@@ -101,7 +106,13 @@ describe('useStudySession：标过「不认识」的复习门禁', () => {
             lemma: 'run',
             meaning: '跑',
             tags: ['不认识'],
-            reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0, lapses: 1 },
+            reviewState: {
+              ease: 2.5,
+              due: '2020-01-01T00:00:00.000Z',
+              interval: 0,
+              repetitions: 0,
+              lapses: 1,
+            },
           }),
           vocabItem({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
           vocabItem({ id: 'w3', word: 'say', lemma: 'say', meaning: '说' }),
@@ -109,7 +120,7 @@ describe('useStudySession：标过「不认识」的复习门禁', () => {
         ])}
       />,
     )
-    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
     expect(api!.card?.id).toBe('w1')
     expect(api!.meaningGate).toBe(true)
 
@@ -122,6 +133,84 @@ describe('useStudySession：标过「不认识」的复习门禁', () => {
     expect(api!.meaningGate).toBe(false)
     fireEvent.keyDown(window, { key: ' ' })
     expect(api!.revealed).toBe(true)
+    unmount()
+  })
+})
+
+describe('useStudySession：学习模式的「4 条释义」', () => {
+  /** 4 个不同释义：够出「正确 + 3 干扰项」。 */
+  const freshLib = () =>
+    lib([
+      vocabItem({ id: 'n1', word: 'run', lemma: 'run', meaning: '跑' }),
+      vocabItem({ id: 'n2', word: 'walk', lemma: 'walk', meaning: '走' }),
+      vocabItem({ id: 'n3', word: 'say', lemma: 'say', meaning: '说' }),
+      vocabItem({ id: 'n4', word: 'see', lemma: 'see', meaning: '看' }),
+    ])
+
+  it('新词先出 4 条释义；看答案判不认识，停在单词卡等「下一词」（不自动跳）', () => {
+    const seen: VocabLibrary[] = []
+    const { unmount } = render(<Harness library={freshLib()} onPersist={(l) => seen.push(l)} />)
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    expect(api!.learnPhase).toBe(true)
+
+    act(() => api!.revealLearnAnswer())
+    // 判完不跳下一张：Spec 要求停住等用户点「下一词」
+    expect(api!.index).toBe(0)
+    expect(api!.learnGraded).toBe(true)
+    const saved = seen.at(-1)!.items.find((it) => it.id === 'n1')!
+    expect(saved.reviewState.relearn).toBe(1) // again → 进入重学
+    expect(saved.reviewState.meaningPasses).toBeUndefined() // 判不认识 → 选对次数归零（0 不写字段）
+
+    act(() => api!.continueLearn())
+    expect(api!.revealed).toBe(true) // 打断停留 → 进单词卡
+    unmount()
+  })
+
+  it('选对：首次判模糊并记一次「没看答案就选对」，直接进单词卡', () => {
+    const seen: VocabLibrary[] = []
+    const { unmount } = render(<Harness library={freshLib()} onPersist={(l) => seen.push(l)} />)
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.answerLearn(2, true))
+    const saved = seen.at(-1)!.items.find((it) => it.id === 'n1')!
+    expect(saved.reviewState.repetitions).toBe(1) // hard：不算「真认识」
+    expect(saved.reviewState.meaningPasses).toBe(1)
+    expect(api!.revealed).toBe(true)
+    expect(api!.index).toBe(0) // 仍要等「下一词」
+    unmount()
+  })
+
+  it('选错：判不认识，停在释义页等「继续」（不自动进单词卡）', () => {
+    const { unmount } = render(<Harness library={freshLib()} />)
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.answerLearn(1, false))
+    expect(api!.learnReveal?.wrong).toBe(1)
+    expect(api!.learnReveal?.auto).toBe(false)
+    expect(api!.revealed).toBe(false)
+    act(() => api!.continueLearn())
+    expect(api!.revealed).toBe(true)
+    unmount()
+  })
+
+  it('判完之后空格 = 下一词，不再二次评分', () => {
+    const { unmount } = render(<Harness library={freshLib()} />)
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.answerLearn(0, true))
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(api!.index).toBe(1)
+    unmount()
+  })
+
+  it('词库不足 4 个不同释义：不出 4 选项，退回普通卡流程', () => {
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({ id: 'a', word: 'aa', lemma: 'aa', meaning: '甲' }),
+          vocabItem({ id: 'b', word: 'bb', lemma: 'bb', meaning: '乙' }),
+        ])}
+      />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    expect(api!.learnPhase).toBe(false)
     unmount()
   })
 })

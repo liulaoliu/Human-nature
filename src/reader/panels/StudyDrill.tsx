@@ -1,18 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import { useHotkeys } from '../useHotkeys'
-import { canQuizMeaning, displayMeaning, normalizePos } from '../../core/vocab'
+import { canQuizMeaning, displayMeaning, meaningOptions, normalizePos } from '../../core/vocab'
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 /** 去掉首尾标点，便于搭配比对。 */
 const stripPunct = (s: string) => s.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '').trim()
-
-/** 稳定哈希（用卡 id 做种子，保证同一卡的选项顺序不乱跳）。 */
-function hash(s: string): number {
-  let h = 2166136261
-  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619)
-  return h >>> 0
-}
 
 interface DrillStep {
   kind: 'spell' | 'meaning' | 'usage'
@@ -32,37 +25,43 @@ function collocationsOf(card: VocabItem): string[] {
   return [...card.usage, ...(card.phrases ?? [])]
 }
 
-/** 选词义：正确释义 + 3 个来自其它词的释义（确定性排序）。 */
-function meaningOptions(card: VocabItem, items: VocabItem[]): { text: string; correct: boolean }[] {
-  const correct = displayMeaning(card)
-  const pool = [...new Set(items.filter((it) => it.id !== card.id).map((it) => displayMeaning(it)).filter(Boolean))]
-    .filter((m) => m !== correct)
-  const picked = pool
-    .map((m) => ({ m, k: hash(card.id + '|' + m) }))
-    .sort((a, b) => a.k - b.k)
-    .slice(0, 3)
-    .map((x) => x.m)
-  return [correct, ...picked]
-    .map((t) => ({ t, correct: t === correct, k: hash(card.id + '#' + t) }))
-    .sort((a, b) => a.k - b.k)
-    .map(({ t, correct: c }) => ({ text: t, correct: c }))
+/** 揭示答案时的高亮：正确项浅绿（`wrong` 非空时它同时浅红）。 */
+export interface MeaningReveal {
+  /** 正确项下标 */
+  correct: number
+  /** 你选错的那项下标；null = 没选（点了「看答案」） */
+  wrong: number | null
+  /** true = 停留一下会自动进入下一步（看答案）；false = 等用户点「继续」（选错）。 */
+  auto: boolean
 }
 
-/** 词库够不够出 4 个释义选项（正确 + 3 个干扰项）。 */
 /**
- * 「选中文释义」独立组件：强制锤炼和「不认识」复习加练共用。
- * 选对才回调 onPass；选错只标红当前项，不泄露正确答案。
+ * 「选中文释义」独立组件：强制锤炼、「不认识」复习加练、学习模式共用。
+ *
+ * 默认（复习 / 锤炼）：选对才回调 `onPass`；选错只标红当前项，不泄露正确答案。
+ * 学习模式（给了 `onPick` / `onReveal`）：选对选错都交给外层判定（外层负责写 SRS），
+ * 并按 `reveal` 把正确项标浅绿、你选错的那项标浅红。
  */
 export function MeaningQuiz({
   card,
   items,
   onSpeak,
   onPass,
+  onPick,
+  onReveal,
+  reveal = null,
 }: {
   card: VocabItem
   items: VocabItem[]
   onSpeak?: (text: string) => void
-  onPass: () => void
+  /** 选对时回调。学习模式用 `onPick` 接管，不传这个。 */
+  onPass?: () => void
+  /** 给了它：选对 / 选错都回调（学习模式；外层负责判定与写库）。 */
+  onPick?: (index: number, correct: boolean) => void
+  /** 给了它：底部多一个「看答案」键（学习模式）。 */
+  onReveal?: () => void
+  /** 揭示答案后的高亮；非空时锁住选项，不能再改答案。 */
+  reveal?: MeaningReveal | null
 }) {
   const options = useMemo(() => meaningOptions(card, items), [card, items])
   /** -1 = 还没按 A/D，不预选，避免泄露答案。 */
@@ -74,9 +73,15 @@ export function MeaningQuiz({
     setWrongPick(null)
   }, [card.id])
 
+  const locked = !!reveal
+
   const pick = (o: { text: string; correct: boolean } | undefined, i: number) => {
-    if (!o) return
-    if (o.correct) onPass()
+    if (!o || locked) return
+    if (onPick) {
+      onPick(i, o.correct)
+      return
+    }
+    if (o.correct) onPass?.()
     else setWrongPick(i)
   }
 
@@ -84,6 +89,7 @@ export function MeaningQuiz({
   useHotkeys(
     (e) => {
       if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (locked) return
       const k = e.key.toLowerCase()
       const n = Number(k)
       if (n >= 1 && n <= options.length) {
@@ -122,18 +128,33 @@ export function MeaningQuiz({
           )}
         </div>
         <div className="quiz-options">
-          {options.map((o, i) => (
-            <button
-              key={o.text}
-              className={`${i === wrongPick ? 'wrong-choice ' : ''}${i === focus ? 'focused' : ''}`}
-              onClick={() => pick(o, i)}
-              title={`按 ${i + 1} 选择`}
-            >
-              <kbd>{i + 1}</kbd> {o.text}
-            </button>
-          ))}
+          {options.map((o, i) => {
+            const isWrong = i === wrongPick || (!!reveal && reveal.wrong === i)
+            const isRight = !!reveal && reveal.correct === i
+            return (
+              <button
+                key={o.text}
+                className={`${isWrong ? 'wrong-choice ' : ''}${isRight ? 'right-pick ' : ''}${i === focus ? 'focused' : ''}`}
+                onClick={() => pick(o, i)}
+                title={`按 ${i + 1} 选择`}
+              >
+                <kbd>{i + 1}</kbd> {o.text}
+              </button>
+            )
+          })}
         </div>
-        {wrongPick != null && <div className="study-result bad">✘ 不对，再来一次</div>}
+        {reveal ? (
+          <div className="study-result bad">
+            {reveal.wrong == null ? '看了答案 · 正确的是浅绿那条' : '✘ 选错了 · 正确的是浅绿那条'}
+          </div>
+        ) : (
+          wrongPick != null && <div className="study-result bad">✘ 不对，再来一次</div>
+        )}
+        {onReveal && !reveal && (
+          <button className="reveal-btn" onClick={onReveal} title="想不起来就点它：这一下会判为「不认识」">
+            看答案
+          </button>
+        )}
         <div className="muted drill-keys">1–4 选择 · A / D 切换 · 回车确认</div>
       </div>
     </div>

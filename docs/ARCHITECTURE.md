@@ -78,6 +78,8 @@ types ← core ← adapters ← reader
 | 单词「学过没有 / 要不要复习」 | `src/core/vocab/review.ts` 的 `isFresh` / `hasReviewHistory` / `isRelearning` | 别再看 `repetitions === 0`：答错后它也会归零；新词 = 从未排期（interval 0 + due null + 非重学） |
 | 拼写判错 → 判为「不认识」 | `src/core/vocab/spelling.ts`（`spellingMatches` / `markSpellingMiss`） | 一次判定：SRS again + `relearn + 1` + 「不认识」标签；会话负责重排与锁导航，视图不算规则 |
 | 刚过释义关却点「忘记了」 | `src/core/vocab/review.ts` 的 `needsForgotConfirm` | 先确认再落库；确认前不写 SRS、评分快捷键停用；确认后仍按 again，**不偷偷降成 hard** |
+| 背单词「学习新词」这一步怎么判 | `src/core/vocab/learnStep.ts` | 看答案 / 选错 = 不认识（again），首次选对 = 模糊（hard，防蒙对），第二次起 = 认识（good）；词库不足 4 个释义时 `fallback` 退回普通卡。停留时长 `LEARN_REVEAL_HOLD_MS`（可打断）。选对次数记在 `ReviewState.meaningPasses`（跨轮持久，判不认识归零） |
+| 背单词「选中文释义」的四个选项 | `src/core/vocab/meaningOptions.ts` | 正确 + 3 干扰项，卡 id 做种子的稳定哈希定序；`correctOptionIndex` 供「揭示答案时给正确项上浅绿」用。视图与会话共用这一份，不许各算一套 |
 
 ## 三、两条硬约定（都是踩过坑换来的）
 

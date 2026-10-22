@@ -261,6 +261,19 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   速读那边 `core/speedRead` 的 `speedCursorKey` 补 2 条（标识相同、正文不同 → 键不同），`useSpeedReadSession` 补 5 条
   （停在最后一句退出清零 / 读完退出清零 / 读到中间退出保留 / 同标识换正文从第一句开始且成绩清空 / 换回原篇回原位）。
   这条 hook 用「假滚动元素」测：jsdom 不做布局，`scrollHeight` 恒为 0，会被「可滚区间 0」的守卫挡掉。
+- **背单词「学习新词」四选项（2026-10-22 第一批）**：`core/vocab/learnStep`（13：看答案 / 选错 = again /
+  首次选对 = hard / 第二次起 = good / 词库不足 fallback / 停留常量 > 0 / 次数脏值按 0 /
+  判不认识归零 / 写库只改一条且 0 时摘字段 / 次数没变不白写 / 找不到词原样返回）、
+  `core/vocab/meaningOptions`（6：4 条且只有一个正确 / 干扰项不含正确释义 / 顺序稳定 /
+  正确项下标 / 词库不足返回空 + -1 / 无释义不出题）、`useStudySession` 补 5 条
+  （看答案判不认识且不自动跳 / 选对记次数并进单词卡 / 选错停住等「继续」/ 判完空格 = 下一词不二次评分 /
+  词库不足不出题）、`hooks/useStudyLearnStep`（8：学习模式新词才出关 / 复习模式与重学词不抢 /
+  词库不足或没在背不出题 / 看答案停留可打断（fake timers）/ 选对直接进卡 / 选错等「继续」/
+  判过不再重复判定 / reset 清定时器）。
+  **改了一条旧用例**：原「复习门禁」用的是新词，现在新词在学习模式走四选项，
+  门禁用例改用「学过但排期后又忘」（有 due、repetitions 0）的词 + `mode: 'review'`。
+  **拆了 hook**：`useStudySession` 到 800 行上限被门禁拦住，学习模式这一关的状态机
+  拆到 `hooks/useStudyLearnStep`（落库仍回调主 hook 的 `applyGrade`，避免两个写入方）。
 - **顶栏行数（2026-10-20 第五批）**：`core/toolbarRows`（8：默认 4 行 / 脏值回 4 / 字符串与数字都认 /
   每档行数等于档位 / 四组不丢不重不乱序 / 3、2 档的具体并法 / 统计组恒在最后一行 / 类名拼法）、
   `useReaderPrefs` 补 1 条（默认 4 行 / 改档存成字符串 `reader:toolbarRows` / 怪值回 4）、

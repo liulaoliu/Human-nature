@@ -104,6 +104,9 @@ export default function SessionHost({
           canRetryForgot={study.api.canRetryForgot}
           drillOn={study.api.drillOn}
           meaningGate={study.api.meaningGate}
+          learnPhase={study.api.learnPhase}
+          learnReveal={study.api.learnReveal}
+          learnGraded={study.api.learnGraded}
           pendingForgot={study.api.pendingForgot}
           relearning={study.api.relearning}
           spellMiss={study.api.spellMiss}
@@ -147,6 +150,9 @@ export default function SessionHost({
           onMarkUnknown={study.api.markUnknown}
           onDrillCleared={study.api.clearDrill}
           onMeaningCleared={study.api.clearMeaningGate}
+          onLearnReveal={study.api.revealLearnAnswer}
+          onLearnPick={study.api.answerLearn}
+          onLearnContinue={study.api.continueLearn}
           onSpellMiss={study.api.applySpellingMiss}
           onAckSpellMiss={study.api.ackSpellMiss}
           onRetryForgot={study.api.retryForgot}

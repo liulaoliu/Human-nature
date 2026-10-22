@@ -9,6 +9,8 @@
  *   - `review.ts`：SM-2 复习排期 / 重学阶梯 / 背单词队列
  *   - `extra.ts`：忘记 / 模糊的加练与「重练忘记的」出场账本（每轮次数上限）
  *   - `spelling.ts`：拼写判定（错一次即「不认识」并进入重学）
+ *   - `meaningOptions.ts`：选中文释义的四个选项与稳定顺序（视图与会话共用）
+ *   - `learnStep.ts`：学习模式「看答案 / 选对 / 选错」的判定与「选对次数」账本
  *
  * 外部统一从这里 import，避免各自记子模块路径；纯函数，不碰界面、不碰 IndexedDB。
  * 存储层（IndexedDB/SQLite）在 adapters/，界面在 reader/ 与 ui/。
@@ -21,3 +23,5 @@ export * from './vocab/library'
 export * from './vocab/review'
 export * from './vocab/extra'
 export * from './vocab/spelling'
+export * from './vocab/meaningOptions'
+export * from './vocab/learnStep'

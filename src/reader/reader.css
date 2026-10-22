@@ -872,6 +872,14 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 .drill .quiz-options { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
 .drill .quiz-options button.focused { border-color: var(--accent); box-shadow: var(--ring); }
 .drill .quiz-options button.wrong-choice { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255, 90, 82, 0.25); }
+/* 学习模式揭示答案：正确项浅绿、你选错的那项浅红（Spec：看答案 / 选错都判不认识） */
+.drill .quiz-options button.right-pick {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(53, 201, 138, 0.25);
+  background: rgba(53, 201, 138, 0.12);
+}
+.drill .quiz-options button.wrong-choice { background: rgba(255, 90, 82, 0.12); }
+.drill .reveal-btn { margin-top: 4px; }
 .drill-keys { font-size: 12px; margin-top: 2px; }
 .drill .study-result.bad { margin-top: 4px; }
 .study-done { text-align: center; padding: 40px 0; }
