@@ -1,5 +1,4 @@
 import { createHash } from 'node:crypto'
-import { spawn, spawnSync } from 'node:child_process'
 import {
   createReadStream,
   existsSync,
@@ -9,8 +8,16 @@ import {
   statSync,
   unlinkSync,
 } from 'node:fs'
-import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
+import {
+  LOCAL_PREFIX,
+  PIPER_VOICES,
+  SAPI_PREFIX,
+  listLocalVoices,
+  listSapiVoices,
+  synthPiper,
+  synthSapi,
+} from './tts-local.mjs'
 
 /**
  * TTS 共享核心（dev 走 Vite 插件，static 走 httpApp.js）。三个引擎：
@@ -30,8 +37,6 @@ import { dirname, join } from 'node:path'
 export const DEFAULT_VOICE = 'en-US-AriaNeural'
 
 const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/
-const SAPI_PREFIX = 'sapi:'
-const LOCAL_PREFIX = 'local:'
 const MAX_TEXT = 600
 const MAX_CONCURRENT = 2
 const SYNTH_TIMEOUT_MS = 20000
@@ -42,37 +47,6 @@ const EDGE_RETRY_MS = 20000
 /** Piper 失败后先降级多久，再回头重试 Piper。 */
 const PIPER_RETRY_MS = 60000
 
-/** Piper 离线神经音色；只有模型文件存在时才出现在下拉里。 */
-const PIPER_VOICES = [
-  {
-    id: 'local:piper-us-lessac',
-    name: 'Piper 美音 Lessac',
-    model: 'en_US-lessac-medium',
-    gender: 'Female',
-    lang: 'en-US',
-  },
-  {
-    id: 'local:piper-us-ryan',
-    name: 'Piper 美音 Ryan（高清）',
-    model: 'en_US-ryan-high',
-    gender: 'Male',
-    lang: 'en-US',
-  },
-  {
-    id: 'local:piper-gb-cori',
-    name: 'Piper 英音 Cori（高清）',
-    model: 'en_GB-cori-high',
-    gender: 'Female',
-    lang: 'en-GB',
-  },
-  {
-    id: 'local:piper-gb-northern',
-    name: 'Piper 英音 Northern',
-    model: 'en_GB-northern_english_male-medium',
-    gender: 'Male',
-    lang: 'en-GB',
-  },
-]
 
 const LOCAL_VOICE_MAP = new Map(
   PIPER_VOICES.map((v) => [v.id, { ...v, kind: 'piper' }]),
@@ -152,179 +126,7 @@ async function synthEdge(text, voice, outPath) {
   await tts.ttsPromise(text, outPath)
 }
 
-// ---- SAPI（离线，Windows 系统语音） ----
-const SAPI_SCRIPT = `
-$ErrorActionPreference = 'Stop'
-Add-Type -AssemblyName System.Speech
-$s = New-Object System.Speech.Synthesis.SpeechSynthesizer
-if ($env:TTS_VOICE) { try { $s.SelectVoice($env:TTS_VOICE) } catch {} }
-$s.SetOutputToWaveFile($env:TTS_OUT)
-$list = New-Object System.Collections.ArrayList
-$sb = { param($sender, $e) [void]$list.Add([pscustomobject]@{ t = $e.Text; ms = [int]$e.AudioPosition.TotalMilliseconds }) }
-$s.add_SpeakProgress($sb)
-$txt = [Console]::In.ReadToEnd()
-$s.Speak($txt)
-$s.remove_SpeakProgress($sb)
-$s.Dispose()
-if ($env:TTS_WORDS) {
-  $totalMs = 0
-  try {
-    $b = [System.IO.File]::ReadAllBytes($env:TTS_OUT)
-    if ($b.Length -gt 44) {
-      $br = [BitConverter]::ToInt32($b, 28)
-      $ds = [BitConverter]::ToInt32($b, 40)
-      if ($br -gt 0) { $totalMs = [int](($ds / $br) * 1000) }
-    }
-  } catch {}
-  $parts = @()
-  for ($i = 0; $i -lt $list.Count; $i++) {
-    $start = $list[$i].ms
-    if ($i + 1 -lt $list.Count) { $end = $list[$i + 1].ms }
-    elseif ($totalMs -gt $start) { $end = $totalMs }
-    else { $end = $start + 300 }
-    $parts += [pscustomobject]@{ part = $list[$i].t; start = $start; end = $end }
-  }
-  [System.IO.File]::WriteAllText($env:TTS_WORDS, (ConvertTo-Json -InputObject $parts -Compress))
-}
-`.trim()
 
-function synthSapi(text, voiceName, outWav, outWords) {
-  return new Promise((resolve, reject) => {
-    if (process.platform !== 'win32') {
-      reject(new Error('sapi only on Windows'))
-      return
-    }
-    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', SAPI_SCRIPT], {
-      env: { ...process.env, TTS_VOICE: voiceName, TTS_OUT: outWav, TTS_WORDS: outWords || '' },
-      stdio: ['pipe', 'ignore', 'pipe'],
-    })
-    let err = ''
-    ps.stderr.on('data', (d) => {
-      err += String(d)
-    })
-    ps.on('error', reject)
-    ps.on('close', (code) => {
-      try {
-        if (code === 0 && existsSync(outWav) && statSync(outWav).size > 44) resolve()
-        else reject(new Error(`sapi exit ${code}: ${err.slice(0, 200)}`))
-      } catch (e) {
-        reject(e)
-      }
-    })
-    ps.stdin.write(text)
-    ps.stdin.end()
-  })
-}
-
-let sapiCache = null
-function listSapiVoices() {
-  if (sapiCache) return Promise.resolve(sapiCache)
-  if (process.platform !== 'win32') {
-    sapiCache = []
-    return Promise.resolve([])
-  }
-  return new Promise((resolve) => {
-    const script =
-      'Add-Type -AssemblyName System.Speech; ' +
-      '(New-Object System.Speech.Synthesis.SpeechSynthesizer).GetInstalledVoices() | ' +
-      'ForEach-Object { $i=$_.VoiceInfo; "$($i.Name)`t$($i.Gender)`t$($i.Culture)" }'
-    const ps = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-    let out = ''
-    ps.stdout.on('data', (d) => {
-      out += String(d)
-    })
-    ps.on('error', () => {
-      sapiCache = []
-      resolve([])
-    })
-    ps.on('close', () => {
-      const voices = out
-        .split(/\r?\n/)
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((l) => {
-          const [name, gender, lang] = l.split('\t')
-          return { id: `${SAPI_PREFIX}${name}`, name, gender: gender || '', lang: lang || '' }
-        })
-      sapiCache = voices
-      resolve(voices)
-    })
-  })
-}
-
-// ---- local（离线，Piper） ----
-let piperBin
-/** 找 Piper：环境变量 → PATH → 本机安装目录。 */
-function findPiper() {
-  if (piperBin !== undefined) return piperBin
-  const candidates = [
-    process.env.PIPER_BIN,
-    'piper',
-    join(homedir(), '.local/opt/piper/piper'),
-    '/opt/piper/piper',
-    '/usr/local/bin/piper',
-    '/usr/bin/piper',
-  ].filter(Boolean)
-  for (const bin of candidates) {
-    try {
-      const r = spawnSync(bin, ['--help'], { stdio: 'ignore', timeout: 2000 })
-      if (r.status === 0) {
-        piperBin = bin
-        return bin
-      }
-    } catch {
-      // 试下一个
-    }
-  }
-  piperBin = null
-  return null
-}
-
-/** Piper 模型目录：环境变量 → 二进制同级的 voices → 常见共享目录。 */
-function piperVoicesDir() {
-  const bin = findPiper()
-  const binDir = bin && bin.includes('/') ? dirname(bin) : ''
-  const candidates = [
-    process.env.PIPER_VOICES_DIR,
-    binDir ? join(binDir, 'voices') : '',
-    join(homedir(), '.local/share/piper-voices'),
-    '/usr/local/share/piper-voices',
-    '/usr/share/piper-voices',
-    '/opt/piper/voices',
-  ].filter(Boolean)
-  for (const d of candidates) {
-    if (existsSync(d)) return d
-  }
-  return ''
-}
-
-function piperModelPath(model) {
-  const dir = piperVoicesDir()
-  if (!dir) return null
-  const path = join(dir, `${model}.onnx`)
-  return existsSync(path) && existsSync(`${path}.json`) ? path : null
-}
-
-let piperCache = null
-/** 已安装模型的 Piper 音色；模型不存在就不显示。 */
-function listPiperVoices() {
-  if (piperCache) return piperCache
-  if (!findPiper()) {
-    piperCache = []
-    return piperCache
-  }
-  piperCache = PIPER_VOICES.filter((v) => piperModelPath(v.model)).map(
-    ({ id, name, gender, lang }) => ({ id, name, gender, lang }),
-  )
-  return piperCache
-}
-
-/** 顶栏下拉的离线音色：只有 Piper。 */
-function listLocalVoices() {
-  return listPiperVoices()
-}
 
 /** Edge 音色 → 本地口音（美式/英式）。 */
 export function edgeLangFor(voice) {
@@ -395,34 +197,6 @@ function fallbackFileFor(target, file) {
   return v?.kind === 'piper' ? `${file}.fallback.wav` : null
 }
 
-function synthPiper(text, model, outWav) {
-  return new Promise((resolve, reject) => {
-    const bin = findPiper()
-    const modelPath = piperModelPath(model)
-    if (!bin || !modelPath) {
-      reject(new Error('piper not installed'))
-      return
-    }
-    const ps = spawn(bin, ['--model', modelPath, '--output_file', outWav, '--quiet'], {
-      stdio: ['pipe', 'ignore', 'pipe'],
-    })
-    let err = ''
-    ps.stderr.on('data', (d) => {
-      err += String(d)
-    })
-    ps.on('error', reject)
-    ps.on('close', (code) => {
-      try {
-        if (code === 0 && existsSync(outWav) && statSync(outWav).size > 44) resolve()
-        else reject(new Error(`piper exit ${code}: ${err.slice(0, 200)}`))
-      } catch (e) {
-        reject(e)
-      }
-    })
-    ps.stdin.write(text)
-    ps.stdin.end()
-  })
-}
 
 // ---- 通用合成到文件 ----
 async function synthOnce(text, target, outPath, wordsPath) {
