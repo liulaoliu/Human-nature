@@ -81,6 +81,12 @@ export interface StudyPanelProps {
   learnReveal: MeaningReveal | null
   /** 学习模式：这一卡已判过，停在单词卡等「下一词」（不再评分）。 */
   learnGraded: boolean
+  /** 复习模式：三键直接可点（看见单词就能判，不用先翻面）。 */
+  reviewKeys: boolean
+  /** 复习模式：模糊待定中（卡片已摊开，等「下一词」/「记错了」）。 */
+  reviewFuzzy: boolean
+  /** 复习模式：已判过并停卡（忘记 / 记错了），等「下一词」。 */
+  reviewGraded: boolean
   /** 刚过释义关却点了「忘记了」：等用户确认按哪个排期（确认前不落库）。 */
   pendingForgot: boolean
   drillAfter: number
@@ -123,6 +129,10 @@ export interface StudyPanelProps {
   onLearnPick: (index: number, correct: boolean) => void
   /** 打断「看答案」的停留，或选错后点「继续」：立刻进单词卡。 */
   onLearnContinue: () => void
+  /** 复习模式：三键之一（认识 / 模糊 / 忘记了）。 */
+  onReviewAnswer: (grade: ReviewGrade) => void
+  /** 复习模式：模糊摊卡后的出口——「下一词」（认下模糊）/「记错了」（改成不认识）。 */
+  onReviewChoice: (choice: 'next' | 'missed') => void
   /** 拼错后确认「判为不认识」，继续下一张（这个词已重排到队尾）。 */
   onAckSpellMiss: () => void
   /** 锤炼里拼错：立即判为不认识（不提供第二次输入）。 */
@@ -165,6 +175,9 @@ export default function StudyPanel({
   learnPhase,
   learnReveal,
   learnGraded,
+  reviewKeys,
+  reviewFuzzy,
+  reviewGraded,
   pendingForgot,
   relearning,
   spellMiss,
@@ -207,6 +220,8 @@ export default function StudyPanel({
   onLearnReveal,
   onLearnPick,
   onLearnContinue,
+  onReviewAnswer,
+  onReviewChoice,
   onAckSpellMiss,
   onSpellMiss,
   onRetryForgot,
@@ -214,7 +229,9 @@ export default function StudyPanel({
 }: StudyPanelProps) {
   // 重学卡不直接考拼写：先看词、看释义，再进锤炼（否则「从头重学」变成又考一次）
   const spellingFront = spelling && !checked && !relearning
-  const canGrade = spelling ? checked : revealed
+  const reviewMode = mode === 'review'
+  /** 复习模式看见单词就能评分；其它模式仍要「翻面」或「判完拼写」。 */
+  const canGrade = reviewMode ? reviewKeys : spelling ? checked : revealed
   const correct = card ? spellingMatches(input, card.word) : false
   /** 规则由 core 判断，这里只负责显示。 */
   const showMeaningGate = !!card && meaningGate
@@ -322,7 +339,7 @@ export default function StudyPanel({
               }}
             />
           ) : (
-          <div className={'study-card heat-' + heat} onClick={spellingFront ? undefined : onReveal}>
+          <div className={'study-card heat-' + heat} onClick={spellingFront || reviewKeys ? undefined : onReveal}>
             {spellingFront ? (
               <div className="study-prompt">
                 <div className="study-meaning">
@@ -390,17 +407,17 @@ export default function StudyPanel({
                           ))}
                         </span>
                       ) : null}
-                      {/* 学习模式已经判过了：这里再点「不认识」会二次写库，直接不给 */}
-                      {!(mode === 'learn' && learnGraded) && (
+                      {/* 学习模式已经判过 / 复习模式有「记错了」：再给「不认识」等于二次写库 */}
+                      {!(mode === 'learn' && learnGraded) && !reviewMode && (
                         <button
                           className="unknown-btn"
                           onClick={(e) => {
                             e.stopPropagation()
                             onMarkUnknown()
                           }}
-                          title="我不认识这个词（标为全新词，稍后重练）"
+                          title="我不认识这个词（标为全新词，稍后重练）· 快捷键 U"
                         >
-                          不认识
+                          不认识 <kbd>U</kbd>
                         </button>
                       )}
                     </div>
@@ -434,12 +451,31 @@ export default function StudyPanel({
             learnReveal && !learnReveal.auto ? (
               <div className="bar study-actions">
                 <button className="primary" onClick={onLearnContinue}>
-                  继续（看单词卡）
+                  继续（看单词卡） <kbd>空格</kbd>
                 </button>
               </div>
             ) : null
           ) : learnGraded && mode === 'learn' ? (
             // 学习模式判完了：只等「下一词」，不再显示三档评分（避免二次评分）
+            <div className="bar study-actions">
+              <button className="primary" onClick={onNext}>
+                下一词 <kbd>空格</kbd>
+              </button>
+              {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+            </div>
+          ) : reviewFuzzy ? (
+            // 复习模式判了「模糊」：先摊开卡看释义，再决定是认下模糊还是其实不认识
+            <div className="bar study-actions">
+              <button className="primary" onClick={() => onReviewChoice('next')}>
+                下一词 <kbd>空格</kbd>
+              </button>
+              <button className="danger" onClick={() => onReviewChoice('missed')}>
+                记错了 · 其实不认识 <kbd>M</kbd>
+              </button>
+              <span className="muted">看过释义才想起来不认识？点「记错了」，按忘记重排</span>
+            </div>
+          ) : reviewGraded ? (
+            // 复习模式已判「忘记了 / 记错了」：停在卡上看一眼答案，点「下一词」继续
             <div className="bar study-actions">
               <button className="primary" onClick={onNext}>
                 下一词 <kbd>空格</kbd>
@@ -483,19 +519,21 @@ export default function StudyPanel({
                 </div>
               ) : canGrade ? (
                 <>
-                  <div className="muted grade-preview">
-                    预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
-                    {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
-                    {fmtInterval(review(card.reviewState, 'again').interval)}
-                  </div>
+                  {!reviewMode && (
+                    <div className="muted grade-preview">
+                      预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
+                      {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
+                      {fmtInterval(review(card.reviewState, 'again').interval)}
+                    </div>
+                  )}
                   <div className="bar study-actions">
-                    <button className="primary" onClick={() => onGrade('good')}>
+                    <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
                       认识 <kbd>1</kbd>
                     </button>
-                    <button onClick={() => onGrade('hard')}>
+                    <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
                       模糊 <kbd>2</kbd>
                     </button>
-                    <button onClick={() => onGrade('again')}>
+                    <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
                       忘记了 <kbd>3</kbd>
                     </button>
                   </div>

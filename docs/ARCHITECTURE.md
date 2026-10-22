@@ -80,6 +80,8 @@ types ← core ← adapters ← reader
 | 刚过释义关却点「忘记了」 | `src/core/vocab/review.ts` 的 `needsForgotConfirm` | 先确认再落库；确认前不写 SRS、评分快捷键停用；确认后仍按 again，**不偷偷降成 hard** |
 | 背单词「学习新词」这一步怎么判 | `src/core/vocab/learnStep.ts` | 看答案 / 选错 = 不认识（again），首次选对 = 模糊（hard，防蒙对），第二次起 = 认识（good）；词库不足 4 个释义时 `fallback` 退回普通卡。停留时长 `LEARN_REVEAL_HOLD_MS`（可打断）。选对次数记在 `ReviewState.meaningPasses`（跨轮持久，判不认识归零） |
 | 背单词「选中文释义」的四个选项 | `src/core/vocab/meaningOptions.ts` | 正确 + 3 干扰项，卡 id 做种子的稳定哈希定序；`correctOptionIndex` 供「揭示答案时给正确项上浅绿」用。视图与会话共用这一份，不许各算一套 |
+| 背单词「复习单词」三键 | `src/core/vocab/reviewStep.ts` | 看见单词就能判，不用先翻面：认识 → 直接写 good 并换下一张；模糊 → **先不落库**、摊卡等「下一词」（hard）/「记错了」（again）；忘记 → 立刻 again 并停卡。模糊先不写库是为了「一次决定一次落库」——先 hard 再 again 会在统计里算两次、还把刚加的 repetitions 又清零 |
+| 背单词的键盘映射 | `src/reader/hooks/useStudyHotkeys.ts` | 面板上每个按钮都标了对应键：空格/回车 = 主操作（看答案 → 继续 → 下一词；复习模式 = 看一眼释义）、H = 看答案、1/2/3 = 认识/模糊/忘记了、U = 不认识、M = 记错了、R = 朗读、Q/E = 上一个/下一个、Esc = 结束。「看答案」用 H 而非 A：释义题的 A/D 是左右切换选项 |
 | 背单词「组末拼写测试」（学习模式） | `src/reader/hooks/useStudySpellingRound.ts` + `src/core/vocab/review.ts` 的 `groupEndOf` | 学了多少拼多少（本组全部，不封顶）。`groupEndOf(index, total, size)` 按队列位置切组，size≤0 或 ≥total = 整轮一组；每组大小存 `reader:studyGroupSize`（0 = 跟随范围）。拼错判「不认识」并落库，显示英文原文要求照着重打（输入为空才显示原文），重打不改判定；全拼完主 hook 才把 index 推到组末。正面拼错的卡面状态机在 `hooks/useStudySpellGate.ts`——拆出去的 hook 只管界面状态，落库仍只有主 hook 一个写入方 |
 
 ## 三、两条硬约定（都是踩过坑换来的）

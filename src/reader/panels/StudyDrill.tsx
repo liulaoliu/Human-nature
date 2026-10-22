@@ -152,10 +152,10 @@ export function MeaningQuiz({
         )}
         {onReveal && !reveal && (
           <button className="reveal-btn" onClick={onReveal} title="想不起来就点它：这一下会判为「不认识」">
-            看答案
+            看答案 <kbd>H</kbd>
           </button>
         )}
-        <div className="muted drill-keys">1–4 选择 · A / D 切换 · 回车确认</div>
+        <div className="muted drill-keys">1–4 选择 · A / D 切换 · 回车确认{onReveal ? ' · H 看答案' : ''}</div>
       </div>
     </div>
   )

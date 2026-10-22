@@ -107,6 +107,9 @@ export default function SessionHost({
           learnPhase={study.api.learnPhase}
           learnReveal={study.api.learnReveal}
           learnGraded={study.api.learnGraded}
+          reviewKeys={study.api.reviewKeys}
+          reviewFuzzy={study.api.reviewFuzzy}
+          reviewGraded={study.api.reviewGraded}
           roundTest={study.api.roundTest}
           roundMiss={study.api.roundMiss}
           roundInput={study.api.roundInput}
@@ -160,6 +163,8 @@ export default function SessionHost({
           onLearnReveal={study.api.revealLearnAnswer}
           onLearnPick={study.api.answerLearn}
           onLearnContinue={study.api.continueLearn}
+          onReviewAnswer={study.api.answerReview}
+          onReviewChoice={study.api.chooseReview}
           onSpellMiss={study.api.applySpellingMiss}
           onAckSpellMiss={study.api.ackSpellMiss}
           onRetryForgot={study.api.retryForgot}

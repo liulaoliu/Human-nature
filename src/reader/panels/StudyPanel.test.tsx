@@ -94,6 +94,11 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     onMeaningCleared: noop,
     onAckSpellMiss: noop,
     onSpellMiss: noop,
+    reviewKeys: false,
+    reviewFuzzy: false,
+    reviewGraded: false,
+    onReviewAnswer: noop,
+    onReviewChoice: noop,
     onRetryForgot: noop,
     onRestart: noop,
     ...over,
@@ -269,5 +274,46 @@ describe('StudyPanel：刚过释义关点「忘记了」', () => {
     expect(onSoftenForgot).toHaveBeenCalledTimes(1)
     expect(onConfirmForgot).toHaveBeenCalledTimes(1)
     expect(onCancelForgot).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('StudyPanel：复习模式三键', () => {
+  it('看见单词就能判：不用先翻面，也没有「显示释义」按钮', () => {
+    const onReviewAnswer = vi.fn()
+    render(<StudyPanel {...props({ mode: 'review', reviewKeys: true, onReviewAnswer })} />)
+
+    expect(screen.queryByRole('button', { name: '显示释义（空格）' })).toBeNull()
+    expect(screen.queryByText(/复习 2 次/)).toBeNull() // 释义区没摊开
+    fireEvent.click(screen.getByRole('button', { name: /^认识/ }))
+    fireEvent.click(screen.getByRole('button', { name: /模糊/ }))
+    fireEvent.click(screen.getByRole('button', { name: /忘记了/ }))
+    expect(onReviewAnswer.mock.calls.map((c) => c[0])).toEqual(['good', 'hard', 'again'])
+  })
+
+  it('点卡片不翻面（不给偷看答案再点认识）', () => {
+    const onReveal = vi.fn()
+    render(<StudyPanel {...props({ mode: 'review', reviewKeys: true, onReveal })} />)
+    fireEvent.click(screen.getByText('run'))
+    expect(onReveal).not.toHaveBeenCalled()
+  })
+
+  it('判「模糊」后摊开卡：给「下一词」和「记错了」两个出口', () => {
+    const onReviewChoice = vi.fn()
+    render(<StudyPanel {...props({ mode: 'review', revealed: true, reviewFuzzy: true, onReviewChoice })} />)
+
+    expect(screen.getByText(/复习 2 次/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /记错了/ }))
+    fireEvent.click(screen.getByRole('button', { name: /下一词/ }))
+    expect(onReviewChoice.mock.calls.map((c) => c[0])).toEqual(['missed', 'next'])
+  })
+
+  it('判「忘记了」后只等「下一词」，不再显示三键（也不给「不认识」二次写库）', () => {
+    const onNext = vi.fn()
+    render(<StudyPanel {...props({ mode: 'review', revealed: true, reviewGraded: true, onNext })} />)
+
+    expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
+    expect(screen.queryByRole('button', { name: '不认识' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /下一词/ }))
+    expect(onNext).toHaveBeenCalled()
   })
 })

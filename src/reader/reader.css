@@ -1659,7 +1659,9 @@ button.danger {
 
 /* 背单词：总时长 + 评分按钮快捷键徽标 */
 .study-total { margin-left: 10px; font-variant-numeric: tabular-nums; }
-.study-actions kbd {
+.study-actions kbd,
+.study-card kbd,
+.drill kbd {
   display: inline-block;
   margin-left: 5px;
   padding: 0 5px;

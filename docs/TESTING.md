@@ -284,6 +284,19 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   **踩坑**：`advance` 曾在 `setIndex` 的 updater 里嵌套 `setWords` + `onDone`（→ 主 hook 再 `setIndex`），
   React 渲染期嵌套更新在 jsdom 下只报一个被 sourcemap 吞掉的神秘错误（`column must be >= 0`）——
   **updater 必须纯**：先用当前值算好下一步，再分头更新，最后才回调。
+- **背单词「复习三键 + 快捷键」（2026-10-22 第三批）**：`core/vocab/reviewStep`（7：认识/easy 直接推进 /
+  模糊不落库只摊卡 / 忘记立刻 again 停卡 / 模糊两个出口 / 一次只写一次库）、
+  `hooks/useStudyReviewStep`（10：复习模式才给三键 / 学习模式与门禁占住时不给 /
+  认识推进 / 模糊摊卡 / 忘记停卡 / 模糊→下一词=hard / 模糊→记错了=again / 判过不重复写库 /
+  模糊待定时不叠判定 / reset 复原）、`hooks/useStudyStarts`（6：新学习只取新词 / 复习只取到期 /
+  空队列给提示 / 本篇全部忽略配额 / 从头重学标 retrying / 拼错未确认不许重开 + 空牌组只提示）、
+  `useStudySession` 补 9 条（复习三键落库与推进 / 复习模式也有组末拼写 / 空格只是看一眼释义 /
+  H=看答案且与 A/D 不冲突 / U=不认识 / M=记错了）、`StudyPanel` 补 4 条（三键不用翻面 /
+  点卡不偷看 / 模糊两个出口 / 判完只等下一词且不给「不认识」二次写库）。
+  **拆了两个模块**：键盘映射搬到 `hooks/useStudyHotkeys`（`useStudySession` 一度涨到 831 行）、
+  「背哪些词」搬到 `hooks/useStudyStarts`。
+  **踩坑**：复习模式判完停卡时，「下一词」必须走 `choose('next')`（写 hard + 推进），
+  不能走 `forward()`——后者只切卡不落库，模糊那一次就悄悄丢了。
 - **顶栏行数（2026-10-20 第五批）**：`core/toolbarRows`（8：默认 4 行 / 脏值回 4 / 字符串与数字都认 /
   每档行数等于档位 / 四组不丢不重不乱序 / 3、2 档的具体并法 / 统计组恒在最后一行 / 类名拼法）、
   `useReaderPrefs` 补 1 条（默认 4 行 / 改档存成字符串 `reader:toolbarRows` / 怪值回 4）、
