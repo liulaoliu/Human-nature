@@ -1,16 +1,11 @@
 import { useCallback, useRef, useState } from 'react'
 import {
   canQuizMeaning,
-  isFresh,
   isRelearning,
-  markSpellingMiss,
   needsForgotConfirm,
   needsMeaningCheck,
-  planExtra,
   planRetryForgot,
   groupEndOf,
-  recordLearnPass,
-  reviewItem,
   beginExtraRound,
   displayMeaning,
   emptyExtraRound,
@@ -20,8 +15,8 @@ import {
 } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import { fmtInterval } from '../format'
 import { useStudyCardEdit } from './useStudyCardEdit'
+import { useStudyGrading } from './useStudyGrading'
 import { useStudyLearnStep } from './useStudyLearnStep'
 import { useStudyPool, type StudyScope } from './useStudyPool'
 import { useStudySpellGate } from './useStudySpellGate'
@@ -107,21 +102,27 @@ export function useStudySession(params: UseStudySessionParams) {
   const [revealed, setRevealed] = useState(false)
   const [input, setInput] = useState('')
   const [checked, setChecked] = useState(false)
-  const [counts, setCounts] = useState({ know: 0, fuzzy: 0, forgot: 0 })
-  const [gradeInfo, setGradeInfo] = useState('')
   /** 本轮加练 / 重练的出场账本（每卡最多出场 3 次，跨重练保留）。 */
   const [extraRound, setExtraRound] = useState<ExtraRound>(emptyExtraRound)
-  /** 本轮点过「忘记了」的词 id，用于收尾重练 */
-  const forgotRef = useRef<string[]>([])
-  /** 拼写错误后的「不认识」提示：确认前不允许切卡 / 退出（见 checkSpelling）。 */
-  /** 正面拼写的「判错卡」状态（钉住不认识提示、锁导航）在子 hook 里；落库与记账在下面 `judge`。 */
-  const bumpedRef = useRef<Set<string>>(new Set())
-  /** 供外部（收尾小结）显示「重练忘记的 N 个」 */
-  const [forgotCount, setForgotCount] = useState(0)
   /** 本轮总数（进度分母）——开始时冻结；忘记/模糊只加练，不撑大它。 */
   const [roundTotal, setRoundTotal] = useState(0)
-  /** 忘记/模糊触发的「加练」次数（单独计数，不计入分母）。 */
-  const [extraCount, setExtraCount] = useState(0)
+
+  /**
+   * 判定落库与记账：评分 / 拼错 / 标「不认识」/ 组末拼错共用一套账本
+   * （写库 → 今日新词 → 计时与活动 → 计数 → 重排 → 提示），见 `useStudyGrading`。
+   */
+  const grading = useStudyGrading({
+    library,
+    extraRound,
+    setExtraRound,
+    setQueue,
+    persist,
+    markStudied,
+    recordActivity,
+    addStudyTime,
+    flash,
+    onBumpNewToday,
+  })
   /** 收尾「重练忘记的」：也按加练处理，标过不认识的词要先选释义。 */
   const [retrying, setRetrying] = useState(false)
   /** 本卡是否已经通过「选中文释义」这一关（换卡/评分时重置）。 */
@@ -146,11 +147,7 @@ export function useStudySession(params: UseStudySessionParams) {
   const spellingRound = useStudySpellingRound({
     onMiss: (item) => {
       // 判定在这里已经定了（again + relearn + 「不认识」标签）；组末是验收，不再本轮重排
-      persist(markSpellingMiss(library, item.id))
-      setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
-      addStudyTime(0, 1)
-      markStudied(item.id)
-      recordActivity('vocab', 1)
+      grading.recordRoundTestMiss(item)
       flash(`「${item.word}」拼错了，已判为「不认识」`)
     },
     onDone: () => finishGroupRef.current?.(),
@@ -243,17 +240,13 @@ export function useStudySession(params: UseStudySessionParams) {
 
   const resetSession = useCallback(() => {
     setExtraRound(emptyExtraRound())
-    forgotRef.current = []
-    bumpedRef.current = new Set()
-    setForgotCount(0)
-    setExtraCount(0)
+    grading.resetLedger()
     setRetrying(false)
-    setCounts({ know: 0, fuzzy: 0, forgot: 0 })
     groupCursorRef.current = 0
     finishGroupRef.current = null
     spellingRound.reset()
     resetCardUi()
-  }, [resetCardUi, spellingRound])
+  }, [resetCardUi, spellingRound, grading.resetLedger])
 
   /**
    * 推进到下一张卡：到了「每组 N 词」的组末先停下把本组全部词拼一遍，
@@ -293,31 +286,13 @@ export function useStudySession(params: UseStudySessionParams) {
     judge: (typed: string) => {
       const cur = card
       if (!cur || !queue) return { requeued: false, word: typed, meaning: null }
-      persist(markSpellingMiss(library, cur.id))
-      if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
-        bumpedRef.current.add(cur.id)
-        onBumpNewToday()
-      }
-      addStudyTime(0, 1)
-      markStudied(cur.id)
-      recordActivity('vocab', 1)
-      setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
-      if (!forgotRef.current.includes(cur.id)) {
-        forgotRef.current.push(cur.id)
-        setForgotCount(forgotRef.current.length)
-      }
-      const decision = planExtra(extraRound, cur.id, 'again')
-      if (decision.append) {
-        setExtraRound(decision.round)
-        setQueue((q) => (q ? [...q, cur] : q))
-        setExtraCount((n) => n + 1)
-      }
-      setGradeInfo('拼写错误 · 判为不认识 · 已从零重学')
-      window.setTimeout(() => setGradeInfo(''), 2000)
+      // 写库 + 记账 + 本轮重排，都在 grading 里（和正常评分同一本账）
+      const requeued = grading.recordSpellingMiss(cur)
+      grading.showGradeInfo('拼写错误 · 判为不认识 · 已从零重学', 2000)
       flash('拼写错误，已判为「不认识」：这个词会从零重学')
       setChecked(true)
       setRevealed(false)
-      return { requeued: decision.append, word: cur.word, meaning: displayMeaning(cur) || null }
+      return { requeued, word: cur.word, meaning: displayMeaning(cur) || null }
     },
   })
   const { spellMiss } = spellGate
@@ -378,6 +353,8 @@ export function useStudySession(params: UseStudySessionParams) {
 
   /**
    * 真正落库的评分（对外入口是下面的 `grade`，会先处理「忘记确认」）。
+   * 账本（写库 / 今日新词 / 计时 / 计数 / 重排 / 提示）在 `grading.recordGrade`；
+   * 这里只负责「清卡片 UI」和「要不要推进」。
    *
    * `opts.advance = false`：只写库不跳下一张（学习模式判完要停在单词卡等「下一词」）。
    * `opts.learnPass`：学习模式里把「这次有没有没看答案就选对」一起写进
@@ -389,40 +366,7 @@ export function useStudySession(params: UseStudySessionParams) {
       if (!queue) return
       const queued = queue[index]
       if (!queued) return
-      const cur = library.items.find((it) => it.id === queued.id) ?? queued
-      const reviewed = reviewItem(library, cur.id, g)
-      const nextLibrary = opts?.learnPass == null ? reviewed : recordLearnPass(reviewed, cur.id, opts.learnPass)
-      persist(nextLibrary)
-      if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
-        bumpedRef.current.add(cur.id)
-        onBumpNewToday()
-      }
-      const nextState = nextLibrary.items.find((it) => it.id === cur.id)?.reviewState
-      if (nextState) {
-        const label: Record<ReviewGrade, string> = { again: '忘记了', hard: '模糊', good: '认识', easy: '认识' }
-        setGradeInfo(`${label[g]} · 下次复习：${fmtInterval(nextState.interval)}`)
-        window.setTimeout(() => setGradeInfo(''), 1600)
-      }
-      addStudyTime(0, 1)
-      markStudied(cur.id)
-      recordActivity('vocab', 1)
-      setCounts((c) =>
-        g === 'again' ? { ...c, forgot: c.forgot + 1 } : g === 'hard' ? { ...c, fuzzy: c.fuzzy + 1 } : { ...c, know: c.know + 1 },
-      )
-      if (g === 'again' && !forgotRef.current.includes(cur.id)) {
-        forgotRef.current.push(cur.id)
-        setForgotCount(forgotRef.current.length)
-      }
-      // 帮记忆：忘记的词本轮末尾再出现（不封顶，直到评认识/模糊）；模糊即收尾。
-      // 规则在 core/vocab/extra。
-      if (g === 'again' || g === 'hard') {
-        const decision = planExtra(extraRound, cur.id, g)
-        if (decision.append) {
-          setExtraRound(decision.round)
-          setQueue((q) => (q ? [...q, cur] : q))
-          setExtraCount((n) => n + 1)
-        }
-      }
+      grading.recordGrade(g, queued, opts?.learnPass)
       setRevealed(false)
       setInput('')
       setChecked(false)
@@ -438,7 +382,7 @@ export function useStudySession(params: UseStudySessionParams) {
         else setIndex((i) => i + 1)
       }
     },
-    [queue, index, library, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, extraRound, flash, spellMiss, mode, advanceFrom],
+    [queue, index, grading.recordGrade, spellMiss, spellingRound.test, mode, advanceFrom],
   )
 
   /**
@@ -572,37 +516,19 @@ export function useStudySession(params: UseStudySessionParams) {
   }, [resetCardUi])
   finishGroupRef.current = finishGroup
 
-  /** 「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
+  /** 标「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
   const markUnknown = useCallback(() => {
     if (!queue) return
     const queued = queue[index]
     if (!queued) return
-    const cur = library.items.find((it) => it.id === queued.id) ?? queued
-    const reviewed = reviewItem(library, cur.id, 'again')
-    persist({
-      ...reviewed,
-      items: reviewed.items.map((it) =>
-        it.id === cur.id && !it.tags.includes('不认识') ? { ...it, tags: [...it.tags, '不认识'] } : it,
-      ),
-    })
-    if (!forgotRef.current.includes(cur.id)) {
-      forgotRef.current.push(cur.id)
-      setForgotCount(forgotRef.current.length)
-    }
-    setCounts((c) => ({ ...c, forgot: c.forgot + 1 }))
-    addStudyTime(0, 1)
-    markStudied(cur.id)
-    recordActivity('vocab', 1)
-    setGradeInfo('已标为「不认识」· 已从零重学')
-    window.setTimeout(() => setGradeInfo(''), 1600)
-    flash('已标为「不认识」的全新词，已安排重学')
+    grading.recordUnknown(queued)
     resetCardUi()
     setIndex((i) => i + 1)
-  }, [queue, index, library, persist, addStudyTime, markStudied, recordActivity, flash, resetCardUi])
+  }, [queue, index, grading.recordUnknown, resetCardUi])
 
   /** 收尾重练本轮点过「忘记了」的词（每轮只发起一次，已练满 3 次的不再进队）。 */
   const retryForgot = useCallback(() => {
-    const ids = new Set(forgotRef.current)
+    const ids = new Set(grading.getForgotIds())
     const items = library.items.filter((it) => ids.has(it.id))
     if (!items.length) return
     const plan = planRetryForgot(extraRound, items.map((it) => it.id))
@@ -617,17 +543,13 @@ export function useStudySession(params: UseStudySessionParams) {
     }
     const keep = new Set(plan.ids)
     const retryItems = items.filter((it) => keep.has(it.id))
-    forgotRef.current = []
-    bumpedRef.current = new Set()
-    setForgotCount(0)
-    setExtraCount(0)
-    setCounts({ know: 0, fuzzy: 0, forgot: 0 })
+    grading.resetLedger()
     setQueue(retryItems)
     setRoundTotal(retryItems.length)
     setRetrying(true)
     setIndex(0)
     resetCardUi()
-  }, [library.items, extraRound, flash, resetCardUi])
+  }, [library.items, extraRound, flash, resetCardUi, grading.resetLedger, grading.getForgotIds])
 
   /** 背单词的键盘映射集中在 `hooks/useStudyHotkeys`（面板按钮上的 kbd 与它一一对应）。 */
   useStudyHotkeys(
@@ -686,19 +608,19 @@ export function useStudySession(params: UseStudySessionParams) {
     setChecked,
     editOpen,
     setEditOpen,
-    counts,
+    counts: grading.counts,
     liveSeconds,
     cardSeconds,
-    gradeInfo,
+    gradeInfo: grading.gradeInfo,
     pool,
     draft,
     setDraft,
     delArmed,
-    forgotCount,
+    forgotCount: grading.forgotCount,
     /** 本轮还能不能点「重练忘记的」（每轮只发起一次）。 */
     canRetryForgot: !extraRound.retried,
     roundTotal,
-    extraCount,
+    extraCount: grading.extraCount,
     card,
     /** 组末拼写测试（学习模式每组结束）：非空时整页显示它，`card` 已换成测试里的词。 */
     roundTest: spellingRound.test,
