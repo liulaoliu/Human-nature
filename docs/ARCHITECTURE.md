@@ -23,9 +23,15 @@ src/reader/      React 视图层
   reader.css     样式入口：只按固定顺序 @import styles/ 下 8 个分片
   styles/        按功能拆的样式分片（基础 / 侧栏顶栏 / 选词与 AI / 背单词 / 语言点与计划 / 选择器 / 主题与考试 / 速读与编辑）
 src/ui/          跟读练习（旧模块，独立于精读词库）
-  App.tsx         页面装配：状态 → 控件接线 + 全局快捷键
+  App.tsx         页面装配：建 store、挂本机偏好、全局快捷键，其余交给下面六个区块
+  ChunkList.tsx   左侧块列表（含自动滚到当前块；计数/✂ 查表）
+  AppBanners.tsx  顶部提示条（notice / 麦克风电平低 / 解码中 / 打不开）
+  CycleRow.tsx    连续跟读：开关 + 说完静音多久 + 本轮状态
+  TransportBar.tsx 播放控制：上一块/播放/下一块、语速、切块档位、撕开开关；另出 AbCompareRow
+  AlignmentRow.tsx 对齐校准：正文起点 + 文字整体偏移
+  RecorderPanel.tsx 录制区：录音按钮 + 电平表 + 麦克风/音质/回放放大
   ScriptPanel.tsx 原文面板（整篇摊开、当前块高亮、选字定块、锚点微调）
-  AppBits.tsx     空状态 / 备份条 / 录音导出 / 时间格式化
+  AppBits.tsx     空状态 / 备份条 / 录音导出与列表 / 时间格式化
   ChunkSplitter.tsx 波形撕块面板；FishLayer.tsx 背景动效
 ```
 

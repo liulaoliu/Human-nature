@@ -15,7 +15,6 @@ import {
   saveToProject,
 } from '../adapters/stateBackup'
 import { parseBackup } from '../core/stateBackup'
-import { GRANULARITY_LABEL, type Granularity } from '../core/ports'
 import {
   VIEW_MODES,
   readHangover,
@@ -31,11 +30,22 @@ import {
   type ViewMode,
 } from '../state/shadowingPrefs'
 import ScriptPanel from './ScriptPanel'
-import { BackupBar, Empty, TakeExport, extOf, fmt, interceptAudioPick } from './AppBits'
+import { BackupBar, Empty, TakesList, fmt, interceptAudioPick } from './AppBits'
+import { AppBanners } from './AppBanners'
+import { ChunkList } from './ChunkList'
+import { CycleRow } from './CycleRow'
+import { AlignmentRow } from './AlignmentRow'
+import { AbCompareRow, TransportBar } from './TransportBar'
+import { RecorderPanel } from './RecorderPanel'
 
-const RATES = [0.5, 0.75, 1, 1.5, 2]
-const GRANS: Granularity[] = ['short', 'normal', 'long']
-
+/**
+ * 跟读页的装配层：建 store、把本机偏好和小状态挂上去、把各段交给子组件。
+ *
+ * 页面被拆成六块，都只接 props、不碰 store：
+ * `ChunkList`（左侧块列表）/ `AppBanners`（顶部提示）/ `CycleRow`（连续跟读）/
+ * `TransportBar`（播放与切块）/ `AlignmentRow`（对齐校准）/ `RecorderPanel`（录制与麦克风）。
+ * 这样改一块的样式不用在六百行 JSX 里翻。
+ */
 export default function App() {
   const storeRef = useRef<SessionStore | null>(null)
   if (!storeRef.current) {
@@ -52,8 +62,6 @@ export default function App() {
   const s = useSession(store)
   const [editing, setEditing] = useState(false)
   const [notice, setNotice] = useState<string | null>(null)
-  const listRef = useRef<HTMLOListElement>(null)
-  const prevChunkCount = useRef(0)
   const [viewMode, setViewMode] = useState<ViewMode>(readViewMode)
   const [splitOpen, setSplitOpen] = useState(false)
   const [micRaw, setMicRaw] = useState<boolean>(readMicRaw)
@@ -84,18 +92,6 @@ export default function App() {
   useEffect(() => {
     void listAudioInputs().then(setInputs)
   }, [])
-
-  // 左侧块列表自动滚到当前块；刚撕开新增了一块时，滚到那块，让它一眼能看见
-  useEffect(() => {
-    if (s.status !== 'ready') return
-    const ol = listRef.current
-    const grew = prevChunkCount.current > 0 && s.chunks.length > prevChunkCount.current
-    prevChunkCount.current = s.chunks.length
-    if (!ol || ol.children.length === 0) return
-    const idx = grew ? Math.min(s.current + 1, s.chunks.length - 1) : s.current
-    const el = ol.children[idx] as HTMLElement | undefined
-    el?.scrollIntoView({ block: 'nearest' })
-  }, [s.status, s.current, s.chunks.length])
 
   const exportBackup = () => {
     downloadBackup(currentBackup())
@@ -242,63 +238,24 @@ export default function App() {
         </a>
       </header>
 
-      {notice && (
-        <div className="banner">
-          {notice}
-          <button className="ghost sm" onClick={() => setNotice(null)}>
-            知道了
-          </button>
-        </div>
-      )}
-
-      {s.lowMic && (
-        <div className="banner">
-          麦克风电平很低（录音峰值 &lt; 0.03），录出来会又小又难判定。去系统「声音 → 输入」把这个麦的
-          音量 / 增强调大，或在下拉里换一个设备端点（同名设备常有好几个）再试。
-          <button className="ghost sm" onClick={() => store.dismissLowMic()}>
-            知道了
-          </button>
-        </div>
-      )}
-
-      {s.status === 'loading' && <div className="banner">解码中…</div>}
-      {s.status === 'error' && <div className="banner err">打不开：{s.error}</div>}
-      {s.error && s.status === 'ready' && (
-        <div className="banner err">
-          {s.error}
-          <button onClick={() => window.location.reload()}>重试</button>
-        </div>
-      )}
+      <AppBanners
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
+        lowMic={s.lowMic}
+        onDismissLowMic={() => store.dismissLowMic()}
+        status={s.status}
+        error={s.error}
+      />
 
       {s.status === 'ready' && (
         <div className="body">
-          <ol className="list" ref={listRef}>
-            {s.chunks.map((c) => {
-              // 计数和 ✂ 都在 map 外面先算好：原来每行都 filter 全部录音、
-              // 扫全部撕开点，一篇 250 块 × 250 条录音 = 每帧几万次（录音时 25fps）
-              const n = takeCountByChunk.get(c.index) ?? 0
-              const cut = splitTimes.has(Math.round(c.start * 50))
-              return (
-                <li key={c.index}>
-                  <button
-                    className={c.index === s.current ? 'row on' : 'row'}
-                    onClick={() => store.select(c.index)}
-                  >
-                    <span className="i">{c.index + 1}</span>
-                    <span className="t">{fmt(c.start)}</span>
-                    <span className="d">
-                      {cut && (
-                        <span className="cut" title="手动撕开的新边界">
-                          ✂
-                        </span>
-                      )}
-                      {n > 0 ? <b title={`${n} 条录音`}>●{n}</b> : null}
-                    </span>
-                  </button>
-                </li>
-              )
-            })}
-          </ol>
+          <ChunkList
+            chunks={s.chunks}
+            current={s.current}
+            takeCountByChunk={takeCountByChunk}
+            splitTimes={splitTimes}
+            onSelect={(i) => store.select(i)}
+          />
 
           <main>
             <div className="big">
@@ -333,103 +290,33 @@ export default function App() {
               onClearAnchors={() => store.clearAnchors()}
             />
 
-            <div className="row">
-              <label className="check" title="一圈下来：标准音 → 自动录音 → 自动回放。手动录音按 R 停录后也会自动回放">
-                <input
-                  type="checkbox"
-                  checked={s.autoCycle}
-                  onChange={(e) => void store.setAutoCycle(e.target.checked)}
-                />
-                连续跟读（标准音 → 录音 → 回放）
-              </label>
-              {s.autoCycle && (
-                <>
-                  <span className="lab">说完静音</span>
-                  <select
-                    value={String(hangoverMs)}
-                    onChange={(e) => setHangoverMs(Number(e.target.value))}
-                    title="连续跟读里，说完之后静多久算「读完」并自动进回放。读得慢、句中有停顿就调长"
-                  >
-                    <option value="1600">1.6s</option>
-                    <option value="2500">2.5s</option>
-                    <option value="4000">4s</option>
-                    <option value="6000">6s</option>
-                  </select>
-                  <span className="lab">算读完</span>
-                </>
-              )}
-              {s.autoCycle && s.cycleStep === 'rec' && (
-                <span className="lab">
-                  录音中 · 说完停 {(s.hangoverMs / 1000).toFixed(1)} 秒自动结束（最长{' '}
-                  {Math.round(s.autoRecordMs / 1000)} 秒），按空格或 R 直接结束并回放
-                </span>
-              )}
-              {s.autoCycle && s.cycleStep === 'ref' && <span className="lab">正在放标准音…</span>}
-              {s.autoCycle && s.cycleStep === 'playback' && (
-                <span className="lab">回放中（我的录音）…</span>
-              )}
-            </div>
+            <CycleRow
+              autoCycle={s.autoCycle}
+              hangoverMs={hangoverMs}
+              activeHangoverMs={s.hangoverMs}
+              autoRecordMs={s.autoRecordMs}
+              cycleStep={s.cycleStep}
+              onToggle={(on) => void store.setAutoCycle(on)}
+              onHangover={setHangoverMs}
+            />
 
-            <div className="row">
-              <button
-                onClick={() => store.prev()}
-                disabled={s.current === 0}
-                title="上一块（A，或方向键 ↑），并像按空格一样直接跑"
-              >
-                A ← 上一块
-              </button>
-              <button
-                className="primary"
-                onClick={() => void store.toggleChunkPlay()}
-                title="再按一次暂停；暂停后按空格是接着播，不是重头"
-              >
-                {s.autoCycle
-                  ? s.cycleStep === 'idle'
-                    ? '▶ 跟读一轮（空格）'
-                    : '⏹ 停止本轮（空格）'
-                  : s.playing
-                    ? '⏸ 暂停（空格）'
-                    : '▶ 标准音（空格）'}
-              </button>
-              <button
-                onClick={() => store.next()}
-                disabled={s.current === s.chunks.length - 1}
-                title="下一块（D，或方向键 ↓），并像按空格一样直接跑"
-              >
-                下一块 → D
-              </button>
-            </div>
-
-            <div className="row">
-              <span className="lab">语速</span>
-              {RATES.map((r) => (
-                <button
-                  key={r}
-                  className={s.rate === r ? 'chip on' : 'chip'}
-                  onClick={() => store.setRate(r)}
-                >
-                  {r}x
-                </button>
-              ))}
-              <span className="lab">切块</span>
-              {GRANS.map((g) => (
-                <button
-                  key={g}
-                  className={s.granularity === g ? 'chip on' : 'chip'}
-                  onClick={() => store.setGranularity(g)}
-                >
-                  {GRANULARITY_LABEL[g]}
-                </button>
-              ))}
-              <button
-                className={splitOpen ? 'chip on' : 'chip'}
-                onClick={() => setSplitOpen((v) => !v)}
-                title="打开波形，把这一大块手动撕成两段（X）"
-              >
-                撕开 / 微调（X）
-              </button>
-              {s.chunkEditCount > 0 && <span className="off">已手动切 {s.chunkEditCount} 处</span>}
-            </div>
+            <TransportBar
+              current={s.current}
+              chunkCount={s.chunks.length}
+              playing={s.playing}
+              autoCycle={s.autoCycle}
+              cycleStep={s.cycleStep}
+              rate={s.rate}
+              granularity={s.granularity}
+              splitOpen={splitOpen}
+              chunkEditCount={s.chunkEditCount}
+              onPrev={() => store.prev()}
+              onPlay={() => void store.toggleChunkPlay()}
+              onNext={() => store.next()}
+              onRate={(r) => store.setRate(r)}
+              onGranularity={(g) => store.setGranularity(g)}
+              onToggleSplit={() => setSplitOpen((v) => !v)}
+            />
 
             {splitOpen && current && (
               <ChunkSplitter
@@ -466,149 +353,46 @@ export default function App() {
             )}
 
             {s.script.trim() && s.manualAnchors === 0 && (
-              <div className="row">
-                <span className="lab">对齐校准</span>
-                <button
-                  className={s.textStartChunk > 0 ? 'chip on' : 'chip'}
-                  onClick={() => store.setTextStartChunk(s.current)}
-                  title="听到正文第一句时，切到那一块按下这个"
-                >
-                  正文从这块开始（S）
-                </button>
-                <span className="off">
-                  {s.textStartChunk > 0 ? `第 ${s.textStartChunk + 1} 块` : '第 1 块'}
-                </span>
-                {s.textStartChunk > 0 && (
-                  <button className="ghost sm" onClick={() => store.clearTextStart()}>
-                    取消
-                  </button>
-                )}
-                <span className="lab">文字偏移</span>
-                <button className="chip" onClick={() => store.nudgeOffsetWords(-15)} title="文字往后挪 15 词">
-                  −15
-                </button>
-                <button className="chip" onClick={() => store.nudgeOffsetWords(-3)} title="文字往后挪 3 词">
-                  −3
-                </button>
-                <span className="off">
-                  {s.offsetWords > 0 ? `+${s.offsetWords}` : s.offsetWords} 词
-                </span>
-                <button className="chip" onClick={() => store.nudgeOffsetWords(3)} title="文字往前赶 3 词">
-                  +3
-                </button>
-                <button className="chip" onClick={() => store.nudgeOffsetWords(15)} title="文字往前赶 15 词">
-                  +15
-                </button>
-                {(s.offsetWords !== 0 || s.textStartChunk > 0) && (
-                  <button
-                    className="ghost sm"
-                    onClick={() => {
-                      store.setOffsetWords(0)
-                      store.clearTextStart()
-                    }}
-                  >
-                    全部归零
-                  </button>
-                )}
-              </div>
+              <AlignmentRow
+                textStartChunk={s.textStartChunk}
+                offsetWords={s.offsetWords}
+                onSetTextStart={() => store.setTextStartChunk(s.current)}
+                onClearTextStart={() => store.clearTextStart()}
+                onNudgeWords={(delta) => store.nudgeOffsetWords(delta)}
+                onResetAll={() => {
+                  store.setOffsetWords(0)
+                  store.clearTextStart()
+                }}
+              />
             )}
 
-            <div className="row rec">
-              <button
-                className={s.recording ? 'rec on' : 'rec'}
-                onClick={() => void store.toggleRecording()}
-                title="开始/停止录音；停止后自动回放刚录的这条"
-              >
-                {s.recording ? '■ 停止并回放（R）' : '● 录音（R）'}
-              </button>
-              <div className="meter">
-                <div className="bar" style={{ width: `${Math.round(s.level * 100)}%` }} />
-              </div>
-              <span className="lv" title="当前输入电平（峰值）。说话时应明显高于安静时的数">
-                {s.level.toFixed(2)}
-              </span>
-            </div>
+            <RecorderPanel
+              recording={s.recording}
+              level={s.level}
+              micDevice={micDevice}
+              inputs={inputs}
+              micRaw={micRaw}
+              takeBoost={takeBoost}
+              onToggleRecord={() => void store.toggleRecording()}
+              onMicDevice={setMicDevice}
+              onMicRaw={setMicRaw}
+              onTestMic={() => void runTestMic()}
+              onTakeBoost={setTakeBoost}
+            />
 
-            <div className="row mic">
-              <span className="lab">麦克风</span>
-              <select
-                value={micDevice}
-                onChange={(e) => setMicDevice(e.target.value)}
-                title="换一个输入设备试试——蓝牙耳麦只有窄带，天生发闷"
-              >
-                <option value="">系统默认</option>
-                {inputs.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label}
-                  </option>
-                ))}
-              </select>
-              <span className="lab">音质</span>
-              <button
-                className={micRaw ? 'chip on' : 'chip'}
-                onClick={() => setMicRaw(true)}
-                title="关掉浏览器的降噪 / 回声消除，保真优先（发闷通常就是降噪干的）；自动增益保留，保证音量"
-              >
-                原声
-              </button>
-              <button
-                className={!micRaw ? 'chip on' : 'chip'}
-                onClick={() => setMicRaw(false)}
-                title="打开浏览器那套降噪，嘈杂环境用"
-              >
-                降噪
-              </button>
-              <button
-                className="ghost sm"
-                onClick={() => void runTestMic()}
-                disabled={s.recording}
-                title="录 2.5 秒马上回放，用来对比不同设备/音质。不会占当前块的录音"
-              >
-                试录 2.5 秒
-              </button>
-              <span className="lab">回放放大</span>
-              <select
-                value={String(takeBoost)}
-                onChange={(e) => setTakeBoost(Number(e.target.value))}
-                title="录音回放的额外音量（在「对齐标准音」之上再乘）。觉得还是小就往大调；太大可能削波"
-              >
-                <option value="1">不放大</option>
-                <option value="1.5">+50%</option>
-                <option value="2">+100%</option>
-                <option value="3">+200%</option>
-                <option value="4">+300%</option>
-              </select>
-              <span className="lab">
-                {micRaw ? '原声（推荐）' : '降噪'} · 蓝牙麦换有线常有奇效
-              </span>
-            </div>
+            <AbCompareRow
+              abPlaying={s.abPlaying}
+              onCompare={() => void store.compareAB(false)}
+              onLoopCompare={() => void store.compareAB(true)}
+              onStop={() => store.stopAb()}
+              onPlayWhole={() => void store.playWhole()}
+            />
 
-            <div className="row">
-              <button onClick={() => void store.compareAB(false)}>标准 → 我的</button>
-              <button onClick={() => void store.compareAB(true)}>循环对比</button>
-              {s.abPlaying && (
-                <button className="warn" onClick={() => store.stopAb()}>
-                  停下
-                </button>
-              )}
-              <button className="ghost" onClick={() => void store.playWhole()}>
-                整篇连播
-              </button>
-            </div>
-
-            {myTakes.length > 0 && (
-              <ul className="takes">
-                {myTakes.map((t, i) => (
-                  <li key={t.id}>
-                    <span>第 {i + 1} 条 · {t.durationSec.toFixed(1)}s</span>
-                    <TakeExport take={t} fileName={`${s.current + 1}-${i + 1}.${extOf(t.mimeType)}`} />
-                    <button className="ghost sm" onClick={() => void store.removeTake(t.id)}>
-                      删
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
+            <TakesList
+              takes={myTakes}
+              chunkNumber={s.current + 1}
+              onRemove={(id) => void store.removeTake(id)}
+            />
 
             <p className="hint">
               空格 播放/暂停 · A/D（或 ↑↓）切块（直接跑）· R 录音（停了自动回放）· C 对比 · T 改文本 ·

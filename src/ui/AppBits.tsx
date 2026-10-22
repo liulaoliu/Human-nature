@@ -123,6 +123,35 @@ export function TakeExport({ take, fileName }: { take: Take; fileName: string })
   )
 }
 
+/** 当前块录过的音：逐条导出 / 删。没录音时整块不渲染。 */
+export function TakesList({
+  takes,
+  chunkNumber,
+  onRemove,
+}: {
+  takes: Take[]
+  /** 第几块（1 起算），拼下载文件名用 */
+  chunkNumber: number
+  onRemove: (id: string) => void
+}) {
+  if (takes.length === 0) return null
+  return (
+    <ul className="takes">
+      {takes.map((t, i) => (
+        <li key={t.id}>
+          <span>
+            第 {i + 1} 条 · {t.durationSec.toFixed(1)}s
+          </span>
+          <TakeExport take={t} fileName={`${chunkNumber}-${i + 1}.${extOf(t.mimeType)}`} />
+          <button className="ghost sm" onClick={() => onRemove(t.id)}>
+            删
+          </button>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
 /** 秒 → m:ss（列表里的时间点，最长也不会到小时） */
 export function fmt(sec: number) {
   const m = Math.floor(sec / 60)
