@@ -255,314 +255,322 @@ export default function StudyPanel({
     cardSeconds >= 90 ? 4 : cardSeconds >= drillAfter && drillAfter > 0 ? 3 : cardSeconds >= 30 ? 2 : cardSeconds >= 12 ? 1 : 0
 
   return (
-    <div className="study">
-      <StudyToolbar
-        index={index}
-        queueLength={queueLength}
-        roundTotal={roundTotal}
-        extraCount={extraCount}
-        mode={mode}
-        deck={deck}
-        scope={scope}
-        newLimit={newLimit}
-        newToday={newToday}
-        dueCount={dueCount}
-        newCount={newCount}
-        spelling={spelling}
-        drillAfter={drillAfter}
-        cardSeconds={cardSeconds}
-        liveSeconds={liveSeconds}
-        grandSeconds={grandSeconds}
-        heat={heat}
-        navLocked={navLocked}
-        onClose={onClose}
-        onBack={onBack}
-        onNext={onNext}
-        onExam={onExam}
-        onSwitchMode={onSwitchMode}
-        onSwitchDeck={onSwitchDeck}
-        onSwitchScope={onSwitchScope}
-        onStartArticleAll={onStartArticleAll}
-        onNewLimitChange={onNewLimitChange}
-        onDrillAfterChange={onDrillAfterChange}
-        onSpellingChange={onSpellingChange}
-        groupSize={groupSize}
-        onGroupSizeChange={onGroupSizeChange}
-      />
-
-      {roundTest && card ? (
-        <StudySpellingRound
-          card={card}
-          index={roundTest.index}
-          total={roundTest.total}
-          input={roundInput}
-          miss={roundMiss}
-          onInputChange={onRoundInputChange}
-          onCheck={onRoundCheck}
-          onSpeak={onSpeak}
+    // 左侧一列放工具条、右侧一列放卡片与评分按钮：卡片不会被工具条挤到折叠线以下
+    <div className="study study-split">
+      <aside className="study-side">
+        <StudyToolbar
+          index={index}
+          queueLength={queueLength}
+          roundTotal={roundTotal}
+          extraCount={extraCount}
+          mode={mode}
+          deck={deck}
+          scope={scope}
+          newLimit={newLimit}
+          newToday={newToday}
+          dueCount={dueCount}
+          newCount={newCount}
+          spelling={spelling}
+          drillAfter={drillAfter}
+          cardSeconds={cardSeconds}
+          liveSeconds={liveSeconds}
+          grandSeconds={grandSeconds}
+          heat={heat}
+          navLocked={navLocked}
+          onClose={onClose}
+          onBack={onBack}
+          onNext={onNext}
+          onExam={onExam}
+          onSwitchMode={onSwitchMode}
+          onSwitchDeck={onSwitchDeck}
+          onSwitchScope={onSwitchScope}
+          onStartArticleAll={onStartArticleAll}
+          onNewLimitChange={onNewLimitChange}
+          onDrillAfterChange={onDrillAfterChange}
+          onSpellingChange={onSpellingChange}
+          groupSize={groupSize}
+          onGroupSizeChange={onGroupSizeChange}
         />
-      ) : spellMiss ? (
-        <div className="study-card spell-miss">
-          <div className="study-word">{spellMiss.word}</div>
-          <div className="study-result bad">✘ 拼写错误：你写的是「{spellMiss.input || '（空）'}」</div>
-          {spellMiss.meaning && <div className="study-meaning">{spellMiss.meaning}</div>}
-          <div className="muted spell-miss-note">
-            已判为「不认识」：这个词的复习进度已归零。
-            {spellMiss.requeued
-              ? '本轮稍后会从「看词 → 释义 → 拼写」重新学。'
-              : '本轮已经练满 3 次，明天从「看词」开始重学。'}
-            不能靠再输入一次蒙对，也不能直接跳过。
+      </aside>
+
+      <div className="study-main">
+        {roundTest && card ? (
+          <StudySpellingRound
+            card={card}
+            index={roundTest.index}
+            total={roundTest.total}
+            input={roundInput}
+            miss={roundMiss}
+            onInputChange={onRoundInputChange}
+            onCheck={onRoundCheck}
+            onSpeak={onSpeak}
+          />
+        ) : spellMiss ? (
+          <div className="study-card spell-miss">
+            <div className="study-word">{spellMiss.word}</div>
+            <div className="study-result bad">✘ 拼写错误：你写的是「{spellMiss.input || '（空）'}」</div>
+            {spellMiss.meaning && <div className="study-meaning">{spellMiss.meaning}</div>}
+            <div className="muted spell-miss-note">
+              已判为「不认识」：这个词的复习进度已归零。
+              {spellMiss.requeued
+                ? '本轮稍后会从「看词 → 释义 → 拼写」重新学。'
+                : '本轮已经练满 3 次，明天从「看词」开始重学。'}
+              不能靠再输入一次蒙对，也不能直接跳过。
+            </div>
+            <button className="primary" autoFocus onClick={onAckSpellMiss}>
+              确认，从头重学（稍后再出场）
+            </button>
+            <div className="muted spell-miss-hint">
+              确认继续（<kbd>空格</kbd>）
+            </div>
           </div>
-          <button className="primary" autoFocus onClick={onAckSpellMiss}>
-            确认，从头重学（稍后再出场）
-          </button>
-        </div>
-      ) : card ? (
-        <>
-          {!drillOn && (learnQuizOn ? (
-            <MeaningQuiz
-              card={card}
-              items={items}
-              onSpeak={onSpeak}
-              onPick={onLearnPick}
-              onReveal={onLearnReveal}
-              reveal={learnReveal}
-            />
-          ) : showMeaningGate ? (
-            <MeaningQuiz
-              card={card}
-              items={items}
-              onSpeak={onSpeak}
-              onPass={() => {
-                onMeaningCleared()
-                onReveal()
-              }}
-            />
-          ) : (
-          <div className={'study-card heat-' + heat} onClick={spellingFront || reviewKeys ? undefined : onReveal}>
-            {spellingFront ? (
-              <div className="study-prompt">
-                <div className="study-meaning">
-                  {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
-                  {displayMeaning(card) || '（无释义）'}
-                </div>
-                <input
-                  className="study-input"
-                  autoFocus
-                  placeholder="拼出这个英文单词，回车检查"
-                  value={input}
-                  onChange={(e) => onInputChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      onCheckSpelling()
-                    }
-                  }}
-                />
-              </div>
+        ) : card ? (
+          <>
+            {!drillOn && (learnQuizOn ? (
+              <MeaningQuiz
+                card={card}
+                items={items}
+                onSpeak={onSpeak}
+                onPick={onLearnPick}
+                onReveal={onLearnReveal}
+                reveal={learnReveal}
+              />
+            ) : showMeaningGate ? (
+              <MeaningQuiz
+                card={card}
+                items={items}
+                onSpeak={onSpeak}
+                onPass={() => {
+                  onMeaningCleared()
+                  onReveal()
+                }}
+              />
             ) : (
-              <>
-                <div className="study-word">
-                  {card.word}
-                  <button
-                    className="speak"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSpeak(card.word)
+            <div className={'study-card heat-' + heat} onClick={spellingFront || reviewKeys ? undefined : onReveal}>
+              {spellingFront ? (
+                <div className="study-prompt">
+                  <div className="study-meaning">
+                    {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+                    {displayMeaning(card) || '（无释义）'}
+                  </div>
+                  <input
+                    className="study-input"
+                    autoFocus
+                    placeholder="拼出这个英文单词，回车检查"
+                    value={input}
+                    onChange={(e) => onInputChange(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        onCheckSpelling()
+                      }
                     }}
-                    title="朗读"
-                    aria-label="朗读"
-                  >
-                    🔊
+                  />
+                </div>
+              ) : (
+                <>
+                  <div className="study-word">
+                    {card.word}
+                    <button
+                      className="speak"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSpeak(card.word)
+                      }}
+                      title="朗读"
+                      aria-label="朗读"
+                    >
+                      🔊
+                    </button>
+                  </div>
+                  {card.phonetic && (
+                    <div
+                      className="study-phon"
+                      title="点读发音"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onSpeak(card.word)
+                      }}
+                    >
+                      {card.phonetic}
+                    </div>
+                  )}
+                  {spelling && checked && (
+                    <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
+                      {correct ? '✔ 正确' : `✘ 你写的是「${input || '（空）'}」`}
+                    </div>
+                  )}
+                  {(revealed || (spelling && checked)) && (
+                    <div className="study-back">
+                      <div className="study-meaning">
+                        {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+                        {displayMeaning(card) || '（无释义）'}
+                        {card.grammarMarks?.length ? (
+                          <span className="grammar-marks">
+                            {card.grammarMarks.map((m) => (
+                              <span className="gmark" key={m}>
+                                {m}
+                              </span>
+                            ))}
+                          </span>
+                        ) : null}
+                        {/* 学习模式已经判过 / 复习模式有「记错了」：再给「不认识」等于二次写库 */}
+                        {!(mode === 'learn' && learnGraded) && !reviewMode && (
+                          <button
+                            className="unknown-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onMarkUnknown()
+                            }}
+                            title="我不认识这个词（标为全新词，稍后重练）· 快捷键 U"
+                          >
+                            不认识 <kbd>U</kbd>
+                          </button>
+                        )}
+                      </div>
+                      {cleanGloss(card.definition) && (
+                        <div className="study-def">
+                          <span className="study-def-label">英英释义</span>
+                          {cleanGloss(card.definition)}
+                        </div>
+                      )}
+                      <VocabBlocks className="study-blocks" blocks={vocabCardBlocks(card, { maxExamples: 3 })} />
+                      <div className="muted study-srs">
+                        复习 {card.reviewState.repetitions} 次
+                        {(card.reviewState.lapses ?? 0) > 0 ? ` · 忘记 ${card.reviewState.lapses} 次` : ''}
+                        {card.reviewState.due ? ` · 下次 ${fmtDue(card.reviewState.due)}` : ' · 还没排期'}
+                        {isPriority(card) ? ' · 🔥 优先重练' : ''}
+                        {relearning ? ' · ♻️ 重学中' : ''}
+                        {card.tags.includes('不认识') ? ' · 🆕 标为不认识' : ''}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            ))}
+
+            {/* 超时未评分 → 强制锤炼 */}
+            {drillOn ? (
+              <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
+            ) : learnQuizOn ? (
+              // 选错后停在释义页：正确项浅绿、你选的那项浅红，点「继续」才进单词卡
+              learnReveal && !learnReveal.auto ? (
+                <div className="bar study-actions">
+                  <button className="primary" onClick={onLearnContinue}>
+                    继续（看单词卡） <kbd>空格</kbd>
                   </button>
                 </div>
-                {card.phonetic && (
-                  <div
-                    className="study-phon"
-                    title="点读发音"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      onSpeak(card.word)
-                    }}
-                  >
-                    {card.phonetic}
-                  </div>
+              ) : null
+            ) : learnGraded && mode === 'learn' ? (
+              // 学习模式判完了：只等「下一词」，不再显示三档评分（避免二次评分）
+              <div className="bar study-actions">
+                <button className="primary" onClick={onNext}>
+                  下一词 <kbd>空格</kbd>
+                </button>
+                {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+              </div>
+            ) : reviewFuzzy ? (
+              // 复习模式判了「模糊」：先摊开卡看释义，再决定是认下模糊还是其实不认识
+              <div className="bar study-actions">
+                <button className="primary" onClick={() => onReviewChoice('next')}>
+                  下一词 <kbd>空格</kbd>
+                </button>
+                <button className="danger" onClick={() => onReviewChoice('missed')}>
+                  记错了 · 其实不认识 <kbd>M</kbd>
+                </button>
+                <span className="muted">看过释义才想起来不认识？点「记错了」，按忘记重排</span>
+              </div>
+            ) : reviewGraded ? (
+              // 复习模式已判「忘记了 / 记错了」：停在卡上看一眼答案，点「下一词」继续
+              <div className="bar study-actions">
+                <button className="primary" onClick={onNext}>
+                  下一词 <kbd>空格</kbd>
+                </button>
+                {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+              </div>
+            ) : showMeaningGate ? null : (
+              <>
+                {/* 卡内维护：改词形/释义、删误加的词 */}
+                <div className="bar study-tools">
+                  <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
+                    ✎ 编辑
+                  </button>
+                  <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
+                    {delArmed ? '确认删除' : '删除'}
+                  </button>
+                  {(!card.meaning || card.usage.length === 0) && (
+                    <button className="primary" onClick={onOpenEdit} title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题">
+                      ＋ 补全释义/用法
+                    </button>
+                  )}
+                  {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
+                </div>
+
+                {editOpen && draft && (
+                  <StudyEditForm draft={draft} onDraftChange={onDraftChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
                 )}
-                {spelling && checked && (
-                  <div className={'study-result ' + (correct ? 'ok' : 'bad')}>
-                    {correct ? '✔ 正确' : `✘ 你写的是「${input || '（空）'}」`}
-                  </div>
-                )}
-                {(revealed || (spelling && checked)) && (
-                  <div className="study-back">
-                    <div className="study-meaning">
-                      {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
-                      {displayMeaning(card) || '（无释义）'}
-                      {card.grammarMarks?.length ? (
-                        <span className="grammar-marks">
-                          {card.grammarMarks.map((m) => (
-                            <span className="gmark" key={m}>
-                              {m}
-                            </span>
-                          ))}
-                        </span>
-                      ) : null}
-                      {/* 学习模式已经判过 / 复习模式有「记错了」：再给「不认识」等于二次写库 */}
-                      {!(mode === 'learn' && learnGraded) && !reviewMode && (
-                        <button
-                          className="unknown-btn"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            onMarkUnknown()
-                          }}
-                          title="我不认识这个词（标为全新词，稍后重练）· 快捷键 U"
-                        >
-                          不认识 <kbd>U</kbd>
-                        </button>
-                      )}
+
+                {pendingForgot ? (
+                  <div className="forgot-confirm">
+                    <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>
+                    <div className="bar study-actions">
+                      <button className="danger" onClick={onConfirmForgot}>
+                        确实忘了 · 从头重学
+                      </button>
+                      <button className="primary" onClick={onSoftenForgot}>
+                        其实记得 · 按模糊（{fmtInterval(review(card.reviewState, 'hard').interval)}）
+                      </button>
+                      <button onClick={onCancelForgot}>返回重评</button>
                     </div>
-                    {cleanGloss(card.definition) && (
-                      <div className="study-def">
-                        <span className="study-def-label">英英释义</span>
-                        {cleanGloss(card.definition)}
+                  </div>
+                ) : canGrade ? (
+                  <>
+                    {!reviewMode && (
+                      <div className="muted grade-preview">
+                        预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
+                        {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
+                        {fmtInterval(review(card.reviewState, 'again').interval)}
                       </div>
                     )}
-                    <VocabBlocks className="study-blocks" blocks={vocabCardBlocks(card, { maxExamples: 3 })} />
-                    <div className="muted study-srs">
-                      复习 {card.reviewState.repetitions} 次
-                      {(card.reviewState.lapses ?? 0) > 0 ? ` · 忘记 ${card.reviewState.lapses} 次` : ''}
-                      {card.reviewState.due ? ` · 下次 ${fmtDue(card.reviewState.due)}` : ' · 还没排期'}
-                      {isPriority(card) ? ' · 🔥 优先重练' : ''}
-                      {relearning ? ' · ♻️ 重学中' : ''}
-                      {card.tags.includes('不认识') ? ' · 🆕 标为不认识' : ''}
+                    <div className="bar study-actions">
+                      <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
+                        认识 <kbd>1</kbd>
+                      </button>
+                      <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
+                        模糊 <kbd>2</kbd>
+                      </button>
+                      <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
+                        忘记了 <kbd>3</kbd>
+                      </button>
                     </div>
-                  </div>
+                  </>
+                ) : spellingFront ? (
+                  <button className="primary" onClick={onCheckSpelling}>
+                    检查（回车）
+                  </button>
+                ) : (
+                  <button className="primary" onClick={onReveal}>
+                    显示释义（空格）
+                  </button>
                 )}
               </>
             )}
-          </div>
-          ))}
-
-          {/* 超时未评分 → 强制锤炼 */}
-          {drillOn ? (
-            <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
-          ) : learnQuizOn ? (
-            // 选错后停在释义页：正确项浅绿、你选的那项浅红，点「继续」才进单词卡
-            learnReveal && !learnReveal.auto ? (
-              <div className="bar study-actions">
-                <button className="primary" onClick={onLearnContinue}>
-                  继续（看单词卡） <kbd>空格</kbd>
-                </button>
-              </div>
-            ) : null
-          ) : learnGraded && mode === 'learn' ? (
-            // 学习模式判完了：只等「下一词」，不再显示三档评分（避免二次评分）
-            <div className="bar study-actions">
-              <button className="primary" onClick={onNext}>
-                下一词 <kbd>空格</kbd>
-              </button>
-              {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-            </div>
-          ) : reviewFuzzy ? (
-            // 复习模式判了「模糊」：先摊开卡看释义，再决定是认下模糊还是其实不认识
-            <div className="bar study-actions">
-              <button className="primary" onClick={() => onReviewChoice('next')}>
-                下一词 <kbd>空格</kbd>
-              </button>
-              <button className="danger" onClick={() => onReviewChoice('missed')}>
-                记错了 · 其实不认识 <kbd>M</kbd>
-              </button>
-              <span className="muted">看过释义才想起来不认识？点「记错了」，按忘记重排</span>
-            </div>
-          ) : reviewGraded ? (
-            // 复习模式已判「忘记了 / 记错了」：停在卡上看一眼答案，点「下一词」继续
-            <div className="bar study-actions">
-              <button className="primary" onClick={onNext}>
-                下一词 <kbd>空格</kbd>
-              </button>
-              {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-            </div>
-          ) : showMeaningGate ? null : (
-            <>
-              {/* 卡内维护：改词形/释义、删误加的词 */}
-              <div className="bar study-tools">
-                <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
-                  ✎ 编辑
-                </button>
-                <button className={delArmed ? 'danger' : ''} onClick={onDelete} title="删除这个误加的词（两步确认）">
-                  {delArmed ? '确认删除' : '删除'}
-                </button>
-                {(!card.meaning || card.usage.length === 0) && (
-                  <button className="primary" onClick={onOpenEdit} title="补上释义 / 用法后，才能出「拼写 / 填空 / 听力」题">
-                    ＋ 补全释义/用法
-                  </button>
-                )}
-                {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-              </div>
-
-              {editOpen && draft && (
-                <StudyEditForm draft={draft} onDraftChange={onDraftChange} onSave={onSaveEdit} onCancel={onCancelEdit} />
-              )}
-
-              {pendingForgot ? (
-                <div className="forgot-confirm">
-                  <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>
-                  <div className="bar study-actions">
-                    <button className="danger" onClick={onConfirmForgot}>
-                      确实忘了 · 从头重学
-                    </button>
-                    <button className="primary" onClick={onSoftenForgot}>
-                      其实记得 · 按模糊（{fmtInterval(review(card.reviewState, 'hard').interval)}）
-                    </button>
-                    <button onClick={onCancelForgot}>返回重评</button>
-                  </div>
-                </div>
-              ) : canGrade ? (
-                <>
-                  {!reviewMode && (
-                    <div className="muted grade-preview">
-                      预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
-                      {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
-                      {fmtInterval(review(card.reviewState, 'again').interval)}
-                    </div>
-                  )}
-                  <div className="bar study-actions">
-                    <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
-                      认识 <kbd>1</kbd>
-                    </button>
-                    <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
-                      模糊 <kbd>2</kbd>
-                    </button>
-                    <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
-                      忘记了 <kbd>3</kbd>
-                    </button>
-                  </div>
-                </>
-              ) : spellingFront ? (
-                <button className="primary" onClick={onCheckSpelling}>
-                  检查（回车）
-                </button>
-              ) : (
-                <button className="primary" onClick={onReveal}>
-                  显示释义（空格）
-                </button>
-              )}
-            </>
-          )}
-        </>
-      ) : (
-        <StudyRoundDone
-          counts={counts}
-          liveSeconds={liveSeconds}
-          forgotCount={forgotCount}
-          canRetryForgot={canRetryForgot}
-          mode={mode}
-          onRetryForgot={onRetryForgot}
-          onRestart={onRestart}
-          onExam={onExam}
-          onClose={onClose}
-        />
-      )}
+          </>
+        ) : (
+          <StudyRoundDone
+            counts={counts}
+            liveSeconds={liveSeconds}
+            forgotCount={forgotCount}
+            canRetryForgot={canRetryForgot}
+            mode={mode}
+            onRetryForgot={onRetryForgot}
+            onRestart={onRestart}
+            onExam={onExam}
+            onClose={onClose}
+          />
+        )}
+      </div>
     </div>
   )
 }

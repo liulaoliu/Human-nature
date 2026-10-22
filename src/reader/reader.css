@@ -765,6 +765,69 @@ textarea.manual { height: 70vh; min-height: 420px; resize: vertical; }
 /* 背单词模式 */
 .study { max-width: 760px; margin: 0 auto; }
 .study-bar { justify-content: space-between; }
+
+/* 背单词主界面：工具条独立成左栏，卡片 + 评分按钮在右栏。
+   整页锁在一屏内（卡片自己滚、按钮永远贴底），避免工具条把「下一词」挤到折叠线以下。 */
+.reader.studying .reader-main { display: flex; flex-direction: column; overflow: hidden; }
+.study.study-split {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 780px);
+  /* 行高必须显式锁成 1fr：默认 auto 会被卡片内容撑开，
+     下面所有 min-height: 0 / flex 收缩就都白写了（按钮会被顶到折叠线以下） */
+  grid-template-rows: minmax(0, 1fr);
+  justify-content: center;
+  align-items: stretch;
+  gap: 20px;
+  /* 撑满 .reader-main 的剩余高度：靠 flex 而不是百分比高度，少一层祖先就失效 */
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  max-width: none;
+}
+.study-side { min-width: 0; min-height: 0; overflow: auto; }
+.study-side .study-bar { flex-direction: column; align-items: stretch; gap: 6px; margin-bottom: 0; }
+.study-side .study-bar > button,
+.study-side .study-bar > select { width: 100%; }
+.study-side .study-bar .view-toggle { margin-left: 0; display: flex; gap: 6px; }
+.study-side .study-bar .view-toggle button { flex: 1 1 0; }
+.study-side .study-bar .muted,
+.study-side .study-bar .study-timer { margin-left: 0; font-size: 12px; line-height: 1.6; }
+.study-main { display: flex; flex-direction: column; gap: 8px; min-width: 0; min-height: 0; overflow: hidden; }
+/* 卡片吃掉剩下的高度（内容多就在卡内滚），动作条不参与伸缩 → 始终可见 */
+.study-main > .study-card {
+  flex: 1 1 auto;
+  min-height: 140px;
+  margin: 0;
+  padding: 18px 22px;
+  overflow: auto;
+}
+/* 卡内竖向留白在「锁一屏」下压小，一屏能多放两行释义/例句 */
+.study-main > .study-card .study-back { margin-top: 12px; padding-top: 10px; }
+.study-main > .study-card .study-word { font-size: 34px; }
+.study-main > .study-done { flex: 1 1 auto; overflow: auto; }
+.study-main > .drill { min-height: 0; overflow: auto; }
+.study-main > .bar { flex: 0 0 auto; margin-bottom: 0; }
+
+/* 窄屏：工具条回到卡片上方，恢复成可滚动的普通文档流 */
+@media (max-width: 1080px) {
+  .reader.studying .reader-main { display: block; overflow: auto; }
+  .study.study-split { grid-template-columns: minmax(0, 1fr); grid-template-rows: none; flex: 0 0 auto; height: auto; }
+  .study-side { overflow: visible; }
+  .study-side .study-bar { flex-direction: row; flex-wrap: wrap; align-items: center; }
+  .study-side .study-bar > button,
+  .study-side .study-bar > select { width: auto; }
+  .study-side .study-bar .view-toggle { margin-left: 8px; display: inline-flex; }
+  .study-side .study-bar .view-toggle button { flex: 0 0 auto; }
+  .study-side .study-bar .muted,
+  .study-side .study-bar .study-timer { margin-left: 10px; font-size: 13px; }
+  .study-main { overflow: visible; }
+  .study-main > .study-card { flex: 0 0 auto; min-height: 260px; margin: 10px 0; padding: 32px 24px; overflow: visible; }
+  .study-main > .study-card .study-word { font-size: 42px; }
+  .study-main > .study-card .study-back { margin-top: 22px; padding-top: 16px; }
+}
+
+/* 拼写判错页：按钮下方的键位提示 */
+.spell-miss-hint { margin-top: 8px; font-size: 13px; }
 .study-card {
   background: linear-gradient(180deg, var(--panel-2), var(--panel));
   border: 1px solid var(--line);
@@ -1677,7 +1740,8 @@ button.danger {
   text-align: center;
   vertical-align: 1px;
 }
-.study-actions button.primary kbd {
+.study-actions button.primary kbd,
+.study-card button.primary kbd {
   background: rgba(255, 255, 255, 0.18);
   border-color: rgba(255, 255, 255, 0.45);
   color: #fff;

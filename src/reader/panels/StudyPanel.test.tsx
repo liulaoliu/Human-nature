@@ -317,3 +317,31 @@ describe('StudyPanel：复习模式三键', () => {
     expect(onNext).toHaveBeenCalled()
   })
 })
+
+describe('StudyPanel：两列布局与拼写判错提示', () => {
+  it('工具条独占左栏，卡片和评分按钮在右栏（不跟工具条挤一列）', () => {
+    const { container } = render(<StudyPanel {...props({ revealed: true })} />)
+    const side = container.querySelector('.study > .study-side')
+    const main = container.querySelector('.study > .study-main')
+
+    expect(side?.querySelector('.study-bar')).not.toBeNull()
+    expect(main?.querySelector('.study-card')).not.toBeNull()
+    expect(main?.querySelector('.study-bar')).toBeNull() // 工具条不在卡片那一列
+    expect(main?.querySelector('.study-actions')).not.toBeNull()
+  })
+
+  it('拼写判错页：确认按钮下方标出空格键（和「看答案 H」一个样式）', () => {
+    const onAckSpellMiss = vi.fn()
+    render(
+      <StudyPanel
+        {...props({ spellMiss: { input: 'rnu', word: 'run', meaning: '跑', requeued: true }, onAckSpellMiss })}
+      />,
+    )
+
+    const hint = document.querySelector('.spell-miss-hint')
+    expect(hint?.textContent).toContain('空格')
+    expect(hint?.querySelector('kbd')).not.toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /确认，从头重学/ }))
+    expect(onAckSpellMiss).toHaveBeenCalledTimes(1)
+  })
+})
