@@ -274,6 +274,16 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   门禁用例改用「学过但排期后又忘」（有 due、repetitions 0）的词 + `mode: 'review'`。
   **拆了 hook**：`useStudySession` 到 800 行上限被门禁拦住，学习模式这一关的状态机
   拆到 `hooks/useStudyLearnStep`（落库仍回调主 hook 的 `applyGrade`，避免两个写入方）。
+- **背单词「组末拼写测试」（2026-10-22 第二批）**：`core/vocab/review` 补 4 条（`groupEndOf`：size≤0 不分组 /
+  小数 floor / 越界封顶 total / 普通切组）、`hooks/useStudySpellingRound`（6：begin 建序列 /
+  逐词拼对推进 + 全拼完 onDone 一次 / 大小写空格不算错 / 拼错 onMiss 一次并显示原文 /
+  重打再错不改判定、照原文打对才放行 / begin 与 reset 清状态）、
+  `useStudySession` 的旧「E 到完成页」用例改为「组末先拼写，拼完才进完成页」。
+  **拆了 hook**：正面拼错的卡面拆到 `useStudySpellGate`、组末序列拆到 `useStudySpellingRound`
+  （落库都经回调回主 hook，一个写入方）；锤炼板拼错与正面拼写共用同一条判定路径（归一化一致）。
+  **踩坑**：`advance` 曾在 `setIndex` 的 updater 里嵌套 `setWords` + `onDone`（→ 主 hook 再 `setIndex`），
+  React 渲染期嵌套更新在 jsdom 下只报一个被 sourcemap 吞掉的神秘错误（`column must be >= 0`）——
+  **updater 必须纯**：先用当前值算好下一步，再分头更新，最后才回调。
 - **顶栏行数（2026-10-20 第五批）**：`core/toolbarRows`（8：默认 4 行 / 脏值回 4 / 字符串与数字都认 /
   每档行数等于档位 / 四组不丢不重不乱序 / 3、2 档的具体并法 / 统计组恒在最后一行 / 类名拼法）、
   `useReaderPrefs` 补 1 条（默认 4 行 / 改档存成字符串 `reader:toolbarRows` / 怪值回 4）、

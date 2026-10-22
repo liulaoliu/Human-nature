@@ -236,8 +236,8 @@ export default function ReaderApp() {
   const rightDownRef = useRef(false)
 
   // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词时不触发）
-  const toggleVocabRef = useRef<() => void>(() => {})
-  const navVocabRef = useRef<(dir: 1 | -1) => void>(() => {})
+  const toggleVocabRef = useRef<() => void>(() => { })
+  const navVocabRef = useRef<(dir: 1 | -1) => void>(() => { })
 
   // 护眼主题：eye 已由 useLocalStorageState 存成 'green'/'dark'，这里只负责应用到 DOM
   useEffect(() => {

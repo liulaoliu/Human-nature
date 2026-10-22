@@ -229,3 +229,19 @@ export function buildReviewQueue(items: VocabItem[], now: Date = new Date()): Vo
         a.createdAt.localeCompare(b.createdAt),
     )
 }
+
+/**
+ * 「每组 N 词」的组末边界（纯函数）。
+ *
+ * 学习模式学到组末要停下做拼写测试（本组学了多少就拼多少，Spec 2026-10-22），
+ * 组的切分只看**队列里的位置**：加练重排回队尾的词自然归到后面的组，不打乱前面的组。
+ *
+ * `size <= 0` 或 ≥ 总数 = 不分组，整轮就是一组。
+ */
+export function groupEndOf(index: number, total: number, size: number): number {
+  const n = typeof size === 'number' && Number.isFinite(size) && size > 0 ? Math.floor(size) : 0
+  if (total <= 0) return 0
+  if (n <= 0 || n >= total) return total
+  if (index < 0) index = 0
+  return Math.min((Math.floor(index / n) + 1) * n, total)
+}

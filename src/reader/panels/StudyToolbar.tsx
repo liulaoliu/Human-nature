@@ -17,6 +17,9 @@ export interface StudyToolbarProps {
   newCount: number
   spelling: boolean
   drillAfter: number
+  /** 学习模式每组多少词（0 = 跟随范围；本篇 = 全部）。 */
+  groupSize: number
+  onGroupSizeChange: (n: number) => void
   cardSeconds: number
   liveSeconds: number
   grandSeconds: number
@@ -52,6 +55,8 @@ export default function StudyToolbar({
   newCount,
   spelling,
   drillAfter,
+  groupSize,
+  onGroupSizeChange,
   cardSeconds,
   liveSeconds,
   grandSeconds,
@@ -133,6 +138,18 @@ export default function StudyToolbar({
         />
         拼写
       </label>
+      <select
+        value={String(groupSize)}
+        onChange={(e) => onGroupSizeChange(Number(e.target.value))}
+        disabled={navLocked || mode !== 'learn'}
+        title="学习模式每组多少词：学完一组停下来，把这一组全部词拼写一遍（本篇范围默认整篇一组；换档下一组生效）"
+      >
+        <option value="0">每组跟本篇</option>
+        <option value="5">每组 5 词</option>
+        <option value="10">每组 10 词</option>
+        <option value="20">每组 20 词</option>
+        <option value="50">每组 50 词</option>
+      </select>
       <select
         value={String(drillAfter)}
         onChange={(e) => onDrillAfterChange(Number(e.target.value))}

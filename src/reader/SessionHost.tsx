@@ -107,6 +107,13 @@ export default function SessionHost({
           learnPhase={study.api.learnPhase}
           learnReveal={study.api.learnReveal}
           learnGraded={study.api.learnGraded}
+          roundTest={study.api.roundTest}
+          roundMiss={study.api.roundMiss}
+          roundInput={study.api.roundInput}
+          onRoundInputChange={study.api.onRoundInputChange}
+          onRoundCheck={study.api.onRoundCheck}
+          groupSize={study.api.groupSize}
+          onGroupSizeChange={study.api.setGroupSize}
           pendingForgot={study.api.pendingForgot}
           relearning={study.api.relearning}
           spellMiss={study.api.spellMiss}

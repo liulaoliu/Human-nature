@@ -60,7 +60,7 @@ afterEach(() => {
 })
 
 describe('useStudySession：单词之间切换', () => {
-  it('E 下一个、Q 上一个；到边界不越界', () => {
+  it('E 下一个、Q 上一个；组末先拼写（学多少拼多少），拼完才进完成页', () => {
     const { unmount } = render(
       <Harness
         library={lib([
@@ -75,8 +75,17 @@ describe('useStudySession：单词之间切换', () => {
     fireEvent.keyDown(window, { key: 'e' })
     expect(api!.index).toBe(1)
 
+    // 最后一组的组末：E 不再直接翻页，而是停下做组末拼写（默认每组 = 范围全部）
     fireEvent.keyDown(window, { key: 'e' })
-    expect(api!.index).toBe(2) // 最后一张再往后 = 本轮完成页
+    expect(api!.roundTest).toEqual({ index: 0, total: 2 })
+    expect(api!.index).toBe(1)
+
+    act(() => api!.onRoundInputChange('one'))
+    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundInputChange('two'))
+    act(() => api!.onRoundCheck())
+    expect(api!.roundTest).toBeNull()
+    expect(api!.index).toBe(2) // 拼完 = 本轮完成页
 
     fireEvent.keyDown(window, { key: 'q' })
     expect(api!.index).toBe(1)

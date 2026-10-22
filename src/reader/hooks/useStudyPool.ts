@@ -39,6 +39,12 @@ export function useStudyPool({ library, articleIdentity, docLemmas }: UseStudyPo
     'word',
     persistentEnum(['word', 'collocation'] as const, 'word'),
   )
+  /**
+   * 学习模式「每组 N 词」的组大小：组末要做拼写测试（本组学了多少就拼多少）。
+   * 0 = 跟随范围——「本篇」= 本篇全部生词（Spec 2026-10-22：默认一篇一篇学）；
+   * 其它范围 = 20。手动设了正数就用它（存本机）。
+   */
+  const [groupSize, setGroupSize] = useLocalStorageState('reader:studyGroupSize', 0, persistentNumber)
 
   /** 可背的：按当前牌组过滤；用法笔记（中文说明）不进卡片 */
   const studyable = useMemo(
@@ -60,6 +66,12 @@ export function useStudyPool({ library, articleIdentity, docLemmas }: UseStudyPo
   const dueCount = useMemo(() => pool.filter((it) => hasReviewHistory(it) && isDue(it)).length, [pool])
   const newCount = useMemo(() => pool.filter(isFresh).length, [pool])
 
+  /** 组大小生效值：手动设了就用；否则本篇 = 全部，其它范围 = 20。 */
+  const effectiveGroupSize = useMemo(() => {
+    if (groupSize > 0) return Math.floor(groupSize)
+    return scope === 'article' ? Math.max(1, pool.length) : 20
+  }, [groupSize, scope, pool.length])
+
   return {
     scope,
     setScope,
@@ -71,6 +83,9 @@ export function useStudyPool({ library, articleIdentity, docLemmas }: UseStudyPo
     setMode,
     deck,
     setDeck,
+    groupSize,
+    setGroupSize,
+    effectiveGroupSize,
     pool,
     poolFor,
     dueCount,

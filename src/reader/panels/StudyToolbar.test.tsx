@@ -19,6 +19,8 @@ function props(over: Partial<StudyToolbarProps> = {}): StudyToolbarProps {
     newCount: 7,
     spelling: false,
     drillAfter: 60,
+    groupSize: 0,
+    onGroupSizeChange: noop,
     cardSeconds: 12,
     liveSeconds: 65,
     grandSeconds: 3600,

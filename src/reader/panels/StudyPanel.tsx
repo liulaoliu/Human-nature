@@ -19,6 +19,8 @@ import VocabBlocks from './VocabBlocks'
 import DrillBoard, { MeaningQuiz, type MeaningReveal } from './StudyDrill'
 import StudyEditForm from './StudyEditForm'
 import StudyRoundDone from './StudyRoundDone'
+import StudySpellingRound from './StudySpellingRound'
+import type { SpellingRoundMiss } from '../hooks/useStudySpellingRound'
 import StudyToolbar from './StudyToolbar'
 
 export type { StudyDraft, StudyScope }
@@ -60,8 +62,15 @@ export interface StudyPanelProps {
   relearning: boolean
   /** 拼写错误的判定提示；非空时只显示这张「判为不认识」的卡。 */
   spellMiss: { input: string; word: string; meaning: string | null; requeued: boolean } | null
+  /** 组末拼写测试（学习模式每组结束）：非空时整页显示它，`card` 已换成测试里的当前词。 */
+  roundTest: { index: number; total: number } | null
+  roundMiss: SpellingRoundMiss | null
+  roundInput: string
   /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
   navLocked: boolean
+  /** 学习模式每组多少词（0 = 跟随范围：本篇 = 全部）。 */
+  groupSize: number
+  onGroupSizeChange: (n: number) => void
   /** 超过 drillAfter 秒未评分 → 强制锤炼（拼写/选义/搭配/听写），完成后才能评分。 */
   drillOn: boolean
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
@@ -106,6 +115,8 @@ export interface StudyPanelProps {
   onMarkUnknown: () => void
   onDrillCleared: () => void
   onMeaningCleared: () => void
+  onRoundInputChange: (v: string) => void
+  onRoundCheck: () => void
   /** 学习模式「看答案」：判不认识并高亮正确项。 */
   onLearnReveal: () => void
   /** 学习模式选了某一项：判定 + 写库（选错会停在高亮页等「继续」）。 */
@@ -157,7 +168,12 @@ export default function StudyPanel({
   pendingForgot,
   relearning,
   spellMiss,
+  roundTest,
+  roundMiss,
+  roundInput,
   navLocked,
+  groupSize,
+  onGroupSizeChange,
   drillAfter,
   onClose,
   onExam,
@@ -186,6 +202,8 @@ export default function StudyPanel({
   onMarkUnknown,
   onDrillCleared,
   onMeaningCleared,
+  onRoundInputChange,
+  onRoundCheck,
   onLearnReveal,
   onLearnPick,
   onLearnContinue,
@@ -251,9 +269,22 @@ export default function StudyPanel({
         onNewLimitChange={onNewLimitChange}
         onDrillAfterChange={onDrillAfterChange}
         onSpellingChange={onSpellingChange}
+        groupSize={groupSize}
+        onGroupSizeChange={onGroupSizeChange}
       />
 
-      {spellMiss ? (
+      {roundTest && card ? (
+        <StudySpellingRound
+          card={card}
+          index={roundTest.index}
+          total={roundTest.total}
+          input={roundInput}
+          miss={roundMiss}
+          onInputChange={onRoundInputChange}
+          onCheck={onRoundCheck}
+          onSpeak={onSpeak}
+        />
+      ) : spellMiss ? (
         <div className="study-card spell-miss">
           <div className="study-word">{spellMiss.word}</div>
           <div className="study-result bad">✘ 拼写错误：你写的是「{spellMiss.input || '（空）'}」</div>

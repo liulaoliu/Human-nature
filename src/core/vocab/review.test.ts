@@ -5,6 +5,7 @@ import {
   buildStudyQueue,
   canQuizMeaning,
   dueItems,
+  groupEndOf,
   isDue,
   needsForgotConfirm,
   needsMeaningCheck,
@@ -258,5 +259,29 @@ describe('释义关通过后的「忘记」确认', () => {
     expect(needsForgotConfirm({ grade: 'again', meaningProven: false })).toBe(false)
     expect(needsForgotConfirm({ grade: 'hard', meaningProven: true })).toBe(false)
     expect(needsForgotConfirm({ grade: 'good', meaningProven: true })).toBe(false)
+  })
+})
+
+describe('review：组末边界（学习模式每组 N 词，组末做拼写测试）', () => {
+  it('size 无效（0 / 负数）按不分组算：整轮一组；小数向下取整', () => {
+    expect(groupEndOf(5, 10, 0)).toBe(10)
+    expect(groupEndOf(5, 10, -3)).toBe(10)
+    expect(groupEndOf(5, 10, 2.9)).toBe(6) // floor(2.9) = 2 → 每组 2 词
+  })
+
+  it('size ≥ 总数也是整轮一组', () => {
+    expect(groupEndOf(5, 10, 10)).toBe(10)
+    expect(groupEndOf(5, 10, 99)).toBe(10)
+  })
+
+  it('每组 N 词：第 i 张卡的组末是下一个 N 的倍数（封顶总数）', () => {
+    expect(groupEndOf(0, 23, 5)).toBe(5)
+    expect(groupEndOf(4, 23, 5)).toBe(5)
+    expect(groupEndOf(5, 23, 5)).toBe(10)
+    expect(groupEndOf(20, 23, 5)).toBe(23) // 最后一组不足 N，封顶总数
+  })
+
+  it('空轮没有组末', () => {
+    expect(groupEndOf(0, 0, 5)).toBe(0)
   })
 })
