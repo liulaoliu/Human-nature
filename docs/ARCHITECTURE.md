@@ -227,6 +227,33 @@ types ← core ← adapters ← reader
 - 用户资产写入必须同时考虑 IndexedDB 兜底和「导出全部」；
 - 上帝文件门禁扫描 `src/`、`tools/`、`server/`：新文件 >800 行直接失败，拆出去再写。
 
+## 三·六、吸顶 / 吸底（界面约定）
+
+工具条跟着内容滚跑掉，是这一版被提得最多的问题（速读顶栏、速读「读本句/下一句/退出」、
+语言点的「语言点（N）+ 条目列表」、保存/取消）。统一按下面这套写，**别每个面板各发明一套**：
+
+1. **先认出滚动容器**：`position: sticky` 相对**最近的滚动祖先**算，不是相对窗口。
+   精读/速读是 `.reader-main`（`overflow:auto; padding:24px 34px`）；
+   语言点编辑器是 `.lang-editor` 自己（`max-height:86vh; overflow:auto; padding:14px 16px`）。
+   写之前先在 DOM 里确认谁在滚 —— 容器换了，sticky 全部失效，而且不报错。
+2. **负 margin + 等量 padding 抵消容器的内边距**：让吸住的条贴到容器边上、横铺满，
+   又不改变「还没吸住」时的位置。源头是精读顶栏 `.reader-toolbar`：
+   `margin:-24px -34px 16px; padding:14px 34px 10px;`；
+   语言点同理 `margin:-14px -16px 0; padding:14px 16px 8px;`。
+3. **底色必须不透明**（页级 `var(--bg)`、面板内 `var(--panel)`），再给 `z-index`（页级 20–25）。
+   底色差一点就会出现「正文从按钮缝里穿过去」；`z-index` 还要低于真浮层
+   （清单 `40`、对话框 `60`）。
+4. **吸底必须抹掉 `.bar` 自带的 `margin-bottom:16px`**，否则吸住时下面漏一条正文。
+5. **别拿 `position: fixed` 假装吸底**：fixed 脱离文档流，会盖住最后一屏内容。
+   只有真浮层（`.speed-basket-panel`、`.toast`、`.lang-editor-overlay`）才 fixed。
+6. **只吸「工具条」**：按钮行、标题 + 条目列表。表单/正文/卡片不进 sticky ——
+   两个吸底块叠一起时，第二个就得写死第一个的高度，字号一变就错位。
+7. **要一起吸的东西包一层**：标题 + 列表这种组合，包成 `.lang-editor-head` 让**一个**元素 sticky；
+   不要把两个兄弟分别 sticky（第二个要写死第一个的高度）。
+8. **测试与验收**：jsdom 没有布局，sticky 断言不了。
+   结构改动要保证测试用**后代选择器**（`querySelector('.lang-item')`），别写 `>` 直连 ——
+   包一层包装元素就全红。改完按 F5 肉眼确认三件事：滚动时条不动、底下不透、按钮贴边。
+
 ## 四、有意为之的例外（别当违规修）
 
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
