@@ -218,6 +218,69 @@ function alignPosWithGloss(it, dict) {
   }
 }
 
+/**
+ * 复合词的词性（和 `core/ecdict.ts` 的 guessCompoundPos 同一口径）：
+ * 只看末段后缀，判不出来就返回空串。`waiting-times` 这种词性不明的不硬标。
+ */
+const COMPOUND_SUFFIX = [
+  [/(?:ed|ing|less|ful|ous|ive|able|ible|ant|ent|al|like|free|made|blind|proof|wide|odd|worthy)$/i, 'adj.'],
+  [/ly$/i, 'adv.'],
+]
+
+function compoundPos(word) {
+  const w = String(word ?? '').trim()
+  if (!w.includes('-')) return ''
+  const last = w.split('-').filter(Boolean).pop() ?? ''
+  if (last.length < 3 || !/^[a-z]+$/i.test(last)) return ''
+  for (const [re, pos] of COMPOUND_SUFFIX) if (re.test(last)) return pos
+  return ''
+}
+
+/**
+ * 给「空白单词卡」补词典内容（--fill）。
+ *
+ * 只补空的，且**只补词典里只有一种词性的词**：多词性的词取释义第一行会踩到冷僻义
+ * （`pale` 的第一行是「n. 栅栏, 界线」，正文里十次有九次是形容词）——
+ * 这种卡留着空白交给 AI 查词，比填一条误导的释义强。
+ */
+function fillEmpty(it, dict) {
+  if (it.kind || String(it.word ?? '').includes(' ')) return null
+  if (it.fieldSources?.partOfSpeech === 'manual' || it.fieldSources?.meaning === 'manual') return null
+  const iso = new Date().toISOString()
+  const guess = it.partOfSpeech ? '' : compoundPos(it.word)
+
+  // 已经有内容：只可能补一个判出来的词性
+  if (it.meaning || it.definition || it.partOfSpeech) {
+    return guess ? { ...it, partOfSpeech: guess, updatedAt: iso } : null
+  }
+  const e = dict.get(norm(it.word))
+  if (!e) return guess ? { ...it, partOfSpeech: guess, updatedAt: iso } : null
+  const classes = new Set()
+  for (const line of String(e.zh ?? '').split(/\\n|\n/)) {
+    const t = line.trim()
+    if (!t) continue
+    for (const [re, k] of POS_TAG) {
+      if (re.test(t)) {
+        classes.add(k)
+        break
+      }
+    }
+  }
+  if (classes.size !== 1) return null
+  const pos = posFromGloss(e.zh) || guess
+  const meaning = firstGloss(e.zh, pos)
+  if (!meaning) return null
+  return {
+    ...it,
+    partOfSpeech: pos || null,
+    meaning,
+    definition: firstGloss(e.en, pos) || null,
+    fieldSources: { partOfSpeech: 'dict', meaning: 'dict', definition: 'dict' },
+    status: 'queried',
+    updatedAt: iso,
+  }
+}
+
 async function main() {
   if (!existsSync(DB)) {
     console.error(`找不到数据库：${DB}`)
@@ -236,11 +299,13 @@ async function main() {
   const renameWrong = [] // A
   const posMismatch = [] // B
   const verbSense = [] // C
+  const empty = [] // D
   for (const it of items) {
     const word = String(it.word ?? '')
     // 只体检「单个单词」的词条：词组 / 习语 / 用法笔记的 word 里带空格或整句说明，
     // 它们的 partOfSpeech 是语言点带的，跟释义开头标记不是一回事。
     if (word.includes(' ') || it.kind) continue
+    if (!it.meaning && !it.definition) empty.push(word)
     const surface = surfaceFromNote(it.note)
     if (surface && !surface.includes(' ') && norm(surface) !== norm(word) && !isInflection(norm(surface), norm(word))) {
       renameWrong.push({ it, word, surface })
@@ -270,15 +335,18 @@ async function main() {
   console.log(`C. 释义是动词义（英英以 to 开头）、词性却是别的：${verbSense.length}`)
   for (const { word, pos, meaning } of verbSense.slice(0, 30)) console.log(`   ${word}  [${pos}] ${meaning.slice(0, 40)}`)
   if (verbSense.length > 30) console.log(`   ……还有 ${verbSense.length - 30} 条`)
+  console.log('')
+  console.log(`D. 标了词却还空白的单词卡（--fill 用词典补）：${empty.length}`)
+  for (const w of empty.slice(0, 20)) console.log(`   ${w}`)
 
   if (!fix) {
-    if (renameWrong.length || posMismatch.length || verbSense.length)
+    if (renameWrong.length || posMismatch.length || verbSense.length || empty.length)
       console.log('\n要修：先关掉应用，再跑 `node tool/audit-vocab.mjs --fix`')
     db.close()
     return
   }
 
-  if (!renameWrong.length && !posMismatch.length && !verbSense.length) {
+  if (!renameWrong.length && !posMismatch.length && !verbSense.length && !empty.length) {
     console.log('\n没有要修的')
     db.close()
     return
@@ -303,6 +371,7 @@ async function main() {
     let moved = 0
     let spawned = 0
     let aligned = 0
+    let filledCount = 0
     const out = []
     for (const it of cur.items) {
       const surface = surfaceFromNote(it.note)
@@ -322,7 +391,13 @@ async function main() {
           if (process.env.AUDIT_DEBUG)
             console.log('  [align]', it.word, JSON.stringify(it.partOfSpeech), '→', JSON.stringify(fixedItem.partOfSpeech), '|', JSON.stringify(String(it.meaning ?? '').slice(0, 24)))
         }
-        out.push(fixedItem ?? it)
+        const filled = fillEmpty(fixedItem ?? it, dict)
+        if (filled) {
+          filledCount++
+          if (process.env.AUDIT_DEBUG)
+            console.log('  [fill]', it.word, '→', filled.partOfSpeech, '|', String(filled.meaning ?? '').slice(0, 24))
+        }
+        out.push(filled ?? fixedItem ?? it)
         continue
       }
       const word = String(it.word)
@@ -382,7 +457,7 @@ async function main() {
       spawned++
     }
     store.saveVocab({ ...cur, items: out })
-    console.log(`\n已回改 ${moved} 条词形；拆分出 ${spawned} 条被打乱的词；对齐 ${aligned} 条词性与释义`)
+    console.log(`\n已回改 ${moved} 条词形；拆分出 ${spawned} 条被打乱的词；对齐 ${aligned} 条词性与释义；补空 ${filledCount} 条`)
   } finally {
     store.close()
   }

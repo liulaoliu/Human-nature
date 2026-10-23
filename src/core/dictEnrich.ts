@@ -10,7 +10,7 @@
  */
 import type { VocabFieldSources, VocabItem, VocabLibrary } from '../types/document'
 import type { Ecdict } from './ecdict'
-import { glossForPos, resolveWord } from './ecdict'
+import { glossForPos, guessCompoundPos, resolveWord } from './ecdict'
 import { reconcileSense } from './vocab/sense'
 import { cleanGloss, normalizePos } from './vocab'
 
@@ -35,7 +35,10 @@ export function enrichWithDict(
   const items = library.items.map((it) => {
     const hit = resolveWord(dict, it.word) ?? resolveWord(dict, it.lemma)
     const mw = mwld?.(it.word) ?? mwld?.(it.lemma) ?? null
-    if (!hit && !mw) return it
+    // 连字符复合词（self-described / taxpayer-funded）词典一条都查不到，
+    // 但词性能按末段后缀判出来：有词性才能参与语法标记和复习题型。
+    const compoundPos = hit || mw ? null : guessCompoundPos(it.word)
+    if (!hit && !mw && !compoundPos) return it
     const patch: Partial<VocabItem> = {}
     const fieldSources: VocabFieldSources = { ...it.fieldSources }
     // 词典只填空：不覆盖已有值；只有「用户手动清空过」的字段才主动跳过
@@ -53,6 +56,10 @@ export function enrichWithDict(
     if (it.fieldSources?.partOfSpeech !== 'manual' && !it.partOfSpeech && pos && meaningFromDict) {
       patch.partOfSpeech = pos
       fieldSources.partOfSpeech = 'dict'
+    }
+    // 复合词：按后缀判出来的词性，不记来源（它不是词典的结论，也不能冒充 AI 看过语境）
+    if (!it.partOfSpeech && !patch.partOfSpeech && compoundPos) {
+      patch.partOfSpeech = compoundPos
     }
     const meaning = hit?.entry.zh ? cleanGloss(glossForPos(hit.entry.zh, pos || hit.entry.pos)) : ''
     if (it.fieldSources?.meaning !== 'manual' && !it.meaning && meaning) {

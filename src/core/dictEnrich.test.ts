@@ -58,6 +58,30 @@ describe('enrichWithDict', () => {
     expect(out.library.items[0].meaning).toContain('安顿')
   })
 
+  it('连字符复合词查不到整词，也按末段后缀给出词性', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [
+        vocabItem({ word: 'taxpayer-funded', lemma: 'taxpayer-funded', meaning: '由纳税人出资的', status: 'queried' }),
+        vocabItem({ word: 'world-leading', lemma: 'world-leading', meaning: '世界领先的', status: 'queried' }),
+      ],
+    }
+    const out = enrichWithDict(lib, dict, undefined, TEST_NOW)
+    expect(out.library.items[0].partOfSpeech).toBe('adj.')
+    expect(out.library.items[1].partOfSpeech).toBe('adj.')
+    // 推出来的词性不冒充词典/AI 的结论
+    expect(out.library.items[0].fieldSources?.partOfSpeech).toBeUndefined()
+  })
+
+  it('判不出来的复合词（末段是普通名词）不硬标词性', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [vocabItem({ word: 'waiting-times', lemma: 'waiting-times', status: 'unqueried' })],
+    }
+    const out = enrichWithDict(lib, dict, undefined, TEST_NOW)
+    expect(out.library.items[0].partOfSpeech ?? null).toBeNull()
+  })
+
   it('英英释义（可选传入的 M-W 查询）也补上', () => {
     const lib = markWord(createLibrary(), { word: 'run', articleId: 'A' }, TEST_NOW).library
     const out = enrichWithDict(lib, dict, (w) => (w === 'run' ? { en: 'to move with speed', pos: 'verb' } : null), TEST_NOW)

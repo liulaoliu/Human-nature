@@ -240,6 +240,32 @@ export function glossForPos(zh: string, pos: string): string {
   return firstLine(zh)
 }
 
+/**
+ * 连字符复合词的词性（词典查不到整词时的兜底）。
+ *
+ * 为什么需要：`self-described` / `taxpayer-funded` / `world-leading` / `50-odd` 这类词
+ * ECDICT 一条都没收录，于是卡上是「只有一句中文释义，没有词性也没有英英」，
+ * 语法标记、复习题型都拿不到词性。复合词的**末段**决定了整个词的词性，按后缀就能判。
+ *
+ * 只看末段、只认明确的后缀 —— `waiting-times`（末段 times）这类判不出就返回 null，
+ * 宁可没有词性，也不要把名词短语标成形容词。
+ */
+const COMPOUND_SUFFIX: [RegExp, string][] = [
+  [/(?:ed|ing)$/i, 'adj.'],
+  [/(?:less|ful|ous|ive|able|ible|ant|ent|al)$/i, 'adj.'],
+  [/(?:like|free|made|blind|proof|wide|odd|worthy)$/i, 'adj.'],
+  [/ly$/i, 'adv.'],
+]
+
+export function guessCompoundPos(word: string | null | undefined): string | null {
+  const w = String(word ?? '').trim()
+  if (!w.includes('-')) return null
+  const last = w.split('-').filter(Boolean).pop() ?? ''
+  if (last.length < 3 || !/^[a-z]+$/i.test(last)) return null
+  for (const [re, pos] of COMPOUND_SUFFIX) if (re.test(last)) return pos
+  return null
+}
+
 const WORD_RE = /[A-Za-z][A-Za-z'-]*/g
 
 /** 这个位置是不是「句首」（前一个非空白字符是句末标点/引号，或文本开头）。 */
