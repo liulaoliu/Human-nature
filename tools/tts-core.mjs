@@ -170,9 +170,13 @@ export function pickVoiceFor(voices, lang, gender) {
   )
 }
 
-/** Edge 失败时挑一个同口音/同性别的 Piper 音色；没装 Piper 就交给浏览器语音。 */
-function localFallbackTargets(edgeVoice) {
-  const piper = pickVoiceFor(listPiperVoices(), edgeLangFor(edgeVoice), edgeGenderFor(edgeVoice))
+/**
+ * Edge 失败时挑一个同口音/同性别的 Piper 音色；没装 Piper 就交给浏览器语音。
+ * 导出只为测试（这里曾经把 `listLocalVoices` 写成没导入的 `listPiperVoices`，
+ * 一句 TTS 请求直接 502，见 tts-core.test.mjs）。
+ */
+export function localFallbackTargets(edgeVoice) {
+  const piper = pickVoiceFor(listLocalVoices(), edgeLangFor(edgeVoice), edgeGenderFor(edgeVoice))
   return piper ? [{ engine: 'local', voice: piper.id, ext: 'wav' }] : []
 }
 
@@ -278,7 +282,15 @@ function pickAudio(target, file) {
 async function synthWithFallbacks(text, target, file) {
   const fallbackFile = fallbackFileFor(target, file)
   let lastErr
-  for (const attempt of [target, ...fallbackTargets(target)]) {
+  // 兜底候选**等主目标真的失败之后**才去解析。
+  //
+  // 之前写的是 `for (const attempt of [target, ...fallbackTargets(target)])` —— 数组在循环前
+  // 就展开了，于是兜底代码里一个笔误（`listPiperVoices` 根本没导入）会在**尝试 Edge 之前**
+  // 就抛 ReferenceError，把所有请求统一打成 502 "tts failed: listPiperVoices is not defined"，
+  // 而主路径（Edge）当时明明是好的。降级链再烂，也不该把主路径一起带崩。
+  const queue = [target]
+  for (let i = 0; i < queue.length; i++) {
+    const attempt = queue[i]
     if (Date.now() < targetDownUntil(attempt)) continue
     const outPath = attempt === target ? file : fallbackFile
     if (!outPath) continue
@@ -289,6 +301,14 @@ async function synthWithFallbacks(text, target, file) {
       lastErr = e
       if (attempt.engine === 'edge') edgeDownUntil = Date.now() + EDGE_RETRY_MS
       if (targetConfig(attempt)?.kind === 'piper') piperDownUntil = Date.now() + PIPER_RETRY_MS
+      if (i === 0) {
+        try {
+          queue.push(...fallbackTargets(target))
+        } catch (fe) {
+          // 兜底解析坏了只丢兜底，报出来但别影响主路径的失败原因
+          console.warn(`[tts] 兜底候选解析失败，本次只用主引擎：${fe && fe.message ? fe.message : fe}`)
+        }
+      }
     }
   }
   throw lastErr || new Error('tts failed')

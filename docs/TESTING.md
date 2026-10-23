@@ -175,6 +175,15 @@
     + `src/reader/panels/domNesting.test.tsx`（直接量渲染后的 DOM，不依赖 React 的 dev 警告）。
     **别用 `console.error` 断言 `validateDOMNesting`**：那条警告按 (childTag, ancestorTag) 全局去重，
     同文件里前面用例触发过，后面就永远绿。
+31. **降级链的 bug 会把主路径一起带崩**（2026-10-23）。阅读页点任意一句，`/api/tts` 全 502：
+    `tts failed: listPiperVoices is not defined`。而 Edge TTS 本身是好的（单独探针 1.9 秒出 14KB）。
+    原因在 `tts-core.mjs` 的 `synthWithFallbacks`：兜底候选写在循环头里
+    `for (const attempt of [target, ...fallbackTargets(target)])` —— 数组在**尝试 Edge 之前**就展开，
+    于是兜底代码里一个笔误（`listLocalVoices` 写成没导入的 `listPiperVoices`）每次都先抛
+    ReferenceError，主路径根本没机会跑；错误还被外层 catch 成 502，看起来像「TTS 服务挂了」。
+    规矩：**兜底候选等主目标真的失败之后再解析**，且解析失败只丢兜底（`console.warn` 出来），
+    不许影响主路径。`tools/tts-core.test.mjs` 已钉住 `localFallbackTargets` 不抛异常 + 候选形状合法。
+    排查口径：TTS 502 先看响应正文里的 `tts failed: ...`，那是真实异常消息，别只看状态码。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

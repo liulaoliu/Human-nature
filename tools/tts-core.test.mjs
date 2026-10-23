@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { edgeLangFor, edgeProxyFromEnv, parseTarget, pickVoiceFor } from './tts-core.mjs'
+import { edgeLangFor, edgeProxyFromEnv, localFallbackTargets, parseTarget, pickVoiceFor } from './tts-core.mjs'
 
 describe('parseTarget', () => {
   it('Edge 音色', () => {
@@ -80,5 +80,30 @@ describe('edgeProxyFromEnv', () => {
 
   it('没有代理返回空串', () => {
     expect(edgeProxyFromEnv({})).toBe('')
+  })
+})
+
+describe('localFallbackTargets：Edge 挂了时的 Piper 兜底候选', () => {
+  it('对任意 Edge 音色都不抛异常，返回的都是合法 local 目标', () => {
+    // 回归：这里曾经调用一个根本没导入的 `listPiperVoices`（实际导出叫 `listLocalVoices`），
+    // ReferenceError 被外层 catch 成一个 502 "tts failed: listPiperVoices is not defined"，
+    // 页面里点任意一句都读不出声。这条用例只需保证「不炸 + 形状对」。
+    for (const voice of ['en-US-AriaNeural', 'en-GB-RyanNeural', 'en-AU-NatashaNeural']) {
+      const targets = localFallbackTargets(voice)
+      expect(Array.isArray(targets)).toBe(true)
+      for (const t of targets) {
+        expect(t.engine).toBe('local')
+        expect(t.ext).toBe('wav')
+        expect(t.voice.startsWith('local:')).toBe(true)
+        // 必须是白名单音色，否则 parseTarget 不会认
+        expect(parseTarget(t.voice)).toEqual({ engine: 'local', voice: t.voice, ext: 'wav' })
+      }
+    }
+  })
+
+  it('没装 Piper 时返回空数组（交给浏览器语音），而不是抛错', () => {
+    // 本机装没装 Piper 都有可能，这里只钉住「要么空数组、要么合法候选」这个契约
+    const targets = localFallbackTargets('en-US-AriaNeural')
+    expect(targets.length === 0 || targets.length === 1).toBe(true)
   })
 })
