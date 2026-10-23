@@ -92,3 +92,25 @@ describe('toggleIndex / wordsAtIndex（按位置而非词形选中）', () => {
     expect(wordsAtIndex(spans, [99, 1])).toEqual(['big'])
   })
 })
+
+describe('wordSpans：结果缓存（朗读时每秒要重跑 3–5 次全篇分词）', () => {
+  it('同一段文本第二次调用直接复用同一个结果（不重新分词）', () => {
+    const text = 'the quick brown fox jumps over the lazy dog — repeatedly'
+    const a = wordSpans(text)
+    const b = wordSpans(text)
+    expect(b).toBe(a) // 同一引用 = 命中缓存
+    expect(b.map((w) => w.text)).toEqual(['the', 'quick', 'brown', 'fox', 'jumps', 'over', 'the', 'lazy', 'dog', 'repeatedly'])
+  })
+
+  it('不同文本不会串味', () => {
+    expect(wordSpans('alpha beta').map((w) => w.text)).toEqual(['alpha', 'beta'])
+    expect(wordSpans('gamma delta').map((w) => w.text)).toEqual(['gamma', 'delta'])
+    expect(wordSpans('alpha beta').map((w) => w.text)).toEqual(['alpha', 'beta'])
+  })
+
+  it('超过上限会淘汰最久未用的，结果仍然正确', () => {
+    // 填满并越过 LRU 上限（500），再回来查最早那段
+    for (let i = 0; i < 520; i++) wordSpans(`sentence number ${i} here`)
+    expect(wordSpans('sentence number 0 here').map((w) => w.text)).toEqual(['sentence', 'number', '0', 'here'])
+  })
+})

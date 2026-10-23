@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from 'react'
+import { useMemo, type ReactNode, type RefObject } from 'react'
 import { wordSpans } from '../../core/wordSelect'
 import { lemmaOf } from '../../core/vocab'
 import { getSentenceLanguages } from '../../core/language'
@@ -133,6 +133,11 @@ export default function ReaderBody({
   onWordSeek,
   onAddPhrase,
 }: ReaderBodyProps) {
+  /**
+   * 句子 id → 句子。原来在 `paragraphs.map → sentenceIds.map` 里对每句做 `sentences.find`，
+   * 一篇 300 句就是 9 万次比较，而且**每渲染一次**重跑一遍（朗读时每秒 3–5 次）。
+   */
+  const sentenceById = useMemo(() => new Map(sentences.map((s) => [s.id, s])), [sentences])
   return (
     <article className={'article' + (translateView === 'only' ? ' tr-only' : '')} ref={articleRef}>
       {showLanguage && (
@@ -149,7 +154,7 @@ export default function ReaderBody({
       {paragraphs.map((p) => (
         <p className="para" key={p.id}>
           {p.sentenceIds.map((sid) => {
-            const s = sentences.find((x) => x.id === sid)
+            const s = sentenceById.get(sid)
             if (!s) return null
             return (
               <span key={sid} className="s-pair">

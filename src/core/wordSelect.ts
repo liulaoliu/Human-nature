@@ -34,8 +34,38 @@ function mergeHyphenated(text: string, spans: WordSpan[]): WordSpan[] {
   return out
 }
 
+/**
+ * 分词结果缓存（LRU，按原文文本做 key）。
+ *
+ * 为什么需要：阅读正文每渲染一次就要给**每一句**重新分词（`ReaderBody.sentenceNodes`）。
+ * 实测 300 句约 32ms（冷启动 87ms），而朗读时逐词高亮会让 `activeIndex` 每秒变 3–5 次，
+ * 等于每秒白跑 100–160ms 的分词。文本是稳定的，结果纯函数可缓存。
+ *
+ * 调用方只读：返回的数组/对象**不要原地改**（要改就自己 map 一份）。
+ * 上限 500 条：一篇长文 + 相邻几篇足够，超出按最久未用淘汰。
+ */
+const SPAN_CACHE_MAX = 500
+const spanCache = new Map<string, WordSpan[]>()
+
 /** 切出所有「词」（含字母或数字的片段），标点和空白不算词。 */
 export function wordSpans(text: string): WordSpan[] {
+  const hit = spanCache.get(text)
+  if (hit) {
+    // 命中后挪到队尾（Map 保持插入序，最前面的就是最久未用）
+    spanCache.delete(text)
+    spanCache.set(text, hit)
+    return hit
+  }
+  const spans = computeWordSpans(text)
+  if (spanCache.size >= SPAN_CACHE_MAX) {
+    const oldest = spanCache.keys().next().value
+    if (oldest !== undefined) spanCache.delete(oldest)
+  }
+  spanCache.set(text, spans)
+  return spans
+}
+
+function computeWordSpans(text: string): WordSpan[] {
   const Segmenter = (Intl as unknown as { Segmenter?: unknown }).Segmenter
   if (typeof Segmenter === 'function') {
     const seg = new (Segmenter as new (
