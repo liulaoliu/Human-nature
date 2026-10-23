@@ -63,19 +63,26 @@ export function useLibraryAutoFill({
     [],
   )
 
-  /** 离线例句库加载一次（没装就保持 false，功能降级不报错） */
+  /** 离线例句库加载一次（没装就保持 false，功能降级不报错）。同样等空闲：6.6MB，别抢首屏。 */
   useEffect(() => {
     let alive = true
     if (typeof fetch !== 'function') return
-    void loadTatoeba()
-      .then((ok) => {
-        if (alive) setTatoebaReady(ok)
-      })
-      .catch(() => {
-        // 没装离线例句库：静默降级（功能还在，只是没有离线例句）
-      })
+    const start = () => {
+      void loadTatoeba()
+        .then((ok) => {
+          if (alive) setTatoebaReady(ok)
+        })
+        .catch(() => {
+          // 没装离线例句库：静默降级（功能还在，只是没有离线例句）
+        })
+    }
+    const ric = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number })
+      .requestIdleCallback
+    const idleId = typeof ric === 'function' ? ric(start, { timeout: 4000 }) : setTimeout(start, 500)
     return () => {
       alive = false
+      if (typeof ric === 'function') (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(idleId)
+      else clearTimeout(idleId)
     }
   }, [])
 
