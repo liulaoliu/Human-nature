@@ -119,7 +119,7 @@ export function printStatus(port, st) {
   console.log('  状态: 运行中')
   console.log(`  端口: ${port}`)
   console.log(`  地址: http://localhost:${port}/`)
-  console.log(`  精读: http://localhost:${port}/reader.html`)
+  console.log(`  精读: http://localhost:${port}/reader`)
   console.log(`  PID : ${st.pid}`)
   console.log(`  运行: ${formatUptime(st.uptime)}`)
   if (st.time) {

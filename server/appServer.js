@@ -45,6 +45,6 @@ server.on('error', (e) => {
 // 只监听本机：SQLite 数据接口没有登录态，不能对局域网开放。
 server.listen(port, '127.0.0.1', () => {
   console.log(`学吧老哥 服务已启动： http://localhost:${port}/`)
-  console.log(`  精读页： http://localhost:${port}/reader.html`)
+  console.log(`  精读页： http://localhost:${port}/reader`)
   console.log(`  数据：   ${process.env.XUEBA_DB || join(root, 'data', 'xueba.db')}`)
 })

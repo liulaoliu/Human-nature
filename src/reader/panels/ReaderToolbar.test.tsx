@@ -1,10 +1,19 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render as baseRender, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import type { ReactElement, ReactNode } from 'react'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../core/ports'
 import type { TtsAccent } from '../../core/ttsVoices'
 import ReaderToolbar, { type ReaderToolbarProps } from './ReaderToolbar'
+
+/** 工具栏里有返回跟读页的 `<Link>`，测试必须放在 Router 里。 */
+function renderInRouter(ui: ReactElement) {
+  return baseRender(ui, {
+    wrapper: ({ children }: { children: ReactNode }) => <MemoryRouter>{children}</MemoryRouter>,
+  })
+}
 
 const book: ArticleBook = {
   '009 Leaders - Interest-rate caps': { title: 'Leaders', words: 100, text: 'Text.' },
@@ -108,7 +117,7 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
 
 describe('ReaderToolbar：没有文章', () => {
   it('只保留保存（禁用）/新建/目标/统计/显示设置', () => {
-    render(<ReaderToolbar {...props()} />)
+    renderInRouter(<ReaderToolbar {...props()} />)
     expect((screen.getByRole('button', { name: '保存这篇' }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByRole('button', { name: '＋ 新建文章' })).toBeTruthy()
     expect(screen.getByRole('button', { name: /目标/ })).toBeTruthy()
@@ -122,7 +131,7 @@ describe('ReaderToolbar：没有文章', () => {
 
   it('期次筛选只在多于一期且已有原文库时出现', () => {
     const onEditionChange = vi.fn()
-    const { rerender } = render(<ReaderToolbar {...props({ book, editions: [] })} />)
+    const { rerender } = renderInRouter(<ReaderToolbar {...props({ book, editions: [] })} />)
     expect(screen.queryByTitle('按期次筛选内置文章')).toBeNull()
 
     const editions: [string, number][] = [
@@ -141,7 +150,7 @@ describe('ReaderToolbar：阅读操作', () => {
     const onTranslateAll = vi.fn()
     const onVocabLevelChange = vi.fn()
     const onAutoVocab = vi.fn()
-    const { rerender } = render(
+    const { rerender } = renderInRouter(
       <ReaderToolbar
         {...props({ hasDoc: true, onToggleVocab, onTranslateAll, onVocabLevelChange, onAutoVocab })}
       />,
@@ -166,7 +175,7 @@ describe('ReaderToolbar：阅读操作', () => {
     const onSpeakSelected = vi.fn()
     const onToggleReadAll = vi.fn()
     const onTtsVoiceChange = vi.fn()
-    const { rerender } = render(
+    const { rerender } = renderInRouter(
       <ReaderToolbar
         {...props({
           hasDoc: true,
@@ -201,21 +210,21 @@ describe('ReaderToolbar：阅读操作', () => {
   })
 
   it('离线音色提示无逐词高亮（Edge 音色不提示）', () => {
-    const { rerender } = render(<ReaderToolbar {...props({ hasDoc: true })} />)
+    const { rerender } = renderInRouter(<ReaderToolbar {...props({ hasDoc: true })} />)
     expect(screen.queryByText('无逐词高亮')).toBeNull()
     rerender(<ReaderToolbar {...props({ hasDoc: true, ttsVoice: 'local:piper-us' })} />)
     expect(screen.getByText('无逐词高亮')).toBeTruthy()
   })
 
   it('没有选中句时「读本句」禁用', () => {
-    render(<ReaderToolbar {...props({ hasDoc: true })} />)
+    renderInRouter(<ReaderToolbar {...props({ hasDoc: true })} />)
     expect((screen.getByRole('button', { name: '🔊 读本句' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('预生成朗读三态：普通/生成中可取消/已缓存', () => {
     const onPregenerate = vi.fn()
     const onCancelPregenerate = vi.fn()
-    const { rerender } = render(
+    const { rerender } = renderInRouter(
       <ReaderToolbar {...props({ hasDoc: true, onPregenerate, onCancelPregenerate })} />,
     )
     fireEvent.click(screen.getByRole('button', { name: '⬇ 预生成朗读' }))
@@ -242,7 +251,7 @@ describe('ReaderToolbar：阅读操作', () => {
       onEnterEdit: vi.fn(),
       onDeleteSave: vi.fn(),
     }
-    render(<ReaderToolbar {...props({ hasDoc: true, savedId: 'saved:1', ...callbacks })} />)
+    renderInRouter(<ReaderToolbar {...props({ hasDoc: true, savedId: 'saved:1', ...callbacks })} />)
     fireEvent.click(screen.getByRole('button', { name: '⚡ 速读' }))
     fireEvent.click(screen.getByRole('button', { name: '🎯 精读' }))
     fireEvent.click(screen.getByRole('button', { name: '📅 日志' }))
@@ -258,7 +267,7 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
     const onCleanupEdit = vi.fn()
     const onApplyEdit = vi.fn()
     const onCancelEdit = vi.fn()
-    const { rerender } = render(
+    const { rerender } = renderInRouter(
       <ReaderToolbar
         {...props({ hasDoc: true, editing: true, onCleanupEdit, onApplyEdit, onCancelEdit })}
       />,
@@ -283,7 +292,7 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
     const onBoldChange = vi.fn()
     const onSerifChange = vi.fn()
     const onEyeChange = vi.fn()
-    render(
+    renderInRouter(
       <ReaderToolbar
         {...props({ onFontSizeChange, onBoldChange, onSerifChange, onEyeChange })}
       />,
@@ -300,7 +309,7 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
 
   it('保存按钮在有文档时可点；删除保存两步文案', () => {
     const onSave = vi.fn()
-    const { rerender } = render(<ReaderToolbar {...props({ hasDoc: true, onSave })} />)
+    const { rerender } = renderInRouter(<ReaderToolbar {...props({ hasDoc: true, onSave })} />)
     fireEvent.click(screen.getByRole('button', { name: '保存这篇' }))
     expect(onSave).toHaveBeenCalled()
 
@@ -310,7 +319,7 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
 
   it('顶栏宽度：自适应时按钮区按内容宽（不铺满），改了档位走回调', () => {
     const onToolbarWidthChange = vi.fn()
-    const { container, rerender } = render(<ReaderToolbar {...props({ hasDoc: true, onToolbarWidthChange })} />)
+    const { container, rerender } = renderInRouter(<ReaderToolbar {...props({ hasDoc: true, onToolbarWidthChange })} />)
     // 默认自适应 = fit-content：窗口再宽，这一块也不会被拉满
     expect((container.querySelector('.tb-inner') as HTMLElement).style.width).toBe('fit-content')
 
@@ -323,7 +332,7 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
   })
 
   it('顶栏行数：4 行各自一行，3 / 2 行把相邻组并起来（控件不丢，「显示」仍在最后）', () => {
-    const { container, rerender } = render(<ReaderToolbar {...props({ hasDoc: true })} />)
+    const { container, rerender } = renderInRouter(<ReaderToolbar {...props({ hasDoc: true })} />)
     expect(container.querySelectorAll('.tb-row')).toHaveLength(4)
     expect(container.querySelectorAll('.tb-sep')).toHaveLength(0)
     // 「选中朗读」不再占视图行，跟在「显示 ⚙」右边
@@ -349,13 +358,13 @@ describe('ReaderToolbar：编辑态与显示设置', () => {
 
   it('顶栏行数：改了档位走回调（值为数字）', () => {
     const onToolbarRowsChange = vi.fn()
-    render(<ReaderToolbar {...props({ hasDoc: true, onToolbarRowsChange })} />)
+    renderInRouter(<ReaderToolbar {...props({ hasDoc: true, onToolbarRowsChange })} />)
     fireEvent.change(screen.getByTitle(/顶栏按钮区分几行/), { target: { value: '2' } })
     expect(onToolbarRowsChange).toHaveBeenCalledWith(2)
   })
 
   it('有原文库/已保存文章时渲染文章选择器', () => {
-    const { container } = render(
+    const { container } = renderInRouter(
       <ReaderToolbar {...props({ book, saved, savedGroups: [['未分组', saved]] })} />,
     )
     expect(container.querySelector('.picker')).toBeTruthy()

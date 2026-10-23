@@ -97,9 +97,11 @@ function serveFile(req, res, file, { head = false, cache = false } = {}) {
   createReadStream(file).pipe(res)
 }
 
-/** 哪些路径属于阅读页（要用 reader.html 回落，而不是首页 index.html）。 */
-function isReaderPath(pathname) {
-  return pathname === '/reader' || pathname === '/reader.html' || pathname.startsWith('/reader/')
+/** 单入口 SPA：所有前端路由都回落到同一份 index.html（/reader/** 与旧 /reader.html 也一样）。 */
+function isSpaFallback(pathname) {
+  // 带扩展名的缺失资源仍然 404（否则浏览器把 HTML 当 JS 解析）；
+  // 只有旧入口 /reader.html 是个例外：它没有对应文件，但要能打开阅读页。
+  return !/\.[a-zA-Z0-9]+$/.test(pathname) || pathname === '/reader.html'
 }
 
 /**
@@ -229,10 +231,10 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
     if (pathname === '/' || pathname === '') file = join(distDir, 'index.html')
     if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html')
     if (!existsSync(file)) {
-      if (!/\.[a-zA-Z0-9]+$/.test(pathname)) {
-        // 阅读页用 BrowserRouter，URL 是多层干净路径（/reader/a/<ref>/p/intensive）。
-        // 这些路径磁盘上不存在，必须回落到 reader.html —— 回落成 index.html 会打开主界面。
-        const target = join(distDir, isReaderPath(pathname) ? 'reader.html' : 'index.html')
+      if (isSpaFallback(pathname)) {
+        // 单入口 SPA：/reader、/reader/a/<slug>/p/<panel>、旧 /reader.html
+        // 磁盘上都不存在，统一交给 index.html，由前端 Router 决定渲染哪棵树。
+        const target = join(distDir, 'index.html')
         if (existsSync(target)) {
           serveFile(req, res, target)
           return

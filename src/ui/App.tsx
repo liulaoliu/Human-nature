@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { SessionStore } from '../state/session'
 import { useSession } from './useSession'
 import { BrowserPlayer, BrowserRecorder, listAudioInputs } from '../adapters/browserAudio'
@@ -233,9 +234,9 @@ export default function App() {
           onImport={(f) => void importBackup(f)}
           onSaveProject={() => void saveToProjectFile()}
         />
-        <a className="navlink accent" href="./reader.html" title="打开 学吧老哥 / 生词本">
+        <Link className="navlink accent" to="/reader" title="打开 学吧老哥 / 生词本">
           学吧老哥 · 生词本 <span className="arrow">→</span>
-        </a>
+        </Link>
       </header>
 
       <AppBanners

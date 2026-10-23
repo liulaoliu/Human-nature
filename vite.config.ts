@@ -13,24 +13,21 @@ import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
 import { storeEndpointPlugin } from './tools/vite-store-endpoint.mjs'
 
 /**
- * 把 `/reader` 与 `/reader/**` 改写成 `/reader.html`。
+ * 单入口 SPA 的 dev 回落：`/reader`、`/reader/**` 和旧地址 `/reader.html`
+ * 一律交给同一份 `index.html`（React Router 在浏览器里决定画哪棵树）。
  *
- * 阅读页用 BrowserRouter（干净路径，没有 `#`），URL 形如
- *   /reader                文章列表
- *   /reader/a/<ref>        读某一篇
- *   /reader/a/<ref>/p/xxx  读某一篇 + 开面板
- * 这些路径磁盘上并不存在，得让 dev server 回落到 reader.html；
- * 生产环境由 `server/httpApp.js` 做同样的事。
+ * 生产由 `server/httpApp.js` 做同样的事。**带扩展名的缺失资源仍然 404**，
+ * 别回落成 HTML，否则浏览器会把一段 HTML 当 JS 解析。
  */
-function readerRoutePlugin() {
+function spaRoutePlugin() {
   return {
-    name: 'reader-route-fallback',
+    name: 'spa-route-fallback',
     configureServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: unknown, next: () => void) => void) => void } }) {
       server.middlewares.use((req, _res, next) => {
         const url = req.url || ''
         const [path, query] = url.split('?')
-        if (path === '/reader' || path.startsWith('/reader/')) {
-          req.url = '/reader.html' + (query ? `?${query}` : '')
+        if (path === '/reader' || path.startsWith('/reader/') || path === '/reader.html') {
+          req.url = '/index.html' + (query ? `?${query}` : '')
         }
         next()
       })
@@ -41,7 +38,7 @@ function readerRoutePlugin() {
 export default defineConfig({
   plugins: [
     react(),
-    readerRoutePlugin(),
+    spaRoutePlugin(),
     projectStatePlugin(),
     fishStaticPlugin(),
     ttsEndpointPlugin(),
@@ -52,10 +49,9 @@ export default defineConfig({
   // 相对路径 `./assets/x.js` 会解析成 /reader/a/assets/x.js → 404 白屏。
   // 代价：不能部署在子路径下（本地自用，部署在根，够）。
   base: '/',
+  // 单入口：只有 index.html。阅读页跟着主路由 lazy 加载，不再单独打包一个 HTML。
   build: {
-    rollupOptions: {
-      input: ['index.html', 'reader.html'],
-    },
+    // 默认只以 index.html 为入口（阅读页不在这里列第二个 input）。
   },
   server: {
     // 端口固定死，别让 vite 在占用时自动换到 5174。

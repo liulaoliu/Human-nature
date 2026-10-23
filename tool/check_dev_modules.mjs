@@ -51,7 +51,7 @@ async function probe(url) {
 
 async function main() {
   try {
-    await probe(`${BASE}/reader.html`)
+    await probe(`${BASE}/reader`)
   } catch {
     console.error(`❌ 连不上 ${BASE} —— dev server 没在跑？先 npm run dev`)
     process.exit(2)

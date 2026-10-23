@@ -1,4 +1,5 @@
 import { Fragment, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../core/ports'
@@ -416,9 +417,9 @@ export default function ReaderToolbar({
           🎯 {studiedCount}
           {dailyGoal > 0 ? `/${dailyGoal}` : ''} · 🔥{streak}
         </span>
-        <a className="navlink tb-home" href="./index.html" title="回到跟读练习">
+        <Link className="navlink tb-home" to="/" title="回到跟读练习">
           <span className="arrow">←</span> 跟读练习
-        </a>
+        </Link>
         <details className="tb-settings">
           <summary title="显示设置">显示 ⚙</summary>
           <div className="tb-settings-body">

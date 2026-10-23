@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Link } from 'react-router-dom'
 import { pickAudioFile, supportsAudioPicker } from '../adapters/audioPick'
 import type { Take } from '../core/ports'
 import mascotBig from '../../assets/imgs/big.png'
@@ -41,9 +42,9 @@ export function Empty({ onPick, backup }: { onPick: (f: File) => void; backup?: 
           }}
         />
       </label>
-      <a className="navlink accent empty-nav" href="./reader.html" title="打开 学吧老哥 / 生词本">
+      <Link className="navlink accent empty-nav" to="/reader" title="打开 学吧老哥 / 生词本">
         学吧老哥 · 生词本 <span className="arrow">→</span>
-      </a>
+      </Link>
       <p className="tip">
         浏览器不给 <code>file://</code> 页面麦克风权限。如果点录音没反应，在项目目录跑{' '}
         <code>npm run dev</code>，然后打开终端里给的 <code>http://localhost</code> 地址。

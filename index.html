@@ -3,11 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
     <title>学吧老哥</title>
+    <script>
+      // 单入口 SPA：/ 与 /reader 共用这一份 HTML。
+      // 主题在首帧前落地（避免绿色主题用户先看到一帧深色）；
+      // data-entry 只用来决定要不要显示阅读页骨架，不影响路由。
+      try {
+        document.documentElement.dataset.theme = localStorage.getItem('reader:theme') === 'green' ? 'green' : 'dark'
+      } catch (e) {
+        document.documentElement.dataset.theme = 'dark'
+      }
+      var p = location.pathname
+      document.documentElement.dataset.entry = p === '/reader' || p.indexOf('/reader/') === 0 ? 'reader' : 'app'
+    </script>
+    <style>
+      /* 首屏骨架。JS 还在下载/解析时先给个轮廓，别让人对着白屏等。
+         `createRoot().render()` 首次渲染会清空 #root，所以这里不用手动移除。
+         只在阅读页显示；跟读页保持原来的空容器。 */
+      html, body { margin: 0; background: #14161a; color: #c9d1d9; }
+      html[data-theme='green'] body { background: #10201a; }
+      .boot-skeleton { display: none; padding: 18px 24px; max-width: 980px; margin: 0 auto; }
+      html[data-entry='reader'] .boot-skeleton { display: block; }
+      /* 客户端从 / 跳到 /reader 时 data-entry 还是 app，懒加载/水合占位不能被藏掉 */
+      .boot-skeleton.route-loading { display: block; }
+      .boot-skeleton .bar { display: flex; gap: 10px; margin-bottom: 26px; }
+      .boot-skeleton .chip { height: 26px; width: 76px; border-radius: 6px; }
+      .boot-skeleton .line { height: 14px; border-radius: 4px; margin: 0 0 14px; }
+      .boot-skeleton .chip,
+      .boot-skeleton .line {
+        background: linear-gradient(90deg, rgba(255,255,255,.06) 25%, rgba(255,255,255,.13) 37%, rgba(255,255,255,.06) 63%);
+        background-size: 400% 100%;
+        animation: boot-shimmer 1.4s ease-in-out infinite;
+      }
+      .boot-skeleton .hint { margin: 22px 0 0; font: 13px/1.6 system-ui, sans-serif; color: #7c8794; }
+      @keyframes boot-shimmer { 0% { background-position: 100% 0 } 100% { background-position: 0 0 } }
+      @media (prefers-reduced-motion: reduce) { .boot-skeleton .chip, .boot-skeleton .line { animation: none } }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div class="boot-skeleton" aria-hidden="true">
+        <div class="bar">
+          <div class="chip"></div><div class="chip"></div><div class="chip"></div><div class="chip"></div>
+        </div>
+        <div class="line" style="width: 92%"></div>
+        <div class="line" style="width: 86%"></div>
+        <div class="line" style="width: 95%"></div>
+        <div class="line" style="width: 64%"></div>
+        <div class="line" style="width: 88%"></div>
+        <div class="line" style="width: 42%"></div>
+        <p class="hint">正在打开…</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

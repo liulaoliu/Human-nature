@@ -371,13 +371,13 @@ describe('httpApp：路由回落 + 静态 gzip', () => {
     const pub = mkdtempSync(join(tmpdir(), 'sa-pub2-'))
     mkdirSync(join(dist, 'assets'), { recursive: true })
     writeFileSync(join(dist, 'index.html'), '<!doctype html><title>首页</title>')
-    writeFileSync(join(dist, 'reader.html'), '<!doctype html><title>阅读页</title>')
+    // 单入口 SPA：不再有 reader.html
     // 大于 GZIP_MIN(1KB) 才能触发压缩
     writeFileSync(join(dist, 'assets', 'app.js'), `/* ${'x'.repeat(4096)} */\nconsole.log(1)\n`)
     return { dist, pub }
   }
 
-  it('/reader 与 /reader/** 回落到 reader.html，其余回 index.html', async () => {
+  it('/reader、/reader/** 与旧 /reader.html 都回落到单入口 index.html', async () => {
     const { dist, pub } = setup()
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
     await new Promise((r) => server.listen(0, r))
@@ -386,7 +386,7 @@ describe('httpApp：路由回落 + 静态 gzip', () => {
       for (const p of ['/reader', '/reader/a/b%3A005', '/reader/a/b%3A005/p/intensive', '/reader/p/plan', '/reader.html']) {
         const r = await rawGet(port, p)
         expect(r.status, p).toBe(200)
-        expect(r.body.toString(), p).toContain('阅读页')
+        expect(r.body.toString(), p).toContain('首页')
       }
       const home = await rawGet(port, '/a/whatever')
       expect(home.body.toString()).toContain('首页')
