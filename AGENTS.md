@@ -22,6 +22,13 @@
     查进程 / 内存用 PowerShell 的 `Get-CimInstance Win32_Process`；
   - 删文件走 node-safe-delete 垫片：**单次批量删超过 50 个会被拒**（`Permission denied`），
     别 `rm -rf` 整棵树，按 ≤40 个一批、每批新起进程。
+- **dev server 会偶发「模块 0 字节」，页面直接白屏**（2026-10-23 踩过）：
+  浏览器报 `does not provide an export named 'xxx'`，但那个文件本身完好（tsc 过、esbuild 能转）。
+  真实原因是 **vite 模块图缓存了一份空的 transform 结果**——文件被写到一半（截断态）时
+  watcher 就触发了，vite 当场把空内容转掉并缓存；之后文件写完了也不会自动重转。
+  `vite.config.ts` 里的 `server.watch.awaitWriteFinish` 就是防这个的，**别删**。
+  万一还遇到：`npm run check:dev` 一条命令扫出是哪个模块（270 个模块约 3 秒），
+  按提示 `touch` 那个文件或重启 dev server。
 - **工具输出会被折叠**：用户看不到命令日志。**结论、报错原文、改了哪些文件、跑了几项测试，
   必须写进最终回复**，不能只丢一句「已完成」。
 - **机器只有 16GB 物理内存**：并发别开满。全量测试固定

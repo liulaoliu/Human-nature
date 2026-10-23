@@ -36,7 +36,19 @@ export default defineConfig({
     strictPort: true,
     // data/ 里是 SQLite 的 db/wal/shm，写一次就变；不忽略会让 Vite 以为源码变了，
     // 页面自动刷新 → 自动保存 → 再刷新。public/tts 是 TTS 缓存，同理。
-    watch: { ignored: ['**/data/**', '**/public/tts/**', '**/public/shadowing-state.json'] },
+    watch: {
+      ignored: ['**/data/**', '**/public/tts/**', '**/public/shadowing-state.json'],
+      // **关键**：等文件写完再通知，别在「截断 / 写一半」的中间态就触发。
+      //
+      // 少了这一条会这样：某个 .ts 文件被改成空/半截状态的那一刻，chokidar 立刻发 change，
+      // vite 当场把这个**空内容** transform 掉并缓存进模块图（key = 该文件的 HMR 时间戳）。
+      // 之后文件写完了，但因为「文件大小/mtime 没再变」，模块图里那份空缓存不会被作废——
+      // 浏览器请求该模块拿到 0 字节，ESM 解析失败，直接报
+      //   `does not provide an export named 'xxx'`（整个页面白屏）。
+      // 实测过一次（useAiPack.ts），`touch` 一下能救，但那是运气，不是机制。
+      // 200ms 静默期足够覆盖「截断→写入」，又不至于让正常改代码的 HMR 变迟钝。
+      awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
+    },
     // 别让 dev server 把 /data/xueba.db 当静态文件直接吐出去。
     fs: { deny: ['**/data/**'] },
   },

@@ -19,7 +19,8 @@
     "gates": "tsc -b && vitest run && node tool/check_god_file.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs",
     "check:size": "node tool/check_god_file.mjs",
     "check:arch": "node tool/check_architecture.mjs",
-    "check:vocab": "node tool/check_vocab_sense.mjs"
+    "check:vocab": "node tool/check_vocab_sense.mjs",
+    "check:dev": "node tool/check_dev_modules.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",
