@@ -213,7 +213,7 @@ export default function ReaderBody({
                 {showLanguage &&
                   getSentenceLanguages(s).map((L, li) => (
                     <span className="lang-block" key={li}>
-                      {L.source === 'manual' && <div className="lang-src">手动</div>}
+                      {L.source === 'manual' && <span className="lang-src">手动</span>}
                       <LanguageLines
                         lang={L}
                         onAddPhrases={onAddPhrase ? (items) => onAddPhrase(items, s) : undefined}

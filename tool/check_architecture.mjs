@@ -14,6 +14,7 @@
 //   R5 词条类型的名字只在 core/entryKind.ts 定义（视图里不许再抄一份字面量）
 //   R6 日期键只走 core/activity（不许自己拼 YYYY-MM-DD / 用 toISOString().slice(0,10)）
 //   R7 core 下每个模块要有同名测试（白名单 = 纯数据/纯类型/测试夹具）
+//   R8 <p> 里不许出现 <div>（非法 DOM 嵌套，React 会报 validateDOMNesting）
 //
 // EXCEPTIONS：存量违规登记（**必须写理由**，且会每次打印出来 —— 债务要看得见）。
 // 新增违规一律修代码，不许随手登记。
@@ -145,6 +146,118 @@ for (const r of allRel.filter((r) => r.startsWith('src/core/') && !isTest(r))) {
   if (!allRel.includes(test)) violations.push(`R7 ${r} 没有同名测试（${test}）`)
 }
 
+// R8 的规则说明放在下面实现处（要考虑跨组件，写长了）。
+/** 去掉注释与字符串，避免把「文档里写的 <p>」当成真标签。 */
+const stripJsxNoise = (src) =>
+  src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(/(^|[^:])\/\/.*$/gm, '$1')
+    .replace(/`[^`]*`/g, '``')
+
+/** 找出每个 <p …> 的闭合位置（按同一文件里的 <p> 计数配对）。 */
+function findParaBlocks(src) {
+  const lines = src.split('\n')
+  const blocks = []
+  let depth = 0
+  let start = -1
+  for (let i = 0; i < lines.length; i++) {
+    const opens = (lines[i].match(/<p[\s>]/g) || []).length
+    const closes = (lines[i].match(/<\/p>/g) || []).length
+    if (opens && depth === 0) start = i
+    depth += opens - closes
+    if (depth <= 0 && start >= 0) {
+      blocks.push({ start, end: i })
+      depth = 0
+      start = -1
+    }
+  }
+  return blocks
+}
+
+// R8：<p> 里不许出现块级标签（非法 DOM 嵌套）
+//
+// 为什么管：HTML 规定 <p> 只能装 phrasing content（span / b / button…），
+// 塞 <div> 属于非法嵌套。React 18 在 dev 下会打 `validateDOMNesting` 警告，
+// 真机上还可能被浏览器容错解析（<p> 被提前闭合），把后面的结构挪位。
+// 表现是「console 一片黄」或「某个块样式莫名跑到别处」，很难一眼看出根因。
+//
+// 怎么查（这条必须**跨组件**，否则等于没查）：
+//   <p> 在 ReaderBody、渲染 div 的可能是它引用的 <LanguageLines>——
+//   只看单个文件永远查不出来。所以策略是「组件渲染树里有没有块级标签」：
+//     ① 先把每个 .tsx 按文件名索引成「组件名 → 文件」；
+//     ② 对每个 <p>…</p> 块，看里面直接出现的块级标签，以及引用的自定义组件；
+//     ③ 自定义组件递归看它自己（以及它引用的组件）渲染树里有没有块级标签。
+//   只要有一条分支会渲染 <div>，它挂在 <p> 下面就是非法的——不区分分支是否走到。
+//
+// 唯一会误报的情形：组件某个分支渲染 div、而挂在 <p> 时永远走另一分支。
+// 真遇到了在 EXCEPTIONS 登记，别把规则放宽（放宽就等于没规则）。
+const BLOCK_TAGS = [
+  'div', 'p', 'ul', 'ol', 'li', 'dl', 'dd', 'dt', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'td', 'th',
+  'caption', 'colgroup', 'section', 'article', 'aside', 'nav', 'header', 'footer', 'main', 'figure',
+  'figcaption', 'form', 'fieldset', 'legend', 'blockquote', 'pre', 'hr', 'address', 'details', 'summary',
+  'menu', 'center', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+]
+/** 非全局正则：带 /g 的 test() 会记住 lastIndex，循环里会漏判。 */
+const BLOCK_TAG_RE = new RegExp(`<(${BLOCK_TAGS.join('|')})\\b`)
+
+/** 组件名 → 文件（同名组件只保留第一处；本项目的命名本来就唯一）。 */
+const componentFile = new Map()
+for (const r of allRel) {
+  const m = /\/([A-Za-z0-9_]+)\.tsx$/.exec(r)
+  if (m && !componentFile.has(m[1])) componentFile.set(m[1], r)
+}
+
+/** 该文件的渲染树里是否会出现块级标签（含它引用的组件，递归）。 */
+const blockCache = new Map()
+function rendersBlockTag(relPath, seen = new Set()) {
+  if (blockCache.has(relPath)) return blockCache.get(relPath)
+  if (seen.has(relPath)) return false
+  seen.add(relPath)
+  const src = stripJsxNoise(read(relPath))
+  let hit = BLOCK_TAG_RE.test(src)
+  if (!hit) {
+    // 再往下追一层：它引用的组件里有没有块级标签
+    for (const m of src.matchAll(/<([A-Z][A-Za-z0-9_]*)\b/g)) {
+      const child = componentFile.get(m[1])
+      if (child && child !== relPath && rendersBlockTag(child, seen)) {
+        hit = true
+        break
+      }
+    }
+  }
+  blockCache.set(relPath, hit)
+  return hit
+}
+
+for (const f of files.filter((f) => /^src\/(reader|ui)\//.test(rel(f)))) {
+  const r = rel(f)
+  if (skip(r)) continue
+  const src = stripJsxNoise(read(f))
+  const lines = src.split('\n')
+  for (const { start, end } of findParaBlocks(src)) {
+    const body = lines.slice(start, end + 1).join('\n')
+    // 掐掉最外层那对 <p …> … </p>（不然外层的 <p 自己就命中规则）
+    const inner = body.replace(/^[\s\S]*?<p\b[^>]*>/, '').replace(/<\/p>\s*$/, '')
+    // ① 块内直接的块级标签
+    const direct = inner.match(new RegExp(`<(${BLOCK_TAGS.join('|')})\\b`, 'g'))
+    if (direct) {
+      violations.push(
+        `R8 ${r}:${start + 1} <p> 里直接放了块级标签 ${direct.join(' ')} —— 用 <span> + CSS 保持块级外观`,
+      )
+    }
+    // ② 块内引用的自定义组件，渲染树里出现块级标签
+    for (const m of inner.matchAll(/<([A-Z][A-Za-z0-9_]*)\b/g)) {
+      const child = componentFile.get(m[1])
+      if (!child) continue
+      if (rendersBlockTag(child)) {
+        violations.push(
+          `R8 ${r}:${start + 1} <p> 里用了 <${m[1]}>，而 ${child} 的渲染树里有块级标签 —— p 只能装 phrasing content，改成 <span> + CSS`,
+        )
+      }
+    }
+  }
+}
+
 if (violations.length) {
   console.error('\n❌ 架构门禁未通过：')
   for (const v of violations) console.error('  - ' + v)
@@ -153,7 +266,7 @@ if (violations.length) {
 }
 
 const debt = Object.keys(EXCEPTIONS)
-console.log(`✅ 架构门禁通过（R1–R7）`)
+console.log(`✅ 架构门禁通过（R1–R8）`)
 if (debt.length) {
   console.log('存量豁免（看得见的债，建议尽快销账）：')
   for (const [f, why] of Object.entries(EXCEPTIONS)) console.log(`  - ${f}：${why}`)

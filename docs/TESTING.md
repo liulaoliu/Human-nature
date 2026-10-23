@@ -164,6 +164,17 @@
     **确认前不写 SRS、评分快捷键与导航都不生效**；确认「确实忘了」仍按 again（不篡改评分），
     「其实记得」按 hard 落库。别把这条做成「静默降级」——用户没选过的分数不能替他改。
     注意 `markUnknown`（「不认识」标签）是另一条显式动作，不并入这个确认。
+30. **`<p>` 里塞 `<div>` 会让 React 刷屏，而且跨组件才看得出来**（2026-10-23）。
+    语言点由 `LanguageLines` / `LangPhrases` 渲染，当时用的是 `<div className="lang-line">`，
+    而它被挂在正文段落的 `<p className="para">` 下面 —— 单看任何一个文件都合法，
+    合起来就是非法嵌套，console 里一串
+    `validateDOMNesting(...): <div> cannot appear as a descendant of <p>`；
+    真机上浏览器还会按容错规则**提前闭合 `<p>`**，把后面的结构挪位。
+    规矩：会进 `<p>` 的组件一律用 `<span>` + CSS 拿回块级外观（`.lang-line` 的 `display:block` 就是这么来的）。
+    两道闸：门禁 **R8**（`tool/check_architecture.mjs`，跨组件静态扫「`<p>` 里引用的组件渲染树有没有块级标签」）
+    + `src/reader/panels/domNesting.test.tsx`（直接量渲染后的 DOM，不依赖 React 的 dev 警告）。
+    **别用 `console.error` 断言 `validateDOMNesting`**：那条警告按 (childTag, ancestorTag) 全局去重，
+    同文件里前面用例触发过，后面就永远绿。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

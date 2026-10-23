@@ -51,7 +51,7 @@
   ```
   - 上帝文件门禁：**新文件超 800 行直接失败**；存量超限登记在
     `tool/check_god_file.mjs` 的 `BASELINE`，**只准变小**（拆分后同步下调）。
-  - 架构门禁：`tool/check_architecture.mjs` 的 R1–R7（依赖方向 / SSOT / 日期键 / 模块必须有测试）。
+  - 架构门禁：`tool/check_architecture.mjs` 的 R1–R8（依赖方向 / SSOT / 日期键 / 模块必须有测试 / `<p>` 里不许放块级标签）。
     真留着的存量违规要在 `EXCEPTIONS` 里**写明理由**（每次运行都会打印出来当债务）。
 - **文档同步**（同一次提交里改）：结构/分层/新目录 → `docs/ARCHITECTURE.md`；
   新增踩坑 → `docs/TESTING.md` §3 补一条（编号 +1）；依赖原生/浏览器能力的用例 → §4 人工用例。

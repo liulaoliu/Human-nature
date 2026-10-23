@@ -324,6 +324,29 @@ types ← core ← adapters ← reader
    结构改动要保证测试用**后代选择器**（`querySelector('.lang-item')`），别写 `>` 直连 ——
    包一层包装元素就全红。改完按 F5 肉眼确认三件事：滚动时条不动、底下不透、按钮贴边。
 
+## 三·七、DOM 嵌套：会进 `<p>` 的组件只能用 phrasing content
+
+阅读正文的段落是 `<p className="para">`，而每句话的译文、语言点、生词高亮都挂在它**里面**。
+HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），**不能装 `<div>` / `<ul>` / `<table>` 这类块级标签**。
+违反了会怎么样：
+
+- dev 下 React 18 打 `validateDOMNesting(...): <div> cannot appear as a descendant of <p>`，
+  一屏警告把真正的错淹掉；
+- 真机上浏览器会按容错规则**提前闭合 `<p>`**，后面的节点被挪到段落外，样式莫名其妙错位。
+
+**写法**：进 `<p>` 的组件一律用 `<span>`，块级外观交给 CSS：
+`.tr-block`（译文）、`.lang-block` / `.lang-line` / `.lang-src`（语言点）、`.lang-phrases`（词组行）
+都是 `display:block` / `flex` 的 `span`。新加「一行一块」的东西照这个写，别顺手用 `<div>`。
+
+**为什么容易漏**：`<p>` 在 `ReaderBody`，渲染 `div` 的是它引用的 `LanguageLines` ——
+单看任何一个文件都合法，合起来才非法。所以检查必须**跨组件**：
+
+- 门禁 **R8**（`tool/check_architecture.mjs`）：把 `<p>…</p>` 里引用的自定义组件递归追下去，
+  谁渲染树里有块级标签就报谁；
+- 回归测试 `src/reader/panels/domNesting.test.tsx`：直接量渲染后的 DOM
+  （`p` 后代里不许出现块级元素）。**别改成断言 `console.error` 里的 `validateDOMNesting`** ——
+  那条警告按 (childTag, ancestorTag) 全局去重，同文件里前面用例触发过，后面就永远是绿的。
+
 ## 四、有意为之的例外（别当违规修）
 
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。

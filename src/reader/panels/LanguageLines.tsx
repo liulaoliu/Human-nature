@@ -15,16 +15,21 @@ export interface LanguageLinesProps {
  *
  * 正文、速读、日志三处原来各写一份同样的五行——文案与顺序只在这里定义一次。
  * 「加语言点」本身也只有一个编辑器（`LanguageEditor`，两处入口都走它）。
+ *
+ * **为什么根节点是 span 而不是 div**：这组件会被塞进阅读正文的 `<p className="para">` 里
+ * （每句话的语言点挂在句子下面）。HTML 规定 `<p>` 只能放 phrasing content（span / b / button…），
+ * 放 `<div>` 属于非法嵌套，React 18 会在 console 报 `validateDOMNesting` 警告。
+ * 这里一律用 span，块级外观交给 CSS（`.lang-line` / `.lang-phrases` 都是 display:block/flex）。
  */
 export default function LanguageLines({ lang: L, onAddPhrases, plain }: LanguageLinesProps) {
   return (
     <>
-      {L.structure && <div className="lang-line">结构：{L.structure}</div>}
-      {L.grammar && <div className="lang-line">语法：{L.grammar}</div>}
+      {L.structure && <span className="lang-line">结构：{L.structure}</span>}
+      {L.grammar && <span className="lang-line">语法：{L.grammar}</span>}
       {plain ? (
         <>
-          {L.idioms?.length ? <div>{KIND_LABEL.idiom}：{L.idioms.join('；')}</div> : null}
-          {L.phrases?.length ? <div>{KIND_LABEL.phrase}：{L.phrases.join('；')}</div> : null}
+          {L.idioms?.length ? <span className="lang-line">{KIND_LABEL.idiom}：{L.idioms.join('；')}</span> : null}
+          {L.phrases?.length ? <span className="lang-line">{KIND_LABEL.phrase}：{L.phrases.join('；')}</span> : null}
         </>
       ) : (
         <>
@@ -32,7 +37,7 @@ export default function LanguageLines({ lang: L, onAddPhrases, plain }: Language
           <LangPhrases label={KIND_LABEL.phrase} items={L.phrases ?? []} onAdd={onAddPhrases} />
         </>
       )}
-      {L.usage?.length ? <div className="lang-line">用法：{L.usage.join('；')}</div> : null}
+      {L.usage?.length ? <span className="lang-line">用法：{L.usage.join('；')}</span> : null}
     </>
   )
 }

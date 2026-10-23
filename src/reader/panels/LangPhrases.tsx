@@ -1,6 +1,9 @@
 /**
  * 语言点里的「词组 / 习语」一行：每条都能点一下**加入生词本**（`英文 — 中文` 会拆成词条 + 释义）。
  * 速读与正文共用，保证两处一致。
+ *
+ * 根节点用 span（不是 div）：这组件会出现在阅读正文的 `<p>` 里，`<p>` 内不能放 `<div>`。
+ * 外观靠 `.lang-phrases` 的 display:flex 保持。
  */
 export default function LangPhrases({
   label,
@@ -13,7 +16,7 @@ export default function LangPhrases({
 }) {
   if (!items.length) return null
   return (
-    <div className="lang-phrases">
+    <span className="lang-phrases">
       <span className="lang-phrases-label">{label}：</span>
       {items.map((p, i) => (
         <button
@@ -35,6 +38,6 @@ export default function LangPhrases({
           全部 ＋
         </button>
       ) : null}
-    </div>
+    </span>
   )
 }
