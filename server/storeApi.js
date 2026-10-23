@@ -5,6 +5,10 @@ import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION } from './sqliteStore.js'
 import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.js'
 import { localDayKey } from './localDate.js'
+import { gzip } from 'node:zlib'
+import { promisify } from 'node:util'
+
+const gzipAsync = promisify(gzip)
 
 const MAX_BODY = 64 * 1024 * 1024
 
@@ -18,6 +22,30 @@ function sendJson(res, code, obj, headers = {}) {
 
 function fail(res, code, message) {
   sendJson(res, code, { ok: false, error: message })
+}
+
+/**
+ * 发大 JSON：body 已经是拼好的字符串，按需 gzip。
+ *
+ * 词库 16.3MB（gzip 后 ~1.5MB）。本地回环也不该每次首屏搬 16MB，
+ * 而且 Express 那套压缩中间件这里没有，手动做一次。
+ */
+async function sendBigJson(req, res, code, body) {
+  const buf = Buffer.from(body, 'utf8')
+  const accepts = String(req.headers['accept-encoding'] || '').includes('gzip')
+  res.statusCode = code
+  res.setHeader('Content-Type', 'application/json; charset=utf-8')
+  res.setHeader('Cache-Control', 'no-store')
+  res.setHeader('Vary', 'Accept-Encoding')
+  if (accepts && buf.length > 1024) {
+    const gz = await gzipAsync(buf, { level: 6 })
+    res.setHeader('Content-Encoding', 'gzip')
+    res.setHeader('Content-Length', gz.length)
+    res.end(gz)
+    return
+  }
+  res.setHeader('Content-Length', buf.length)
+  res.end(buf)
 }
 
 function readBody(req, limit = MAX_BODY) {
@@ -98,14 +126,13 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
     }
 
     if (path === '/vocab' && method === 'GET') {
-      const meta = store.vocabMeta()
-      sendJson(res, 200, {
-        ok: true,
-        value: store.loadVocab(),
-        // 乐观锁的版本号：客户端下次写回时原样带回来，服务器据此判断「你看到的是不是最新」
-        updatedAt: meta?.updatedAt ?? null,
-        count: meta?.count ?? 0,
-      })
+      // 不 parse、不重新 stringify：直接把库里那段 JSON 拼进响应（少 ~240ms CPU），再 gzip
+      const { json, updatedAt, count } = store.loadVocabJson()
+      const body =
+        '{"ok":true,"value":' + (json === null ? 'null' : json) +
+        ',"updatedAt":' + JSON.stringify(updatedAt) +
+        ',"count":' + Number(count) + '}'
+      await sendBigJson(req, res, 200, body)
       return
     }
 

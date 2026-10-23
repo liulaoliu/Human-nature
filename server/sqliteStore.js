@@ -386,6 +386,22 @@ export function openStore(dbPath) {
         const row = db.prepare('SELECT payload FROM vocab WHERE id = 1').get()
         return row ? parsePayload(unpackPayload(row.payload)) : null
       },
+      /**
+       * 词库的**原始 JSON 文本** + 版本号（不 parse）。
+       *
+       * `GET /vocab` 走这条：以前是「服务端 parse 16MB → 再 stringify 16MB」，
+       * 一次首屏白烧 ~240ms CPU。响应体本来就等于库里存的这段 JSON，
+       * 直接拼成 `{"ok":true,"value":<这段>,…}` 发出去即可。
+       */
+      loadVocabJson() {
+        const row = db.prepare('SELECT payload, updated_at, item_count FROM vocab WHERE id = 1').get()
+        if (!row) return { json: null, updatedAt: null, count: 0 }
+        return {
+          json: unpackPayload(row.payload),
+          updatedAt: String(row.updated_at),
+          count: Number(row.item_count),
+        }
+      },
       /** 词库的版本号（= 最后一次保存时间）与条数；乐观锁靠它判断「客户端看到的是不是最新」。 */
       vocabMeta() {
         const row = db.prepare('SELECT item_count, updated_at FROM vocab WHERE id = 1').get()
