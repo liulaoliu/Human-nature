@@ -457,3 +457,14 @@ npm run gates                 # 收尾门禁（提交前必跑）
 - 机器是 **16GB 物理内存**（开发机），并发开满会互相挤；tsc 报
   `Fatal process out of memory: Zone` 是系统提交内存（物理 + 页面文件）见底，不是配置问题：
   等一会儿再跑，或 `--max-old-space-size=2048`。
+
+32. **词库落盘是「合并写」，不是「点一下就写」**（2026-10-23）。`persist()` 只更新 state/ref，
+    落盘推迟 300ms（连续操作合并成一次），最迟 1200ms 强制落一次，卸载/`visibilitychange`/`pagehide`
+    时立即 flush；保存还串行排队（并发 save 会拿同一个 base 版本号，后一次必然 409）。
+    测试要 `await waitFor(() => expect(saved).toHaveLength(1))`，**不能同步断言**；
+    组合窗口相关的断言用导出的 `PERSIST_DELAY_MS` / `PERSIST_MAX_WAIT_MS`。
+33. **整库数据别「parse 再 stringify」发出去**（2026-10-23）。`GET /vocab` 现在是
+    「库里那段 JSON 原样拼进响应 + 按需 gzip」：16.3MB / 1.4s → 1.5MB / 0.46s。
+    改这条读路径时注意两点：① 三张词库表的 payload 都是 **gzip BLOB**，读一律走 `unpackPayload`；
+    ② 响应形状必须还是 `{ ok, value, updatedAt, count }`，前端 `vocabRepo` 只认这个。
+    加新的大接口照抄 `sendBigJson`（`Content-Encoding: gzip` + `Vary`），别每次搬 16MB。

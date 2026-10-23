@@ -81,7 +81,7 @@ schema 版本：`PRAGMA user_version = 7`（v3 建学习记录表，v4 修旧词
 ### 4.1 事实来源（JSON 快照）
 
 ```sql
-vocab(id=1, payload JSON, item_count, updated_at)
+vocab(id=1, payload BLOB, item_count, updated_at)          -- 当前词库（gzip；读一律走 unpackPayload）
 vocab_prev(id=1, payload BLOB, item_count, updated_at)      -- 刚被覆盖的那一版（gzip）
 vocab_snapshots(at, payload BLOB, item_count)               -- 最近 5 版 + 历史最大一版（gzip）
 articles(id, payload JSON, title, book, source_key,
@@ -97,8 +97,10 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 - 词库备份语义与 IndexedDB 实现一致：覆盖前留「**刚被覆盖的那一版**」，空库不算上一版。
   旧规则「只留更大的那一份」会让历史最大值永远占位（本库 8731 条 / 10-20 卡住之后，
   8306 → 8302 这类缩水根本进不了 prev，「恢复上一版」拿到的是两天前的库），已按 `updated_at` 改掉。
-- 快照与上一版的 payload 是 **gzip BLOB**（`unpackPayload` 两种都认，老明文库能直接读）；
-  `vocab` 主表仍是明文 JSON，方便 `sqlite3` / 体检脚本直接读。
+- 三张词库表（`vocab` / `vocab_prev` / `vocab_snapshots`）的 payload 都是 **gzip BLOB**；
+  `unpackPayload` 两种都认，老明文库能直接读，**下次保存自动转成压缩态**。
+  为什么主表也压：16MB 明文一次 INSERT 要 ~478ms，压缩后 1.5MB 只要几十毫秒，
+  WAL / 备份 / 文件体积跟着一起降。代价是 `sqlite3` 里不能直接看 JSON，要 gunzip 一下。
 - 文章每次覆盖/删除前把当前版本留到 `article_prev`；`GET /api/store/articles/:id/prev`
   查看，`POST /api/store/articles/:id/restore-prev` 恢复。恢复会把“当前版”再写进 prev，
   所以恢复错了还能切回来。
