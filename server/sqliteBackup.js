@@ -5,8 +5,8 @@ import { localDayKey } from './localDate.js'
 
 /** schema 迁移前的整库备份，留最近 5 份。 */
 const DB_BACKUP_KEEP = 5
-/** 每天第一次打开时留一份整库备份，留最近 7 天。 */
-const DAILY_BACKUP_KEEP = 7
+/** 每天第一次打开时留一份整库备份，留最近 5 天（一天 ~90MB，7 天就半 G 了）。 */
+const DAILY_BACKUP_KEEP = 5
 
 function backupsDir(dbPath) {
   const dir = join(dirname(dbPath), 'backups')

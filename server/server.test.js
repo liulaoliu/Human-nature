@@ -138,7 +138,31 @@ describe('httpApp 请求处理', () => {
         body: JSON.stringify(library),
       })
       expect(putVocab.status).toBe(200)
+      const got = await fetch(`${base}/api/store/vocab`).then((r) => r.json())
+      expect(got.value.items).toHaveLength(1)
+      expect(got.updatedAt).toBeTruthy()
+
+      // 乐观锁：带着过期版本号写 → 409，库不动
+      const stale = await fetch(`${base}/api/store/vocab`, {
+        method: 'PUT',
+        headers: { ...json(), 'X-Vocab-Base': '2000-01-01T00:00:00.000Z' },
+        body: JSON.stringify({ items: [], stats: {} }),
+      })
+      expect(stale.status).toBe(409)
+      expect((await stale.json()).count).toBe(1)
       expect((await fetch(`${base}/api/store/vocab`).then((r) => r.json())).value.items).toHaveLength(1)
+
+      // 带着最新版本号写 → 放行
+      const fresh = await fetch(`${base}/api/store/vocab`, {
+        method: 'PUT',
+        headers: { ...json(), 'X-Vocab-Base': got.updatedAt },
+        body: JSON.stringify({ items: [...library.items, { id: 'w2', word: 'more' }], stats: {} }),
+      })
+      expect(fresh.status).toBe(200)
+      expect((await fresh.json()).updatedAt).not.toBe(got.updatedAt)
+
+      // 还原成原来的内容，后面的「相同内容不重复写」才测得准（不带 base = 强制写）
+      await fetch(`${base}/api/store/vocab`, { method: 'PUT', headers: json(), body: JSON.stringify(library) })
 
       // 相同内容重复 PUT：不再写快照 / 重建派生表
       const snapsBefore = (await fetch(`${base}/api/store/vocab/snapshots`).then((r) => r.json())).snapshots.length

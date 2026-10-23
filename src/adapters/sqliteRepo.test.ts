@@ -95,6 +95,57 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
     expect((await local.load()).items).toHaveLength(4)
   })
 
+  it('保存时把「我读到的那一版」带回去（乐观锁的 base）', async () => {
+    const local = new MemoryVocabRepo()
+    const calls = mockStore({
+      '/api/store/health': () => jsonResponse({ ok: true }),
+      '/api/store/vocab': (init) =>
+        init?.method === 'PUT'
+          ? jsonResponse({ ok: true, updatedAt: 'v2' })
+          : jsonResponse({ ok: true, value: lib(3), updatedAt: 'v1' }),
+    })
+
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+    await repo.save(lib(4))
+    const put = calls.filter((c) => c.init?.method === 'PUT').at(-1)
+    expect(new Headers(put?.init?.headers as HeadersInit).get('X-Vocab-Base')).toBe('v1')
+
+    // 写成功后版本号换成服务端返回的那个，下一次写才对得上
+    await repo.save(lib(5))
+    const second = calls.filter((c) => c.init?.method === 'PUT').at(-1)
+    expect(new Headers(second?.init?.headers as HeadersInit).get('X-Vocab-Base')).toBe('v2')
+  })
+
+  it('别处先写过：409 就报错，不当成服务挂掉、也不镜像本地', async () => {
+    const local = new MemoryVocabRepo()
+    await local.save(lib(9))
+    let rejected = 0
+    mockStore({
+      '/api/store/health': () => jsonResponse({ ok: true }),
+      '/api/store/vocab': (init) => {
+        if (init?.method === 'PUT') {
+          rejected++
+          // 第一次冲突，第二次（版本号已对齐）放行
+          return rejected === 1
+            ? jsonResponse({ ok: false, error: '词库已被其它页面改过', updatedAt: 'v2', count: 12 }, 409)
+            : jsonResponse({ ok: true, updatedAt: 'v3' })
+        }
+        return jsonResponse({ ok: true, value: lib(3), updatedAt: 'v1' })
+      },
+    })
+
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
+    // 关键：冲突不能把词库镜像到 IndexedDB（那才是真丢数据）
+    expect((await local.load()).items).toHaveLength(9)
+
+    // 版本号已经对齐服务器，用户再存一次就放行（此时 prev/快照里有被覆盖的那一版）
+    await repo.save(lib(4))
+    expect(rejected).toBe(2)
+  })
+
   it('服务不可用时完全回退 IndexedDB', async () => {
     const local = new MemoryVocabRepo()
     await local.save(lib(5))

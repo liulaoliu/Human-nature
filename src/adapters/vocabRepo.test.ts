@@ -4,11 +4,12 @@ import { createLibrary } from '../core/vocab'
 import { vocabItem } from '../core/testFixtures'
 
 /**
- * 词库仓储的**备份语义**：每次覆盖前留一份「上一版」，且**只留更大的那一份**。
+ * 词库仓储的**备份语义**：每次覆盖前留一份「上一版」。
  *
  * 为什么这么设计（真实事故）：词库从 IndexedDB 读失败时拿到的是空库；
  * 一旦有任何写入（含自动补全），空库就被覆盖回去 —— 生词全丢。
- * 备份只变大不缩小 ⇒ 缩水事故发生时，备份里留住的正是事故前那一版，能一键恢复。
+ * 所以空库**不算**上一版；除此之外，上一版永远是「刚被覆盖的那一版」，
+ * 而不是「历史上条数最多的那一版」（旧规则会让历史最大值永远占位，缩水事故退不回去）。
  */
 const lib = (n: number) => ({
   ...createLibrary(),
@@ -26,15 +27,19 @@ describe('MemoryVocabRepo：上一版备份', () => {
     expect((await repo.loadPrev())?.items).toHaveLength(3)
   })
 
-  it('缩水（事故/误清）不会把备份也冲掉：备份只变大不缩小', async () => {
+  it('缩水时上一版跟着走，而不是卡在历史最大值', async () => {
     const repo = new MemoryVocabRepo()
     await repo.save(lib(5))
     await repo.save(lib(7))
     expect((await repo.loadPrev())?.items).toHaveLength(5)
 
+    // 缩水：上一版必须是刚被覆盖的 7，用户点恢复才回到事故前
+    await repo.save(lib(6))
+    expect((await repo.loadPrev())?.items).toHaveLength(7)
+
     // 事故：空库被写进去（正常流程里已被 persist 的硬闸拦住，这里防的是其它路径）
     await repo.save(lib(0))
-    expect((await repo.loadPrev())?.items).toHaveLength(7) // 备份仍是最大的那一版（7）
+    expect((await repo.loadPrev())?.items).toHaveLength(6) // 空库不覆盖 prev
     expect((await repo.load()).items).toHaveLength(0)
   })
 

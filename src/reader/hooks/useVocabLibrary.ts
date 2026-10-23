@@ -5,6 +5,7 @@ import { createLibrary } from '../../core/vocab'
 import { migrateLibrary } from '../../core/migrations'
 import { libraryErrors } from '../../core/libraryValidate'
 import { createVocabRepo } from '../../adapters/vocabRepo'
+import { StoreConflictError } from '../../adapters/storeApi'
 
 /**
  * 词库的**持久化接线**：读回来 → 修数据 → 对外提供「写一次」的 persist。
@@ -109,6 +110,12 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       libraryRef.current = lib
       setLibrary(lib)
       repo.current.save(lib).catch((e) => {
+        // 版本冲突和「存不上」是两件事：冲突说明别处已经写过，**这次改动根本没落盘**，
+        // 必须让用户知道（否则他以为保存成功了，实际刷新就没了）。
+        if (e instanceof StoreConflictError) {
+          flash(`词库在别的页面被改过（服务器现有 ${e.count} 条），这次改动没保存；刷新后再改，或再存一次用本页覆盖`)
+          return
+        }
         console.warn('[词库] 保存失败', e)
         flash('词库保存失败：界面已更新，但可能没落盘；请稍后重试或导出备份')
       })

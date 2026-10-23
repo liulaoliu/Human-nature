@@ -22,36 +22,82 @@ afterEach(() => {
 })
 
 describe('sqliteStore：词库', () => {
-  it('保存 / 读取 / 上一版只留更大的那一份', () => {
+  it('上一版 = 刚被覆盖的那一版（缩水也记，空库不记）', () => {
     const store = openStore(tempDb())
     expect(store).not.toBeNull()
 
     expect(store.loadVocab()).toBeNull()
-    store.saveVocab(lib(3))
-    expect(store.loadVocab().items).toHaveLength(3)
+    store.saveVocab(lib(10))
+    expect(store.loadVocab().items).toHaveLength(10)
     expect(store.loadPrev()).toBeNull()
 
-    store.saveVocab(lib(5))
-    expect(store.loadPrev().items).toHaveLength(3)
+    // 缩水也是「上一版」。旧规则「只留更大的那一份」会让 10-20 那版 8731 条永远占着 prev，
+    // 之后所有缩水事故都进不去，用户点「恢复上一版」拿到的是几天前的库。
+    store.saveVocab(lib(9))
+    expect(store.loadPrev().items).toHaveLength(10)
+    store.saveVocab(lib(2))
+    expect(store.loadPrev().items).toHaveLength(9)
 
-    // 事故/误清：空库写进去，备份仍是事故前最大的 5
+    // 空库不是「上一版」：误清空时 prev 必须还停在清空前的 2
     store.saveVocab(lib(0))
     expect(store.loadVocab().items).toHaveLength(0)
-    expect(store.loadPrev().items).toHaveLength(5)
+    expect(store.loadPrev().items).toHaveLength(2)
 
+    // 从空库再写回去，prev 仍是 2（清空那一版不值得恢复）
     store.saveVocab(lib(4))
-    expect(store.loadPrev().items).toHaveLength(5)
+    expect(store.loadPrev().items).toHaveLength(2)
   })
 
-  it('快照保留最近 8 版 + 历史最大的一版', () => {
+  it('版本号对不上就拒绝写入（旧标签页不能抹掉别处的改动）', () => {
+    const store = openStore(tempDb())
+    const v1 = store.saveVocab(lib(3))
+    expect(v1.updatedAt).toBeTruthy()
+
+    // 带着自己读到的那一版写：放行，并换新的令牌
+    const v2 = store.saveVocab(lib(4), { baseUpdatedAt: v1.updatedAt })
+    expect(v2.updatedAt).not.toBe(v1.updatedAt)
+    expect(store.loadVocab().items).toHaveLength(4)
+
+    // 旧标签页还拿着 v1：必须被挡，库里还是 4
+    expect(() => store.saveVocab(lib(2), { baseUpdatedAt: v1.updatedAt })).toThrow(/改过/)
+    expect(store.loadVocab().items).toHaveLength(4)
+    expect(store.vocabMeta().count).toBe(4)
+
+    // 不带 base = 强制写（迁移脚本 / curl / 工具）
+    store.saveVocab(lib(5))
+    expect(store.loadVocab().items).toHaveLength(5)
+
+    // 乱传一个版本号，同样被挡
+    expect(() => store.saveVocab(lib(6), { baseUpdatedAt: '1999-01-01T00:00:00.000Z' })).toThrow(/改过/)
+    expect(store.loadVocab().items).toHaveLength(5)
+  })
+
+  it('快照保留最近 5 版 + 历史最大的一版', () => {
     const store = openStore(tempDb())
     store.saveVocab(lib(10))
     for (let n = 0; n <= 7; n++) store.saveVocab(lib(n))
 
     const snaps = store.listSnapshots()
-    expect(snaps).toHaveLength(9)
+    expect(snaps).toHaveLength(6)
     expect(snaps.some((s) => s.count === 10)).toBe(true)
     expect(store.loadSnapshot(snaps[0].at)).not.toBeNull()
+  })
+
+  it('快照与上一版是 gzip 存的，读回来还能还原', () => {
+    const path = tempDb()
+    const store = openStore(path)
+    store.saveVocab(lib(3))
+    store.saveVocab(lib(4))
+
+    const raw = new DatabaseSync(path, { readOnly: true })
+    const snap = raw.prepare('SELECT payload FROM vocab_snapshots LIMIT 1').get()
+    const prev = raw.prepare('SELECT payload FROM vocab_prev WHERE id = 1').get()
+    raw.close()
+    // 16MB 的整库 JSON 存两份就是 32MB；压完是 BLOB，不是 JSON 文本
+    expect(typeof snap.payload).not.toBe('string')
+    expect(typeof prev.payload).not.toBe('string')
+    expect(store.loadPrev().items).toHaveLength(3)
+    expect(store.exportAll().vocabSnapshots[0].library.items.length).toBeGreaterThan(0)
   })
 
   it('首次迁移只在服务端空库时写入', () => {

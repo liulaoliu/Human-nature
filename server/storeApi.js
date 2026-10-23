@@ -98,18 +98,36 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
     }
 
     if (path === '/vocab' && method === 'GET') {
-      sendJson(res, 200, { ok: true, value: store.loadVocab() })
+      const meta = store.vocabMeta()
+      sendJson(res, 200, {
+        ok: true,
+        value: store.loadVocab(),
+        // 乐观锁的版本号：客户端下次写回时原样带回来，服务器据此判断「你看到的是不是最新」
+        updatedAt: meta?.updatedAt ?? null,
+        count: meta?.count ?? 0,
+      })
       return
     }
 
     if (path === '/vocab' && method === 'PUT') {
-      store.saveVocab(await readJson(req))
-      sendJson(res, 200, { ok: true })
+      // 不带 `X-Vocab-Base` = 强制写（迁移脚本 / curl 手工操作）；带了就必须对得上。
+      const base = req.headers['x-vocab-base']
+      try {
+        const out = store.saveVocab(await readJson(req), { baseUpdatedAt: base })
+        sendJson(res, 200, { ok: true, ...out })
+      } catch (e) {
+        if (e?.code === 'VOCAB_CONFLICT') {
+          sendJson(res, 409, { ok: false, error: e.message, updatedAt: e.updatedAt, count: e.count })
+          return
+        }
+        throw e
+      }
       return
     }
 
     if (path === '/vocab/if-empty' && method === 'PUT') {
-      sendJson(res, 200, { ok: true, ...store.migrateVocab(await readJson(req)) })
+      const out = store.migrateVocab(await readJson(req))
+      sendJson(res, 200, { ok: true, ...out, updatedAt: store.vocabMeta()?.updatedAt ?? null })
       return
     }
 

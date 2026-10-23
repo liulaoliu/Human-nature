@@ -9,6 +9,24 @@ export class StoreUnavailableError extends Error {
   }
 }
 
+/**
+ * 写冲突（HTTP 409）：这次写入**被服务端有意拒绝**，不是服务挂了。
+ *
+ * 必须和 StoreUnavailableError 分开：后者会触发「切到 IndexedDB」的降级，
+ * 而冲突要保留在 SQLite 上、让用户知道「另一个页面改过了」。
+ */
+export class StoreConflictError extends Error {
+  readonly updatedAt: string | null
+  readonly count: number
+
+  constructor(message: string, detail: { updatedAt?: string | null; count?: number } = {}) {
+    super(message)
+    this.name = 'StoreConflictError'
+    this.updatedAt = detail.updatedAt ?? null
+    this.count = detail.count ?? 0
+  }
+}
+
 function resolveFetch(fetchImpl?: FetchLike): FetchLike | null {
   if (fetchImpl) return fetchImpl
   return typeof fetch === 'function' ? fetch : null
@@ -63,6 +81,16 @@ export async function storeRequest<T>(
     })
   } catch (e) {
     throw new StoreUnavailableError(e instanceof Error ? e.message : '存储服务不可用')
+  }
+  if (res.status === 409) {
+    // 版本冲突：把服务端那版的元信息带出去，调用方据此刷新/提示
+    let body: { error?: string; updatedAt?: string | null; count?: number } = {}
+    try {
+      body = (await res.json()) as typeof body
+    } catch {
+      // 不是 JSON 也照样按冲突处理
+    }
+    throw new StoreConflictError(body.error || '词库已被其它页面改过', body)
   }
   if (!res.ok) throw new StoreUnavailableError(`存储服务返回 ${res.status}`)
   try {
