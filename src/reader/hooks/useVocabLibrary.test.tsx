@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { PERSIST_DELAY_MS, PERSIST_MAX_WAIT_MS, useVocabLibrary } from './useVocabLibrary'
+import { PERSIST_DELAY_MS, useVocabLibrary } from './useVocabLibrary'
 import { MemoryVocabRepo } from '../../adapters/vocabRepo'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
