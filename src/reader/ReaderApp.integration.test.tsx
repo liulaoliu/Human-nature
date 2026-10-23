@@ -62,6 +62,7 @@ vi.mock('../adapters/tatoeba', () => ({
   tatoebaExamples: () => [],
 }))
 
+import { MemoryRouter } from 'react-router-dom'
 import ReaderApp from './ReaderApp'
 
 const withLang = (id: string, text: string, phrases: string[]): Sentence => ({
@@ -123,7 +124,7 @@ afterEach(() => {
 
 describe('ReaderApp 集成', () => {
   it('恢复上次文章后，自动补全只写一次且收下语言点', async () => {
-    render(<ReaderApp />)
+    render(<MemoryRouter><ReaderApp /></MemoryRouter>)
 
     await waitFor(() => expect(vocabState.saved).toHaveLength(1))
     expect(vocabState.saved[0].items.map((it) => it.word)).toEqual(['fall back on'])
@@ -136,7 +137,7 @@ describe('ReaderApp 集成', () => {
   })
 
   it('数字键 1 与 W 一样切换选词模式', async () => {
-    render(<ReaderApp />)
+    render(<MemoryRouter><ReaderApp /></MemoryRouter>)
     await screen.findByRole('button', { name: '选词模式(1)' }, { timeout: 5000 })
 
     fireEvent.keyDown(window, { key: '1', code: 'Digit1' })
@@ -151,7 +152,7 @@ describe('ReaderApp 集成', () => {
   })
 
   it('粘回语言点结果：写进词库一次，重复应用不重不漏', async () => {
-    render(<ReaderApp />)
+    render(<MemoryRouter><ReaderApp /></MemoryRouter>)
     await waitFor(() => expect(vocabState.saved).toHaveLength(1))
 
     const raw = JSON.stringify({ sentences: [{ id: 's1', phrases: ['take its toll — 造成损害'] }] })

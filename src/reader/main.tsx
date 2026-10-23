@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client'
+import { HashRouter } from 'react-router-dom'
 import ReaderApp from './ReaderApp'
 import { hydrateLearningFromServer } from './learningState'
 import { useLearningSync } from './hooks/useLearningSync'
@@ -18,7 +19,11 @@ async function boot() {
   } catch {
     // 忽略
   }
-  createRoot(document.getElementById('reader-root')!).render(<ReaderRoot />)
+  createRoot(document.getElementById('reader-root')!).render(
+    <HashRouter>
+      <ReaderRoot />
+    </HashRouter>,
+  )
 }
 
 void boot()

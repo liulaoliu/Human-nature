@@ -5,6 +5,8 @@ import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useReaderPanels } from './hooks/useReaderPanels'
+import { articlePath, parseReaderRoute, useRoutedPanels } from './route'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
 import { buildTtsAccents } from '../core/ttsVoices'
@@ -108,7 +110,14 @@ export default function ReaderApp() {
     setSideTab, setNewToday,
   } = prefs
   /** 浮层/面板的开关（速读 / 计划 / 精读 / 日志 / 导出 / 备忘 / 统计 / 全部生词）都在 useReaderPanels */
-  const panels = useReaderPanels()
+  const panelsRaw = useReaderPanels()
+  const { pathname } = useLocation()
+  const navigate = useNavigate()
+  const route = useMemo(() => parseReaderRoute(pathname), [pathname])
+  /** 当前文章在路由里的 ref：'b:<内置 key>' / 's:<已保存 id>' / 空串（没打开文章）。 */
+  const currentRef = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
+  // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
+  const panels = useRoutedPanels(panelsRaw, route, currentRef)
   const { statsOpen, setStatsOpen, browseAll, setBrowseAll } = panels
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
@@ -563,6 +572,50 @@ export default function ReaderApp() {
   })
   const { articleQuizCount } = viewData
 
+  // ---- 路由：/a/<ref> 决定「读哪一篇」 ----
+  /** 首屏恢复出来的文章：把 URL 补成 /a/<ref>（replace，不往历史里堆空层）。 */
+  const routeSynced = useRef(false)
+  useEffect(() => {
+    if (routeSynced.current || !doc) return
+    routeSynced.current = true
+    if (currentRef) navigate(articlePath(currentRef), { replace: true })
+  }, [doc, currentRef, navigate])
+
+  // URL 指向另一篇 → 按 URL 加载（浏览器前进/后退、直接粘贴地址都走这条）
+  useEffect(() => {
+    if (!route.ref || route.ref === currentRef) return
+    routeSynced.current = true
+    workspace.docApi.onPick(route.ref)
+  }, [route.ref, currentRef, workspace.docApi])
+
+  // 返回到 /（URL 里没有文章）且当前有文章 → 关掉文章，回到列表
+  useEffect(() => {
+    if (route.ref || !doc || !routeSynced.current) return
+    setDoc(null)
+    setArticleKey(null)
+    setSavedId(null)
+    try {
+      localStorage.removeItem('reader:last')
+    } catch {
+      // 隐私模式忽略
+    }
+  }, [route.ref]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** 文章选择器改成「只导航」，真正加载由上面的 URL → 文章 effect 负责。 */
+  const routedWorkspace = useMemo(
+    () => ({
+      ...workspace,
+      docApi: {
+        ...workspace.docApi,
+        onPick: (v: string) => {
+          routeSynced.current = true
+          navigate(articlePath(v))
+        },
+      },
+    }),
+    [workspace, navigate],
+  )
+
   /** AI 服务：复制提示词 / 应用结果 / 工作包 / 粘回路由；逻辑在 hooks/useAiServices。 */
   const ai = useAiServices({
     exact,
@@ -729,7 +782,7 @@ export default function ReaderApp() {
       dictReady={dictReady}
       tatoebaReady={tatoebaReady}
       exporter={exporter}
-      workspace={workspace}
+      workspace={routedWorkspace}
       services={services}
       ai={ai}
       ui={ui}
