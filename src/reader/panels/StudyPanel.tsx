@@ -6,17 +6,17 @@ import {
   displayMeaning,
   isPriority,
   normalizePos,
-  review,
   spellingMatches,
   vocabCardBlocks,
   type ReviewGrade,
   type StudyMode,
 } from '../../core/vocab'
-import { fmtDue, fmtInterval } from '../format'
+import { fmtDue } from '../format'
 import type { StudyDraft } from '../hooks/useStudyCardEdit'
 import type { StudyScope } from '../hooks/useStudyPool'
 import VocabBlocks from './VocabBlocks'
-import DrillBoard, { MeaningQuiz, type MeaningReveal } from './StudyDrill'
+import { MeaningQuiz, type MeaningReveal } from './StudyDrill'
+import StudyActions from './StudyActions'
 import StudyEditForm from './StudyEditForm'
 import StudyRoundDone from './StudyRoundDone'
 import StudySpellingRound from './StudySpellingRound'
@@ -477,92 +477,38 @@ export default function StudyPanel({
               </>
             )}
 
-            {/* 超时未评分 → 强制锤炼 */}
-            {drillOn ? (
-              <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
-            ) : learnQuizOn ? (
-              // 选错后停在释义页：正确项浅绿、你选的那项浅红，点「继续」才进单词卡
-              learnReveal && !learnReveal.auto ? (
-                <div className="bar study-actions">
-                  <button className="primary" onClick={onLearnContinue}>
-                    继续（看单词卡） <kbd>空格</kbd>
-                  </button>
-                </div>
-              ) : null
-            ) : learnGraded && mode === 'learn' ? (
-              // 学习模式判完了：只等「下一词」，不再显示三档评分（避免二次评分）
-              <div className="bar study-actions">
-                <button className="primary" onClick={onNext}>
-                  下一词 <kbd>空格</kbd>
-                </button>
-                {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-              </div>
-            ) : reviewFuzzy ? (
-              // 复习模式判了「模糊」：先摊开卡看释义，再决定是认下模糊还是其实不认识
-              <div className="bar study-actions">
-                <button className="primary" onClick={() => onReviewChoice('next')}>
-                  下一词 <kbd>空格</kbd>
-                </button>
-                <button className="danger" onClick={() => onReviewChoice('missed')}>
-                  记错了 · 其实不认识 <kbd>M</kbd>
-                </button>
-                <span className="muted">看过释义才想起来不认识？点「记错了」，按忘记重排</span>
-              </div>
-            ) : reviewGraded ? (
-              // 复习模式已判「忘记了 / 记错了」：停在卡上看一眼答案，点「下一词」继续
-              <div className="bar study-actions">
-                <button className="primary" onClick={onNext}>
-                  下一词 <kbd>空格</kbd>
-                </button>
-                {gradeInfo && <span className="grade-info">{gradeInfo}</span>}
-              </div>
-            ) : showMeaningGate ? null : (
-              <>
-                {pendingForgot ? (
-                  <div className="forgot-confirm">
-                    <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>
-                    <div className="bar study-actions">
-                      <button className="danger" onClick={onConfirmForgot}>
-                        确实忘了 · 从头重学
-                      </button>
-                      <button className="primary" onClick={onSoftenForgot}>
-                        其实记得 · 按模糊（{fmtInterval(review(card.reviewState, 'hard').interval)}）
-                      </button>
-                      <button onClick={onCancelForgot}>返回重评</button>
-                    </div>
-                  </div>
-                ) : canGrade ? (
-                  <>
-                    {!reviewMode && (
-                      <div className="muted grade-preview">
-                        预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
-                        {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
-                        {fmtInterval(review(card.reviewState, 'again').interval)}
-                      </div>
-                    )}
-                    <div className="bar study-actions">
-                      <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
-                        认识 <kbd>1</kbd>
-                      </button>
-                      <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
-                        模糊 <kbd>2</kbd>
-                      </button>
-                      <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
-                        忘记了 <kbd>3</kbd>
-                      </button>
-                    </div>
-                  </>
-                ) : spellingFront ? (
-                  <button className="primary" onClick={onCheckSpelling}>
-                    检查（回车）
-                  </button>
-                ) : (
-                  <button className="primary" onClick={onReveal}>
-                    显示释义（空格）
-                  </button>
-                )}
-              </>
-            )}
+            {/* 超时未评分 → 强制锤炼 / 学习释义页 / 判完等下一词 / 复习三态 / 评分或翻面：
+                这一整条状态机在 StudyActions 里，优先级与按钮组都在那儿排好了 */}
+            <StudyActions
+              card={card}
+              items={items}
+              mode={mode}
+              drillOn={drillOn}
+              learnQuizOn={learnQuizOn}
+              learnReveal={learnReveal}
+              learnGraded={learnGraded}
+              reviewMode={reviewMode}
+              reviewFuzzy={reviewFuzzy}
+              reviewGraded={reviewGraded}
+              showMeaningGate={showMeaningGate}
+              pendingForgot={pendingForgot}
+              canGrade={canGrade}
+              spellingFront={spellingFront}
+              gradeInfo={gradeInfo}
+              onSpeak={onSpeak}
+              onDrillCleared={onDrillCleared}
+              onSpellMiss={onSpellMiss}
+              onLearnContinue={onLearnContinue}
+              onNext={onNext}
+              onReviewChoice={onReviewChoice}
+              onConfirmForgot={onConfirmForgot}
+              onSoftenForgot={onSoftenForgot}
+              onCancelForgot={onCancelForgot}
+              onGrade={onGrade}
+              onReviewAnswer={onReviewAnswer}
+              onCheckSpelling={onCheckSpelling}
+              onReveal={onReveal}
+            />
           </>
         ) : (
           <StudyRoundDone

@@ -4,6 +4,7 @@ import { type AnalysisTask } from '../core/analyzer'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
+import { useReaderPanels } from './hooks/useReaderPanels'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
 import { buildTtsAccents } from '../core/ttsVoices'
@@ -106,10 +107,9 @@ export default function ReaderApp() {
     confusableBatchSize, aiPackScope, autoVocabDirect, newLimit, newToday,
     setSideTab, setNewToday,
   } = prefs
-  /** 每日统计面板是否展开 */
-  const [statsOpen, setStatsOpen] = useState(false)
-  /** 「全部生词」独立视图（侧栏只显示本篇） */
-  const [browseAll, setBrowseAll] = useState(false)
+  /** 浮层/面板的开关（速读 / 计划 / 精读 / 日志 / 导出 / 备忘 / 统计 / 全部生词）都在 useReaderPanels */
+  const panels = useReaderPanels()
+  const { statsOpen, setStatsOpen, browseAll, setBrowseAll } = panels
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
@@ -247,20 +247,22 @@ export default function ReaderApp() {
   /** 记录今天新引入了一个词（用于每日配额；跨天由 useReaderPrefs 的 serialize 归零）。 */
   const bumpNewToday = useCallback(() => setNewToday((prev) => prev + 1), [setNewToday])
 
-  /** 逐句速读。 */
-  const [speedReadOpen, setSpeedReadOpen] = useState(false)
-  /** 今日计划。
-   */
-  const [planOpen, setPlanOpen] = useState(false)
-  /** 精读工作流面板。 */
-  const [intensiveOpen, setIntensiveOpen] = useState(false)
-  /** 学习日志面板 + 选中的日期。 */
-  const [journalOpen, setJournalOpen] = useState(false)
-  const [journalDay, setJournalDay] = useState(() => dayKeyLocal(new Date()))
-  /** 打印 / 导出面板。 */
-  const [exportOpen, setExportOpen] = useState(false)
-  /** 目标备忘面板 + 今日读文目标 + 自由备忘（状态在 useLearningData）。 */
-  const [goalOpen, setGoalOpen] = useState(false)
+  const {
+    speedReadOpen,
+    setSpeedReadOpen,
+    planOpen,
+    setPlanOpen,
+    intensiveOpen,
+    setIntensiveOpen,
+    journalOpen,
+    setJournalOpen,
+    journalDay,
+    setJournalDay,
+    exportOpen,
+    setExportOpen,
+    goalOpen,
+    setGoalOpen,
+  } = panels
   /** 生词本排序方式：见 useReaderPrefs.vocabSort */
   /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
   const vocabEdits = useVocabEdits({
