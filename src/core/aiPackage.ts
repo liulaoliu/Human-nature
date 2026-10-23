@@ -25,12 +25,12 @@ import {
 } from './analyzer'
 import {
   confusableChunks,
+  contextChunks,
+  exampleChunks,
   lookupChunks,
-  pickContextLookup,
-  pickExamples,
+  markChunks,
+  phraseChunks,
   pickLemmas,
-  pickMarks,
-  pickPhrases,
   pickPos,
   pickTodoBase,
   sentenceChunks,
@@ -136,40 +136,38 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 例句（还没「AI 例句」就生成；离线例句不算数，AI 仍会给一份带中文的）
-  const exampleTodo = pickExamples(base)
-  if (exampleTodo.length) {
+  // 分批：以前只取前 30 个，剩下的每点一次才推 30 个 —— 上百个缺口就是「点十次还在补」。
+  for (const part of exampleChunks(base)) {
     push(
       'example',
-      `例句（${exampleTodo.length}）`,
-      buildExamplePrompt(exampleTodo.map((it) => ({ word: it.word, meaning: it.meaning ?? undefined }))),
-      exampleTodo.map((it) => it.word),
+      `例句（${part.length}）`,
+      buildExamplePrompt(part.map((it) => ({ word: it.word, meaning: it.meaning ?? undefined }))),
+      part.map((it) => it.word),
     )
   }
   // 缺词组 → 生成「词组 / 习语」（有释义、但还没标注过；空数组也算标注过）
-  const phraseTodo = pickPhrases(base)
-  if (phraseTodo.length) {
+  for (const part of phraseChunks(base)) {
     push(
       'phrase',
-      `词组/习语（${phraseTodo.length}）`,
-      buildPhrasePrompt(phraseTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
-      phraseTodo.map((it) => it.word),
+      `词组/习语（${part.length}）`,
+      buildPhrasePrompt(part.map((it) => ({ word: it.word, meaning: it.meaning }))),
+      part.map((it) => it.word),
     )
   }
   // 本篇里刚选中的词、但「本篇语境」还没释义 → 按**本篇上下文**重查一次
-  const ctxTodo = pickContextLookup(base, input.articleId)
-  if (ctxTodo.length) {
+  for (const part of contextChunks(base, input.articleId)) {
     push(
       'lookup',
-      `按本篇语境重查（${ctxTodo.length}）`,
+      `按本篇语境重查（${part.length}）`,
       buildBatchLookupPrompt(
-        ctxTodo.map((it) => ({
+        part.map((it) => ({
           word: it.word,
           context:
             (it.contexts ?? []).find((c) => c.fileName === input.articleId && !c.meaning)?.sentenceText ||
             it.source?.sentenceText,
         })),
       ),
-      ctxTodo.map((it) => it.word),
+      part.map((it) => it.word),
     )
   }
   // 疑似非原型 → 校正原形
@@ -193,13 +191,12 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     )
   }
   // 名词/动词/形容词缺语法标记（可数/不可数、及物/不及物…）→ 标注
-  const markTodo = pickMarks(base)
-  if (markTodo.length) {
+  for (const part of markChunks(base)) {
     push(
       'grammar_mark',
-      `语法标记（${markTodo.length}）`,
-      buildGrammarMarkPrompt(markTodo.map((it) => ({ word: it.word, meaning: it.meaning }))),
-      markTodo.map((it) => it.word),
+      `语法标记（${part.length}）`,
+      buildGrammarMarkPrompt(part.map((it) => ({ word: it.word, meaning: it.meaning }))),
+      part.map((it) => it.word),
     )
   }
   // 缺译文 → 全文翻译（按句分块：一条塞几十句最容易在网页端被截断）
@@ -246,13 +243,13 @@ export function countAiJobs(input: AiJobsInput): number {
   if (input.batch.length) n++
   n += lookupChunks(base).length
   n += confusableChunks(base, input.confusableBatchSize).length
-  if (pickContextLookup(base, input.articleId).length) n++
-  if (pickExamples(base).length) n++
-  if (pickPhrases(base).length) n++
+  n += contextChunks(base, input.articleId).length
+  n += exampleChunks(base).length
+  n += phraseChunks(base).length
   if (!input.autoVocabDone && input.sentences.length) n++
   if (pickLemmas(base).length) n++
   if (pickPos(base).length) n++
-  if (pickMarks(base).length) n++
+  n += markChunks(base).length
   n += sentenceChunks(input.sentences.filter((s) => !s.translation)).length
   n += sentenceChunks(input.sentences.filter((s) => !hasSentenceLanguage(s))).length
   if (input.sentences.length && !input.hasListenQuiz) n++

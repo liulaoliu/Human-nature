@@ -380,6 +380,17 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       flash('没有待办（生词本已齐，也没有缺译文/语言点/听力题）')
       return
     }
+    // pending 为空 = 本轮都跑过了。以前这里直接拿 round 重跑：于是「点一次没变化，再点一次」
+    // 会变成「反复调 AI、反复没结果」——尤其是模型没返回某个词时，那个词会一直留在待办里。
+    // 重跑本身是合理需求（上次失败这次可能成功），但要让人知道自己在重跑，而不是以为在补。
+    if (!pending.length) {
+      const ok = window.confirm(
+        `本轮 ${round.length} 项待办都已经处理过了，再点会原样重跑一遍（会重新调用 AI）。\n\n` +
+          `如果数据没变化：多半是模型没返回这些词。可以先把不需要的词删掉，或者改走「网页版」粘贴。\n\n` +
+          `确定重跑吗？`,
+      )
+      if (!ok) return
+    }
     // 全库范围要谨慎：词库可能有上千词，一次全跑又慢又费 token，先让人确认
     if (jobsInput.scope === 'all' && first.length > 20) {
       const ok = window.confirm(
@@ -396,6 +407,9 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
     const attempted = new Set<string>()
     let planned = 0
+    /** 累计成功 / 失败项数：收尾提示要如实说，不能有失败也说「完成」。 */
+    let okTotal = 0
+    let failTotal = 0
     const ctrl = new AbortController()
     localAbortRef.current = ctrl
 
@@ -415,6 +429,8 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         const { results, failed, dropped } = await runBatchOnServer(todo, (d) => setLocalDone(d), ctrl.signal)
 
         const { okCount, failCount, lines, appliedIds } = applyResultsRef.current(results, all)
+        okTotal += okCount
+        failTotal += failCount
         setDoneIds((prev) => [...new Set([...prev, ...appliedIds])])
         const report = [`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)]
         if (dropped) report.push(`⚠️ 丢弃了 ${dropped} 条结构不完整的 AI 结果（缺 raw / 不是对象）`)
@@ -432,10 +448,15 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         onReport(report)
         // 本轮一条都没成，就别再等数据变化了
         if (!results.length) break
+        // 解析出了结果但一条都没应用成功（格式不对 / 找不到任务）：数据不会变，
+        // `settle` 只能等满 3 秒超时 —— 白等，还让「跑批中」一直挂着。
+        if (!appliedIds.length) break
         // 等数据落地、下一轮待办浮现
         await settle(input)
       }
-      flash(`一键跑批完成（共 ${planned} 项）`)
+      if (failTotal) flash(`一键跑批结束：成功 ${okTotal} 项、失败 ${failTotal} 项（失败的会留在待办里，可重试）`)
+      else if (planned === 0) flash('没有待办')
+      else flash(`一键跑批完成（${okTotal} 项）`)
     } catch (e) {
       if (ctrl.signal.aborted) {
         // 用户主动取消：不当错误展示

@@ -97,23 +97,39 @@ function applyConfusable(text: string, lib: VocabLibrary, askedWords: string[]):
 function applyExample(text: string, lib: VocabLibrary): ApplyTableOutcome {
   const rows = parseExampleTable(text)
   if (!rows.length) return notParsed('没解析出例句（格式：单词 | 英 | 中 | 英 | 中）')
+  const next = applyExamples(lib, rows)
+  // 数**实际改动的词条**：`rows.length` 只是解析出的行数。词形对不上时一行都写不进去，
+  // 旧回执照样说「已加入 30 个词的例句」—— 用户看到的就是「说成功了，卡上还是空的」。
+  const written = next.items.filter((it, i) => it !== lib.items[i]).length
+  const unknown = rows.map((r) => r.word).filter((w) => !findItem(lib, w))
+  const report = [`解析 ${rows.length} 行，实际写入 ${written} 个词的例句`]
+  if (unknown.length) report.push(`词库里找不到这 ${unknown.length} 个（词形不一致？）：${head(unknown, EMPTY_PREVIEW)}`)
   return {
-    next: applyExamples(lib, rows),
-    report: [`已加入 ${rows.length} 个词的例句`],
+    next: written ? next : null,
+    report,
     missing: null,
     ok: true,
   }
+}
+
+/** 按词形/原形在词库里找词条（与 applyExamples / applyPhrases 同一套匹配规则）。 */
+function findItem(lib: VocabLibrary, word: string): boolean {
+  const lemma = lemmaOf(word)
+  const nw = normalizeWord(word)
+  return lib.items.some((it) => it.lemma === lemma || normalizeWord(it.word) === nw)
 }
 
 /** 词组 / 习语：给词补「词组」「习语」两块（与用法、例句分开）。 */
 function applyPhrase(text: string, lib: VocabLibrary, askedWords: string[]): ApplyTableOutcome {
   const rows = parsePhraseTable(text)
   if (!rows.length) return notParsed('没解析出词组/习语（格式：单词 | 词组1；词组2 | 习语1；习语2）')
+  const next = applyPhrases(lib, rows)
   const missing = missingWords(askedWords, rows.map((r) => r.word))
-  const report = [`已写入 ${rows.length} 个词组的词组/习语`]
+  const written = next.items.filter((it, i) => it !== lib.items[i]).length
+  const report = [`解析 ${rows.length} 行，实际写入 ${written} 个词组的词组/习语`]
   if (missing.length) report.push(`AI 未返回 ${missing.length} 个：${head(missing, MISSING_PREVIEW)}`)
   return {
-    next: applyPhrases(lib, rows),
+    next: written ? next : null,
     report,
     missing: missing.length ? { task: 'phrase', words: missing } : null,
     ok: true,

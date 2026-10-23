@@ -90,8 +90,16 @@ describe('applyTableTask：confusable', () => {
 describe('applyTableTask：补内容类（example / phrase / grammar_mark）', () => {
   it('example：例句落进词条', () => {
     const out = applyTableTask('example', 'run | I run daily. | 我每天跑。', libOf('run'), ['run'])
-    expect(out.report[0]).toBe('已加入 1 个词的例句')
+    expect(out.report[0]).toBe('解析 1 行，实际写入 1 个词的例句')
     expect(first(out.next!, 'run').examples[0].text).toBe('I run daily.')
+  })
+
+  it('example：一行都对不上词库时不说「已加入」，且不落库', () => {
+    // 旧回执照 `rows.length` 说「已加入 1 个词的例句」，卡上其实是空的
+    const out = applyTableTask('example', 'zebra | A zebra runs. | 斑马在跑。', libOf('run'), ['run'])
+    expect(out.next).toBe(null)
+    expect(out.report[0]).toBe('解析 1 行，实际写入 0 个词的例句')
+    expect(out.report[1]).toContain('zebra')
   })
 
   it('phrase：词组进 phrases，AI 漏的进 missing', () => {

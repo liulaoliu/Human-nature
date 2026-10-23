@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest'
 import {
   chunk,
   confusableChunks,
+  exampleChunks,
   lookupChunks,
+  markChunks,
+  phraseChunks,
   pickConfusable,
   pickContextLookup,
   pickExamples,
@@ -27,11 +30,16 @@ describe('aiTodos 待办筛选', () => {
     expect(pickTodoBase({ scope: 'all', articleWords: phrases, items: phrases })).toHaveLength(0)
   })
 
-  it('pickNeedInfo 只挑「从没查过且缺音标/释义」的词', () => {
+  it('pickNeedInfo：没有释义的都要补（查过但没查到也算），只差音标的只补从没查过的', () => {
     const todo = vocabItem({ status: 'unqueried', phonetic: null, meaning: null })
     const hasInfo = vocabItem({ status: 'unqueried', phonetic: '/x/', meaning: '义' })
-    const queried = vocabItem({ status: 'queried', phonetic: null, meaning: null })
-    expect(pickNeedInfo([todo, hasInfo, queried])).toEqual([todo])
+    // 查过一次、但一条释义都没拿到 —— 不重排的话这就是一张永远空着的卡
+    const triedButEmpty = vocabItem({ status: 'queried', phonetic: null, meaning: null })
+    // 有释义、只差音标：不重排，免得半成品被无限重试
+    const onlyPhonetic = vocabItem({ status: 'queried', phonetic: null, meaning: '义' })
+    // 手填过的释义不动
+    const manual = vocabItem({ status: 'queried', meaning: null, fieldSources: { meaning: 'manual' } })
+    expect(pickNeedInfo([todo, hasInfo, triedButEmpty, onlyPhonetic, manual])).toEqual([todo, triedButEmpty])
   })
 
   it('lookupChunks 每 30 个一批', () => {
@@ -59,6 +67,15 @@ describe('aiTodos 待办筛选', () => {
     const never = vocabItem({ meaning: '义' })
     const marked = vocabItem({ meaning: '义', phrases: [] })
     expect(pickPhrases([never, marked])).toEqual([never])
+  })
+
+  it('例句 / 词组 / 语法标记都按 30 个分批：一次点击排完所有缺口', () => {
+    // 以前是 `.slice(0, 30)`：缺口 90 个要连点三次，用户看到的就是「点十次还在补」
+    const base = filler(35).map((it) => ({ ...it, meaning: '义', partOfSpeech: 'n.' }))
+    expect(exampleChunks(base).map((p) => p.length)).toEqual([30, 5])
+    expect(phraseChunks(base).map((p) => p.length)).toEqual([30, 5])
+    expect(markChunks(base).map((p) => p.length)).toEqual([30, 5])
+    expect(exampleChunks([])).toEqual([])
   })
 
   it('pickContextLookup 只挑本篇语境还没释义的词', () => {

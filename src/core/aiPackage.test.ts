@@ -425,6 +425,15 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs.filter((j) => j.task === 'translate')[2].askedIds).toHaveLength(1)
   })
 
+  it('缺例句 / 词组超过 30 个时拆成多条任务（一次点击就把缺口全排上）', () => {
+    const items = Array.from({ length: 35 }, (_, i) => mkItem({ word: `w${i}`, lemma: `w${i}` }))
+    const jobs = buildAiJobs(emptyInput({ items }))
+    expect(jobs.filter((j) => j.task === 'example').map((j) => j.askedWords.length)).toEqual([30, 5])
+    expect(jobs.filter((j) => j.task === 'phrase').map((j) => j.askedWords.length)).toEqual([30, 5])
+    expect(jobs.filter((j) => j.task === 'grammar_mark').map((j) => j.askedWords.length)).toEqual([30, 5])
+    expect(countAiJobs(emptyInput({ items }))).toBe(jobs.length)
+  })
+
   it('countAiJobs 与 buildAiJobs 数量一致', () => {
     const input = emptyInput({
       batch: [{ word: 'a' }],

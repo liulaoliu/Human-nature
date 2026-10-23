@@ -54,7 +54,16 @@ export function pickTodoBase(input: AiScopeInput): VocabItem[] {
  * 免得「模型只补了释义没给音标」这种半成品被无限重试；剩下的可离线「补齐生词本」。
  */
 export function pickNeedInfo(base: VocabItem[]): VocabItem[] {
-  return base.filter((it) => it.status === 'unqueried' && (!it.phonetic || !it.meaning))
+  return base.filter((it) => {
+    // 手填过的释义不动
+    if (it.fieldSources?.meaning === 'manual') return false
+    // 一张**没有释义**的卡是废的：不管「从没查过」还是「查过但模型没给」，
+    // 都值得再排一次。只认 status === 'unqueried' 的话，模型漏掉的词会永久停在
+    // 空卡状态 —— 面板上「有释义 308/497」永远不会动，用户看到的就是「点了补齐没反应」。
+    if (!it.meaning) return true
+    // 已有释义、只差音标：只补「从没查过」的，免得「模型不给音标」这种半成品被无限重试
+    return it.status === 'unqueried' && !it.phonetic
+  })
 }
 
 export function lookupChunks(base: VocabItem[]): VocabItem[][] {
@@ -74,12 +83,22 @@ export function confusableChunks(base: VocabItem[], batchSize: number): VocabIte
 
 /** 例句：还没「AI 例句」就生成；离线例句不算数，AI 仍会给一份带中文的。 */
 export function pickExamples(base: VocabItem[]): VocabItem[] {
-  return base.filter((it) => it.meaning && needsAiExamples(it)).slice(0, EXAMPLE_MAX)
+  return base.filter((it) => it.meaning && needsAiExamples(it))
+}
+
+/** 例句分批：一次点击要把**所有**缺例句的词都排上，而不是只排前 30 个。 */
+export function exampleChunks(base: VocabItem[]): VocabItem[][] {
+  return chunk(pickExamples(base), EXAMPLE_MAX)
 }
 
 /** 词组 / 习语：有释义、但还没标注过（空数组也算标注过）。 */
 export function pickPhrases(base: VocabItem[]): VocabItem[] {
-  return base.filter((it) => it.meaning && it.phrases === undefined).slice(0, PHRASE_MAX)
+  return base.filter((it) => it.meaning && it.phrases === undefined)
+}
+
+/** 词组 / 习语分批：同上，别让「还剩 98 个」变成点十次补不完。 */
+export function phraseChunks(base: VocabItem[]): VocabItem[][] {
+  return chunk(pickPhrases(base), PHRASE_MAX)
 }
 
 /**
@@ -87,9 +106,12 @@ export function pickPhrases(base: VocabItem[]): VocabItem[] {
  * 不再是待办（天然的终结标记，不会无限重跑）。
  */
 export function pickContextLookup(base: VocabItem[], articleId: string): VocabItem[] {
-  return base
-    .filter((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === articleId && !c.meaning))
-    .slice(0, CONTEXT_MAX)
+  return base.filter((it) => it.meaning && (it.contexts ?? []).some((c) => c.fileName === articleId && !c.meaning))
+}
+
+/** 语境重查分批：一篇里卡住的句子可能几十个，一次点击要全排上。 */
+export function contextChunks(base: VocabItem[], articleId: string): VocabItem[][] {
+  return chunk(pickContextLookup(base, articleId), CONTEXT_MAX)
 }
 
 /** 疑似非原型 → 校正原形。 */
@@ -109,7 +131,12 @@ export function pickPos(base: VocabItem[]): VocabItem[] {
  * 判「标注过」看字段**是否存在**（空数组也算标注过），否则「查过但无可标」的词会永远重复跑。
  */
 export function pickMarks(base: VocabItem[]): VocabItem[] {
-  return base.filter((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined).slice(0, MARK_MAX)
+  return base.filter((it) => it.meaning && isMarkablePos(it.partOfSpeech) && it.grammarMarks === undefined)
+}
+
+/** 语法标记分批：同理，别让 30 个以外的词永远排不上。 */
+export function markChunks(base: VocabItem[]): VocabItem[][] {
+  return chunk(pickMarks(base), MARK_MAX)
 }
 
 /** 翻译 / 语言点共用的分块（每块最多 6 句）。 */
