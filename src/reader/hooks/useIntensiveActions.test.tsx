@@ -37,6 +37,8 @@ describe('useIntensiveActions（精读工作流入口）', () => {
       act(() => result.current.openIntensiveStage(stage))
       expect(deps.runAiLocal).toHaveBeenCalledTimes(1)
       expect(deps.startQuizArticleDrill).not.toHaveBeenCalled()
+      // 就地跑批：面板不关，进度和「取消」留在眼前（关掉再跑 = 点了没反应）
+      expect(deps.setIntensiveOpen).not.toHaveBeenCalled()
     }
   })
 

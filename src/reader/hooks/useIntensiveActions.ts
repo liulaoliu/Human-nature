@@ -45,6 +45,12 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
   /** 某个阶段「跳到对应工具」 */
   const openIntensiveStage = useCallback(
     (key: IntensiveStageKey) => {
+      // 标词 / 词块 / 理解三档是「就地跑批」——面板留着不关，跑批进度、第几轮、
+      // 「取消」都在眼前。关掉再跑，用户只能等一句 flash，看起来就像「点了没反应」。
+      if (key === 'vocab' || key === 'chunks' || key === 'comprehend') {
+        void runAiLocal()
+        return
+      }
       setIntensiveOpen(false)
       if (key === 'skim') openSpeedRead()
       else if (key === 'recall') startStudy()
@@ -52,7 +58,6 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       // 语法专项的按钮写着「练结构 / 语法」，就该去练：和「快速拷打 → 语法」同一套文章级题型
       //（句子题，不写 SRS）。之前这里落到 `runAiLocal()`，点下去只是补语言点，等于没练。
       else if (key === 'grammar') startQuizArticleDrill(DRILL_KINDS.grammar)
-      else void runAiLocal()
     },
     [setIntensiveOpen, openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill],
   )
