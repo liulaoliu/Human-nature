@@ -364,6 +364,13 @@ export function openStore(dbPath) {
       close() {
         stopDailyBackup()
         try {
+          // 走之前把 WAL 并回主库并截断：PASSIVE checkpoint 只「并」不「缩」，
+          // 一次保存就是 16MB，留着一次就是几十 MB（本库实测 51MB）。
+          db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
+        } catch {
+          // 还有别的连接在读，跳过；下次启动的 reclaimSpace 还会再收一次
+        }
+        try {
           db.close()
         } finally {
           cache.delete(dbPath)

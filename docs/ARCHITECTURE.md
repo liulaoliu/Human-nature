@@ -250,10 +250,10 @@ types ← core ← adapters ← reader
 | `vocab_prev` | 一版，gzip | 同上，只是「上一版」 |
 | `vocab` 主表 | 明文 JSON | 导出、体检脚本、`sqlite3` 手工查都要直接读它 |
 | `data/backups/` | 每日一份 `VACUUM INTO`，留 5 天 | 防整库文件被删坏；一天 ~60-90MB |
-| `-wal` | 每次保存后 `wal_checkpoint(PASSIVE)`，启动时 `TRUNCATE` | 一次保存写 16MB，WAL 不 checkpoint 会涨到几十 MB |
+| `-wal` | 每次保存后 `wal_checkpoint(PASSIVE)`，启动与 `close()` 时 `TRUNCATE` | 一次保存写 16MB，PASSIVE 只「并」不「缩」，不主动截断会一直占几十 MB |
 | 空闲页 | 启动时 `freelist/total ≥ 15%` 才 `VACUUM` | 删过快照/文章后文件不会自己缩；但别每次启动都全量重写 |
 
-> 数字来自实测：这套策略把 `data/xueba.db` 从 226MB 收到 68MB、`-wal` 从 55MB 收到 0。
+> 数字来自实测：这套策略把 `data/xueba.db` 从 226MB 收到 51MB、`-wal` 从 55MB 收到 0。
 
 ## 三·六、吸顶 / 吸底（**按需**使用，不是全局默认）
 

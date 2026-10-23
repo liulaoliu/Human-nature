@@ -231,8 +231,8 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   ```
 
 - 写放大：每次保存会写 JSON + 快照 + 派生表（整库 payload 16MB，压缩后快照约 2MB）。
-  快照只留 5 版 + 最大一版；每次保存后 `wal_checkpoint(PASSIVE)`、启动时 `TRUNCATE`、
-  空闲页占比 ≥ 15% 才 `VACUUM`。实测：库 226MB → 68MB，`-wal` 55MB → 0，`data/` 1.4G → 1.2G。
+  快照只留 5 版 + 最大一版；每次保存后 `wal_checkpoint(PASSIVE)`、启动与 `close()` 时 `TRUNCATE`、
+  空闲页占比 ≥ 15% 才 `VACUUM`。实测：库 226MB → 51MB，`-wal` 55MB → 0，`data/` 1.4G → 1.2G。
 
 ## 五、导出 / 备份
 
