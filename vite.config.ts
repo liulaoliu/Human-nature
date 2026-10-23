@@ -35,9 +35,9 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     // data/ 里是 SQLite 的 db/wal/shm，写一次就变；不忽略会让 Vite 以为源码变了，
-    // 页面自动刷新 → 自动保存 → 再刷新。public/tts 是 TTS 缓存，同理。
+    // 页面自动刷新 → 自动保存 → 再刷新。data/tts 是 TTS 缓存（以前在 public 下，被拷进 dist），同理。
     watch: {
-      ignored: ['**/data/**', '**/public/tts/**', '**/public/shadowing-state.json'],
+      ignored: ['**/data/**', '**/public/shadowing-state.json'],
       // **关键**：等文件写完再通知，别在「截断 / 写一半」的中间态就触发。
       //
       // 少了这一条会这样：某个 .ts 文件被改成空/半截状态的那一刻，chokidar 立刻发 change，

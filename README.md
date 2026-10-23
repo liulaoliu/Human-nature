@@ -254,7 +254,7 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 - **进度看得见**：合成阶段按钮显示「**🔊 合成中…**」，出声后「**🔊 朗读中**」。
 - **预生成整篇**：顶栏「**⬇ 预生成朗读**」把整篇音频一次性生成并缓存（带「生成中 X/N」进度，可取消）；
   之后整篇连播 / 点句起播**零延迟**。
-- **缓存**：按 `sha1(engine + voice + text)` 存到 **`public/tts/<hash>.mp3|.wav`**（已 gitignore）。
+- **缓存**：按 `sha1(engine + voice + text)` 存到 **`data/tts/<hash>.mp3|.wav`**（已 gitignore）。
   同一句第二次是**本地文件、瞬发**。缓存上限 800 条，超出按最旧自动清理。
 - **逐词高亮 / 点词起播**：朗读时**当前词实时高亮**；点句子里的**任意词 → 从该词开始播**
   （在原音频里 seek，不重新合成、不改语气，零延迟）。
@@ -287,7 +287,7 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 | 同一份词库/文章的兜底 | 浏览器 IndexedDB | 本地服务没起、静态部署、Node < 22.5 时自动使用；升级后首次连上会自动迁移 |
 | 跟读录音 | 浏览器 IndexedDB `shadowing` | 音频 blob，体积大；暂未迁 SQLite（计划 `data/takes/` + 元数据） |
 | 校准 / 改过的正文 / 统计 / 目标 | 浏览器 localStorage | 小数据，随「导出全部」备份 |
-| TTS 缓存 | `public/tts/` | 可再生，不算用户资产 |
+| TTS 缓存 | `data/tts/` | 可再生，不算用户资产 |
 
 - SQLite 用 Node 22.5+ 自带的 `node:sqlite`，不装原生依赖；旧 Node 自动回退 IndexedDB。
 - `data/xueba.db` 里除了整库 JSON（事实来源），还有 `words` / `word_usage` / `word_examples` /

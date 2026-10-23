@@ -1,5 +1,4 @@
-import { resolve } from 'node:path'
-import { handleTts } from './tts-core.mjs'
+import { handleTts, resolveTtsCacheDir } from './tts-core.mjs'
 import { allowLocalRequest } from '../server/sameOrigin.js'
 
 /**
@@ -13,7 +12,7 @@ export function ttsEndpointPlugin() {
   return {
     name: 'shadowing-tts-endpoint',
     configureServer(server) {
-      const cacheDir = resolve(server.config.root, 'public', 'tts')
+      const cacheDir = resolveTtsCacheDir(server.config.root)
       server.middlewares.use((req, res, next) => {
         const path = (req.url || '').split('?')[0]
         if (!path.startsWith('/api/tts')) return next()

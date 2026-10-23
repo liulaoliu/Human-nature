@@ -31,11 +31,23 @@ import {
  *
  * Edge 连续失败时自动降级到本机 Piper（神经音色）；本机也没有时由前端退回浏览器语音。
  * Piper 降级 60 秒、Edge 降级 20 秒后都会回头重试。
- * 缓存：public/tts/<sha1(engine+voice+text)>.<mp3|wav>（edge 另存同名 .json 逐词时间戳）。
+ * 缓存：data/tts/<sha1(engine+voice+text)>.<mp3|wav>（edge 另存同名 .json 逐词时间戳）。
  * 只服务本机自用：文本长度上限、并发上限、硬超时、失败重试、缓存条数上限。
  */
 
 export const DEFAULT_VOICE = 'en-US-AriaNeural'
+
+/**
+ * TTS 缓存目录（默认 `<root>/data/tts`）。
+ *
+ * 以前放在 `public/tts`：那是静态目录，`vite build` 会把 32MB 音频原样拷进 `dist/`
+ * （dist 一半体积是缓存），而且每次写缓存都要触发 dev server 的 watch。
+ * 缓存是**运行时产物**，和 `xueba.db` 一样归 `data/` 管。可用 `XUEBA_TTS_DIR` 覆盖。
+ */
+export function resolveTtsCacheDir(root) {
+  const env = process.env.XUEBA_TTS_DIR?.trim()
+  return env || join(root, 'data', 'tts')
+}
 
 const EDGE_VOICE_RE = /^[a-z]{2,3}-[A-Z]{2}-[A-Za-z0-9]+Neural$/
 const MAX_TEXT = 600

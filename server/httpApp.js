@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
-import { handleTts } from '../tools/tts-core.mjs'
+import { handleTts, resolveTtsCacheDir } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
 import { handleStoreApi } from './storeApi.js'
 import { allowLocalRequest } from './sameOrigin.js'
@@ -110,7 +110,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
 
     // TTS：/api/tts（音频）、/api/tts/words（逐词时间戳）、/api/tts/engines（可用引擎）
     if (pathname.startsWith('/api/tts')) {
-      handleTts(req, res, { cacheDir: join(publicDir, 'tts') }).catch(() => {
+      handleTts(req, res, { cacheDir: resolveTtsCacheDir(dirname(publicDir)) }).catch(() => {
         if (!res.headersSent) {
           res.statusCode = 500
           res.end('tts error')

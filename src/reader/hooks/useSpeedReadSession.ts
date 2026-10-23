@@ -113,7 +113,7 @@ export function useSpeedReadSession({
     if (phase !== 'read' || done) return
     t0.current = Date.now()
     setElapsed(0)
-    const id = window.setInterval(() => setElapsed(Date.now() - t0.current), 100)
+    const id = window.setInterval(() => setElapsed(Date.now() - t0.current), 250)
     return () => window.clearInterval(id)
   }, [phase, index, done])
 

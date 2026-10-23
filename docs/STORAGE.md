@@ -27,7 +27,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
 | **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
 | 目标 / 备忘等偏好 | localStorage | 无 | `readGoal` / `goalMemo` 是设置，不是学习记录 |
-| TTS 音频缓存 | `public/tts/` | 浏览器语音 | 可再生，不算用户资产 |
+| TTS 音频缓存 | `data/tts/` | 浏览器语音 | 可再生，不算用户资产 |
 
 ### 2.1 不是所有 localStorage 都该进 SQLite
 

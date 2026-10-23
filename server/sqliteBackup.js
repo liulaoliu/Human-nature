@@ -1,12 +1,15 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { SCHEMA_VERSION } from './sqliteSchema.js'
 import { localDayKey } from './localDate.js'
 
 /** schema 迁移前的整库备份，留最近 5 份。 */
 const DB_BACKUP_KEEP = 5
-/** 每天第一次打开时留一份整库备份，留最近 5 天（一天 ~90MB，7 天就半 G 了）。 */
+/** 每天第一次打开时留一份整库备份，留最近 5 天（一天 ~155MB，5 天就近 1G）。 */
 const DAILY_BACKUP_KEEP = 5
+/** 旧备份压缩级别：1 比 6 快 3 倍，压缩率只差 ~14%（185MB → 22.4MB vs 19.3MB）。 */
+const BACKUP_GZIP_LEVEL = 1
 
 function backupsDir(dbPath) {
   const dir = join(dirname(dbPath), 'backups')
@@ -14,7 +17,8 @@ function backupsDir(dbPath) {
   return dir
 }
 
-function pruneBackups(dir, pattern, keep) {
+/** 导出只为测试（保留策略 / 压缩策略都要能单测）。 */
+export function pruneBackups(dir, pattern, keep) {
   const files = readdirSync(dir)
     .filter((name) => pattern.test(name))
     .sort()
@@ -59,6 +63,43 @@ function vacuumInto(db, file, DatabaseSync) {
 }
 
 /**
+ * 把**旧**的备份压成 `.db.gz`（今天的、刚做的那份不动）。
+ *
+ * 为什么不一生成就压：`backupDaily` 靠 `verifyBackup`（`PRAGMA quick_check`）来判断
+ * 「当天那份是不是好的」，压过的文件没法再 quick_check。所以策略是：
+ *   - 当天那份保持 `.db`，启动时的校验逻辑原样有效；
+ *   - 隔天的（且做出来超过 1 小时、确认没人还在写）压成 `.db.gz`，185MB → ~22MB；
+ *   - 每次只压一个，摊到 30 分钟的 tick 里，不阻塞启动。
+ * 要恢复旧备份：`gunzip xueba-daily-YYYY-MM-DD.db.gz` 后照常拷回去即可。
+ */
+export function compressOldBackups(dir, today) {
+  const hourAgo = Date.now() - 60 * 60 * 1000
+  const candidates = readdirSync(dir)
+    .filter((name) => /^xueba-(daily|v\d+)-.*\.db$/.test(name))
+    .filter((name) => !name.startsWith(`xueba-daily-${today}.db`))
+    .filter((name) => {
+      try {
+        return statSync(join(dir, name)).mtimeMs < hourAgo
+      } catch {
+        return false
+      }
+    })
+    .sort()
+  const name = candidates[0]
+  if (!name) return null
+  const file = join(dir, name)
+  try {
+    // 先写 .gz 再删原文件：压缩中途失败也不会两边都没有
+    writeFileSync(`${file}.gz`, gzipSync(readFileSync(file), { level: BACKUP_GZIP_LEVEL }))
+    rmSync(file, { force: true })
+    return `${file}.gz`
+  } catch (e) {
+    console.warn('[sqlite] 旧备份压缩失败（保留原文件）：', e instanceof Error ? e.message : e)
+    return null
+  }
+}
+
+/**
  * schema 升级前把整库 VACUUM 成独立文件，放在 `data/backups/`。
  * 迁移只增不删，但真出事故时至少要能回到升级前；保留最近 5 份。
  */
@@ -68,7 +109,7 @@ export function backupBeforeMigration(db, dbPath, version, DatabaseSync) {
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
   const file = join(dir, `xueba-v${version}-${stamp}.db`)
   vacuumInto(db, file, DatabaseSync)
-  pruneBackups(dir, /^xueba-v\d+-.*\.db$/, DB_BACKUP_KEEP)
+  pruneBackups(dir, /^xueba-v\d+-.*\.db(\.gz)?$/, DB_BACKUP_KEEP)
   return file
 }
 
@@ -94,7 +135,7 @@ export function backupDaily(db, dbPath, version, DatabaseSync) {
     }
   }
   vacuumInto(db, file, DatabaseSync)
-  pruneBackups(dir, /^xueba-daily-.*\.db$/, DAILY_BACKUP_KEEP)
+  pruneBackups(dir, /^xueba-daily-.*\.db(\.gz)?$/, DAILY_BACKUP_KEEP)
   return file
 }
 
@@ -107,6 +148,9 @@ export function startDailyBackup(db, dbPath, DatabaseSync) {
     try {
       const file = backupDaily(db, dbPath, SCHEMA_VERSION, DatabaseSync)
       if (file) console.info(`[sqlite] 每日备份：${file}`)
+      // 顺手把隔天的旧备份压掉（一次只压一个，不阻塞）
+      const zipped = compressOldBackups(backupsDir(dbPath), localDayKey())
+      if (zipped) console.info(`[sqlite] 旧备份已压缩：${zipped}`)
     } catch (e) {
       console.warn('[sqlite] 每日备份失败：', e instanceof Error ? e.message : e)
     }
