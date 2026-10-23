@@ -27,10 +27,12 @@ function fail(res, code, message) {
 /**
  * 发大 JSON：body 已经是拼好的字符串，按需 gzip。
  *
- * 词库 16.3MB（gzip 后 ~1.5MB）。本地回环也不该每次首屏搬 16MB，
- * 而且 Express 那套压缩中间件这里没有，手动做一次。
+ * 词库 16.3MB（gzip 后 ~1.5MB）。注意：**本机回环上压缩本身是有成本的**
+ * （16MB gzip ≈ 280ms，而回环传 16MB 几乎不要钱），所以压缩结果按版本号缓存，
+ * 同一版只压一次；换个设备/局域网访问时省的是实打实的流量。
  */
-async function sendBigJson(req, res, code, body) {
+const gzCache = new Map() // key → Buffer（最多留 2 版，避免按 db 累积）
+async function sendBigJson(req, res, code, body, cacheKey) {
   const buf = Buffer.from(body, 'utf8')
   const accepts = String(req.headers['accept-encoding'] || '').includes('gzip')
   res.statusCode = code
@@ -38,7 +40,14 @@ async function sendBigJson(req, res, code, body) {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('Vary', 'Accept-Encoding')
   if (accepts && buf.length > 1024) {
-    const gz = await gzipAsync(buf, { level: 6 })
+    let gz = cacheKey ? gzCache.get(cacheKey) : null
+    if (!gz) {
+      gz = await gzipAsync(buf, { level: 6 })
+      if (cacheKey) {
+        gzCache.set(cacheKey, gz)
+        if (gzCache.size > 2) gzCache.delete(gzCache.keys().next().value)
+      }
+    }
     res.setHeader('Content-Encoding', 'gzip')
     res.setHeader('Content-Length', gz.length)
     res.end(gz)
@@ -132,7 +141,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
         '{"ok":true,"value":' + (json === null ? 'null' : json) +
         ',"updatedAt":' + JSON.stringify(updatedAt) +
         ',"count":' + Number(count) + '}'
-      await sendBigJson(req, res, 200, body)
+      await sendBigJson(req, res, 200, body, `${updatedAt ?? 'none'}:${body.length}`)
       return
     }
 
