@@ -77,11 +77,11 @@ describe('IntensivePanel：头部与下一步', () => {
     const { rerender } = render(
       <IntensivePanel {...props({ onRunBatch, plan: { ...plan, nextKey: null } })} />,
     )
-    fireEvent.click(screen.getAllByRole('button', { name: '一键跑批' })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /一键跑批/ })[0])
     expect(onRunBatch).toHaveBeenCalled()
 
     rerender(<IntensivePanel {...props({ onRunBatch, hasDoc: false, plan: { ...plan, nextKey: null } })} />)
-    expect((screen.getAllByRole('button', { name: '一键跑批' })[0] as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getAllByRole('button', { name: /一键跑批/ })[0] as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('跑批中：显示轮次进度、可取消、所有动作锁住', () => {

@@ -196,8 +196,34 @@ types ← core ← adapters ← reader
 - 已保存文章来源：`SavedArticle.origin`（原文库 / 粘贴 / EPUB / 文件）只在入库边界写，
   合法值与标签在 `core/articleOrigin.ts`；旧文章没有 `origin` 就保持未知，不按 `sourceKey` 反推。
 
-## 三·五、数据安全（事故之后立的规矩）
+### 2.6) AI 跑批：一次点击排完、回执说真话、闭卷先学
 
+「一键跑批」是把几十个 AI 小任务串起来补数据。它的坑不在调用，而在**看起来没反应**：
+
+1. **待办要一次排完，不许 `slice`**。`pickExamples` / `pickPhrases` / `pickMarks` /
+   `pickContextLookup` 以前都是 `.slice(0, 30)`：缺口 90 个，点一次只补 30 个，
+   而且被 slice 掉的词下次仍排在队首 —— 用户看到的就是「点十次还在补同一批」。
+   现在它们返回**全量**，`exampleChunks` / `phraseChunks` / `markChunks` / `contextChunks`
+   负责按 30 个切块，`buildAiJobs` 每块一条任务；`countAiJobs` 必须用同一组 chunk 函数计数。
+2. **「查过」不等于「查到了」**。`pickNeedInfo` 原来只认 `status === 'unqueried'`，
+   于是模型漏掉的词永远停在空卡状态，面板上「有释义 308/497」怎么点都不动。
+   现在：**没有释义的都要补**（手填过的除外），只差音标的才看 `status`（避免半成品无限重试）。
+3. **回执要数实际写入**。`applyExample` / `applyPhrase` 以前拿 `rows.length` 说
+   「已加入 N 个词的例句」—— 词形对不上时一行都没写进去，照样报成功。现在数**引用变了的词条**，
+   并把对不上的词点名。同理 `useAiPack` 收尾按「成功 / 失败」如实说，不再一律「完成」。
+4. **「本轮都跑过了」要问一句**。`pending` 为空时再点就是原样重跑一遍（重新花钱调 AI），
+   先 `confirm` 说明「数据没变化多半是模型没返回」；一轮里一条都没应用成功就提前 `break`，
+   别让 `settle()` 白等 3 秒。
+5. **进度按「问过」算，覆盖率另算**。词块阶段用 `chunksAsked`（`phrases` 字段存在，空数组也算）
+   算进度；`withChunks` 只用于产出看板的「词块覆盖」。否则 AI 明确回「无搭配」的词会
+   把这一阶段永远卡在 99%，`精通` 等级锁死。
+6. **闭卷回忆要先学一遍**。记忆拷打 / 词块拷打是回忆题，直接开考等于让用户猜，猜错还会被当成
+   「没记住」写进 SRS 和错题本。`useQuizSession.startDrill(kinds, scope, { warmup })` 先出一道
+   `DrillWarmup` 预习卡（词 + 释义 + 词块），点「开始拷打」才 `begin()`；
+   卡片内容由**题目反推**（`buildWarmupCards`），不另写一套「考哪些词」的筛选。
+   英英释义 / 语法标记 / 听力这些不涉及「没见过」的题型不加预习。
+
+## 三·五、数据安全（事故之后立的规矩）
 用户的词库是**唯一资产**，任何重构都不许让它的丢法变多。四条铁律：
 
 1. **单写入口**：词库只由 `hooks/useVocabLibrary.persist` 写；增删动作统一走

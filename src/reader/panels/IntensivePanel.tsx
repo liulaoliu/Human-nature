@@ -73,13 +73,20 @@ export default function IntensivePanel({
     ? `⏳ 第 ${batchRound} 轮 · ${batchPhase || '处理中'} ${batchDone}/${batchTotal}`
     : '⚡ 一键跑批'
   return (
-    <div className="plan-overlay" onClick={onClose}>
+    // 跑批中：点遮罩不关（一不留神就点没了，还以为是跑批失败）。真要收起来走「隐藏」按钮，
+    // 跑批在后台继续，再打开面板能看到进度和「取消」。
+    <div className="plan-overlay" onClick={busy ? undefined : onClose}>
       <div className="plan-panel intensive-panel" onClick={(e) => e.stopPropagation()}>
         <div className="bar plan-head">
           <b>🎯 精读工作流</b>
           <span className={'ilevel ilevel-' + plan.level}>{plan.levelLabel}</span>
           <span className="muted">总进度 {plan.progress}%</span>
-          <button onClick={onClose}>关闭</button>
+          <button
+            onClick={onClose}
+            title={busy ? '跑批在后台继续；再打开「🎯 精读」可以看进度或取消' : undefined}
+          >
+            {busy ? '隐藏（跑批继续）' : '关闭'}
+          </button>
         </div>
         {articleTitle && <div className="muted intensive-art">当前：{articleTitle}</div>}
         {busy && (
@@ -100,13 +107,14 @@ export default function IntensivePanel({
           </div>
           <div className="muted intensive-next-hint">{plan.nextHint}</div>
           <div className="bar">
-            <button
-              className="primary"
-              onClick={() => (plan.nextKey ? onStage(plan.nextKey) : onRunBatch())}
-              disabled={!hasDoc || busy}
-            >
-              {busy ? batchLabel : plan.nextKey ? '开始这一步' : '一键跑批'}
-            </button>
+            {/* 有下一步才给「开始这一步」；都做完了就别再摆一个按钮，免得点了以为是漏掉的步骤 */}
+            {plan.nextKey ? (
+              <button className="primary" onClick={() => onStage(plan.nextKey!)} disabled={!hasDoc || busy}>
+                {busy ? batchLabel : '开始这一步'}
+              </button>
+            ) : (
+              <span className="muted">本篇已精读到位 🎉 隔天按到期复习即可</span>
+            )}
             <button
               onClick={onRunBatch}
               disabled={!hasDoc || busy}
@@ -236,8 +244,9 @@ export default function IntensivePanel({
             </button>
             <span className="muted">已记录 {retells.length} 条</span>
           </div>
-          {retells.slice(0, 3).map((r) => (
-            <div className="iretell-item" key={r.at}>
+          {/* key 用 at + 下标：同一毫秒连存两条时 at 会撞，React 会复用节点、删除也会连带 */}
+          {retells.slice(0, 3).map((r, i) => (
+            <div className="iretell-item" key={`${r.at}-${i}`}>
               <span className="muted">{r.at.slice(5, 16).replace('T', ' ')} · {r.words} 词</span>
               <span className="iretell-text">{r.text}</span>
               <button onClick={() => onDeleteRetell(r.at)} title="删除这条复述" aria-label="删除这条复述">
