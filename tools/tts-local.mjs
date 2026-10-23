@@ -1,7 +1,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join } from 'node:path'
 
 /**
  * TTS 的本机离线引擎：Windows 系统语音（SAPI）与 Piper。
@@ -150,13 +150,32 @@ export function listSapiVoices() {
 
 // ---- local（离线，Piper） ----
 let piperBin
-/** 找 Piper：环境变量 → PATH → 本机安装目录。 */
+/** Piper 可执行文件名：Windows 是 piper.exe，其余是 piper。 */
+function piperExe() {
+  return process.platform === 'win32' ? 'piper.exe' : 'piper'
+}
+
+/**
+ * 找 Piper：环境变量 → PATH → 本机安装目录。
+ *
+ * **必须跨平台**：早先这里只写了 `~/.local/opt/piper/piper` 这类 Unix 路径，
+ * Windows 上就算装了 Piper 也永远找不到（连 piper.exe 都不在候选里），
+ * 顶栏下拉里那组「离线 · 本地语音」直接消失，看起来像「引擎没接进来」。
+ */
 function findPiper() {
   if (piperBin !== undefined) return piperBin
+  const exe = piperExe()
+  const home = homedir()
+  const localAppData = process.env.LOCALAPPDATA || ''
+  const programFiles = process.env.ProgramFiles || process.env.PROGRAMFILES || ''
   const candidates = [
     process.env.PIPER_BIN,
-    'piper',
-    join(homedir(), '.local/opt/piper/piper'),
+    exe, // 走 PATH（spawnSync 会按 PATH 解析）
+    join(home, '.local/opt/piper', exe), // Linux 解压目录
+    join(home, 'piper', exe), // 通用：家目录解压（Windows 用户最容易放这儿）
+    localAppData && join(localAppData, 'piper', exe),
+    localAppData && join(localAppData, 'Programs', 'piper', exe),
+    programFiles && join(programFiles, 'piper', exe),
     '/opt/piper/piper',
     '/usr/local/bin/piper',
     '/usr/bin/piper',
@@ -176,14 +195,21 @@ function findPiper() {
   return null
 }
 
-/** Piper 模型目录：环境变量 → 二进制同级的 voices → 常见共享目录。 */
+/**
+ * Piper 模型目录：环境变量 → 二进制同级 / 上一级的 voices → 常见共享目录。
+ * 判绝对路径必须用 `path.isAbsolute`：原来写的是 `bin.includes('/')`，
+ * Windows 的 `C:\...\piper.exe` 不含 `/`，会被当成「在 PATH 里」而跳过同级目录。
+ */
 function piperVoicesDir() {
   const bin = findPiper()
-  const binDir = bin && bin.includes('/') ? dirname(bin) : ''
+  const binDir = bin && isAbsolute(bin) ? dirname(bin) : ''
+  const localAppData = process.env.LOCALAPPDATA || ''
   const candidates = [
     process.env.PIPER_VOICES_DIR,
     binDir ? join(binDir, 'voices') : '',
+    binDir ? join(binDir, '..', 'voices') : '',
     join(homedir(), '.local/share/piper-voices'),
+    localAppData ? join(localAppData, 'piper', 'voices') : '',
     '/usr/local/share/piper-voices',
     '/usr/share/piper-voices',
     '/opt/piper/voices',
@@ -218,6 +244,18 @@ function listPiperVoices() {
 /** 顶栏下拉的离线音色：只有 Piper。 */
 export function listLocalVoices() {
   return listPiperVoices()
+}
+
+/**
+ * 本机离线引擎为什么不可用 —— 给 `/api/tts/engines` 与排障用。
+ *
+ * 之前这个信息完全不可见：`listLocalVoices()` 返回空数组，前端只是「不显示那一组」，
+ * 看起来像功能没接上，实际是三条路之一断了（没装 / 没模型 / 目录没找到）。
+ */
+export function piperStatus() {
+  if (!findPiper()) return 'no-binary'
+  if (!piperVoicesDir()) return 'no-voices-dir'
+  return listPiperVoices().length ? 'ok' : 'no-models'
 }
 
 /** 用 Piper 把文本合成到 wav（模型缺失时 reject，由上层降级处理）。 */

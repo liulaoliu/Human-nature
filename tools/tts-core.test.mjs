@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { edgeLangFor, edgeProxyFromEnv, localFallbackTargets, parseTarget, pickVoiceFor } from './tts-core.mjs'
+import { piperStatus } from './tts-local.mjs'
 
 describe('parseTarget', () => {
   it('Edge 音色', () => {
@@ -105,5 +106,20 @@ describe('localFallbackTargets：Edge 挂了时的 Piper 兜底候选', () => {
     // 本机装没装 Piper 都有可能，这里只钉住「要么空数组、要么合法候选」这个契约
     const targets = localFallbackTargets('en-US-AriaNeural')
     expect(targets.length === 0 || targets.length === 1).toBe(true)
+  })
+})
+
+describe('piperStatus：离线引擎为什么不可用', () => {
+  it('只会返回四种结论之一，且不抛异常', () => {
+    // 回归：本机（Windows）没装 Piper 时，下拉里那组「离线 · 本地语音」直接消失，
+    // 界面上看不出到底是「没装」「没模型」还是「路径没找对」。把结论暴露出来。
+    const status = piperStatus()
+    expect(['ok', 'no-binary', 'no-voices-dir', 'no-models']).toContain(status)
+  })
+
+  it('ok 与「有音色」必须一致（不能一边说 ok 一边空列表）', () => {
+    const status = piperStatus()
+    const hasVoices = localFallbackTargets('en-US-AriaNeural').length > 0
+    expect(status === 'ok').toBe(hasVoices)
   })
 })

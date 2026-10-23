@@ -15,6 +15,7 @@ import {
   SAPI_PREFIX,
   listLocalVoices,
   listSapiVoices,
+  piperStatus,
   synthPiper,
   synthSapi,
 } from './tts-local.mjs'
@@ -354,13 +355,19 @@ function bad(res, code, msg) {
 async function handleEngines(res) {
   const sapi = await listSapiVoices()
   const local = listLocalVoices()
+  // reason：本机离线引擎为什么没出现（no-binary / no-voices-dir / no-models / ok）。
+  // 前端目前只按 voices 决定要不要显示那一组，reason 是给排障和日志看的事实。
+  const reason = piperStatus()
+  if (reason !== 'ok') {
+    console.info(`[tts] 离线本地语音不可用：${reason}（详见 docs/TESTING.md §4「离线 TTS（Piper）」）`)
+  }
   res.statusCode = 200
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.end(
     JSON.stringify({
       edge: true,
       sapi: { available: sapi.length > 0, voices: sapi },
-      local: { available: local.length > 0, voices: local },
+      local: { available: local.length > 0, voices: local, reason },
     }),
   )
   return true

@@ -122,7 +122,12 @@ export interface TtsEngineVoice {
 /** `/api/tts/engines` 里的离线引擎信息。 */
 export interface TtsEngineInfo {
   sapi?: { available: boolean; voices: TtsEngineVoice[] }
-  local?: { available: boolean; voices: TtsEngineVoice[] }
+  /**
+   * reason 是本机离线引擎的探测结论（服务端 `piperStatus()`）：
+   * ok / no-binary（没装 piper）/ no-voices-dir（装了但找不到模型目录）/ no-models（目录在、模型缺）。
+   * 前端只按 voices 决定显不显示这一组，reason 用于排障与「为什么这里没有离线音色」。
+   */
+  local?: { available: boolean; voices: TtsEngineVoice[]; reason?: string }
 }
 
 /** 离线引擎前缀：Windows SAPI / Linux 本地语音。 */

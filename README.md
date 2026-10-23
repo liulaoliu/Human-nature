@@ -223,12 +223,20 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 | 引擎 | voice 形如 | 联网 | 说明 |
 |---|---|---|---|
 | **edge**（默认） | `en-US-AriaNeural` | 是 | 微软 Edge 朗读的神经音色，免费但**非官方**（个人自用 OK，商用别用） |
-| **local**（离线） | `local:piper-us-lessac` | 否 | Linux **Piper 神经音色**（Lessac / Ryan / Cori / Northern），Piper 不可用时退回浏览器语音；装完即用、不联网 |
+| **local**（离线） | `local:piper-us-lessac` | 否 | **Piper 神经音色**（Lessac / Ryan / Cori / Northern），Linux / Windows 都能用（装上才出现）；不可用时退回浏览器语音 |
 | **sapi**（离线） | `sapi:Microsoft Zira Desktop` | 否 | **系统自带语音**（Windows SAPI），**免下载、不联网、不白嫖**；音色少、音质一般 |
 
 > Linux 推荐这样装离线引擎：
 > `./tools/install-piper.sh`（Piper + 4 个英语音色，默认 `~/.local/opt/piper`，约 350MB）
 > `sudo apt install speech-dispatcher`（让 Chromium 浏览器语音也有声；Piper 不可用时的最后兜底）。
+>
+> Windows 想用 Piper：把官方 release 的 `piper_windows_amd64.zip` 解压到 `%LOCALAPPDATA%\piper\`
+> （里面要有 `piper.exe`），模型 `*.onnx` + 同名 `*.json` 放到 `%LOCALAPPDATA%\piper\voices\`
+> 或 `piper.exe` 同级的 `voices\`；也可以用环境变量 `PIPER_BIN` / `PIPER_VOICES_DIR` 直接指定。
+> **没装就只有系统语音**——顶栏那组「离线 · 本地语音」不会出现，这是正常的。
+> 到底缺哪一步不用猜：`GET /api/tts/engines` 的 `local.reason` 会给出
+> `ok` / `no-binary`（没装 piper）/ `no-voices-dir`（找不到模型目录）/ `no-models`（目录在、模型缺）。
+>
 > 服务端 Edge 会显式读取 `HTTPS_PROXY` / `HTTP_PROXY`（Node 默认不走系统代理），代理可用时优先在线音色，
 > 仍然失败才降级到 Piper。
 
