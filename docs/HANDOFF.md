@@ -82,7 +82,7 @@
 - **只带学习记录 / 文章 / 词库**：应用里「导出全部（备份）」下载 JSON，新机器「导入备份」。
   文章、词库、学习记录（含答题事件）都会恢复。
 - **只带 SQLite 单文件**：浏览器打开 `http://localhost:5173/api/store/db` 下载一致性快照。
-- **代码**：`git clone` 后 `npm install`；开发用 `npm run dev`（精读页 `/reader.html`），
+- **代码**：`git clone` 后 `npm install`；开发用 `npm run dev`（精读页 `/reader`），
   生产用 `npm run build && npm run serve`。
 
 不要同时保留旧机器的服务在跑同一个 `data/`（本项目不做多标签 / 多进程冲突处理）。

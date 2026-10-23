@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { articlePath } from '../route'
+import { articlePath, panelPath, type PanelName } from '../route'
 
 export interface UseArticleRouteParams {
   /** URL 里的文章 slug（空串 = 没打开文章） */
   routeSlug: string
+  /** URL 里打开的面板 / 整页会话（空串 = 没有）；补 URL 时要一起带上 */
+  routePanel: PanelName | ''
   /** 当前已经打开的那篇的内部标识（`b:xxx` / `s:yyy`） */
   currentRef: string
   /** 标识 → slug（把当前文章写进 URL 用） */
@@ -38,6 +40,7 @@ export interface UseArticleRouteParams {
  */
 export function useArticleRoute({
   routeSlug,
+  routePanel,
   currentRef,
   slugOf,
   refOf,
@@ -73,8 +76,8 @@ export function useArticleRoute({
     if (routeSlug) return // URL 已经有主：要么就是这篇，要么交给 ② 换文章
     const slug = slugOf(currentRef)
     if (!slug) return // 索引里还没有它（目录仍在加载），等下一轮
-    navigate(articlePath(slug))
-  }, [hasDoc, currentRef, slugOf, routeSlug, navigate])
+    navigate(routePanel ? panelPath(slug, routePanel) : articlePath(slug))
+  }, [hasDoc, currentRef, slugOf, routeSlug, routePanel, navigate])
 
   // ② URL 指向另一篇 → 加载
   useEffect(() => {
@@ -86,10 +89,11 @@ export function useArticleRoute({
   }, [indexReady, routeSlug, refOf, currentRef])
 
   // ③ URL 里没有文章而当前有 → 关掉，回列表
+  //    注意：`/reader/p/<panel>` 是「没有文章也能开的面板」，不是回列表，别把文章清掉。
   useEffect(() => {
-    if (routeSlug || !hasDoc || !everHadDoc.current) return
+    if (routeSlug || routePanel || !hasDoc || !everHadDoc.current) return
     clearRef.current()
-  }, [routeSlug, hasDoc])
+  }, [routeSlug, routePanel, hasDoc])
 
   /**
    * 文章选择器：先导航（真实的 URL + 历史层），加载由 ② 完成。

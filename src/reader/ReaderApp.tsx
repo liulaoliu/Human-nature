@@ -8,6 +8,7 @@ import { useReaderPanels } from './hooks/useReaderPanels'
 import { parseReaderRoute, useRoutedPanels } from './route'
 import { buildArticleIndex } from '../core/articleIndex'
 import { useArticleRoute } from './hooks/useArticleRoute'
+import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useLocation } from 'react-router-dom'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
@@ -43,7 +44,6 @@ import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
 import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import type { Paragraph, Sentence } from '../types/document'
-import './reader.css'
 interface Doc {
   paragraphs: Paragraph[]
   sentences: Sentence[]
@@ -585,6 +585,7 @@ export default function ReaderApp() {
   // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useArticleRoute ----
   const routePick = useArticleRoute({
     routeSlug: route.slug,
+    routePanel: route.panel,
     currentRef,
     slugOf: articleIndex.slugOf,
     refOf: articleIndex.refOf,
@@ -696,6 +697,9 @@ export default function ReaderApp() {
     quizSetupOpen || !!quizQueue || !!quizWarmup || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
   /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
   const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
+
+  // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
+  useReaderFlowRouting(route, currentSlug, { services, workspace, sentence, ready: libraryLoaded })
 
   return (
     <ReaderScreen

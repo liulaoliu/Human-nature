@@ -67,9 +67,9 @@
 
 ## 5. 后台服务跑错工作目录 → 页面全 404（且 status 误报）
 
-- **症状**：服务"在跑"，但 `/reader.html` 全 404；`status.js` 却说"未运行"。
+- **症状**：服务"在跑"，但 `/reader` 全 404；`status.js` 却说"未运行"。
 - **根因**：
-  - `silent-start.vbs` 把当前目录设成 `server/`，`spawn` 链路**继承**这个 cwd → Vite 的 root 变成 `server/` → 找不到 `index.html`/`reader.html`；
+  - `silent-start.vbs` 把当前目录设成 `server/`，`spawn` 链路**继承**这个 cwd → Vite 的 root 变成 `server/` → 找不到 `index.html`；
   - `status.js` 在 **dev 模式**探 `/api/status`（那是 **static 模式**才有的接口），所以误报未运行。
 - **修法**：
   - spawn 子进程时**显式固定 `cwd = 项目根`**（`silent-start.js` / `watchdog.js` / `watchdog-cli.js`）；

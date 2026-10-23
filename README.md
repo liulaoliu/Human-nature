@@ -142,9 +142,11 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   会自动退回仓库自带的 Node 分离进程（`server/silent-start.js`）。
 
 
-## 学吧老哥 · 生词本 / 精读（`reader.html`）
+## 学吧老哥 · 生词本 / 精读（`/reader`）
 
-跟读之外多了一个独立的精读页：**`http://localhost:5173/reader.html`**（跟读页是 `/index.html`，两边各有链接互跳）。
+精读是和跟读**同一个单入口 SPA** 的另一段路由：**`http://localhost:5173/reader`**（跟读页是 `/`）。
+只有一份 `index.html`、一个 `main.tsx`、一棵 React 树；两边互跳不整页刷新，浏览器返回键能跨段走。
+老地址 `/reader.html` / `/index.html` 仍可用，启动时会自动换成干净路径。
 
 能做的事：
 
@@ -497,6 +499,8 @@ src/
     scriptEditRepo.ts   localStorage 持久化（「改文本」改过的正文，优先于原文库）
     stateBackup.ts      导出/导入本机进度（localStorage → json）
     scriptRepo.ts    取 public/articles.json
+  main.tsx          唯一入口：建 Router、恢复种子数据
+  AppRoutes.tsx     全站路由树（/ 跟读，/reader/* 精读）
   ui/               View，React 组件
     App.tsx           主界面 + 原文面板 + 显示模式
     ChunkSplitter.tsx 当前块波形 + 刀口编辑器（手动撕开）
@@ -504,8 +508,8 @@ src/
     useSession.ts
   types/
     document.ts       精读/词库的中间层数据模型（唯一真相来源）
-  reader/           精读页（独立入口 reader.html）
-    main.tsx
+  reader/           精读页（同一入口的 /reader 路由，按需懒加载）
+    ReaderRoot.tsx    /reader/* 的根（学习记录水合）
     ReaderApp.tsx     阅读 + 划词标生词 + 一键提示词 + 导出（大组件，重构中）
     reader.css
     hooks/            自定义 hook（useLocalStorageState 等）

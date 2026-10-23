@@ -347,16 +347,47 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   （`p` 后代里不许出现块级元素）。**别改成断言 `console.error` 里的 `validateDOMNesting`** ——
   那条警告按 (childTag, ancestorTag) 全局去重，同文件里前面用例触发过，后面就永远是绿的。
 
-## 三·八、阅读页路由与首屏（BrowserRouter，不要改回 hash）
+## 三·八、单入口 SPA 与阅读页路由（BrowserRouter，不要改回 hash）
 
-阅读页用 **react-router 的 BrowserRouter**，`basename = '/reader'`：
+全站只有 **一份 `index.html`、一个 `src/main.tsx`、一棵 React 树**。
+`src/main.tsx` 建 **根 BrowserRouter（没有 basename）**，`src/AppRoutes.tsx` 切两段：
 
 ```
-/reader                    文章列表（没打开文章）
-/reader/a/<slug>           读某一篇
-/reader/a/<slug>/p/<panel> 读某一篇 + 开某个面板
-/reader/p/<panel>          没有文章时也能开的面板（计划/日志/统计/生词本）
+/                   跟读练习（src/ui/App，StrictMode）
+/reader/**          精读 / 生词本（src/reader/ReaderRoot，按路由 lazy 加载）
+*                   认不出的地址 → 回 /
 ```
+
+> 以前是 `index.html` + `reader.html` 两个入口、两个 `createRoot`，互跳整页重载，
+> 阅读页面板也拿不到跨文档的历史。现在合并成一个入口；**代码仍然 code-split**：
+> `ReaderRoot` 用 `lazy()`，词典 / PDF / 面板只在进 `/reader` 时才下载。
+>
+> 阅读页 CSS（`src/reader/reader.css`）用 `?inline` 字符串在 `ReaderRoot` 挂载时注入、
+> 卸载时删掉。不能改成普通 `import './reader.css'`：那样 Vite 会把 `<link>` 留在 head，
+> 从 `/reader` 返回 `/` 后，阅读页的全局 `body` / `button` / `::selection` 规则会继续污染跟读页。
+
+阅读页的路径（`route.ts` 构造，**都带 `/reader` 前缀**）：
+
+```
+/reader                         文章列表（没打开文章）
+/reader/a/<slug>                读某一篇
+/reader/a/<slug>/p/<panel>      读某一篇 + 开面板 / 整页会话
+/reader/p/<panel>               没有文章时也能开的（计划/日志/统计/生词本/背单词…）
+```
+
+`<panel>` 有两类，都在同一张 `PanelName` 表里：
+
+- **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse` / `statsDetail`；
+- **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
+  `listen`（听力）/ `write`（仿写）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
+
+**为什么整页会话也要进 URL**：它们一打开就占满正文，用户按返回键应该回到「点它之前那一页」
+（文章 / 列表 / 上一个面板），而不是直接退出阅读器。接线在：
+
+- `route.ts` 的 `useRoutedPanels`：布尔面板 ↔ URL；
+- `hooks/useRoutedFlows.ts`：会话状态 ↔ URL。规则是
+  **点按钮打开 → push 一层；浏览器返回 → 关会话；页面内点退出 → replace 掉这一层**。
+  深链接打开失败（没词可背 / 没文章）会退回文章页，别停在空界面。
 
 **`<slug>` 不是内部标识**。内部标识长这样：`b:005 Leaders - Post-truth politics`、
 `s:saved:1761234567`，直接塞 URL 会变成 `b%3A005%20Leaders…` 一串乱码。
@@ -374,16 +405,18 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   否则删掉一篇文章会让另一篇的 URL 悄悄变掉；
 - 反查要等文章目录 + 已保存列表都加载完（`indexReady`）。索引没好时点文章**直接加载**、
   URL 先留空，索引到齐后自动补上 —— 千万别写成「算不出 slug 就 return」，那是「点了没反应」。
+- 补 URL 时如果面板已经开着，要把面板一起带上（`/reader/a/<slug>/p/<panel>`），
+  否则会把面板从地址栏挤掉、随后被 `useRoutedPanels` 关掉。
 
 ### 返回键的层级（别改成 replace）
 
 `useArticleRoute` 里补 URL 用的是 **`navigate()` 默认的 push**：
 
 ```
-[主界面] → /reader → /reader/a/<这篇> → /reader/a/<这篇>/p/<面板>
+/ → /reader → /reader/a/<这篇> → /reader/a/<这篇>/p/<面板>
 ```
 
-返回键：关面板 → 回文章 → 回文章列表 → 才离开阅读页。
+返回键：关面板/会话 → 回文章 → 回文章列表 → 才离开阅读页。
 
 **这里曾经用 `replace` 补 URL**，后果是 `/reader` 那一层被覆盖掉，历史里只剩文章页，
 按返回直接跳回主界面 —— 用户反馈的「按返回键直接返回主页面」就是它。
@@ -391,15 +424,18 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 
 **四处必须一起改**，漏一处就是刷新 404 / 白屏 / 面板关不掉：
 
-1. **代码**：`src/reader/main.tsx` 的 `BrowserRouter basename`；
-   `src/reader/route.ts` 只构造**不含前缀**的路径（`/a/xxx`），前缀由 router 补。
-2. **dev**：`vite.config.ts` 的 `readerRoutePlugin` 把 `/reader*` 改写成 `/reader.html`
-   （vite 自带的 SPA 回落只会回 `index.html`）。
-3. **生产**：`server/httpApp.js` 的 `isReaderPath()` 决定回落 `reader.html` 还是 `index.html`。
-   **带扩展名的缺失资源仍然 404**，绝不能回落成 HTML —— 否则浏览器把一段 HTML 当 JS 解析，
-   报一堆莫名其妙的语法错。
-4. **`base: '/'`（绝对路径）**。相对路径 `./assets/x.js` 在 `/reader/a/b:x` 下会解析成
+1. **代码**：`src/main.tsx` 的根 `BrowserRouter`（无 basename）+ `src/AppRoutes.tsx`；
+   `src/reader/route.ts` 构造**带 `/reader` 前缀**的完整路径。
+2. **dev**：`vite.config.ts` 的 `spaRoutePlugin` 把 `/reader*` 与旧 `/reader.html`
+   改写成 `/index.html`。
+3. **生产**：`server/httpApp.js` 的 `isSpaFallback()` 把前端路由统一回落 `index.html`；
+   **带扩展名的缺失资源仍然 404**（旧 `/reader.html` 例外，它要打开阅读页），
+   绝不能回落成 HTML —— 否则浏览器把一段 HTML 当 JS 解析，报一堆莫名其妙的语法错。
+4. **`base: '/'`（绝对路径）**。相对路径 `./assets/x.js` 在 `/reader/a/<slug>` 下会解析成
    `/reader/a/assets/x.js` → 404。代价是不能部署在子路径下（本地自用，够）。
+
+**老地址**：`src/main.tsx` 的 `normalizeLegacyUrl()` 在 `createRoot` 前把
+`/reader.html#/a/x` 换成 `/reader/a/x`、`/index.html` 换成 `/`，收藏夹/外链不会断。
 
 > 曾经用过 HashRouter（`#/a/xxx`）：省掉服务端配置，但 URL 丑、和「返回键回主界面」的
 > 层级语义不符。既然要干净的层级，就按上面把服务端一起做掉。
@@ -417,8 +453,8 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 
 | 做法 | 为什么 |
 |---|---|
-| **HTML 里的骨架屏**（`reader.html` 内联，不额外请求） | JS 下载/解析期间有轮廓，不是白屏。`createRoot().render()` 会清空容器，不用手动移除 |
-| **水合不挡渲染**（`main.tsx`） | `hydrateLearningFromServer()` 原来无条件 `await` 在 render 之前 = 一个网络往返的纯白屏。只有本地没有任何学习记录时才等，且最多 600ms |
+| **HTML 里的骨架屏**（`index.html` 内联，按 `data-entry` 只在 `/reader*` 显示） | JS 下载/解析期间有轮廓，不是白屏。`createRoot().render()` 会清空容器，不用手动移除 |
+| **水合不挡渲染**（`ReaderRoot`） | `hydrateLearningFromServer()` 原来无条件 `await` 在 render 之前 = 一个网络往返的纯白屏。只有本地没有任何学习记录时才等，且最多 600ms |
 | **面板 `lazy()`**（`ReaderOverlaysHost`） | 8 个浮层首屏不加载。dev 少 17 个模块 / 1.4MB，生产首屏 chunk 637KB → 586KB |
 | **dev `server.warmup.clientFiles`** | 启动时把首屏模块先转译好，避免第一次打开时 200+ 模块、最深 7 层的 transform 瀑布 |
 

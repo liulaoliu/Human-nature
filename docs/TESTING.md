@@ -468,3 +468,14 @@ npm run gates                 # 收尾门禁（提交前必跑）
     改这条读路径时注意两点：① 三张词库表的 payload 都是 **gzip BLOB**，读一律走 `unpackPayload`；
     ② 响应形状必须还是 `{ ok, value, updatedAt, count }`，前端 `vocabRepo` 只认这个。
     加新的大接口照抄 `sendBigJson`（`Content-Encoding: gzip` + `Vary`），别每次搬 16MB。
+34. **整页会话只写 `useState` = 返回键直接回根页**（2026-10-23）。背单词 / 考试 / 快刷 / 听写 /
+    听力 / 仿写 / 语言点编辑 / 新建文章这些「一打开占满正文」的界面，以前只是布尔/队列状态，
+    地址栏不变；用户按返回键就退出阅读器，现场全丢。现在两类状态都进 URL：
+    布尔面板走 `route.ts` 的 `useRoutedPanels`，整页会话走 `hooks/useRoutedFlows`。
+    改这块时记住三条：① 点按钮打开要 **push**、页面内点退出要 **replace**；
+    ② URL 回退时 `close()` 必须真能关（拼写判错之类不能把用户卡住）；
+    ③ 深链接打开失败要回落文章页，且失败判定要再渲染一次（`bump()`）——
+    只调 `open()` 不一定产生状态变化，不 re-render 就永远判不到失败。
+    路由纯函数测试的期望路径都带 `/reader` 前缀（单入口后不再有 `basename`）。
+    另外：阅读页 CSS 必须 `?inline` 注入/卸载，普通懒加载会把 `<link>` 永久留在 head，
+    返回跟读页后全局样式仍被阅读页覆盖（见 `ReaderRoot`）。
