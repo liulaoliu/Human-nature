@@ -200,3 +200,18 @@ button.danger {
   font-weight: 600;
 }
 
+
+/* 面板按需加载时的占位（懒加载首次打开才有，一闪而过）。
+   不铺满屏幕：铺满会让「本来就有内容」的错觉变成「整页空了」。 */
+.panel-loading {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 45;
+  padding: 8px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--dim);
+  font-size: 13px;
+}

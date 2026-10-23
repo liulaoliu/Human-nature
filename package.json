@@ -20,7 +20,8 @@
     "check:size": "node tool/check_god_file.mjs",
     "check:arch": "node tool/check_architecture.mjs",
     "check:vocab": "node tool/check_vocab_sense.mjs",
-    "check:dev": "node tool/check_dev_modules.mjs"
+    "check:dev": "node tool/check_dev_modules.mjs",
+    "app": "npm run build && node server/appServer.js"
   },
   "dependencies": {
     "jszip": "^3.10.2",

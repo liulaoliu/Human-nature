@@ -59,6 +59,19 @@ npm run dev
 
 打开终端里给的 `http://localhost:5173`，选一个 mp3。
 
+### 想更快？`npm run app`
+
+`npm run dev` 是 Vite 按需转译：首屏要发 **200 多个模块请求**（import 瀑布最深 7 层），
+冷启动第一次打开阅读页会明显顿一下 —— 这是 dev 模式的固有代价，换不来。
+**看真实体感（或自己天天用）跑生产构建**：
+
+```
+npm run app        # = npm run build && node server/appServer.js，还是 5173 端口
+```
+
+首屏从「219 个模块」变成「1 个 chunk（gzip 后 203KB）+ 一个 css」，静态资源已开 gzip。
+代价是没有热更新：改完代码要重跑 `npm run app`。
+
 **必须走 `http://localhost`，不要双击 `dist/index.html`。** 浏览器的 `file://` 页面拿不到麦克风权限，
 `public/articles.json` 也读不到（`fetch` 被拦）。构建产物要用 `npm run preview` 打开。
 

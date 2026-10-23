@@ -81,7 +81,7 @@ describe('ReaderOverlaysHost：面板路由', () => {
     expect(container.querySelectorAll('[data-testid]')).toHaveLength(0)
   })
 
-  it('开关打开才渲染，面板 props 原样转发', () => {
+  it('开关打开才渲染，面板 props 原样转发', async () => {
     const onAddItems = vi.fn()
     const onStartStudy = vi.fn()
     render(
@@ -97,14 +97,15 @@ describe('ReaderOverlaysHost：面板路由', () => {
         })}
       />,
     )
+    // 面板是 `lazy()`（首屏不加载），所以这里是异步出现，必须 findBy*。
     for (const id of ['speed', 'lang', 'plan', 'intensive', 'goal', 'export', 'journal']) {
-      expect(screen.getByTestId(id)).toBeTruthy()
+      expect(await screen.findByTestId(id)).toBeTruthy()
     }
     expect(captures.speed?.onAddItems).toBe(onAddItems)
     expect(captures.plan?.onStartStudy).toBe(onStartStudy)
   })
 
-  it('包围战 / 目标的回调也原样转发', () => {
+  it('包围战 / 目标的回调也原样转发', async () => {
     const onSiege = vi.fn()
     const onMarkDone = vi.fn()
     render(
@@ -115,6 +116,8 @@ describe('ReaderOverlaysHost：面板路由', () => {
         })}
       />,
     )
+    await screen.findByTestId('intensive')
+    await screen.findByTestId('goal')
     expect(captures.intensive?.onSiege).toBe(onSiege)
     expect(captures.goal?.onMarkDone).toBe(onMarkDone)
   })
