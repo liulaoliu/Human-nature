@@ -28,6 +28,11 @@ export interface UseVocabLibraryParams {
   createRepo?: () => VocabRepoPort
 }
 
+/** 连续操作的合并窗口：300ms 内多次 persist 只落一次盘。 */
+export const PERSIST_DELAY_MS = 300
+/** 合并上限：一直有操作时也不能无限往后推（最迟这么久必须落一次盘）。 */
+export const PERSIST_MAX_WAIT_MS = 1200
+
 export interface UseVocabLibraryResult {
   library: VocabLibrary
   /** 同步持有的最新词库（给自动补全等「不想把 library 变成依赖」的地方读） */
@@ -48,6 +53,19 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
   const libraryRef = useRef(library)
   libraryRef.current = library
   const libraryLoaded = libraryLoad === 'ok'
+
+  /** 待落盘的那一版（合并写：只保留最新）。 */
+  const pendingRef = useRef<VocabLibrary | null>(null)
+  const timerRef = useRef<number | null>(null)
+  /** 本轮待写是什么时候开始的 —— 决定「最迟多久必须落盘」。 */
+  const firstPendingAtRef = useRef(0)
+  /** 保存串行队列：并发 save 会拿同一个 base 版本号，后一次必然 409。 */
+  const chainRef = useRef<Promise<void>>(Promise.resolve())
+  /** flush 的稳定句柄（卸载 / 页面隐藏的回调只注册一次）。 */
+  const flushRef = useRef<() => void>(() => {})
+  /** flash 的最新引用：保存回来时组件可能已经重渲染过。 */
+  const flashRef = useRef(flash)
+  flashRef.current = flash
 
   // 读回词库：修数据（去重 / 语法标记 / 早先版本误标的类型），修过就写回去
   useEffect(() => {
@@ -96,6 +114,18 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     }
   }, [createRepo, flash])
 
+  /**
+   * 唯一的写入入口。
+   *
+   * **合并写**：以前每次 persist 都立刻 `repo.save(整库)` —— 词库 16MB 时，
+   * 点一次「加入生词本」＝ 序列化 116ms + 上传 16MB + 服务端两次 gzip（各 277ms），
+   * 连点五个词就是五次全量重写。现在：
+   *   - 界面照旧**立即**更新（state / libraryRef 同步），只把落盘推迟；
+   *   - 300ms 内多次改动合并成一次，写的是「最新那一版」；
+   *   - 一直有操作时最长 1200ms 也强制落一次（防饿死）；
+   *   - 卸载 / 页面隐藏 / pagehide 时立即 flush，减少「点了没存上」的窗口。
+   * 保存串行排队：两次 save 并发会拿同一个 base 版本号，后一次必然 409。
+   */
   const persist = useCallback(
     (lib: VocabLibrary) => {
       /** 硬闸：词库没读成功就绝不写（否则空库会覆盖回 IndexedDB，生词全丢）。 */
@@ -109,21 +139,75 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       }
       libraryRef.current = lib
       setLibrary(lib)
-      repo.current.save(lib).catch((e) => {
-        // 版本冲突和「存不上」是两件事：冲突说明别处已经写过，**这次改动根本没落盘**，
-        // 必须让用户知道（否则他以为保存成功了，实际刷新就没了）。
-        if (e instanceof StoreConflictError) {
-          flash(`词库在别的页面被改过（服务器现有 ${e.count} 条），这次改动没保存；刷新后再改，或再存一次用本页覆盖`)
-          return
-        }
-        console.warn('[词库] 保存失败', e)
-        flash('词库保存失败：界面已更新，但可能没落盘；请稍后重试或导出备份')
-      })
+      pendingRef.current = lib
+
+      const now = Date.now()
+      if (firstPendingAtRef.current === 0) firstPendingAtRef.current = now
+      // 已经有待写的版本，且等太久了：立刻落盘，别让连续操作把写入无限推后
+      if (now - firstPendingAtRef.current >= PERSIST_MAX_WAIT_MS) {
+        flushRef.current()
+        return
+      }
+      if (timerRef.current != null) clearTimeout(timerRef.current)
+      timerRef.current = window.setTimeout(() => flushRef.current(), PERSIST_DELAY_MS)
     },
     [libraryLoad, flash],
   )
 
+  /** 立即把待写的那版落盘（没有待写就什么也不做）。 */
+  const flush = useCallback(() => {
+    if (timerRef.current != null) {
+      clearTimeout(timerRef.current)
+      timerRef.current = null
+    }
+    firstPendingAtRef.current = 0
+    const lib = pendingRef.current
+    pendingRef.current = null
+    if (!lib || !repo.current) return
+    const repoNow = repo.current
+    // 串行化：上一次还没回来就排队，避免并发 save 互相撞版本号
+    chainRef.current = chainRef.current.then(async () => {
+      try {
+        await repoNow.save(lib)
+      } catch (e) {
+        // 版本冲突和「存不上」是两件事：冲突说明别处已经写过，**这次改动根本没落盘**，
+        // 必须让用户知道（否则他以为保存成功了，实际刷新就没了）。
+        if (e instanceof StoreConflictError) {
+          flashRef.current(
+            `词库在别的页面被改过（服务器现有 ${e.count} 条），这次改动没保存；刷新后再改，或再存一次用本页覆盖`,
+          )
+          return
+        }
+        console.warn('[词库] 保存失败', e)
+        flashRef.current('词库保存失败：界面已更新，但可能没落盘；请稍后重试或导出备份')
+      }
+    })
+  }, [])
+  // flush 要能被「卸载 / 页面隐藏」这些只跑一次的回调拿到最新版本
+  flushRef.current = flush
+
+  // 卸下 / 页面隐藏 / 关闭时把待写的那版刷出去。
+  // `pagehide` 比 `beforeunload` 可靠（移动端/被系统回收时也会发）；`visibilitychange`
+  // 覆盖「切到别的标签页/切走 App」这种最常见的中断。
+  useEffect(() => {
+    const flushNow = () => flushRef.current()
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flushNow()
+    }
+    window.addEventListener('pagehide', flushNow)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flushNow)
+      document.removeEventListener('visibilitychange', onVisibility)
+      flushNow()
+    }
+  }, [])
+
   const restorePrev = useCallback(async () => {
+    // 先把待写的刷出去：否则「刚加的这批」还没落盘，prev 会指向更早的一版，
+    // 用户点「恢复上一版」拿到的就不是他以为的那份。
+    flushRef.current()
+    await chainRef.current
     const prev = await repo.current?.loadPrev?.()
     if (!prev?.items.length) {
       flash('没有可恢复的上一版')

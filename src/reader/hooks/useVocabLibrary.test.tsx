@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
-import { useVocabLibrary } from './useVocabLibrary'
+import { PERSIST_DELAY_MS, PERSIST_MAX_WAIT_MS, useVocabLibrary } from './useVocabLibrary'
 import { MemoryVocabRepo } from '../../adapters/vocabRepo'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
@@ -49,7 +49,8 @@ describe('useVocabLibrary：读成功', () => {
     act(() => result.current.persist(lib(3)))
     expect(result.current.library.items).toHaveLength(3)
     expect(result.current.libraryRef.current.items).toHaveLength(3)
-    expect(saved).toHaveLength(1)
+    // 落盘是合并写的（300ms 后），界面立刻更新不代表已经写出去
+    await waitFor(() => expect(saved).toHaveLength(1))
   })
 })
 
@@ -112,6 +113,80 @@ describe('useVocabLibrary：读失败（事故现场）', () => {
     expect(saved).toHaveLength(0)
     expect(result.current.library.items).toHaveLength(0)
     expect(flash).toHaveBeenCalledWith('没有可恢复的上一版')
+  })
+})
+
+describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB）', () => {
+  it('300ms 内连点多次只落一次盘，且写的是最新那版', async () => {
+    const { repo, saved } = fakeRepo({ load: async () => lib(0) })
+    const { result } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => {
+      result.current.persist(lib(1))
+      result.current.persist(lib(2))
+      result.current.persist(lib(3))
+    })
+    // 界面立刻是最新的
+    expect(result.current.library.items).toHaveLength(3)
+
+    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(saved[0].items).toHaveLength(3)
+    // 再等一会儿也不该补写第二、第三次
+    await new Promise((r) => setTimeout(r, PERSIST_DELAY_MS + 100))
+    expect(saved).toHaveLength(1)
+  })
+
+  it('卸载时把还没落盘的那版刷出去（别丢最后一次改动）', async () => {
+    const { repo, saved } = fakeRepo({ load: async () => lib(0) })
+    const { result, unmount } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => result.current.persist(lib(2)))
+    expect(saved).toHaveLength(0) // 还在合并窗口里
+    unmount()
+    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(saved[0].items).toHaveLength(2)
+  })
+
+  it('连续操作不饿死：最迟 PERSIST_MAX_WAIT_MS 强制落一次盘', async () => {
+    const { repo, saved } = fakeRepo({ load: async () => lib(0) })
+    const { result } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    // 每 200ms 改一次，模拟一直有点击（300ms 的窗口会被不断重置）
+    for (let i = 1; i <= 7; i++) {
+      act(() => result.current.persist(lib(i)))
+      await new Promise((r) => setTimeout(r, 200))
+    }
+    // 7 × 200ms = 1400ms > PERSIST_MAX_WAIT_MS，必须已经写过至少一次
+    expect(saved.length).toBeGreaterThanOrEqual(1)
+  })
+
+  it('保存按顺序串行：前一次没回来不发下一次（否则必撞 409）', async () => {
+    let inFlight = 0
+    let maxInFlight = 0
+    const saved: number[] = []
+    const repo: VocabRepoPort = {
+      load: async () => lib(0),
+      save: async (l) => {
+        inFlight++
+        maxInFlight = Math.max(maxInFlight, inFlight)
+        await new Promise((r) => setTimeout(r, 50))
+        saved.push(l.items.length)
+        inFlight--
+      },
+      clear: async () => {},
+      loadPrev: async () => null,
+    }
+    const { result } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => result.current.persist(lib(1)))
+    await new Promise((r) => setTimeout(r, PERSIST_DELAY_MS + 80))
+    act(() => result.current.persist(lib(2)))
+    await waitFor(() => expect(saved).toEqual([1, 2]))
+    expect(maxInFlight).toBe(1)
   })
 })
 
