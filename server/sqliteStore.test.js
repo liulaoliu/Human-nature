@@ -22,60 +22,60 @@ afterEach(() => {
 })
 
 describe('sqliteStore：词库', () => {
-  it('上一版 = 刚被覆盖的那一版（缩水也记，空库不记）', () => {
+  it('上一版 = 刚被覆盖的那一版（缩水也记，空库不记）', async () => {
     const store = openStore(tempDb())
     expect(store).not.toBeNull()
 
     expect(store.loadVocab()).toBeNull()
-    store.saveVocab(lib(10))
+    await store.saveVocab(lib(10))
     expect(store.loadVocab().items).toHaveLength(10)
     expect(store.loadPrev()).toBeNull()
 
     // 缩水也是「上一版」。旧规则「只留更大的那一份」会让 10-20 那版 8731 条永远占着 prev，
     // 之后所有缩水事故都进不去，用户点「恢复上一版」拿到的是几天前的库。
-    store.saveVocab(lib(9))
+    await store.saveVocab(lib(9))
     expect(store.loadPrev().items).toHaveLength(10)
-    store.saveVocab(lib(2))
+    await store.saveVocab(lib(2))
     expect(store.loadPrev().items).toHaveLength(9)
 
     // 空库不是「上一版」：误清空时 prev 必须还停在清空前的 2
-    store.saveVocab(lib(0))
+    await store.saveVocab(lib(0))
     expect(store.loadVocab().items).toHaveLength(0)
     expect(store.loadPrev().items).toHaveLength(2)
 
     // 从空库再写回去，prev 仍是 2（清空那一版不值得恢复）
-    store.saveVocab(lib(4))
+    await store.saveVocab(lib(4))
     expect(store.loadPrev().items).toHaveLength(2)
   })
 
-  it('版本号对不上就拒绝写入（旧标签页不能抹掉别处的改动）', () => {
+  it('版本号对不上就拒绝写入（旧标签页不能抹掉别处的改动）', async () => {
     const store = openStore(tempDb())
-    const v1 = store.saveVocab(lib(3))
+    const v1 = await store.saveVocab(lib(3))
     expect(v1.updatedAt).toBeTruthy()
 
     // 带着自己读到的那一版写：放行，并换新的令牌
-    const v2 = store.saveVocab(lib(4), { baseUpdatedAt: v1.updatedAt })
+    const v2 = await store.saveVocab(lib(4), { baseUpdatedAt: v1.updatedAt })
     expect(v2.updatedAt).not.toBe(v1.updatedAt)
     expect(store.loadVocab().items).toHaveLength(4)
 
     // 旧标签页还拿着 v1：必须被挡，库里还是 4
-    expect(() => store.saveVocab(lib(2), { baseUpdatedAt: v1.updatedAt })).toThrow(/改过/)
+    await expect(store.saveVocab(lib(2), { baseUpdatedAt: v1.updatedAt })).rejects.toThrow(/改过/)
     expect(store.loadVocab().items).toHaveLength(4)
     expect(store.vocabMeta().count).toBe(4)
 
     // 不带 base = 强制写（迁移脚本 / curl / 工具）
-    store.saveVocab(lib(5))
+    await store.saveVocab(lib(5))
     expect(store.loadVocab().items).toHaveLength(5)
 
     // 乱传一个版本号，同样被挡
-    expect(() => store.saveVocab(lib(6), { baseUpdatedAt: '1999-01-01T00:00:00.000Z' })).toThrow(/改过/)
+    await expect(store.saveVocab(lib(6), { baseUpdatedAt: '1999-01-01T00:00:00.000Z' })).rejects.toThrow(/改过/)
     expect(store.loadVocab().items).toHaveLength(5)
   })
 
-  it('快照保留最近 5 版 + 历史最大的一版', () => {
+  it('快照保留最近 5 版 + 历史最大的一版', async () => {
     const store = openStore(tempDb())
-    store.saveVocab(lib(10))
-    for (let n = 0; n <= 7; n++) store.saveVocab(lib(n))
+    await store.saveVocab(lib(10))
+    for (let n = 0; n <= 7; n++) await store.saveVocab(lib(n))
 
     const snaps = store.listSnapshots()
     expect(snaps).toHaveLength(6)
@@ -83,11 +83,11 @@ describe('sqliteStore：词库', () => {
     expect(store.loadSnapshot(snaps[0].at)).not.toBeNull()
   })
 
-  it('快照与上一版是 gzip 存的，读回来还能还原', () => {
+  it('快照与上一版是 gzip 存的，读回来还能还原', async () => {
     const path = tempDb()
     const store = openStore(path)
-    store.saveVocab(lib(3))
-    store.saveVocab(lib(4))
+    await store.saveVocab(lib(3))
+    await store.saveVocab(lib(4))
 
     const raw = new DatabaseSync(path, { readOnly: true })
     const snap = raw.prepare('SELECT payload FROM vocab_snapshots LIMIT 1').get()
@@ -100,7 +100,7 @@ describe('sqliteStore：词库', () => {
     expect(store.exportAll().vocabSnapshots[0].library.items.length).toBeGreaterThan(0)
   })
 
-  it('首次迁移只在服务端空库时写入', () => {
+  it('首次迁移只在服务端空库时写入', async () => {
     const store = openStore(tempDb())
     const first = store.migrateVocab(lib(3))
     expect(first.migrated).toBe(true)
@@ -112,19 +112,19 @@ describe('sqliteStore：词库', () => {
     expect(store.loadVocab().items).toHaveLength(3)
   })
 
-  it('clear 只清当前词库，上一版/快照还能恢复', () => {
+  it('clear 只清当前词库，上一版/快照还能恢复', async () => {
     const store = openStore(tempDb())
-    store.saveVocab(lib(6))
+    await store.saveVocab(lib(6))
     store.clearVocab()
     expect(store.loadVocab()).toBeNull()
     expect(store.loadPrev().items).toHaveLength(6)
     expect(store.listSnapshots().length).toBeGreaterThan(0)
   })
 
-  it('重新打开同一个文件，数据和 schema 版本都在', () => {
+  it('重新打开同一个文件，数据和 schema 版本都在', async () => {
     const path = tempDb()
     const first = openStore(path)
-    first.saveVocab(lib(2))
+    await first.saveVocab(lib(2))
     first.close()
 
     const second = openStore(path)
@@ -158,7 +158,7 @@ describe('sqliteStore：词库', () => {
     vi.useFakeTimers()
     const path = tempDb()
     const first = openStore(path)
-    first.saveVocab(lib(1))
+    await first.saveVocab(lib(1))
     first.close()
     const store = openStore(path)
     const dir = join(dirname(path), 'backups')
@@ -174,9 +174,9 @@ describe('sqliteStore：词库', () => {
     vi.useRealTimers()
   })
 
-  it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', () => {
+  it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', async () => {
     const store = openStore(tempDb())
-    store.saveVocab({
+    await store.saveVocab({
       schemaVersion: 1,
       items: [
         {
@@ -222,16 +222,16 @@ describe('sqliteStore：词库', () => {
     expect(store.db.prepare('SELECT word FROM word_confusables WHERE word_id = ?').get('w1').word).toBe('ran')
   })
 
-  it('增量重建：未变化词条不动，变化/删除只动自己', () => {
+  it('增量重建：未变化词条不动，变化/删除只动自己', async () => {
     const store = openStore(tempDb())
     const items = [
       { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
       { id: 'w2', word: 'walk', lemma: 'walk', usage: ['walk away'] },
     ]
-    store.saveVocab({ schemaVersion: 1, items })
+    await store.saveVocab({ schemaVersion: 1, items })
     const rowid1 = store.db.prepare('SELECT rowid FROM words WHERE id = ?').get('w1').rowid
 
-    store.saveVocab({
+    await store.saveVocab({
       schemaVersion: 1,
       items: [
         { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
@@ -245,7 +245,7 @@ describe('sqliteStore：词库', () => {
     expect(store.db.prepare('SELECT text FROM word_usage WHERE word_id = ?').get('w2').text).toBe('walked away')
     expect(store.db.prepare('SELECT word FROM words WHERE id = ?').get('w3').word).toBe('jump')
 
-    store.saveVocab({
+    await store.saveVocab({
       schemaVersion: 1,
       items: [
         { id: 'w1', word: 'run', lemma: 'run', usage: ['run out'] },
@@ -268,7 +268,7 @@ describe('sqliteStore：文章', () => {
     updatedAt,
   })
 
-  it('保存 / 列表按 updatedAt 倒序 / 单篇读取 / 删除', () => {
+  it('保存 / 列表按 updatedAt 倒序 / 单篇读取 / 删除', async () => {
     const store = openStore(tempDb())
     store.saveArticle(article('a', '2026-01-01T00:00:00.000Z'))
     store.saveArticle(article('b', '2026-02-01T00:00:00.000Z'))
@@ -279,7 +279,7 @@ describe('sqliteStore：文章', () => {
     expect(store.getArticle('a')).toBeNull()
   })
 
-  it('覆盖/删除前留上一版，恢复后还能反悔', () => {
+  it('覆盖/删除前留上一版，恢复后还能反悔', async () => {
     const store = openStore(tempDb())
     store.saveArticle(article('a', '2026-01-01T00:00:00.000Z', 'v1'))
     expect(store.loadArticlePrev('a')).toBeNull()
@@ -297,9 +297,9 @@ describe('sqliteStore：文章', () => {
     expect(store.restoreArticlePrev('a').title).toBe('v1')
   })
 
-  it('导出包含词库、快照和文章', () => {
+  it('导出包含词库、快照和文章', async () => {
     const store = openStore(tempDb())
-    store.saveVocab(lib(2))
+    await store.saveVocab(lib(2))
     store.saveArticle(article('a', '2026-01-01T00:00:00.000Z'))
     const dump = store.exportAll()
     expect(dump.vocab.items).toHaveLength(2)
@@ -307,7 +307,7 @@ describe('sqliteStore：文章', () => {
     expect(dump.articles[0].id).toBe('a')
   })
 
-  it('派生表：句子 / 翻译 / 段落 / 手动语言点都能 SQL 查，删文章一起清', () => {
+  it('派生表：句子 / 翻译 / 段落 / 手动语言点都能 SQL 查，删文章一起清', async () => {
     const store = openStore(tempDb())
     store.saveArticle({
       id: 'a1',
@@ -432,7 +432,7 @@ describe('sqliteStore：学习记录', () => {
     ],
   }
 
-  it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', () => {
+  it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', async () => {
     const store = openStore(tempDb())
     expect(store.loadLearning().practice).toEqual([])
     store.saveLearning(learning)
@@ -461,7 +461,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().mistakes).toHaveLength(1)
   })
 
-  it('partial 只替换变化的 section，不碰写作/背词等其它表', () => {
+  it('partial 只替换变化的 section，不碰写作/背词等其它表', async () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
 
@@ -481,7 +481,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_records').get().n).toBe(1)
   })
 
-  it('答题事件增量同步幂等：重复 section 不翻倍，也不会被空数组删除', () => {
+  it('答题事件增量同步幂等：重复 section 不翻倍，也不会被空数组删除', async () => {
     const store = openStore(tempDb())
     store.saveLearningPartial({ answerEvents: learning.answerEvents })
     store.saveLearningPartial({ answerEvents: learning.answerEvents })
@@ -492,12 +492,12 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().answerEvents).toHaveLength(2)
   })
 
-  it('partial 拒绝未知 section，避免拼错字段静默丢数据', () => {
+  it('partial 拒绝未知 section，避免拼错字段静默丢数据', async () => {
     const store = openStore(tempDb())
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
   })
 
-  it('答题事件只重建题型统计；活动聚合原样保留（含非答题活动）', () => {
+  it('答题事件只重建题型统计；活动聚合原样保留（含非答题活动）', async () => {
     const store = openStore(tempDb())
     // 模拟 v7 迁移时留下的历史聚合基线
     store.db
@@ -530,7 +530,7 @@ describe('sqliteStore：学习记录', () => {
     expect(got.practice).toHaveLength(2)
   })
 
-  it('恢复旧快照不会删掉 append-only 的答题事件', () => {
+  it('恢复旧快照不会删掉 append-only 的答题事件', async () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     const current = store.loadLearning()
@@ -549,7 +549,7 @@ describe('sqliteStore：学习记录', () => {
     expect(restored.value.answerEvents).toHaveLength(2)
   })
 
-  it('覆盖前自动留快照，误清空后可以恢复', () => {
+  it('覆盖前自动留快照，误清空后可以恢复', async () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     // 第一次写入空库不留快照；这次覆盖前会把完整记录存下来。
@@ -569,7 +569,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.listLearningSnapshots().length).toBeGreaterThan(snaps.length)
   })
 
-  it('快照只留最近 30 份 + 记录最多的一份', () => {
+  it('快照只留最近 30 份 + 记录最多的一份', async () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     for (let i = 0; i < 35; i++) {
@@ -579,7 +579,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.listLearningSnapshots().some((s) => s.recordCount >= 8)).toBe(true)
   })
 
-  it('if-empty 只在服务端没有任何学习记录时迁移', () => {
+  it('if-empty 只在服务端没有任何学习记录时迁移', async () => {
     const store = openStore(tempDb())
     const first = store.migrateLearning(learning)
     expect(first.migrated).toBe(true)
@@ -590,7 +590,7 @@ describe('sqliteStore：学习记录', () => {
     expect(second.value.practice).toHaveLength(2)
   })
 
-  it('导出包含学习记录', () => {
+  it('导出包含学习记录', async () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     expect(store.exportAll().learning.practice).toHaveLength(2)
@@ -598,7 +598,7 @@ describe('sqliteStore：学习记录', () => {
 })
 
 describe('sqliteStore：重建派生聚合', () => {
-  it('重建只动题型统计，不抹掉背单词/跟读等非答题活动', () => {
+  it('重建只动题型统计，不抹掉背单词/跟读等非答题活动', async () => {
     const store = openStore(tempDb())
     store.saveLearning({
       practice: [],
@@ -627,7 +627,7 @@ describe('sqliteStore：重建派生聚合', () => {
 })
 
 describe('sqliteStore：v1 → v7 迁移', () => {
-  it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', () => {
+  it('旧库的 JSON 会自动回填派生表，并把标题形式的文章 id 换成真 id', async () => {
     const path = tempDb()
     const old = new DatabaseSync(path)
     old.exec(`

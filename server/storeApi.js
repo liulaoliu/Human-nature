@@ -113,7 +113,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       // 不带 `X-Vocab-Base` = 强制写（迁移脚本 / curl 手工操作）；带了就必须对得上。
       const base = req.headers['x-vocab-base']
       try {
-        const out = store.saveVocab(await readJson(req), { baseUpdatedAt: base })
+        const out = await store.saveVocab(await readJson(req), { baseUpdatedAt: base })
         sendJson(res, 200, { ok: true, ...out })
       } catch (e) {
         if (e?.code === 'VOCAB_CONFLICT') {

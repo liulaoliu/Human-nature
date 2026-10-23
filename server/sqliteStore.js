@@ -1,7 +1,8 @@
 import { chmodSync, mkdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
-import { gunzipSync, gzipSync } from 'node:zlib'
+import { gunzipSync, gzip, gzipSync } from 'node:zlib'
+import { promisify } from 'node:util'
 import {
   SCHEMA_V1,
   SCHEMA_V2,
@@ -90,14 +91,19 @@ export class VocabConflictError extends Error {
 }
 
 /**
- * 快照 / 上一版压成 gzip BLOB 再存：同样的 JSON，16MB → 约 2MB。
+ * 历史表 / 主表统一压成 gzip BLOB 再存：同样的 JSON，16MB → 约 1.5MB。
  *
- * 只压这两张历史表。`vocab` 主表仍是明文 JSON —— 导出、体检脚本、`sqlite3` 手动排错
- * 都要直接读它，压了反而添麻烦。
+ * 主表 `vocab` 以前存明文（为了 `sqlite3` 手动排错能直接看），代价是**每次保存**
+ * 都要同步写 16MB —— 实测光这一条 INSERT 就要 ~478ms，WAL 和备份也跟着胖。
+ * 读路径本来就同时兼容「明文 TEXT / gzip BLOB」（`unpackPayload`），所以统一压缩不影响
+ * 任何调用方；手工排查用 `unpackPayload` 或 `gunzip` 解一下即可。
  */
 function packPayload(json) {
   return gzipSync(Buffer.from(json, 'utf8'), { level: 6 })
 }
+
+/** 异步版：4.8MB 的 JSON 压一次约 277ms，同步压会把事件循环整个堵住（TTS/静态资源全排队）。 */
+const gzipAsync = promisify(gzip)
 
 /** 历史表里既可能是老版本的明文 TEXT，也可能是新写入的 gzip BLOB。 */
 function unpackPayload(value) {
@@ -378,7 +384,7 @@ export function openStore(dbPath) {
       },
       loadVocab() {
         const row = db.prepare('SELECT payload FROM vocab WHERE id = 1').get()
-        return row ? parsePayload(String(row.payload)) : null
+        return row ? parsePayload(unpackPayload(row.payload)) : null
       },
       /** 词库的版本号（= 最后一次保存时间）与条数；乐观锁靠它判断「客户端看到的是不是最新」。 */
       vocabMeta() {
@@ -402,26 +408,61 @@ export function openStore(dbPath) {
       /**
        * 保存词库。`baseUpdatedAt` 是客户端**读到的那一版**：传了就必须和服务器当前版本一致，
        * 否则抛 VocabConflictError（不传 = 强制写，留给迁移/工具脚本用）。
+       *
+       * 为什么是 async：17MB 的词库压一次 gzip 要 277ms，以前一次保存要压两遍
+       * （上一版 + 新快照）且都是 `gzipSync`，等于把事件循环堵近 1 秒，
+       * 这期间 `/api/tts`、静态资源、下一次保存全部排队。
+       * 现在：
+       *   - 压缩挪到事务**外面**、用异步 gzip（两次并行跑在 libuv 线程池里，不堵主线程）；
+       *   - 「内容没变」的快路径先解压上一版比字符串，压根不压（自动补全 effect 重跑时很常见）。
        */
-      saveVocab(lib, opts = {}) {
+      async saveVocab(lib, opts = {}) {
         assertLibrary(lib)
         const payload = JSON.stringify(lib)
         const count = lib.items.length
         const base = opts.baseUpdatedAt ? String(opts.baseUpdatedAt) : ''
+        const selectPrev = db.prepare('SELECT payload, item_count, updated_at FROM vocab WHERE id = 1')
+
+        // ---- 事务外：判冲突 / 判「没变」/ 备好压缩结果 ----
+        const prevRow = selectPrev.get()
+        if (base && prevRow && String(prevRow.updated_at) !== base) {
+          throw new VocabConflictError(String(prevRow.updated_at), Number(prevRow.item_count))
+        }
+        let prevRaw = null
+        if (prevRow) {
+          try {
+            prevRaw = unpackPayload(prevRow.payload)
+          } catch {
+            prevRaw = null // 旧 payload 坏了：照常写新的，别让脏数据挡住这次保存
+          }
+        }
+        // 内容没变就别再全量重建派生表/写快照（自动补全 effect 重跑时很常见）。
+        if (prevRow && prevRaw === payload) {
+          return { updatedAt: String(prevRow.updated_at), count: Number(prevRow.item_count) }
+        }
+        const prevPacked =
+          prevRow && prevRaw !== null && Number(prevRow.item_count) > 0
+            ? prevRow.payload instanceof Uint8Array
+              ? Promise.resolve(Buffer.from(prevRow.payload)) // 已经是 gzip：直接复制，不再压第二遍
+              : gzipAsync(Buffer.from(prevRaw, 'utf8'), { level: 6 }) // 老库存的是明文
+            : Promise.resolve(null)
+        const [packed, packedPrev] = await Promise.all([
+          gzipAsync(Buffer.from(payload, 'utf8'), { level: 6 }),
+          prevPacked,
+        ])
+
         const out = tx(db, () => {
-          const prev = db.prepare('SELECT payload, item_count, updated_at FROM vocab WHERE id = 1').get()
-          // 版本对不上就别写：调用方拿到 409 后刷新，比"我这边赢了但别人的改动没了"好
+          // 事务里重读一次：上面读完之后可能有人写过了
+          const prev = selectPrev.get()
           if (base && prev && String(prev.updated_at) !== base) {
             throw new VocabConflictError(String(prev.updated_at), Number(prev.item_count))
           }
-          // 内容没变就别再全量重建派生表/写快照（自动补全 effect 重跑时很常见）。
-          if (prev && String(prev.payload) === payload) return { updatedAt: String(prev.updated_at), count }
           const at = nextUpdatedAt(db)
           // 旧 payload 坏了就退回全量重建，别让一次脏数据把这次保存也拖垮。
           let prevLib
           if (prev) {
             try {
-              prevLib = parsePayload(String(prev.payload))
+              prevLib = parsePayload(unpackPayload(prev.payload))
             } catch {
               prevLib = undefined
             }
@@ -432,16 +473,23 @@ export function openStore(dbPath) {
           // 一旦历史最大值出现（本库 8731 条 / 10-20），之后所有缩水事故都进不了 prev，
           // 用户点「恢复上一版」拿到的是几天前的库。只有空库不算上一版。
           if (prev && Number(prev.item_count) > 0) {
+            // packedPrev 是按事务外那次读到的 prev 压的；万一中间被别人改了，
+            // 宁可同步补压一次（极罕见），也不能把「上一版」写成错的内容。
+            const bytes =
+              packedPrev && String(prev.updated_at) === String(prevRow.updated_at)
+                ? packedPrev
+                : packPayload(unpackPayload(prev.payload))
             db.prepare(
               'INSERT OR REPLACE INTO vocab_prev (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-            ).run(packPayload(String(prev.payload)), Number(prev.item_count), String(prev.updated_at))
+            ).run(bytes, Number(prev.item_count), String(prev.updated_at))
           }
           db.prepare(
             'INSERT OR REPLACE INTO vocab (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-          ).run(payload, count, at)
+          ).run(packed, count, at)
+          // 快照与 prev 复用同一次压缩结果：一次保存只付一次 gzip 的代价
           db.prepare('INSERT OR REPLACE INTO vocab_snapshots (at, payload, item_count) VALUES (?, ?, ?)').run(
             nextSnapshotAt(db),
-            packPayload(payload),
+            packed,
             count,
           )
           pruneSnapshots(db)
@@ -465,15 +513,16 @@ export function openStore(dbPath) {
         const at = nowIso()
         const payload = JSON.stringify(lib)
         const count = lib.items.length
+        const packed = packPayload(payload)
         return tx(db, () => {
           const existing = db.prepare('SELECT payload FROM vocab WHERE id = 1').get()
-          if (existing) return { migrated: false, value: parsePayload(String(existing.payload)) }
+          if (existing) return { migrated: false, value: parsePayload(unpackPayload(existing.payload)) }
           db.prepare(
             'INSERT INTO vocab (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-          ).run(payload, count, at)
+          ).run(packed, count, at)
           db.prepare('INSERT OR REPLACE INTO vocab_snapshots (at, payload, item_count) VALUES (?, ?, ?)').run(
             nextSnapshotAt(db),
-            packPayload(payload),
+            packed,
             count,
           )
           rebuildVocabProjection(db, lib)
@@ -487,7 +536,7 @@ export function openStore(dbPath) {
           if (cur && Number(cur.item_count) > 0) {
             db.prepare(
               'INSERT OR REPLACE INTO vocab_prev (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-            ).run(packPayload(String(cur.payload)), Number(cur.item_count), String(cur.updated_at))
+            ).run(packPayload(unpackPayload(cur.payload)), Number(cur.item_count), String(cur.updated_at))
           }
           db.prepare('DELETE FROM vocab WHERE id = 1').run()
           rebuildVocabProjection(db, null)

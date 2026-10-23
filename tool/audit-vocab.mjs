@@ -456,7 +456,7 @@ async function main() {
       })
       spawned++
     }
-    store.saveVocab({ ...cur, items: out })
+    await store.saveVocab({ ...cur, items: out })
     console.log(`\n已回改 ${moved} 条词形；拆分出 ${spawned} 条被打乱的词；对齐 ${aligned} 条词性与释义；补空 ${filledCount} 条`)
   } finally {
     store.close()
