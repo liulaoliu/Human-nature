@@ -230,9 +230,13 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
 > `./tools/install-piper.sh`（Piper + 4 个英语音色，默认 `~/.local/opt/piper`，约 350MB）
 > `sudo apt install speech-dispatcher`（让 Chromium 浏览器语音也有声；Piper 不可用时的最后兜底）。
 >
-> Windows 想用 Piper：把官方 release 的 `piper_windows_amd64.zip` 解压到 `%LOCALAPPDATA%\piper\`
-> （里面要有 `piper.exe`），模型 `*.onnx` + 同名 `*.json` 放到 `%LOCALAPPDATA%\piper\voices\`
-> 或 `piper.exe` 同级的 `voices\`；也可以用环境变量 `PIPER_BIN` / `PIPER_VOICES_DIR` 直接指定。
+> Windows 推荐这样装（装在仓库内 `.piper/`，不用配环境变量、不进 git）：
+> `powershell -ExecutionPolicy Bypass -File tools\install-piper.ps1`
+> 直连慢就加代理：`... install-piper.ps1 -Proxy http://127.0.0.1:7897`
+> 装完是 `%仓库%\.piper\piper\piper.exe` + `.piper\voices\*.onnx`（约 350MB）。
+>
+> 也可以自己放到别处：`%LOCALAPPDATA%\piper\`、`%ProgramFiles%\piper\`、`~/piper`，
+> 或直接用环境变量 `PIPER_BIN` / `PIPER_VOICES_DIR` 指定。
 > **没装就只有系统语音**——顶栏那组「离线 · 本地语音」不会出现，这是正常的。
 > 到底缺哪一步不用猜：`GET /api/tts/engines` 的 `local.reason` 会给出
 > `ok` / `no-binary`（没装 piper）/ `no-voices-dir`（找不到模型目录）/ `no-models`（目录在、模型缺）。

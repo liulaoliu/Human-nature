@@ -2,6 +2,7 @@ import { spawn, spawnSync } from 'node:child_process'
 import { existsSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 /**
  * TTS 的本机离线引擎：Windows 系统语音（SAPI）与 Piper。
@@ -150,13 +151,23 @@ export function listSapiVoices() {
 
 // ---- local（离线，Piper） ----
 let piperBin
+
+/**
+ * 仓库自带的离线引擎目录（`<repo>/.piper`，已 gitignore）。
+ *
+ * 为什么不只靠环境变量：这东西是「克隆下来放进去就能用」的本地依赖，
+ * 要求用户先 `setx PIPER_BIN` 再重启终端太容易漏，而且换个终端就失效。
+ * 约定：`<repo>/.piper/piper/piper.exe` + `<repo>/.piper/voices/*.onnx`。
+ */
+const REPO_PIPER_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', '.piper')
+
 /** Piper 可执行文件名：Windows 是 piper.exe，其余是 piper。 */
 function piperExe() {
   return process.platform === 'win32' ? 'piper.exe' : 'piper'
 }
 
 /**
- * 找 Piper：环境变量 → PATH → 本机安装目录。
+ * 找 Piper：环境变量 → PATH → 仓库自带 .piper → 本机安装目录。
  *
  * **必须跨平台**：早先这里只写了 `~/.local/opt/piper/piper` 这类 Unix 路径，
  * Windows 上就算装了 Piper 也永远找不到（连 piper.exe 都不在候选里），
@@ -171,6 +182,8 @@ function findPiper() {
   const candidates = [
     process.env.PIPER_BIN,
     exe, // 走 PATH（spawnSync 会按 PATH 解析）
+    join(REPO_PIPER_DIR, 'piper', exe), // 仓库自带（本机安装走这条）
+    join(REPO_PIPER_DIR, exe),
     join(home, '.local/opt/piper', exe), // Linux 解压目录
     join(home, 'piper', exe), // 通用：家目录解压（Windows 用户最容易放这儿）
     localAppData && join(localAppData, 'piper', exe),
@@ -206,6 +219,7 @@ function piperVoicesDir() {
   const localAppData = process.env.LOCALAPPDATA || ''
   const candidates = [
     process.env.PIPER_VOICES_DIR,
+    join(REPO_PIPER_DIR, 'voices'), // 仓库自带
     binDir ? join(binDir, 'voices') : '',
     binDir ? join(binDir, '..', 'voices') : '',
     join(homedir(), '.local/share/piper-voices'),
