@@ -204,13 +204,28 @@ types ← core ← adapters ← reader
    `hooks/useVocabEdits`（只经 `persist`，且以 `libraryRef` 为基准避免连续写互相覆盖）；
    自动补全只由 `core/libraryAutoFill` 这一个 effect 写。新需求加「自动补全」→ 往计划函数里加一格。
 2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示恢复。
-3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 8 版 + 历史最大的一版永久保留），
-   提供 `listSnapshots / loadSnapshot`；侧栏有「恢复上一版词库」（误清/误导入一键退回）。
-4. **同一份事实存多处**：词条 ← SQLite(`data/xueba.db`) / IndexedDB 镜像 / 文章 `Sentence.vocab` /
+3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 5 版 + 历史最大的一版永久保留，
+   SQLite 侧以 gzip 存），`loadPrev()` 取「**刚被覆盖的那一版**」；
+   侧栏有「恢复上一版词库」（误清/误导入一键退回）。
+4. **写入要带版本号**：前端持有的是**整份**词库，任何保存都是全量覆盖，所以每次保存都带
+   `X-Vocab-Base: <读到的 updatedAt>`；服务端对不上返回 409，前端 `persist` 提示
+   「别处改过了，这次没保存」。**不带这个头 = 强制覆盖**，只留给迁移脚本和 `tool/*.mjs`。
+   详见下面「整份覆盖的代价」。
+5. **同一份事实存多处**：词条 ← SQLite(`data/xueba.db`) / IndexedDB 镜像 / 文章 `Sentence.vocab` /
    待选清单(localStorage) / 错题本 / 「导出全部」JSON；语言点 ← 文章 `SentenceLanguage` / 词库里的语言点条目。
-   → 坏了就靠「导入备份」＋「恢复上一版词库」；写入侧永远走上面三条。
+   → 坏了就靠「导入备份」＋「恢复上一版词库」；写入侧永远走上面四条。
 
 > 新增「用户资产」时先问：**它有第二份吗？** 没有就先补上第二份，再谈别的。
+
+### 整份覆盖的代价（2026-10-22 两次事故的结构原因）
+
+前端持有整份词库，一次保存 = 全量 PUT。所以有两个必须一起成立的前提：
+
+- **版本号**：`updatedAt` 严格单调递增（同毫秒连存会自增 1ms，否则旧客户端能蒙混过关），
+  写回时当作乐观锁的令牌；409 时客户端把服务端的版本号记下来，用户若坚持再存一次才会覆盖。
+- **「上一版」的语义是「上一版」，不是「历史最大的一版」**：旧规则「只留条数更大的那份」
+  让本库的 8731 条（10-20）永远占着 `vocab_prev`，之后 8306 → 8302 这类缩水根本进不了 prev，
+  「恢复上一版」拿到的是两天前的库。**能用 `updated_at` 判断新旧的地方，就不要用条数猜。**
 
 ### 存储：SQLite 主存，IndexedDB 只做兜底
 
@@ -226,6 +241,19 @@ types ← core ← adapters ← reader
 - schema 变更走 `PRAGMA user_version` 迁移；新表/新列要留旧库升级测试；
 - 用户资产写入必须同时考虑 IndexedDB 兜底和「导出全部」；
 - 上帝文件门禁扫描 `src/`、`tools/`、`server/`：新文件 >800 行直接失败，拆出去再写。
+
+**磁盘是跟着写放大走的**（一天一次全量保存就能吃掉几百 MB）：
+
+| 东西 | 策略 | 为什么 |
+| --- | --- | --- |
+| `vocab_snapshots` | 最近 5 版，**gzip 存 BLOB** | 整库 payload 16MB，明文 6 版就是 96MB；压完 ~2MB |
+| `vocab_prev` | 一版，gzip | 同上，只是「上一版」 |
+| `vocab` 主表 | 明文 JSON | 导出、体检脚本、`sqlite3` 手工查都要直接读它 |
+| `data/backups/` | 每日一份 `VACUUM INTO`，留 5 天 | 防整库文件被删坏；一天 ~60-90MB |
+| `-wal` | 每次保存后 `wal_checkpoint(PASSIVE)`，启动时 `TRUNCATE` | 一次保存写 16MB，WAL 不 checkpoint 会涨到几十 MB |
+| 空闲页 | 启动时 `freelist/total ≥ 15%` 才 `VACUUM` | 删过快照/文章后文件不会自己缩；但别每次启动都全量重写 |
+
+> 数字来自实测：这套策略把 `data/xueba.db` 从 226MB 收到 68MB、`-wal` 从 55MB 收到 0。
 
 ## 三·六、吸顶 / 吸底（**按需**使用，不是全局默认）
 
@@ -275,9 +303,11 @@ types ← core ← adapters ← reader
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 已降到 732 行（出基线了，不再是大文件）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
+- **`ReaderApp.tsx` 734 行（贴着软上限，但不再长了）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
   它现在只做装配：状态声明、hook 接线、把结果拍平成 `ReaderScreen` 的 props。**两种"分叉"要警惕**：
   同一份数据两个写入方、同一套规则两处实现 —— 都拆到下面列出的 hook / core 里。外壳/正文/侧栏已抽到 `ReaderShell` / `ReaderArticle` / `panels/ReaderSidebar`；
+  九个浮层开关（速读/计划/精读/日志/导出/备忘/统计/全部生词 + 日志选中日期）整包在 `hooks/useReaderPanels`，
+  阅读页只关心「哪块盖在正文上」，别再往组合根里塞 `useState`。
   **props 只在两处还是平铺的**：`prefs`（18 个本机偏好）与 `articleVocab`（本篇生词口径）走整包
   （`prefs={prefs}` / `articleVocab={articleVocab}`），由 zone 自己取 —— 平铺过一遍的代价是
   `ReaderScreenProps` 得把这两个 hook 的每个类型再抄一遍，抄漏一处就是两套类型；其余字段仍是平铺。
@@ -311,6 +341,21 @@ types ← core ← adapters ← reader
   真要迁，先改端口为异步，再走服务端 SQLite。
 - **离线词典/例句加载器已搬到 `adapters/`**：`adapters/dictionary.ts`、`adapters/tatoeba.ts`；
   `core/dictionary.ts` 只保留纯断词判断（不碰 fetch）。
+
+### 拆文件：拆**职责**，不是拆行数
+
+超过 600 行先判断它是哪一种，再决定拆不拆：
+
+| 它是什么 | 怎么办 |
+| --- | --- |
+| 一堆**状态机 / 优先级判断**藏在 JSX 里（九种状态靠三元链排先后） | **拆**。拆出来能单独测「哪个状态下出现哪个按钮」，顺序错了就是二次写库 |
+| 只是把一个 hook 的结果**拍平**成另一个组件的 props | **别拆**。拆了就是搬运 props，两头都得改，还多一层文件 |
+| 编排器，子逻辑已经在子 hook 里（`grading` / `spellingRound` / `timers` / `spellGate`） | **别硬拆**。两个共享十几个 setter 的 hook 比一个 695 行的编排器更难读 |
+| 组合根（`ReaderApp`） | 只搬「成组的状态」出去（见 `useReaderPanels`），别为了行数把 `ReaderScreen` 的 props 改成嵌套对象 —— 那要让 4 个文件一起改 |
+
+例子（2026-10-23）：`panels/StudyPanel` 的动作区（锤炼 / 学习释义页 / 判完等下一词 / 复习三态 /
+忘了但刚选对 / 可评分 / 拼写待检查 / 等翻面）拆成 `panels/StudyActions`，配 9 条分支测试；
+583 → 529 行。硬线仍是 800。
 
 ## 五、命令
 

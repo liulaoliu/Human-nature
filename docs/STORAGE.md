@@ -60,8 +60,9 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ```
 页面启动
   ├ GET /api/store/health 通
-  │    ├ GET /api/store/vocab|articles → 用 SQLite
+  │    ├ GET /api/store/vocab|articles → 用 SQLite（vocab 响应带 updatedAt，写回时作乐观锁的 base）
   │    ├ 服务端空库 → 把 IndexedDB 里的旧数据迁上去（if-empty，事务内检查）
+  │    ├ PUT /api/store/vocab 带 X-Vocab-Base → 版本对不上返回 409（不覆盖，提示刷新）
   │    └ 每次写 SQLite 成功 → 顺手镜像一份 IndexedDB（本机备份）
   └ 不通 / 503 / 静态部署
        └ 全部走原来的 IndexedDB 实现
@@ -81,8 +82,8 @@ schema 版本：`PRAGMA user_version = 7`（v3 建学习记录表，v4 修旧词
 
 ```sql
 vocab(id=1, payload JSON, item_count, updated_at)
-vocab_prev(id=1, payload JSON, item_count, updated_at)      -- 覆盖前那一版
-vocab_snapshots(at, payload JSON, item_count)               -- 最近 8 版 + 历史最大一版
+vocab_prev(id=1, payload BLOB, item_count, updated_at)      -- 刚被覆盖的那一版（gzip）
+vocab_snapshots(at, payload BLOB, item_count)               -- 最近 5 版 + 历史最大一版（gzip）
 articles(id, payload JSON, title, book, source_key,
          created_at, updated_at, sentence_count, word_count)
 article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前那一版
@@ -93,8 +94,11 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 - 词库 payload 里有两层：`items`（全库 `VocabItem`，一个 lemma 一条，复习用）和
   `articleEntries`（每篇收录的 `ArticleVocabEntry`：序号 / 自动手动 / 语境释义 / 按篇打印时间）。
   派生表 `words` 只展开 `items`；按篇收录目前只存在 JSON 里（不做单独的派生表，避免两份编号口径）。
-- 词库备份语义与 IndexedDB 实现一致：覆盖前留「上一版」，且**只留更大的那一份**；
-  缩水事故（读失败/误清）时，备份里是事故前那一版。
+- 词库备份语义与 IndexedDB 实现一致：覆盖前留「**刚被覆盖的那一版**」，空库不算上一版。
+  旧规则「只留更大的那一份」会让历史最大值永远占位（本库 8731 条 / 10-20 卡住之后，
+  8306 → 8302 这类缩水根本进不了 prev，「恢复上一版」拿到的是两天前的库），已按 `updated_at` 改掉。
+- 快照与上一版的 payload 是 **gzip BLOB**（`unpackPayload` 两种都认，老明文库能直接读）；
+  `vocab` 主表仍是明文 JSON，方便 `sqlite3` / 体检脚本直接读。
 - 文章每次覆盖/删除前把当前版本留到 `article_prev`；`GET /api/store/articles/:id/prev`
   查看，`POST /api/store/articles/:id/restore-prev` 恢复。恢复会把“当前版”再写进 prev，
   所以恢复错了还能切回来。
@@ -226,8 +230,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   sqlite3 data/xueba.db "SELECT l.sentence_id, t.kind, t.text FROM lang_points l JOIN lang_point_terms t ON t.lang_point_id = l.id;"
   ```
 
-- 写放大：每次保存会写 JSON + 快照 + 派生表；本地 SSD 可接受。快照只留 8 版 + 最大一版，
-  不会无限增长。
+- 写放大：每次保存会写 JSON + 快照 + 派生表（整库 payload 16MB，压缩后快照约 2MB）。
+  快照只留 5 版 + 最大一版；每次保存后 `wal_checkpoint(PASSIVE)`、启动时 `TRUNCATE`、
+  空闲页占比 ≥ 15% 才 `VACUUM`。实测：库 226MB → 68MB，`-wal` 55MB → 0，`data/` 1.4G → 1.2G。
 
 ## 五、导出 / 备份
 
@@ -236,7 +241,7 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
-| 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 8 版 + 历史最大一版 |
+| 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 5 版 + 历史最大一版；「上一版」= 刚被覆盖的那一版 |
 | 文章上一版 | `GET /api/store/articles/:id/prev` / `POST /api/store/articles/:id/restore-prev` | 覆盖/删除前那一版；恢复后可反悔 |
 
 ## 六、安全
