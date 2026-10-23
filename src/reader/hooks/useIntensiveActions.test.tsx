@@ -31,18 +31,32 @@ describe('useIntensiveActions（精读工作流入口）', () => {
     expect(deps.openWriting).toHaveBeenCalled()
   })
 
-  it('标词 / 词块 / 理解 / 语法 都交给一键跑批（一次补齐音标·释义·例句·语言点）', () => {
-    for (const stage of ['vocab', 'chunks', 'comprehend', 'grammar'] as const) {
+  it('标词 / 词块 / 理解 交给一键跑批（一次补齐音标·释义·例句·词组·语言点）', () => {
+    for (const stage of ['vocab', 'chunks', 'comprehend'] as const) {
       const { deps, result } = setup()
       act(() => result.current.openIntensiveStage(stage))
       expect(deps.runAiLocal).toHaveBeenCalledTimes(1)
+      expect(deps.startQuizArticleDrill).not.toHaveBeenCalled()
     }
   })
 
-  it('拷打：记忆 = 拼写/选义/选择，走词级（本篇）', () => {
+  it('语法专项去练，不是去跑批：走文章级测验（和「快速拷打 → 语法」同一套）', () => {
+    const { deps, result } = setup()
+    act(() => result.current.openIntensiveStage('grammar'))
+    expect(deps.startQuizArticleDrill).toHaveBeenCalledWith([
+      'grammar',
+      'phraseBlank',
+      'translate2',
+      'functionWord',
+      'ordering',
+    ])
+    expect(deps.runAiLocal).not.toHaveBeenCalled()
+  })
+
+  it('拷打：记忆 = 拼写/选义/选择，走词级（本篇），并且先给预习卡', () => {
     const { deps, result } = setup()
     act(() => result.current.startIntensiveDrill('memory'))
-    expect(deps.startQuizDrill).toHaveBeenCalledWith(['spell', 'meaning', 'choice'], 'article')
+    expect(deps.startQuizDrill).toHaveBeenCalledWith(['spell', 'meaning', 'choice'], 'article', { warmup: 'memory' })
   })
 
   it('拷打：词块 / 深度 / 标词 / 听力 各自的题型', () => {
@@ -55,7 +69,9 @@ describe('useIntensiveActions（精读工作流入口）', () => {
     for (const [kind, kinds] of cases) {
       const { deps, result } = setup()
       act(() => result.current.startIntensiveDrill(kind))
-      expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article')
+      // 只有「记忆 / 词块」两档先给预习卡（闭卷回忆，先认一遍再考）
+      if (kind === 'chunk') expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article', { warmup: 'chunk' })
+      else expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article')
     }
   })
 

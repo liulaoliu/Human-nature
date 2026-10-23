@@ -8,6 +8,7 @@ import type { useWriting } from './hooks/useWriting'
 import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
+import DrillWarmup from './panels/DrillWarmup'
 import QuickPanel from './panels/QuickPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
@@ -198,6 +199,17 @@ export default function SessionHost({
           onCancel={() => quiz.setSetupOpen(false)}
           onStart={quiz.start}
           onStartArticle={quiz.startArticle}
+        />
+      )}
+
+      {/* 「先学一遍再考」：队列还没开始，先摊开这轮要考的词 */}
+      {quiz.warmup && (
+        <DrillWarmup
+          title={quiz.warmup.title}
+          kind={quiz.warmup.kind}
+          cards={quiz.warmup.cards}
+          onStart={quiz.beginWarmup}
+          onCancel={quiz.cancelWarmup}
         />
       )}
 

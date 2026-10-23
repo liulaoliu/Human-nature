@@ -7,8 +7,9 @@ import type { IntensiveStageKey } from '../../core/intensive'
  * 精读工作流面板上的两个入口动作 —— 「跳到对应工具」和「就地拷打一篇」。
  *
  * 从 `ReaderApp` 抽出来是因为**两张映射表都是规则**：
- *   - 阶段 → 工具：通读开速读、达标拷打开背单词、产出开仿写，
- *     其余（标词/词块/理解/语法）都交给一键跑批（它一次把音标·释义·例句·词组·习语·
+ *   - 阶段 → 工具：通读开速读、达标拷打开背单词、产出开仿写、**语法开文章级测验**
+ *     （这一步的字面意思就是「练」，不是补数据）；
+ *     其余（标词/词块/理解）交给一键跑批（它一次把音标·释义·例句·词组·习语·
  *     语法标记·翻译·语言点补齐）；
  *   - 拷打类型 → 考哪些题型：记忆 = 拼写/选义/选择，词块 = 用法/填空/搭配/介词/习语，
  *     深度 = 释义/释义选择，标词 = 标记，语法 = 走**文章级**测验（句子题，不写 SRS）。
@@ -23,7 +24,7 @@ export interface IntensiveActionsDeps {
   /** 一键跑批（补词/句/语言点） */
   runAiLocal: () => void
   /** 词级考试（按题型，写 SRS）；`scope` 省略 = 本篇 */
-  startQuizDrill: (kinds: QuizKind[], scope?: 'article' | 'all') => void
+  startQuizDrill: (kinds: QuizKind[], scope?: 'article' | 'all', opts?: { warmup?: 'memory' | 'chunk' }) => void
   /** 文章级测验（句子题，不写 SRS） */
   startQuizArticleDrill: (kinds: QuizKind[]) => void
 }
@@ -48,9 +49,12 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       if (key === 'skim') openSpeedRead()
       else if (key === 'recall') startStudy()
       else if (key === 'produce') openWriting()
+      // 语法专项的按钮写着「练结构 / 语法」，就该去练：和「快速拷打 → 语法」同一套文章级题型
+      //（句子题，不写 SRS）。之前这里落到 `runAiLocal()`，点下去只是补语言点，等于没练。
+      else if (key === 'grammar') startQuizArticleDrill(DRILL_KINDS.grammar)
       else void runAiLocal()
     },
-    [setIntensiveOpen, openSpeedRead, startStudy, openWriting, runAiLocal],
+    [setIntensiveOpen, openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill],
   )
 
   /** 快捷「拷打」（只针对本篇） */
@@ -59,6 +63,9 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       setIntensiveOpen(false)
       const kinds = DRILL_KINDS[kind]
       if (kind === 'grammar') startQuizArticleDrill(kinds)
+      // 记忆 / 词块两档是闭卷回忆：先摊开这轮要考的词（词 + 释义 / 词块）再开考。
+      // 直接上来就考，第一次见的词只能靠猜 —— 猜错还会被当成「没记住」记进错题本。
+      else if (kind === 'memory' || kind === 'chunk') startQuizDrill(kinds, 'article', { warmup: kind })
       else startQuizDrill(kinds, 'article')
     },
     [setIntensiveOpen, startQuizDrill, startQuizArticleDrill],

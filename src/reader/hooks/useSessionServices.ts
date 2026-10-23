@@ -322,6 +322,8 @@ export function useSessionServices({
     setQuizSetupOpen,
     quizQueue,
     setQuizQueue,
+    /** 「先学一遍再考」的预习卡（有它也算会话进行中，正文要让位） */
+    quizWarmup: quizApi.warmup,
     quizIndex,
     quizArticleKinds,
     startArticleQuiz,

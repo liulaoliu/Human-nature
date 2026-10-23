@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
-import { useQuizSession } from './useQuizSession'
+import { useQuizSession, buildWarmupCards } from './useQuizSession'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
@@ -188,5 +188,51 @@ describe('useQuizSession：拼写错 = 不认识，不许重试 / 直接退出',
     act(() => api!.setInput('xxx'))
     act(() => api!.check())
     expect(api!.spellMiss).toBeNull()
+  })
+})
+
+describe('useQuizSession：拷打前先学一遍（预习卡）', () => {
+  it('记忆拷打：先出预习卡，点「开始」才真正开考', () => {
+    render(<Harness library={lib([word({ examples: [{ text: 'I run daily.' }] })])} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory' }))
+
+    // 还没开考，但已经能看到这轮要考的词
+    expect(api!.queue).toBeNull()
+    expect(api!.warmup?.kind).toBe('memory')
+    expect(api!.warmup?.cards.map((c) => c.word)).toEqual(['run'])
+    expect(api!.warmup?.cards[0].meaning).toBe('跑')
+    expect(api!.warmup?.cards[0].example).toBe('I run daily.')
+
+    act(() => api!.beginWarmup())
+    expect(api!.warmup).toBeNull()
+    expect(api!.queue).toHaveLength(1)
+  })
+
+  it('取消预习：不开考、不留队列', () => {
+    render(<Harness library={lib([word()])} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory' }))
+    act(() => api!.cancelWarmup())
+    expect(api!.warmup).toBeNull()
+    expect(api!.queue).toBeNull()
+  })
+
+  it('不传 warmup 的拷打（英英释义 / 语法标记）仍然直接开考', () => {
+    render(<Harness library={lib([word()])} />)
+    act(() => api!.startDrill(['spell'], 'all'))
+    expect(api!.warmup).toBeNull()
+    expect(api!.queue).toHaveLength(1)
+  })
+
+  it('预习卡内容来自题目对应的词条：词块拷打给词组/习语', () => {
+    const it = word({
+      phrases: ['run out — 用完'],
+      idioms: ['run in the family — 家族遗传'],
+      usage: ['run a business — 经营公司'],
+    })
+    const cards = buildWarmupCards([it], [{ id: 'q1', itemId: 'w1' } as never], 'chunk')
+    expect(cards[0].chunks).toEqual(['run out — 用完', 'run in the family — 家族遗传', 'run a business — 经营公司'])
+    expect(cards[0].example).toBeUndefined()
+    // 同一个词出多道题只摊一张卡
+    expect(buildWarmupCards([it], [{ itemId: 'w1' }, { itemId: 'w1' }] as never, 'memory')).toHaveLength(1)
   })
 })

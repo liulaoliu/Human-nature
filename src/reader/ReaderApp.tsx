@@ -158,8 +158,14 @@ export default function ReaderApp() {
   /** 选词模式：最近选中的词 + 气泡位置 */
   const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
   const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
-  /** 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。 */
-  const articleIdentity = articleKey ?? savedId ?? articleTitle
+  /**
+   * 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。
+   *
+   * 最后那个兜底必须有：手动粘贴、还没保存的文章三者全空，`articleIdentity` 会变成空串，
+   * 于是**所有未保存文章的「本篇词表 / 精读工作流 / 待选清单」共用同一个键**，
+   * 切文章时看起来就像「数据串了 / 精读面板不认词」。
+   */
+  const articleIdentity = articleKey || savedId || articleTitle || '手动粘贴'
   // 「待选」清单：状态 + 按文章持久化 + 去重（IO 收口在 useBatchQueue）
   const batchQueue = useBatchQueue({ articleIdentity, sentences: doc?.sentences ?? null })
   const {
@@ -310,6 +316,7 @@ export default function ReaderApp() {
     startStudy,
     quizSetupOpen,
     quizQueue,
+    quizWarmup,
     quizIndex,
     quizArticleKinds,
     startQuizDrill,
@@ -525,7 +532,9 @@ export default function ReaderApp() {
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
   const articleDerived = useArticleDerived({
     articleIdentity,
-    articleWords,
+    // 只传普通单词：精读工作流的「标词/词块/达标拷打」与掌握度都是词汇口径，
+    // 语言点条目（词组/习语/用法笔记）另有「句子理解 / 语法」两个阶段在看。
+    articleWordItems,
     doc,
     practice,
     mistakes,
@@ -632,8 +641,12 @@ export default function ReaderApp() {
     startQuizArticleDrill,
   })
 
-  /** 考试 / 快刷 / 听写 / 听力 进行时（含设置面板）：隐藏正文，别把原文当阅读看。 */
-  const examActive = quizSetupOpen || !!quizQueue || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
+  /**
+   * 考试 / 快刷 / 听写 / 听力 进行时（含设置面板与「先学一遍再考」的预习卡）：
+   * 隐藏正文，别把原文当阅读看。
+   */
+  const examActive =
+    quizSetupOpen || !!quizQueue || !!quizWarmup || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
   /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
   const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
 

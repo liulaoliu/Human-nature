@@ -4,7 +4,7 @@ import { buildArticleQuestions } from '../../core/articleQuiz'
 import { nextDayIso, prioritizeItems, reviewItem, markSpellingMiss } from '../../core/vocab'
 import { buildQuizSet, poolFor, poolSizes, studyableItems, type QuizScope } from '../../core/quizPool'
 import { isArticleKind } from '../../core/quiz'
-import type { Sentence, VocabLibrary } from '../../types/document'
+import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 
 /** 「反复鞭打」最多自动重练几轮（防死循环）。 */
 const MAX_DRILL_ROUNDS = 5
@@ -25,6 +25,58 @@ export type { QuizResultRow } from '../../core/sessionSnapshots'
 export type { QuizScope } from '../../core/quizPool'
 
 const QUIZ_SESSION_KEY = 'reader:quizSession'
+
+/** 拷打前「先学一遍」的预习卡。 */
+export interface DrillWarmupCard {
+  id: string
+  word: string
+  phonetic?: string
+  meaning?: string
+  /** 词块拷打要看的：用法 / 词组 / 习语 */
+  chunks: string[]
+  /** 记忆拷打给一条例句当语境 */
+  example?: string
+}
+
+/** 预习态：题目已经出好，等人看完再开考。 */
+export interface DrillWarmupState {
+  /** memory = 记忆拷打（词·搭配），chunk = 词块拷打（词块·搭配） */
+  kind: 'memory' | 'chunk'
+  title: string
+  cards: DrillWarmupCard[]
+  /** 点「开始拷打」时才真正进队列 */
+  questions: QuizQuestion[]
+  article: boolean
+}
+
+/** 由题目反推「这轮会考到哪些词」，取词条内容做成预习卡（题目是唯一事实来源，不另写筛选）。 */
+export function buildWarmupCards(
+  items: VocabItem[],
+  questions: QuizQuestion[],
+  kind: 'memory' | 'chunk',
+): DrillWarmupCard[] {
+  const byId = new Map(items.map((it) => [it.id, it]))
+  const seen = new Set<string>()
+  const cards: DrillWarmupCard[] = []
+  for (const q of questions) {
+    if (seen.has(q.itemId)) continue
+    seen.add(q.itemId)
+    const it = byId.get(q.itemId)
+    if (!it) continue
+    cards.push({
+      id: it.id,
+      word: it.word,
+      phonetic: it.phonetic ?? undefined,
+      meaning: it.meaning ?? undefined,
+      chunks:
+        kind === 'chunk'
+          ? [...(it.phrases ?? []), ...(it.idioms ?? []), ...(it.usage ?? [])].filter(Boolean).slice(0, 6)
+          : [],
+      example: kind === 'memory' ? (it.examples.find((e) => e.text.trim())?.text ?? undefined) : undefined,
+    })
+  }
+  return cards
+}
 
 function loadQuizSession(): QuizSessionSnapshot | null {
   try {
@@ -106,6 +158,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const [result, setResult] = useState<boolean | null>(restored?.result ?? null)
   /** 拼写题拼错：判定提示（非空时不许直接切题 / 退出）。 */
   const [spellMiss, setSpellMiss] = useState<{ itemId: string; word: string; input: string } | null>(null)
+  /** 「先学一遍再考」的预习态（null = 直接考）。 */
+  const [warmup, setWarmup] = useState<DrillWarmupState | null>(null)
   const [results, setResults] = useState<QuizResultRow[]>(restored?.results ?? [])
   const [seconds, setSeconds] = useState(0)
   /** 本轮是否自动切题（开始一轮时按设置快照）。 */
@@ -224,9 +278,15 @@ export function useQuizSession(params: UseQuizSessionParams) {
     [library.items, kinds, unique, begin, flash, setKinds],
   )
 
-  /** 精读工作流：用指定题型 / 范围直接开一轮「拷打」。 */
+  /**
+   * 精读工作流：用指定题型 / 范围直接开一轮「拷打」。
+   *
+   * `opts.warmup`：先给一张「这轮要考的词」预习卡（词 + 释义 + 词块），看完再开考。
+   * 记忆/词块两档拷打是**闭卷回忆**，直接上来就考等于让用户猜 —— 先过一遍认一遍，
+   * 考出来的分才有意义（也让「词块拷打」第一次就能看到词组长什么样）。
+   */
   const startDrill = useCallback(
-    (ks: QuizKind[], scopeArg: QuizScope = 'article') => {
+    (ks: QuizKind[], scopeArg: QuizScope = 'article', opts?: { warmup?: 'memory' | 'chunk' }) => {
       const vocabKinds = ks.filter((k) => !isArticleKind(k))
       const qs = buildQuizSet(poolFor(studyable, scopeArg, poolCtx), vocabKinds, unique)
       if (!qs.length) {
@@ -235,10 +295,33 @@ export function useQuizSession(params: UseQuizSessionParams) {
       }
       setKinds(ks)
       setScope(scopeArg)
-      begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
+      const picked = shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length)
+      if (opts?.warmup) {
+        const cards = buildWarmupCards(library.items, picked, opts.warmup)
+        setWarmup({
+          kind: opts.warmup,
+          title: opts.warmup === 'chunk' ? '词块拷打 · 先看一遍' : '记忆拷打 · 先看一遍',
+          cards,
+          questions: picked,
+          article: false,
+        })
+        return
+      }
+      begin(picked)
     },
-    [studyable, poolCtx, unique, limit, begin, flash, setKinds, setScope],
+    [studyable, poolCtx, unique, limit, begin, flash, setKinds, setScope, library.items],
   )
+
+  /** 看完预习卡，开始拷打。 */
+  const beginWarmup = useCallback(() => {
+    const w = warmup
+    if (!w) return
+    setWarmup(null)
+    begin(w.questions, { article: w.article })
+  }, [warmup, begin])
+
+  /** 关掉预习卡（本轮不考）。 */
+  const cancelWarmup = useCallback(() => setWarmup(null), [])
 
   /** 精读工作流：用指定文章级题型开一轮（结构/语法、中译英、功能词、排序）。 */
   const startArticleDrill = useCallback(
@@ -328,6 +411,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
       flash('拼错了：先确认「已判为不认识」，再结束考试')
       return
     }
+    setWarmup(null)
     closeSession()
   }, [spellMiss, flash, closeSession])
 
@@ -472,6 +556,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
     /** 拼写错判定提示；非空时禁止直接切题 / 结束。 */
     spellMiss,
     seconds,
+    /** 「先学一遍再考」的预习卡（有内容时面板先画它，队列还没开始） */
+    warmup,
+    beginWarmup,
+    cancelWarmup,
     // 派生
     poolSizes: poolSizesNow,
     availableCount,

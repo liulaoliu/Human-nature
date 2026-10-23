@@ -395,3 +395,30 @@
   background: var(--panel);
   border-top: 1px solid var(--line-soft);
 }
+
+/* 拷打前的「先学一遍」：把这轮要考的词摊开看（记忆 / 词块两档拷打） */
+.drill-warm-hint { margin: 2px 0 12px; }
+.drill-warm-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  padding-bottom: 12px;
+}
+.drill-warm-card {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  padding: 10px 12px;
+}
+.drill-warm-word { display: flex; align-items: baseline; gap: 8px; font-size: 17px; }
+.drill-warm-meaning { margin-top: 4px; font-size: 13px; line-height: 1.6; }
+.drill-warm-chunks {
+  margin: 6px 0 0;
+  padding-left: 16px;
+  color: var(--dim);
+  font-size: 12.5px;
+  line-height: 1.7;
+}
+.drill-warm-ex { margin-top: 6px; color: var(--dim); font-size: 12.5px; }
+.drill-warm-foot { margin-top: 4px; }
+.drill-warm-empty { padding: 10px 0 16px; }
