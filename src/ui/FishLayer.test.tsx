@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { installFakeStorage } from '../reader/testStorage'
 import FishLayer from './FishLayer'
 
 /** 装饰鱼：滚轮缩放 / 图片拖动，同时保留两个手柄与双击复位。 */
@@ -40,14 +41,18 @@ class FakePointerEvent extends MouseEvent {
   }
 }
 
+let restoreStorage: () => void = () => {}
+
 beforeEach(() => {
-  localStorage.clear()
+  // Node 26 自带一个不可用的全局 localStorage，不能直接摸；统一装假的（见 reader/testStorage）
+  restoreStorage = installFakeStorage()
   stubFish()
   vi.stubGlobal('PointerEvent', FakePointerEvent)
 })
 
 afterEach(() => {
   cleanup()
+  restoreStorage()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
