@@ -27,6 +27,21 @@ describe('buildOutputBoard', () => {
     expect(b.rows.find((r) => r.key === 'chunkAcc')?.value).toBe('还没测过')
   })
 
+  it('没批改的仿写不算产出（不再按 70 分兜底）', () => {
+    // 以前 `avgScore ?? 70` 给分、`good` 又按 0 算，同一行两个口径：
+    // 看板写着 70 分，行上永远不达标。现在统一成「没批改 = 还没产出」。
+    const ungraded = buildOutputBoard(
+      base({ chunkStats: { total: 10, correct: 10 }, writes: { count: 1, avgScore: null } }),
+    )
+    const row = ungraded.rows.find((r) => r.key === 'write')!
+    expect(row.value).toContain('待批改')
+    expect(row.good).toBe(false)
+    const graded = buildOutputBoard(
+      base({ chunkStats: { total: 10, correct: 10 }, writes: { count: 1, avgScore: 90 } }),
+    )
+    expect(graded.score).toBeGreaterThan(ungraded.score)
+  })
+
   it('词块正确率会被量化', () => {
     const b = buildOutputBoard(base({ chunkStats: { total: 10, correct: 8 } }))
     expect(b.rows.find((r) => r.key === 'chunkAcc')?.value).toContain('80%')

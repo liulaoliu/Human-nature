@@ -16,7 +16,7 @@ const stableItem = (id: string) =>
 function params(over: Partial<UseArticleDerivedParams> = {}): UseArticleDerivedParams {
   return {
     articleIdentity: 'a1',
-    articleWords: [],
+    articleWordItems: [],
     doc: null,
     practice: [],
     mistakes: [],
@@ -59,7 +59,7 @@ describe('useArticleDerived：掌握度 / 工作流 / 产出', () => {
     const { result } = renderHook(() =>
       useArticleDerived(
         params({
-          articleWords: [stableItem('run'), vocabItem({ id: 'calm', word: 'calm', lemma: 'calm' })],
+          articleWordItems: [stableItem('run'), vocabItem({ id: 'calm', word: 'calm', lemma: 'calm' })],
           doc: { sentences: [sentenceFixture('s1'), sentenceFixture('s2')] },
         }),
       ),
@@ -69,6 +69,54 @@ describe('useArticleDerived：掌握度 / 工作流 / 产出', () => {
     expect(words?.detail).toContain('未学 1')
     const reading = result.current.articleMastery.dimensions.find((d) => d.key === 'reading')
     expect(reading?.detail).toContain('译文 0/2')
+  })
+
+  it('词阶段只数普通单词：语言点条目不进分母（usage 永远不背，会把「学过」卡在 100% 以下）', () => {
+    const { result } = renderHook(() =>
+      useArticleDerived(
+        params({
+          // 调用方只把单词传进来；这里钉住「分母就是这一份」的口径
+          articleWordItems: [stableItem('run')],
+          skimmedArticles: ['a1'],
+        }),
+      ),
+    )
+    const vocab = result.current.intensivePlan.stages.find((s) => s.key === 'vocab')
+    expect(vocab?.progress).toBe(100)
+    expect(vocab?.detail).toContain('1/1')
+    const recall = result.current.intensivePlan.stages.find((s) => s.key === 'recall')
+    expect(recall?.detail).toContain('学过 1/1')
+  })
+
+  it('只填了习语的词也算「有词块」', () => {
+    const { result } = renderHook(() =>
+      useArticleDerived(
+        params({
+          articleWordItems: [
+            vocabItem({ id: 'run', word: 'run', lemma: 'run', meaning: '跑', idioms: ['run in the family'] }),
+          ],
+        }),
+      ),
+    )
+    const chunks = result.current.intensivePlan.stages.find((s) => s.key === 'chunks')
+    expect(chunks?.progress).toBe(100)
+    expect(result.current.outputBoard.rows.find((r) => r.key === 'chunkCover')?.value).toBe('1/1')
+  })
+
+  it('AI 明确说「无搭配」的词也算词块阶段做完（不然永远差一截、精通拿不到）', () => {
+    const { result } = renderHook(() =>
+      useArticleDerived(
+        params({
+          articleWordItems: [vocabItem({ id: 'mrs', word: 'mrs', lemma: 'mrs', meaning: '夫人', phrases: [], idioms: [] })],
+        }),
+      ),
+    )
+    const chunks = result.current.intensivePlan.stages.find((s) => s.key === 'chunks')
+    expect(chunks?.progress).toBe(100)
+    expect(chunks?.status).toBe('done')
+    expect(chunks?.detail).toContain('已问过 1')
+    // 覆盖率（产出看板）仍如实反映「真有搭配的只有 0 个」
+    expect(result.current.outputBoard.rows.find((r) => r.key === 'chunkCover')?.value).toBe('0/1')
   })
 
   it('工作流的产出阶段看本篇仿写条数', () => {
@@ -95,7 +143,7 @@ describe('useArticleDerived：掌握度 / 工作流 / 产出', () => {
     const { result } = renderHook(() =>
       useArticleDerived(
         params({
-          articleWords: [vocabItem({ id: 'run', word: 'run', lemma: 'run', usage: ['run out'] })],
+          articleWordItems: [vocabItem({ id: 'run', word: 'run', lemma: 'run', usage: ['run out'] })],
           kindStats: { a1: { usage: { total: 4, correct: 3 } } },
           writingHistory: [
             {

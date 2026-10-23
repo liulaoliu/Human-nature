@@ -66,10 +66,12 @@ export function buildOutputBoard(i: OutputInput): OutputBoard {
   const grammarAcc = i.grammarStats.total > 0 ? pct(i.grammarStats.correct, i.grammarStats.total) : 0
   const chunkCover = w.total > 0 ? pct(w.withChunks, w.total) : 0
   const memory = w.total > 0 ? Math.round(pct(w.studied, w.total) * 0.6 + pct(w.stable, w.total) * 0.4) : 0
+  // 仿写：**没批改过的一律不给分**。以前没批改按 70 算，而 `good` 又按 0 算，
+  // 同一行两个口径 —— 看板说「有 70 分」，行上却永远不达标。
   const write =
     i.writes.count <= 0
       ? 0
-      : Math.round(pct(Math.min(i.writes.count, 4), 4) * 0.45 + (i.writes.avgScore ?? 70) * 0.55)
+      : Math.round(pct(Math.min(i.writes.count, 4), 4) * 0.45 + (i.writes.avgScore ?? 0) * 0.55)
   const retell =
     i.retells.count <= 0
       ? 0
@@ -116,7 +118,10 @@ export function buildOutputBoard(i: OutputInput): OutputBoard {
     {
       key: 'write',
       label: '仿写',
-      value: i.writes.count > 0 ? `${i.writes.count} 条${i.writes.avgScore != null ? ` · 均分 ${i.writes.avgScore}` : ''}` : '0 条',
+      value:
+        i.writes.count > 0
+          ? `${i.writes.count} 条${i.writes.avgScore != null ? ` · 均分 ${i.writes.avgScore}` : ' · 待批改'}`
+          : '0 条',
       level: write,
       detail: '自己写 + AI 批改才算',
       good: i.writes.count > 0 && (i.writes.avgScore ?? 0) >= 75,

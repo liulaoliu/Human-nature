@@ -25,6 +25,14 @@ export interface IntensiveWords {
   withMeaning: number
   /** 有词块（用法 / 词组 / 习语）的 */
   withChunks: number
+  /**
+   * 「问过词块」的词数：`phrases` 字段已存在（空数组也算问过）。
+   *
+   * 为什么要和 `withChunks` 分开：有些词**真的没有**常用搭配（AI 会写「无」），
+   * 按「有内容」算进度，这一阶段永远到不了 100%，`精通` 等级直接被锁死。
+   * 省略时退回 `withChunks`（只关心覆盖率的调用方不用改）。
+   */
+  chunksAsked?: number
   /** 有语法标记（可数/及物…）的 */
   withMarks: number
   /** 学过（repetitions > 0）的 */
@@ -89,11 +97,18 @@ const clamp = (n: number, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, n))
 const pct = (a: number, b: number): number => (b > 0 ? clamp(Math.round((a / b) * 100)) : 0)
 const statusOf = (p: number): 'todo' | 'doing' | 'done' => (p >= 100 ? 'done' : p > 0 ? 'doing' : 'todo')
 
+/**
+ * 阶段按钮的文案 = **点下去真的会发生什么**。
+ *
+ * 标词 / 词块 / 理解这三步都是「补数据」，共用一个一键跑批（跑批一次补齐音标·释义·
+ * 例句·词组·习语·翻译·语言点），所以文案里明写「跑批」——否则用户会以为点开的是
+ * 某个面板，点完发现数据没变化就变成「点了没反应」。语法那步是真的去练（文章测验）。
+ */
 const ACTION: Record<IntensiveStageKey, string> = {
   skim: '去速读',
-  vocab: '补齐音标 / 释义',
-  chunks: '补词组 / 习语',
-  comprehend: '逐句翻译 / 语言点',
+  vocab: '跑批补音标 / 释义',
+  chunks: '跑批补词组 / 习语',
+  comprehend: '跑批补译文 / 语言点',
   recall: '去背单词',
   produce: '去仿写',
   grammar: '练结构 / 语法',
@@ -110,8 +125,8 @@ export function buildIntensivePlan(i: IntensiveInput): IntensivePlan {
   const skimP = i.skimmed ? 100 : 0
   // ── 标词 / 查词 ──
   const vocabP = hasWords ? pct(w.withMeaning, w.total) : 0
-  // ── 词块 ──
-  const chunksP = hasWords ? pct(w.withChunks, w.total) : 0
+  // ── 词块 ──（进度按「问过」算，覆盖率另说：真没搭配的词不该卡死这一阶段）
+  const chunksP = hasWords ? pct(w.chunksAsked ?? w.withChunks, w.total) : 0
   // ── 句子理解 ──
   const compP = s.total > 0 ? clamp(Math.round(((s.translated + s.language) / (2 * s.total)) * 100)) : 0
   // ── 达标拷打 ──
@@ -152,7 +167,11 @@ export function buildIntensivePlan(i: IntensiveInput): IntensivePlan {
       emoji: '🧩',
       status: statusOf(chunksP),
       progress: chunksP,
-      detail: hasWords ? `${w.withChunks}/${w.total} 有词组/搭配` : '先建生词，再补词组/习语',
+      detail: hasWords
+        ? `${w.withChunks}/${w.total} 有词组/搭配${
+            (w.chunksAsked ?? 0) > w.withChunks ? ` · 已问过 ${w.chunksAsked}` : ''
+          }`
+        : '先建生词，再补词组/习语',
       action: ACTION.chunks,
       enabled: hasWords,
     },

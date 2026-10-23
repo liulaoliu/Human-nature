@@ -3,7 +3,7 @@ import { activityStreak, type DayActivity } from '../../core/activity'
 import { buildArticleMastery, isStable } from '../../core/mastery'
 import { buildIntensivePlan } from '../../core/intensive'
 import { buildOutputBoard } from '../../core/output'
-import { hasOwnExamples, hasReviewHistory, isDue } from '../../core/vocab'
+import { hasReviewHistory, isDue, needsAiExamples } from '../../core/vocab'
 import { hasSentenceLanguage } from '../../core/language'
 import { practiceForArticle, type PracticeRecord } from '../../core/practice'
 import type { KindStats, RetellRecord } from '../../core/learning'
@@ -11,10 +11,27 @@ import type { MistakeEntry } from '../../core/mistakes'
 import type { WritingRecord } from '../../core/writing'
 import type { Sentence, VocabItem } from '../../types/document'
 
+/**
+ * 「有词块」的判定：用法要点 / 词组 / 习语，任一非空就算。
+ *
+ * 精读工作流的「词块」阶段与产出看板的「词块覆盖」共用这一条 ——
+ * 原来两处各写一遍，都漏了 `idioms`：只填了习语的词在两边都不算，进度永远差一截。
+ */
+function hasChunks(it: VocabItem): boolean {
+  return it.usage.length > 0 || (it.phrases?.length ?? 0) > 0 || (it.idioms?.length ?? 0) > 0
+}
+
 export interface UseArticleDerivedParams {
   articleIdentity: string
-  /** 本篇词条（已在上面按归属过滤） */
-  articleWords: VocabItem[]
+  /**
+   * 本篇**普通单词**（`articleWordItems`，不含词组 / 习语 / 用法笔记）。
+   *
+   * 为什么不用「含语言点」的那一份：这里的三个口径（掌握度、精读工作流的词阶段、
+   * 产出看板）问的都是「这个词背得怎么样」。语言点条目里 `usage` 是中文说明，
+   * 按设计永远不进背词牌组（`entryKind.isStudyable`），也就不可能 `repetitions > 0`；
+   * 拿它们当分母会让「学过 N/M」永远到不了 100%，「达标拷打」与最高等级直接锁死。
+   */
+  articleWordItems: VocabItem[]
   doc: { sentences: Sentence[] } | null
   practice: PracticeRecord[]
   mistakes: MistakeEntry[]
@@ -33,7 +50,7 @@ export interface UseArticleDerivedParams {
  */
 export function useArticleDerived({
   articleIdentity,
-  articleWords,
+  articleWordItems,
   doc,
   practice,
   mistakes,
@@ -45,7 +62,7 @@ export function useArticleDerived({
 }: UseArticleDerivedParams) {
   /** 本篇掌握度：词（SRS）+ 精读完成度 + 本篇技能正确率 + 本篇错题。 */
   const articleMastery = useMemo(() => {
-    const words = articleWords
+    const words = articleWordItems
     let stable = 0
     let due = 0
     let lapsed = 0
@@ -83,12 +100,12 @@ export function useArticleDerived({
         sentences: mine.filter((m) => m.kind !== 'vocab').length,
       },
     })
-  }, [articleWords, doc, practice, mistakes, articleIdentity])
+  }, [articleWordItems, doc, practice, mistakes, articleIdentity])
 
   /** 精读工作流：按本篇当前数据算出各阶段进度与下一步。 */
   const intensiveSkimmed = skimmedArticles.includes(articleIdentity)
   const intensivePlan = useMemo(() => {
-    const w = articleWords
+    const w = articleWordItems
     const quizRows = practiceForArticle(practice, articleIdentity).filter((r) => r.kind === 'quiz')
     const quizTotal = quizRows.reduce((a, r) => a + r.total, 0)
     const quizCorrect = quizRows.reduce((a, r) => a + r.correct, 0)
@@ -99,12 +116,17 @@ export function useArticleDerived({
       words: {
         total: w.length,
         withMeaning: w.filter((it) => !!it.meaning).length,
-        withChunks: w.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
+        withChunks: w.filter(hasChunks).length,
+        // 「问过没有」看字段在不在（applyPhrases 一定同时写 phrases/idioms，空数组=AI 说「无」）
+        chunksAsked: w.filter((it) => it.phrases !== undefined || hasChunks(it)).length,
         withMarks: w.filter((it) => (it.grammarMarks?.length ?? 0) > 0).length,
         studied: w.filter(hasReviewHistory).length,
         stable: w.filter((it) => isStable(it)).length,
         due: w.filter((it) => isDue(it)).length,
-        noExample: w.filter((it) => !hasOwnExamples(it)).length,
+        // 与跑批的 `pickExamples` 同一口径：有释义、且还没有 **AI 例句**。
+        // 用 `hasOwnExamples` 会算出另一个数（离线例句也算「有」），于是面板上挂着几百个
+        // 「缺例句」，但跑批压根不会去补 —— 用户看到的就是「点多少次都没变化」。
+        noExample: w.filter((it) => !!it.meaning && needsAiExamples(it)).length,
       },
       sentences: {
         total: sents.length,
@@ -114,7 +136,7 @@ export function useArticleDerived({
       quiz: quizTotal > 0 ? { total: quizTotal, correct: quizCorrect } : undefined,
       writes: writingHistory.filter((r) => r.articleId === articleIdentity).length,
     })
-  }, [doc, articleWords, practice, articleIdentity, writingHistory, intensiveSkimmed])
+  }, [doc, articleWordItems, practice, articleIdentity, writingHistory, intensiveSkimmed])
 
   /** 本篇的复述记录。 */
   const myRetells = useMemo(
@@ -152,16 +174,16 @@ export function useArticleDerived({
       chunkStats,
       grammarStats,
       words: {
-        total: articleWords.length,
-        withChunks: articleWords.filter((it) => it.usage.length > 0 || (it.phrases?.length ?? 0) > 0).length,
-        studied: articleWords.filter(hasReviewHistory).length,
-        stable: articleWords.filter((it) => isStable(it)).length,
+        total: articleWordItems.length,
+        withChunks: articleWordItems.filter(hasChunks).length,
+        studied: articleWordItems.filter(hasReviewHistory).length,
+        stable: articleWordItems.filter((it) => isStable(it)).length,
       },
       writes: { count: writes.length, avgScore },
       retells: { count: myRetells.length, words: myRetells.reduce((a, r) => a + r.words, 0) },
       streak: activityStreak(activity),
     })
-  }, [kindStats, articleIdentity, writingHistory, articleWords, myRetells, activity])
+  }, [kindStats, articleIdentity, writingHistory, articleWordItems, myRetells, activity])
 
   return { articleMastery, intensiveSkimmed, intensivePlan, myRetells, outputBoard }
 }

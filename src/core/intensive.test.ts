@@ -73,4 +73,16 @@ describe('buildIntensivePlan', () => {
     expect(plan.nextKey).toBe('chunks')
     expect(plan.nextLabel).toContain('词块')
   })
+
+  it('词块进度按「问过」算：真的没有搭配的词不该把这一阶段永远卡住', () => {
+    // 3 个词有搭配、10 个都问过了（其余 7 个 AI 明确说「无」）→ 这一阶段算完成，
+    // 否则「精通」永远拿不到，面板还一直催你补根本不存在的搭配。
+    const plan = buildIntensivePlan(base({ words: words({ withChunks: 3, chunksAsked: 10 }) }))
+    const chunks = plan.stages.find((s) => s.key === 'chunks')!
+    expect(chunks.progress).toBe(100)
+    expect(chunks.status).toBe('done')
+    expect(chunks.detail).toContain('已问过 10')
+    // 不传 chunksAsked 时退回覆盖率（老口径）
+    expect(buildIntensivePlan(base({ words: words({ withChunks: 3 }) })).stages.find((s) => s.key === 'chunks')!.progress).toBe(30)
+  })
 })
