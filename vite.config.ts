@@ -12,16 +12,46 @@ import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
 import { storeEndpointPlugin } from './tools/vite-store-endpoint.mjs'
 
+/**
+ * 把 `/reader` 与 `/reader/**` 改写成 `/reader.html`。
+ *
+ * 阅读页用 BrowserRouter（干净路径，没有 `#`），URL 形如
+ *   /reader                文章列表
+ *   /reader/a/<ref>        读某一篇
+ *   /reader/a/<ref>/p/xxx  读某一篇 + 开面板
+ * 这些路径磁盘上并不存在，得让 dev server 回落到 reader.html；
+ * 生产环境由 `server/httpApp.js` 做同样的事。
+ */
+function readerRoutePlugin() {
+  return {
+    name: 'reader-route-fallback',
+    configureServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: unknown, next: () => void) => void) => void } }) {
+      server.middlewares.use((req, _res, next) => {
+        const url = req.url || ''
+        const [path, query] = url.split('?')
+        if (path === '/reader' || path.startsWith('/reader/')) {
+          req.url = '/reader.html' + (query ? `?${query}` : '')
+        }
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
   plugins: [
     react(),
+    readerRoutePlugin(),
     projectStatePlugin(),
     fishStaticPlugin(),
     ttsEndpointPlugin(),
     aiEndpointPlugin(),
     storeEndpointPlugin(),
   ],
-  base: './',
+  // **必须是绝对路径**：阅读页的 URL 会落在 /reader/a/<ref> 这种多层路径上（BrowserRouter），
+  // 相对路径 `./assets/x.js` 会解析成 /reader/a/assets/x.js → 404 白屏。
+  // 代价：不能部署在子路径下（本地自用，部署在根，够）。
+  base: '/',
   build: {
     rollupOptions: {
       input: ['index.html', 'reader.html'],
@@ -51,6 +81,22 @@ export default defineConfig({
     },
     // 别让 dev server 把 /data/xueba.db 当静态文件直接吐出去。
     fs: { deny: ['**/data/**'] },
+    /**
+     * 启动时就把首屏要用的模块先转译好。
+     *
+     * 不预热的话，第一次打开阅读页要现场转译 200+ 个模块，而且 import 是一层层展开的
+     * （实测最深 7 层）：浏览器要等上一层回来才知道下一层要什么，这就是「首屏慢」的主因。
+     * 预热把这一步挪到 server 启动时（多花几秒启动，之后每次打开都是热的）。
+     */
+    warmup: {
+      clientFiles: [
+        './src/main.tsx',
+        './src/reader/**/*.{ts,tsx}',
+        './src/core/**/*.ts',
+        './src/adapters/**/*.ts',
+        './src/ui/**/*.{ts,tsx}',
+      ],
+    },
   },
   preview: { port: 5173, strictPort: true },
   test: {

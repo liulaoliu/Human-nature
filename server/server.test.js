@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
-import { createServer } from 'node:http'
+import { createServer, request } from 'node:http'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
+import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { contentType, safeJoin } from './util.js'
@@ -349,5 +350,69 @@ describe('mode.resolveChild / loadMode', () => {
   })
   it('默认模式是 dev', () => {
     expect(loadMode(resolve('.'))).toBe('dev')
+  })
+})
+
+describe('httpApp：路由回落 + 静态 gzip', () => {
+  /** 用 node:http 直连（fetch 会自动解压，断言不到 Content-Encoding）。 */
+  const rawGet = (port, path, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const req = request({ host: '127.0.0.1', port, path, headers }, (res) => {
+        const chunks = []
+        res.on('data', (c) => chunks.push(c))
+        res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
+      })
+      req.on('error', reject)
+      req.end()
+    })
+
+  const setup = () => {
+    const dist = mkdtempSync(join(tmpdir(), 'sa-route-'))
+    const pub = mkdtempSync(join(tmpdir(), 'sa-pub2-'))
+    mkdirSync(join(dist, 'assets'), { recursive: true })
+    writeFileSync(join(dist, 'index.html'), '<!doctype html><title>首页</title>')
+    writeFileSync(join(dist, 'reader.html'), '<!doctype html><title>阅读页</title>')
+    // 大于 GZIP_MIN(1KB) 才能触发压缩
+    writeFileSync(join(dist, 'assets', 'app.js'), `/* ${'x'.repeat(4096)} */\nconsole.log(1)\n`)
+    return { dist, pub }
+  }
+
+  it('/reader 与 /reader/** 回落到 reader.html，其余回 index.html', async () => {
+    const { dist, pub } = setup()
+    const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
+    await new Promise((r) => server.listen(0, r))
+    const port = server.address().port
+    try {
+      for (const p of ['/reader', '/reader/a/b%3A005', '/reader/a/b%3A005/p/intensive', '/reader/p/plan', '/reader.html']) {
+        const r = await rawGet(port, p)
+        expect(r.status, p).toBe(200)
+        expect(r.body.toString(), p).toContain('阅读页')
+      }
+      const home = await rawGet(port, '/a/whatever')
+      expect(home.body.toString()).toContain('首页')
+      // 带扩展名的缺失资源仍然 404，别回落成 HTML（否则浏览器把 HTML 当 JS 解析）
+      expect((await rawGet(port, '/assets/missing.js')).status).toBe(404)
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
+  })
+
+  it('文本资源按 Accept-Encoding 决定是否 gzip，体积真的变小且内容一致', async () => {
+    const { dist, pub } = setup()
+    const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
+    await new Promise((r) => server.listen(0, r))
+    const port = server.address().port
+    try {
+      const plain = await rawGet(port, '/assets/app.js')
+      const gz = await rawGet(port, '/assets/app.js', { 'accept-encoding': 'gzip' })
+      expect(plain.headers['content-encoding']).toBeUndefined()
+      expect(gz.headers['content-encoding']).toBe('gzip')
+      expect(gz.headers['vary']).toContain('Accept-Encoding')
+      expect(gz.body.length).toBeLessThan(plain.body.length)
+      // 解压后必须和明文完全一致
+      expect(gunzipSync(gz.body).equals(plain.body)).toBe(true)
+    } finally {
+      await new Promise((r) => server.close(r))
+    }
   })
 })

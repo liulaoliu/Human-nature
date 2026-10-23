@@ -2,17 +2,21 @@ import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 /**
- * 阅读页的路由模型（react-router 的 HashRouter）。
+ * 阅读页的路由模型（react-router 的 BrowserRouter，basename = `/reader`）。
  *
- *   #/                     阅读器（没有打开文章时显示文章列表）
- *   #/a/<ref>              读某一篇
- *   #/a/<ref>/p/<panel>    读某一篇 + 打开某个面板
+ *   /reader                    阅读器（没有打开文章时显示文章列表）
+ *   /reader/a/<ref>            读某一篇
+ *   /reader/a/<ref>/p/<panel>  读某一篇 + 打开某个面板
+ *   /reader/p/<panel>          没有文章时也能开的面板
  *
  * `ref` 就是原来的文章标识：`b:<内置 key>` 或 `s:<已保存 id>`。
  *
- * **为什么用 Hash 而不是路径**：`reader.html` 是静态页面，路径路由要求服务端把
- * 未知路径回落到它（dev 的 Vite、生产的 httpApp 都要加 rewrite；漏配就 404）。
- * hash 不需要任何服务端配置，刷新/收藏也都能还原现场。
+ * 这里构造的都是**不含 basename** 的路径（`/a/xxx`），BrowserRouter 会自动补上
+ * `/reader` 前缀，`useLocation()` 拿回来的也是去掉前缀的。
+ *
+ * 服务端要把 `/reader**` 回落到 `reader.html`：dev 由 `vite.config.ts` 的
+ * `readerRoutePlugin` 做，生产由 `server/httpApp.js` 的 `isReaderPath` 做。
+ * 漏一处就是刷新 404 / 白屏。
  */
 
 export type PanelName =

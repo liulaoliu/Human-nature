@@ -347,6 +347,63 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   （`p` 后代里不许出现块级元素）。**别改成断言 `console.error` 里的 `validateDOMNesting`** ——
   那条警告按 (childTag, ancestorTag) 全局去重，同文件里前面用例触发过，后面就永远是绿的。
 
+## 三·八、阅读页路由与首屏（BrowserRouter，不要改回 hash）
+
+阅读页用 **react-router 的 BrowserRouter**，`basename = '/reader'`：
+
+```
+/reader                    文章列表（没打开文章）
+/reader/a/<ref>            读某一篇    ref = b:<内置 key> / s:<已保存 id>
+/reader/a/<ref>/p/<panel>  读某一篇 + 开某个面板
+/reader/p/<panel>          没有文章时也能开的面板（计划/日志/统计/生词本）
+```
+
+**四处必须一起改**，漏一处就是刷新 404 / 白屏 / 面板关不掉：
+
+1. **代码**：`src/reader/main.tsx` 的 `BrowserRouter basename`；
+   `src/reader/route.ts` 只构造**不含前缀**的路径（`/a/xxx`），前缀由 router 补。
+2. **dev**：`vite.config.ts` 的 `readerRoutePlugin` 把 `/reader*` 改写成 `/reader.html`
+   （vite 自带的 SPA 回落只会回 `index.html`）。
+3. **生产**：`server/httpApp.js` 的 `isReaderPath()` 决定回落 `reader.html` 还是 `index.html`。
+   **带扩展名的缺失资源仍然 404**，绝不能回落成 HTML —— 否则浏览器把一段 HTML 当 JS 解析，
+   报一堆莫名其妙的语法错。
+4. **`base: '/'`（绝对路径）**。相对路径 `./assets/x.js` 在 `/reader/a/b:x` 下会解析成
+   `/reader/a/assets/x.js` → 404。代价是不能部署在子路径下（本地自用，够）。
+
+> 曾经用过 HashRouter（`#/a/xxx`）：省掉服务端配置，但 URL 丑、和「返回键回主界面」的
+> 层级语义不符。既然要干净的层级，就按上面把服务端一起做掉。
+
+### 首屏：慢在哪，怎么量
+
+别凭感觉。两条命令：
+
+```bash
+curl -s -o /dev/null -w "%{time_total}s\n" http://localhost:5173/reader      # dev
+curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_total}s\n" <bundle>  # 生产
+```
+
+已经落地的四条（都是实测数字，不是"应该会快"）：
+
+| 做法 | 为什么 |
+|---|---|
+| **HTML 里的骨架屏**（`reader.html` 内联，不额外请求） | JS 下载/解析期间有轮廓，不是白屏。`createRoot().render()` 会清空容器，不用手动移除 |
+| **水合不挡渲染**（`main.tsx`） | `hydrateLearningFromServer()` 原来无条件 `await` 在 render 之前 = 一个网络往返的纯白屏。只有本地没有任何学习记录时才等，且最多 600ms |
+| **面板 `lazy()`**（`ReaderOverlaysHost`） | 8 个浮层首屏不加载。dev 少 17 个模块 / 1.4MB，生产首屏 chunk 637KB → 586KB |
+| **dev `server.warmup.clientFiles`** | 启动时把首屏模块先转译好，避免第一次打开时 200+ 模块、最深 7 层的 transform 瀑布 |
+
+**dev 与生产差多少**（2026-10-23 实测）：
+
+| | 首屏要拿的东西 |
+|---|---|
+| dev（vite） | **219 个模块**，独立请求，import 瀑布最深 7 层 |
+| 生产（`npm run app`） | **1 个 chunk 586KB → gzip 203KB** + 一个 css |
+
+所以「首屏还是慢」先确认跑的是哪个：日常开发用 `npm run dev`（有 HMR，慢是 vite 的固有代价），
+要看真实体感用 **`npm run app`**（build + 起生产服务，同一个 5173 端口）。
+
+⚠️ `server/httpApp.js` 的静态服务现在会 **gzip 文本资源**（js/css/html/json/tsv，>1KB，
+按 mtime+size 缓存结果）。这个以前是缺的 —— 586KB 的 bundle 一直明文发。
+
 ## 四、有意为之的例外（别当违规修）
 
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。

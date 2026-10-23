@@ -1,5 +1,6 @@
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+import { gzipSync } from 'node:zlib'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
 import { handleTts, resolveTtsCacheDir } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
@@ -42,17 +43,63 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj))
 }
 
-function serveFile(res, file, { head = false, cache = false } = {}) {
+/**
+ * 能压的文本类型。图片 / 音频 / woff2 本来就被压过，再 gzip 只会更大。
+ *
+ * 为什么值得做：`dist/assets/reader-*.js` 是 637KB，明文发一次就是 637KB；
+ * gzip 后 214KB（省 66%）。这在局域网 / 手机上差别很直观，本机回环也能省下
+ * 浏览器的解析时间。
+ */
+const GZIP_EXT = /\.(js|mjs|css|html?|json|tsv|svg|txt|map)$/i
+/** 小于这个体积压了反而亏（gzip 头就 20 字节）。 */
+const GZIP_MIN = 1024 // 1KB
+/**
+ * 压缩结果缓存：键 = 绝对路径，值 = { mtimeMs, size, buf }。
+ *
+ * `dist/assets/*` 带 content hash，同一路径的内容永远不变，缓存命中率接近 100%；
+ * `articles.json` / `*.tsv` 这类可变文件靠 (mtime, size) 失效。
+ */
+const gzipCache = new Map()
+
+function gzipFor(file, st) {
+  const hit = gzipCache.get(file)
+  if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.buf
+  // 同步压缩：单次 637KB 约 10–20ms，而且只在这个文件第一次被请求时发生。
+  // 比起「每个请求都发 637KB」，这个代价是划算的；真要再快该用 brotli 预算缓存。
+  const buf = gzipSync(readFileSync(file), { level: 6 })
+  gzipCache.set(file, { mtimeMs: st.mtimeMs, size: st.size, buf })
+  return buf
+}
+
+function serveFile(req, res, file, { head = false, cache = false } = {}) {
   const st = statSync(file)
   res.statusCode = 200
   res.setHeader('Content-Type', contentType(file))
-  res.setHeader('Content-Length', st.size)
   res.setHeader('Cache-Control', cache ? 'public, max-age=31536000, immutable' : 'no-cache')
+  const acceptsGzip = String(req?.headers?.['accept-encoding'] || '').includes('gzip')
+  if (acceptsGzip && GZIP_EXT.test(file) && st.size >= GZIP_MIN) {
+    const buf = gzipFor(file, st)
+    res.setHeader('Vary', 'Accept-Encoding')
+    res.setHeader('Content-Encoding', 'gzip')
+    res.setHeader('Content-Length', buf.length)
+    if (head) {
+      res.end()
+      return
+    }
+    res.end(buf)
+    return
+  }
+  res.setHeader('Content-Length', st.size)
   if (head) {
     res.end()
     return
   }
   createReadStream(file).pipe(res)
+}
+
+/** 哪些路径属于阅读页（要用 reader.html 回落，而不是首页 index.html）。 */
+function isReaderPath(pathname) {
+  return pathname === '/reader' || pathname === '/reader.html' || pathname.startsWith('/reader/')
 }
 
 /**
@@ -140,7 +187,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
       }
       const file = join(fishDir, name)
       if (existsSync(file) && statSync(file).isFile()) {
-        serveFile(res, file, { head: req.method === 'HEAD', cache: true })
+        serveFile(req, res, file, { head: req.method === 'HEAD', cache: true })
         return
       }
       res.statusCode = 404
@@ -169,7 +216,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
 
     const name = stripLeadingSlashes(pathname)
     if (DATA_FILES.has(name) && existsSync(join(publicDir, name))) {
-      serveFile(res, join(publicDir, name), { head: req.method === 'HEAD' })
+      serveFile(req, res, join(publicDir, name), { head: req.method === 'HEAD' })
       return
     }
 
@@ -183,9 +230,11 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
     if (existsSync(file) && statSync(file).isDirectory()) file = join(file, 'index.html')
     if (!existsSync(file)) {
       if (!/\.[a-zA-Z0-9]+$/.test(pathname)) {
-        const idx = join(distDir, 'index.html')
-        if (existsSync(idx)) {
-          serveFile(res, idx)
+        // 阅读页用 BrowserRouter，URL 是多层干净路径（/reader/a/<ref>/p/intensive）。
+        // 这些路径磁盘上不存在，必须回落到 reader.html —— 回落成 index.html 会打开主界面。
+        const target = join(distDir, isReaderPath(pathname) ? 'reader.html' : 'index.html')
+        if (existsSync(target)) {
+          serveFile(req, res, target)
           return
         }
       }
@@ -195,7 +244,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
       return
     }
     const cache = pathname.includes('/assets/')
-    serveFile(res, file, { head: req.method === 'HEAD', cache })
+    serveFile(req, res, file, { head: req.method === 'HEAD', cache })
   }
 }
 
