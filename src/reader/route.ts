@@ -5,13 +5,15 @@ import { useNavigate } from 'react-router-dom'
  * 阅读页的路由模型（react-router 的 BrowserRouter，basename = `/reader`）。
  *
  *   /reader                    阅读器（没有打开文章时显示文章列表）
- *   /reader/a/<ref>            读某一篇
- *   /reader/a/<ref>/p/<panel>  读某一篇 + 打开某个面板
+ *   /reader/a/<slug>           读某一篇
+ *   /reader/a/<slug>/p/<panel> 读某一篇 + 打开某个面板
  *   /reader/p/<panel>          没有文章时也能开的面板
  *
- * `ref` 就是原来的文章标识：`b:<内置 key>` 或 `s:<已保存 id>`。
+ * **`slug` 不是内部标识**：`b:005 Leaders` 那种东西不会出现在地址栏里。
+ * slug 由标题算（`005-leaders-post-truth-politics`），映射表在 `core/articleIndex`。
+ * 这里只当字符串用，不管它怎么来的。
  *
- * 这里构造的都是**不含 basename** 的路径（`/a/xxx`），BrowserRouter 会自动补上
+ * 构造的都是**不含 basename** 的路径（`/a/xxx`），BrowserRouter 会自动补
  * `/reader` 前缀，`useLocation()` 拿回来的也是去掉前缀的。
  *
  * 服务端要把 `/reader**` 回落到 `reader.html`：dev 由 `vite.config.ts` 的
@@ -31,8 +33,8 @@ export type PanelName =
   | 'statsDetail'
 
 export interface ReaderRoute {
-  /** `b:key` / `s:id` / 空串（没打开文章） */
-  ref: string
+  /** URL 里的文章 slug，空串 = 没打开文章 */
+  slug: string
   /** 打开的面板，空串 = 没有 */
   panel: PanelName | ''
 }
@@ -50,25 +52,34 @@ const PANELS: PanelName[] = [
 ]
 
 export function parseReaderRoute(pathname: string): ReaderRoute {
-  const parts = pathname.split('/').filter(Boolean).map(decodeURIComponent)
+  const parts = pathname
+    .split('/')
+    .filter(Boolean)
+    .map((p) => {
+      try {
+        return decodeURIComponent(p)
+      } catch {
+        return p
+      }
+    })
   // #/p/<panel>：没有文章时也能开的面板
   if (parts[0] === 'p') {
     const only = parts[1] && (PANELS as string[]).includes(parts[1]) ? (parts[1] as PanelName) : ''
-    return { ref: '', panel: only }
+    return { slug: '', panel: only }
   }
-  if (parts[0] !== 'a') return { ref: '', panel: '' }
-  const ref = parts[1] ?? ''
+  if (parts[0] !== 'a') return { slug: '', panel: '' }
+  const slug = parts[1] ?? ''
   const panel = parts[2] === 'p' && parts[3] && (PANELS as string[]).includes(parts[3]) ? (parts[3] as PanelName) : ''
-  return { ref, panel }
+  return { slug, panel }
 }
 
-export function articlePath(ref: string): string {
-  return ref ? `/a/${encodeURIComponent(ref)}` : '/'
+export function articlePath(slug: string): string {
+  return slug ? `/a/${slug}` : '/'
 }
 
-export function panelPath(ref: string, panel: PanelName): string {
-  // 没打开文章时面板也能开（计划 / 日志 / 统计 / 生词本）→ #/p/<panel>
-  return ref ? `/a/${encodeURIComponent(ref)}/p/${panel}` : `/p/${panel}`
+export function panelPath(slug: string, panel: PanelName): string {
+  // 没打开文章时面板也能开（计划 / 日志 / 统计 / 生词本）→ /p/<panel>
+  return slug ? `/a/${slug}/p/${panel}` : `/p/${panel}`
 }
 
 /** 面板名 → `useReaderPanels` 里那一对布尔值 / setter。 */
@@ -133,7 +144,7 @@ const PANEL_SETTER: Record<PanelName, string> = {
 export function useRoutedPanels<T extends object>(
   raw: T,
   route: ReaderRoute,
-  ref: string,
+  slug: string,
 ): T {
   const navigate = useNavigate()
   const rawRef = useRef(raw)
@@ -156,10 +167,10 @@ export function useRoutedPanels<T extends object>(
     for (const name of Object.keys(PANEL_SETTER) as PanelName[]) {
       const key = PANEL_SETTER[name]
       ;(out as Record<string, (v: boolean) => void>)[key] = (v: boolean) => {
-        if (v) navigate(panelPath(ref, name))
-        else if (route.panel === name) navigate(articlePath(ref))
+        if (v) navigate(panelPath(slug, name))
+        else if (route.panel === name) navigate(articlePath(slug))
       }
     }
     return out as T
-  }, [raw, navigate, ref, route.panel])
+  }, [raw, navigate, slug, route.panel])
 }

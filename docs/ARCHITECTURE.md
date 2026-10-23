@@ -353,10 +353,41 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 
 ```
 /reader                    文章列表（没打开文章）
-/reader/a/<ref>            读某一篇    ref = b:<内置 key> / s:<已保存 id>
-/reader/a/<ref>/p/<panel>  读某一篇 + 开某个面板
+/reader/a/<slug>           读某一篇
+/reader/a/<slug>/p/<panel> 读某一篇 + 开某个面板
 /reader/p/<panel>          没有文章时也能开的面板（计划/日志/统计/生词本）
 ```
+
+**`<slug>` 不是内部标识**。内部标识长这样：`b:005 Leaders - Post-truth politics`、
+`s:saved:1761234567`，直接塞 URL 会变成 `b%3A005%20Leaders…` 一串乱码。
+所以地址栏里放的是**由标题算出来的可读片段**：
+
+```
+/reader/a/post-truth-politics
+/reader/a/elections-in-hong-kong
+```
+
+规则在 `core/articleSlug`（`slugify` / `shortHash`）与 `core/articleIndex`（双向索引）：
+
+- 只保留 `[a-z0-9-]`，所以 URL 里永远不会有需要百分号转义的字符；
+- 两篇标题撞车（或中文标题被剥成空串）→ 双方都加 `-<4位hash>`。**不是「先到先得」**，
+  否则删掉一篇文章会让另一篇的 URL 悄悄变掉；
+- 反查要等文章目录 + 已保存列表都加载完（`indexReady`）。索引没好时点文章**直接加载**、
+  URL 先留空，索引到齐后自动补上 —— 千万别写成「算不出 slug 就 return」，那是「点了没反应」。
+
+### 返回键的层级（别改成 replace）
+
+`useArticleRoute` 里补 URL 用的是 **`navigate()` 默认的 push**：
+
+```
+[主界面] → /reader → /reader/a/<这篇> → /reader/a/<这篇>/p/<面板>
+```
+
+返回键：关面板 → 回文章 → 回文章列表 → 才离开阅读页。
+
+**这里曾经用 `replace` 补 URL**，后果是 `/reader` 那一层被覆盖掉，历史里只剩文章页，
+按返回直接跳回主界面 —— 用户反馈的「按返回键直接返回主页面」就是它。
+刷新时 URL 里本来就有 slug，补 URL 那段会直接 return，所以不会越堆越多。
 
 **四处必须一起改**，漏一处就是刷新 404 / 白屏 / 面板关不掉：
 

@@ -10,7 +10,20 @@ import { useArticleRoute, type UseArticleRouteParams } from './useArticleRoute'
  *
  * 这里只测「谁在什么时候调了谁」：真正去读文章 / 清空文章的副作用属于 ReaderApp，
  * 用 spy 代替。URL 断言靠一个读 `useLocation` 的探针组件。
+ *
+ * slug ↔ 标识 的映射用一张假表（真表在 `core/articleIndex`，另有单测）。
  */
+const INDEX = {
+  slugOf: (ref: string) =>
+    ref === 'b:005 Leaders' ? '005-leaders-post-truth-politics' : ref === 's:saved:1' ? 'my-article' : '',
+  refOf: (slug: string) =>
+    slug === '005-leaders-post-truth-politics'
+      ? 'b:005 Leaders'
+      : slug === 'my-article'
+        ? 's:saved:1'
+        : '',
+}
+
 function setup(initialPath: string, initial: UseArticleRouteParams) {
   const seen: { pathname: string } = { pathname: initialPath }
   function Probe() {
@@ -32,8 +45,11 @@ function setup(initialPath: string, initial: UseArticleRouteParams) {
 }
 
 const params = (over: Partial<UseArticleRouteParams> = {}): UseArticleRouteParams => ({
-  routeRef: '',
+  routeSlug: '',
   currentRef: '',
+  slugOf: INDEX.slugOf,
+  refOf: INDEX.refOf,
+  indexReady: true,
   hasDoc: false,
   onPick: vi.fn(),
   onClear: vi.fn(),
@@ -41,37 +57,87 @@ const params = (over: Partial<UseArticleRouteParams> = {}): UseArticleRouteParam
 })
 
 describe('useArticleRoute：首屏恢复补 URL', () => {
-  it('恢复出文章时把 URL 补成 /a/<ref>（replace，不堆历史）', async () => {
+  it('用 slug 补地址栏（不是 b%3A 那种编码标识）', async () => {
     const p = params({ hasDoc: true, currentRef: 'b:005 Leaders' })
     const { seen } = setup('/', p)
-    await waitFor(() => expect(seen.pathname).toBe('/a/b%3A005%20Leaders'))
+    await waitFor(() => expect(seen.pathname).toBe('/a/005-leaders-post-truth-politics'))
   })
 
-  it('没有文章时不动 URL', async () => {
-    const { seen } = setup('/', params())
+  it('索引里还没有这篇（slug 为空）时不动 URL', async () => {
+    const { seen } = setup('/', params({ hasDoc: true, currentRef: 'b:不在索引里' }))
     await Promise.resolve()
     expect(seen.pathname).toBe('/')
   })
 })
 
 describe('useArticleRoute：URL → 文章', () => {
-  it('URL 指向另一篇就加载它，同一篇不重复加载', async () => {
+  it('按 URL 里的 slug 找到文章并加载', async () => {
     const onPick = vi.fn()
-    const { rerender } = setup('/a/b%3Ax', params({ routeRef: 'b:x', currentRef: '', onPick }))
-    await waitFor(() => expect(onPick).toHaveBeenCalledWith('b:x'))
-    onPick.mockClear()
-    // 已经加载好了（currentRef 跟上），再渲染不该重复加载
-    rerender(params({ routeRef: 'b:x', currentRef: 'b:x', hasDoc: true, onPick }))
+    setup('/a/005-leaders-post-truth-politics', params({ routeSlug: '005-leaders-post-truth-politics', onPick }))
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith('b:005 Leaders'))
+  })
+
+  it('索引没就绪时先不加载（等目录/已保存列表到齐）', async () => {
+    const onPick = vi.fn()
+    const p = params({ routeSlug: '005-leaders-post-truth-politics', indexReady: false, onPick })
+    const { rerender } = setup('/a/005-leaders-post-truth-politics', p)
+    await Promise.resolve()
+    expect(onPick).not.toHaveBeenCalled()
+    // 就绪后再补上
+    rerender({ ...p, indexReady: true })
+    await waitFor(() => expect(onPick).toHaveBeenCalledWith('b:005 Leaders'))
+  })
+
+  it('认不出的 slug 不乱开文章（链接过期就停在列表）', async () => {
+    const onPick = vi.fn()
+    setup('/a/deleted-article', params({ routeSlug: 'deleted-article', onPick }))
     await Promise.resolve()
     expect(onPick).not.toHaveBeenCalled()
   })
 
-  it('点选择器只导航，不直接加载（加载由 URL effect 负责）', async () => {
+  it('已经打开的就是这一篇时不重复加载', async () => {
+    const onPick = vi.fn()
+    setup(
+      '/a/005-leaders-post-truth-politics',
+      params({
+        routeSlug: '005-leaders-post-truth-politics',
+        currentRef: 'b:005 Leaders',
+        hasDoc: true,
+        onPick,
+      }),
+    )
+    await Promise.resolve()
+    expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('点选择器只导航（URL 用 slug），加载交给 URL effect', async () => {
     const onPick = vi.fn()
     const { result, seen } = setup('/', params({ onPick }))
-    act(() => result.current('b:y'))
-    await waitFor(() => expect(seen.pathname).toBe('/a/b%3Ay'))
+    act(() => result.current('s:saved:1'))
+    await waitFor(() => expect(seen.pathname).toBe('/a/my-article'))
     expect(onPick).not.toHaveBeenCalled()
+  })
+
+  it('索引还没建好时点选择器直接加载 —— 不能「点了没反应」', async () => {
+    const onPick = vi.fn()
+    // slugOf 一律返回空（等价于 articles.json 还没到）
+    const empty = { slugOf: () => '', refOf: () => '' }
+    const { result, seen } = setup('/', params({ ...empty, onPick }))
+    act(() => result.current('b:005 Leaders'))
+    expect(onPick).toHaveBeenCalledWith('b:005 Leaders')
+    // URL 留空，等索引到齐后由 ① 补
+    expect(seen.pathname).toBe('/')
+  })
+
+  it('索引晚到时会补上 URL（先加载、后补地址）', async () => {
+    const onPick = vi.fn()
+    const p = params({ hasDoc: true, currentRef: 'b:005 Leaders', ...{ slugOf: () => '' }, onPick })
+    const { rerender, seen } = setup('/', p)
+    await Promise.resolve()
+    expect(seen.pathname).toBe('/')
+    // 目录到齐，slugOf 恢复
+    rerender(params({ hasDoc: true, currentRef: 'b:005 Leaders', onPick }))
+    await waitFor(() => expect(seen.pathname).toBe('/a/005-leaders-post-truth-politics'))
   })
 })
 
@@ -79,12 +145,18 @@ describe('useArticleRoute：回到列表', () => {
   it('URL 里没文章、当前有文章、且同步过一次 → 关掉文章', async () => {
     const onClear = vi.fn()
     const { rerender } = setup(
-      '/a/b%3Ax',
-      params({ routeRef: 'b:x', currentRef: 'b:x', hasDoc: true, onClear }),
+      '/a/005-leaders-post-truth-politics',
+      params({
+        routeSlug: '005-leaders-post-truth-politics',
+        currentRef: 'b:005 Leaders',
+        hasDoc: true,
+        onClear,
+      }),
     )
     await Promise.resolve()
-    // 用户按返回：URL 回到 /，routeRef 变空
-    rerender(params({ routeRef: '', currentRef: 'b:x', hasDoc: true, onClear }))
+    rerender(
+      params({ routeSlug: '', currentRef: 'b:005 Leaders', hasDoc: true, onClear }),
+    )
     await waitFor(() => expect(onClear).toHaveBeenCalled())
   })
 

@@ -6,6 +6,7 @@ import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
 import { useReaderPanels } from './hooks/useReaderPanels'
 import { parseReaderRoute, useRoutedPanels } from './route'
+import { buildArticleIndex } from '../core/articleIndex'
 import { useArticleRoute } from './hooks/useArticleRoute'
 import { useLocation } from 'react-router-dom'
 import { useTtsEngines } from './hooks/useTtsEngines'
@@ -114,10 +115,19 @@ export default function ReaderApp() {
   const panelsRaw = useReaderPanels()
   const { pathname } = useLocation()
   const route = useMemo(() => parseReaderRoute(pathname), [pathname])
-  /** 当前文章在路由里的 ref：'b:<内置 key>' / 's:<已保存 id>' / 空串（没打开文章）。 */
+  /**
+   * 文章标识 ↔ URL slug 的映射表。
+   *
+   * 地址栏里放的是由标题算出来的可读 slug（`005-leaders-post-truth-politics`），
+   * 不是 `b:005 Leaders` 这种内部标识 —— 后者编码进 URL 就是一堆 `%3A` / `%20`。
+   */
+  const articleIndex = useMemo(() => buildArticleIndex(book, saved), [book, saved])
+  /** 当前文章在路由里的内部标识：'b:<内置 key>' / 's:<已保存 id>' / 空串（没打开文章）。 */
   const currentRef = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
+  /** 当前文章在 URL 里的样子（空串 = 索引里还没有它，先别动地址栏）。 */
+  const currentSlug = currentRef ? articleIndex.slugOf(currentRef) : ''
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
-  const panels = useRoutedPanels(panelsRaw, route, currentRef)
+  const panels = useRoutedPanels(panelsRaw, route, currentSlug)
   const { statsOpen, setStatsOpen, browseAll, setBrowseAll } = panels
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
@@ -572,10 +582,14 @@ export default function ReaderApp() {
   })
   const { articleQuizCount } = viewData
 
-  // ---- 路由：/a/<ref> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useArticleRoute ----
+  // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useArticleRoute ----
   const routePick = useArticleRoute({
-    routeRef: route.ref,
+    routeSlug: route.slug,
     currentRef,
+    slugOf: articleIndex.slugOf,
+    refOf: articleIndex.refOf,
+    // 目录和已保存列表到齐才敢按 URL 找文章（否则 slug 反查不到，会误判"这篇没了"）
+    indexReady: savedLoaded && !!book,
     hasDoc: !!doc,
     onPick: (ref) => workspace.docApi.onPick(ref),
     onClear: () => {
