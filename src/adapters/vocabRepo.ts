@@ -297,11 +297,53 @@ export class HybridVocabRepo implements VocabRepoPort {
     return { value: r.value, updatedAt: this.revision }
   }
 
+  /**
+   * 本机镜像最后一次写入的时间。
+   *
+   * 优先看历史快照的 key（每次 save 都会写一条，含删除后的空库）；
+   * 老库没有快照时退回「词条/按篇记录里最新的时间」。
+   * 用来判断离线期间的本地改动是不是比服务端更新 —— 不能只看服务端有值就直接用它。
+   */
+  private async localSavedAt(local: VocabLibrary): Promise<number> {
+    let newest = 0
+    try {
+      const snaps = await this.local.listSnapshots?.()
+      const at = snaps?.[0]?.at
+      // Memory 实现的 key 是 `<ISO>:<n>`，取前 24 位；Idb 实现就是纯 ISO。
+      if (at) newest = Date.parse(at.slice(0, 24)) || 0
+    } catch {
+      // 快照读不到就退回词条时间
+    }
+    if (newest) return newest
+    for (const it of local.items) {
+      const t = Date.parse(it.updatedAt)
+      if (t > newest) newest = t
+    }
+    for (const e of local.articleEntries ?? []) {
+      const t = Date.parse(e.addedAt)
+      if (t > newest) newest = t
+    }
+    return newest
+  }
+
   async load(): Promise<VocabLibrary> {
     if (await this.useSqlite()) {
       try {
         const r = await this.loadServerRevision()
-        if (r.value) return r.value
+        if (r.value) {
+          // 服务端有值不代表它最新：离线期间写进 IndexedDB 的改动可能更新。
+          // 本地镜像更新时以本地为准（下一次保存会带着服务端版本号写回去），
+          // 不能静默用服务端旧版把它顶掉。
+          try {
+            const local = await this.local.load()
+            const localAt = await this.localSavedAt(local)
+            const serverAt = r.updatedAt ? Date.parse(r.updatedAt) : 0
+            if (localAt > serverAt) return local
+          } catch {
+            // 本地镜像读失败：退回服务端版本
+          }
+          return r.value
+        }
         // 服务端还是空库：把浏览器里的旧词库迁上去（首次升级走这里）。
         const local = await this.local.load()
         if (local.items.length > 0) {

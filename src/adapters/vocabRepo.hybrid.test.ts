@@ -80,3 +80,35 @@ describe('HybridVocabRepo：读失败后不许强制覆盖', () => {
     expect((put?.[1]?.headers as Record<string, string>)?.['X-Vocab-Base']).toBe('srv-1')
   })
 })
+
+describe('HybridVocabRepo：本地镜像比服务端新', () => {
+  it('离线期间写进 IndexedDB 的改动不被服务端旧版顶掉', async () => {
+    const local = new MemoryVocabRepo()
+    const localLib = {
+      ...lib(2),
+      items: [vocabItem({ id: 'local', word: 'local', lemma: 'local' })],
+    }
+    await local.save(localLib) // fake time 2026-10-24
+    storeRequest.mockResolvedValueOnce({
+      value: { ...lib(1), items: [vocabItem({ id: 'server', word: 'server', lemma: 'server' })] },
+      updatedAt: '2026-10-23T00:00:00.000Z',
+    })
+
+    const loaded = await new HybridVocabRepo(local).load()
+    expect(loaded.items.map((it) => it.id)).toEqual(['local'])
+  })
+
+  it('服务端确实更新时仍用服务端版本', async () => {
+    const local = new MemoryVocabRepo()
+    vi.setSystemTime(new Date('2026-10-20T00:00:00.000Z'))
+    await local.save({ ...lib(1), items: [vocabItem({ id: 'old-local', word: 'old', lemma: 'old' })] })
+    vi.setSystemTime(new Date('2026-10-24T00:00:00.000Z'))
+    storeRequest.mockResolvedValueOnce({
+      value: { ...lib(1), items: [vocabItem({ id: 'server-new', word: 'new', lemma: 'new' })] },
+      updatedAt: '2026-10-23T00:00:00.000Z',
+    })
+
+    const loaded = await new HybridVocabRepo(local).load()
+    expect(loaded.items.map((it) => it.id)).toEqual(['server-new'])
+  })
+})
