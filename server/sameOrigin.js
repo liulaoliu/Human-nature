@@ -9,15 +9,34 @@
  * 所以所有「有副作用」的入口都要过这一层。
  *
  * 规则：
- *   - 带 Origin 的：Origin.host 必须等于 Host；
+ *   - 带 Origin 的：Host 必须是本机名（localhost / 127.0.0.1 / [::1]），
+ *     且 Origin.host 必须等于 Host；
  *   - 浏览器明确标记 `Sec-Fetch-Site: cross-site` 的：拒绝（覆盖无 Origin 的 GET）；
  *   - curl / 脚本不带 Origin：放行（本机工具链要用）。
+ *
+ * 只比 `Origin.host === Host` 防不住 DNS 重绑定：把 evil.com 解析到 127.0.0.1 后，
+ * 浏览器发来的 Host / Origin 都是 evil.com，两者相等但根本不是本机页面。
  */
+const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
+
+/** Host / URL.hostname 是不是本机名（端口不参与判断，端口由 Origin 与 Host 相等来保证）。 */
+export function isLocalHost(host) {
+  if (!host) return false
+  try {
+    return LOCAL_HOSTNAMES.has(new URL(`http://${host}`).hostname)
+  } catch {
+    return false
+  }
+}
+
 export function isSameOrigin(req) {
   const origin = req.headers.origin
   if (!origin) return true
+  const host = req.headers.host || ''
+  if (!isLocalHost(host)) return false
   try {
-    return new URL(origin).host === (req.headers.host || '')
+    const o = new URL(origin)
+    return o.host === host && isLocalHost(o.host)
   } catch {
     return false
   }

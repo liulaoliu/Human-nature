@@ -489,3 +489,14 @@ npm run gates                 # 收尾门禁（提交前必跑）
     指纹相同就跳过；覆盖保存把原 `createdAt` 一起带上，服务端 `saveArticle` 在客户端没带时
     也沿用 `articles.created_at`。改自动保存 / 文章日期时，测试至少覆盖：
     打开不写库、真改才写、覆盖保存保留 `createdAt`。
+36. **`server.fs.deny` 是“替换”不是“追加”**（2026-10-24）。手写 `['**/data/**']` 会把 Vite
+    默认的 `.env` / `.env.*` / `*.{crt,pem}` 拒绝列表整体换掉，还会把根目录的
+    `config.local.json`（`ai.apiKey` 就在里面）当静态文件吐给任意 localhost 页面。
+    策略现在集中在 `server/privatePaths.js` 的 `PRIVATE_FS_DENY`，由 `vite.config.ts` 引用；
+    改它时保留 `**/config.local.json`、`**/.env*`、`**/*.{crt,pem}`、`**/data/**`。
+    验收：`curl -H "Origin: http://localhost:9999" http://localhost:5173/config.local.json` 必须 403/404。
+37. **只比 `Origin.host === Host` 防不住 DNS 重绑定**（2026-10-24）。把 `evil.com` 解析到
+    127.0.0.1 后，浏览器发来的 Host 和 Origin 都是 `evil.com`，两者相等但页面不是本机。
+    `server/sameOrigin.js` 现在先要求 Host 的 hostname 属于 `localhost` / `127.0.0.1` / `[::1]`，
+    再比较 Origin 与 Host；dev 插件和静态 `appServer` 共用这一层。补测试时同时断言
+    “Host、Origin 都是 evil.test → 403”和“本机名 → 放行”，只测 Origin 不一致会漏掉重绑定。

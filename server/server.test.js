@@ -12,6 +12,7 @@ import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
 import { allowLocalRequest } from './sameOrigin.js'
+import { PRIVATE_FS_DENY } from './privatePaths.js'
 import { localDayKey } from './localDate.js'
 
 const require = createRequire(import.meta.url)
@@ -44,6 +45,20 @@ describe('sameOrigin', () => {
     expect(allowLocalRequest({ headers: { host: 'localhost:5173', origin: 'http://evil.test' } })).toBe(false)
     expect(allowLocalRequest({ headers: { host: 'localhost:5173', 'sec-fetch-site': 'cross-site' } })).toBe(false)
     expect(allowLocalRequest({ headers: { host: 'localhost:5173' } })).toBe(true)
+  })
+
+  it('DNS 重绑定：Host 和 Origin 都是 evil.test 也拒绝；本机名放行', () => {
+    expect(allowLocalRequest({ headers: { host: 'evil.test:5173', origin: 'http://evil.test:5173' } })).toBe(false)
+    expect(allowLocalRequest({ headers: { host: '127.0.0.1:5173', origin: 'http://127.0.0.1:5173' } })).toBe(true)
+    expect(allowLocalRequest({ headers: { host: '[::1]:5173', origin: 'http://[::1]:5173' } })).toBe(true)
+  })
+})
+
+describe('dev server 私密文件拒绝列表', () => {
+  it('config.local.json / .env / 证书 / data 都在 deny 里', () => {
+    expect(PRIVATE_FS_DENY).toEqual(
+      expect.arrayContaining(['**/config.local.json', '**/.env', '**/.env.*', '**/*.{crt,pem}', '**/*.key', '**/data/**']),
+    )
   })
 })
 
@@ -305,6 +320,26 @@ describe('httpApp 请求处理', () => {
         body: JSON.stringify(library),
       })
       expect(evil.status).toBe(403)
+
+      // DNS 重绑定：Host 与 Origin 都是 evil.test（两者相等），仍必须 403。
+      const rebound = await new Promise((resolve, reject) => {
+        const req = request(
+          {
+            host: '127.0.0.1',
+            port: server.address().port,
+            path: '/api/store/vocab',
+            method: 'GET',
+            headers: { Host: `evil.test:${server.address().port}`, Origin: `http://evil.test:${server.address().port}` },
+          },
+          (res) => {
+            res.resume()
+            res.on('end', () => resolve(res.statusCode))
+          },
+        )
+        req.on('error', reject)
+        req.end()
+      })
+      expect(rebound).toBe(403)
     } finally {
       await new Promise((r) => server.close(r))
       closeAllStores()
