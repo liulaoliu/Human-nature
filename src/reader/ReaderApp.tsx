@@ -93,7 +93,7 @@ export default function ReaderApp() {
   const { book, bookError, saved, setSaved, savedLoaded, articles } = useArticleBootstrap(flash)
 
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
-  const { library, libraryRef, libraryLoaded, persist, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
+  const { library, libraryRef, libraryLoaded, persist, persistNow, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
   const [articleTitle, setArticleTitle] = useState('')
   const [savedId, setSavedId] = useState<string | null>(null)
   /** 「删除保存」文章的两步确认 */
@@ -535,6 +535,7 @@ export default function ReaderApp() {
     writingHistory,
     visibleBatch,
     persist,
+    persistNow,
     flash,
     setSaved,
     setWritingHistory,

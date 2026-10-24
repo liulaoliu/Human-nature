@@ -54,6 +54,35 @@ describe('useVocabLibrary：读成功', () => {
   })
 })
 
+describe('useVocabLibrary：persistNow', () => {
+  it('等真正落盘；失败抛给调用方，后续写入还能继续', async () => {
+    let fail = true
+    const saved: VocabLibrary[] = []
+    const base = fakeRepo({ load: async () => lib(1) }).repo
+    const repo: VocabRepoPort = {
+      ...base,
+      save: async (l) => {
+        if (fail) throw new Error('409 conflict')
+        saved.push(l)
+      },
+    }
+    const { result } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    await act(async () => {
+      await expect(result.current.persistNow(lib(2))).rejects.toThrow('409')
+    })
+    expect(result.current.library.items).toHaveLength(2)
+
+    fail = false
+    await act(async () => {
+      await result.current.persistNow(lib(3))
+    })
+    expect(saved).toHaveLength(1)
+    expect(saved[0].items).toHaveLength(3)
+  })
+})
+
 describe('useVocabLibrary：写失败必须可见', () => {
   it('保存 reject → 提示用户，不静默吞掉', async () => {
     const base = fakeRepo({ load: async () => lib(1) }).repo

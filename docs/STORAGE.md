@@ -252,6 +252,10 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
+
+**合并导入的落盘顺序不能反**：文章 → 词库（`persistNow` 等真正成功）→ 学习记录 → 最后才写
+`reader:importedBackups` 指纹。词库 409 / 断网时不能记指纹，否则同一份文件再导入会被去重直接跳过，
+而数据其实没进来。覆盖导入同理：词库落盘失败时不改学习记录，保持原样可重试。
 | 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 5 版 + 历史最大一版；「上一版」= 刚被覆盖的那一版 |
 | 文章上一版 | `GET /api/store/articles/:id/prev` / `POST /api/store/articles/:id/restore-prev` | 覆盖/删除前那一版；恢复后可反悔 |
 

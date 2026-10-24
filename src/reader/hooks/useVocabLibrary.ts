@@ -45,6 +45,8 @@ export interface UseVocabLibraryResult {
   libraryLoaded: boolean
   /** 唯一的写入入口（加载失败时拒绝写入） */
   persist: (lib: VocabLibrary) => void
+  /** 立刻写入并等结果（导入备份用；失败会抛给调用方） */
+  persistNow: (lib: VocabLibrary) => Promise<void>
   /** 退回「覆盖前那一版」（防误清 / 读失败事故） */
   restorePrev: () => Promise<void>
 }
@@ -161,6 +163,47 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     [libraryLoad, flash],
   )
 
+  /**
+   * 立刻写入指定版本并**等结果**（导入备份用）。
+   *
+   * `persist` 是给界面用的合并写（延迟 + 失败自动重试），调用方拿不到成败；
+   * 导入备份必须在词库真正落盘之后才记「这份文件已导入」，否则 409 / 断网后
+   * 用户再导入同一份文件会被去重直接跳过，数据却没进来。
+   * 失败会抛给调用方；`library` state 仍然先更新（和 persist 一致）。
+   */
+  const persistNow = useCallback(
+    async (lib: VocabLibrary): Promise<void> => {
+      if (libraryLoad === 'failed') {
+        flash('词库读取出错：为避免覆盖，本次不写入（可点「恢复上一版词库」试试）')
+        throw new Error('词库读取出错')
+      }
+      const repoNow = repo.current
+      if (!repoNow) {
+        flash('词库还没准备好，请稍后再试')
+        throw new Error('词库还没准备好')
+      }
+      // 导入的是合并后的最新版：取消还没落盘的旧版本，别让它随后把新版盖回去。
+      if (timerRef.current != null) {
+        clearTimeout(timerRef.current)
+        timerRef.current = null
+      }
+      pendingRef.current = null
+      firstPendingAtRef.current = 0
+      libraryRef.current = lib
+      setLibrary(lib)
+
+      // 串行排队；链本身永远不 reject，失败只抛给本次调用方，后面的版本还能继续写。
+      const task = chainRef.current.then(() => repoNow.save(lib))
+      chainRef.current = task.then(
+        () => undefined,
+        () => undefined,
+      )
+      await task
+      retryCountRef.current = 0
+    },
+    [libraryLoad, flash],
+  )
+
   /** 立即把待写的那版落盘（没有待写就什么也不做）。 */
   const flush = useCallback(() => {
     if (timerRef.current != null) {
@@ -251,5 +294,5 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     flash(`已恢复上一版词库：${prev.items.length} 条`)
   }, [flash])
 
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, restorePrev }
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, persistNow, restorePrev }
 }

@@ -63,6 +63,7 @@ function setup(over: Partial<UseExportParams> = {}) {
   const articles = { current: { list, get: vi.fn(), save, remove: vi.fn() } as ArticleRepoPort }
   const setters = Object.fromEntries(setterNames.map((k) => [k, vi.fn()])) as unknown as LearningSetters
   const persist = vi.fn()
+  const persistNow = vi.fn(async () => {})
   const flash = vi.fn()
   const setSaved = vi.fn()
   const setWritingHistory = vi.fn()
@@ -76,13 +77,14 @@ function setup(over: Partial<UseExportParams> = {}) {
       writingHistory: [],
       visibleBatch: [],
       persist,
+      persistNow,
       flash,
       setSaved,
       setWritingHistory,
       ...over,
     }),
   )
-  return { result, unmount, save, list, setters, persist, flash, setSaved, setWritingHistory, articles }
+  return { result, unmount, save, list, setters, persist, persistNow, flash, setSaved, setWritingHistory, articles }
 }
 
 const fileOf = (text: string) => ({ text: async () => text }) as File
@@ -105,43 +107,43 @@ describe('useExport：导入', () => {
   })
 
   it('成功：文章写入仓储、词库整库替换、学习记录按段替换、刷新已保存列表', async () => {
-    const { result, save, persist, setters, setSaved, flash } = setup()
+    const { result, save, persistNow, setters, setSaved, flash } = setup()
     await act(async () => {
       await result.current.onImportBackup(
         fileOf(JSON.stringify({ articles: [article], library: backupLibrary(), activity: [{ day: '2026-10-01', counts: { read: 1 } }] })),
       )
     })
     expect(save).toHaveBeenCalledWith(article)
-    expect(persist).toHaveBeenCalledTimes(1)
+    expect(persistNow).toHaveBeenCalledTimes(1)
     expect(setters.setActivity).toHaveBeenCalledWith([{ day: '2026-10-01', counts: { read: 1 } }])
     expect(setSaved).toHaveBeenCalledWith([article])
     expect(flash.mock.calls[0][0]).toContain('导入完成')
   })
 
   it('失败：不是有效 JSON 只提示，不碰词库/仓储', async () => {
-    const { result, save, persist, flash } = setup()
+    const { result, save, persistNow, flash } = setup()
     await act(async () => {
       await result.current.onImportBackup(fileOf('not json'))
     })
     expect(save).not.toHaveBeenCalled()
-    expect(persist).not.toHaveBeenCalled()
+    expect(persistNow).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('导入失败：不是有效的 JSON 备份')
   })
 })
 
 describe('useExport：合并导入', () => {
   it('成功：词库合并后写回，并记住文件指纹', async () => {
-    const { result, persist, flash } = setup()
+    const { result, persistNow, flash } = setup()
     const file = fileOf(JSON.stringify({ articles: [article], library: backupLibrary() }))
     await act(async () => {
       await result.current.onMergeBackup(file)
     })
-    expect(persist).toHaveBeenCalledTimes(1)
+    expect(persistNow).toHaveBeenCalledTimes(1)
     expect(flash.mock.calls[0][0]).toContain('合并完成')
   })
 
   it('同一份文件第二次合并：跳过，不重复累加学习时长', async () => {
-    const { result, persist, flash } = setup()
+    const { result, persistNow, flash } = setup()
     const file = fileOf(JSON.stringify({ articles: [article], library: backupLibrary(), activity: [{ day: '2026-10-01', counts: { read: 1 } }] }))
     await act(async () => {
       await result.current.onMergeBackup(file)
@@ -149,16 +151,38 @@ describe('useExport：合并导入', () => {
     await act(async () => {
       await result.current.onMergeBackup(file)
     })
-    expect(persist).toHaveBeenCalledTimes(1)
+    expect(persistNow).toHaveBeenCalledTimes(1)
     expect(flash).toHaveBeenLastCalledWith(expect.stringContaining('已经合并导入过'))
   })
 
+  it('词库落盘失败：不记指纹，同一份文件还能再导一次', async () => {
+    let fail = true
+    const persistNow = vi.fn(async () => {
+      if (fail) throw new Error('409 conflict')
+    })
+    const { result, flash } = setup({ persistNow })
+    const file = fileOf(JSON.stringify({ articles: [article], library: backupLibrary() }))
+
+    await act(async () => {
+      await result.current.onMergeBackup(file)
+    })
+    expect(persistNow).toHaveBeenCalledTimes(1)
+    expect(flash).toHaveBeenLastCalledWith(expect.stringContaining('未记导入指纹'))
+
+    fail = false
+    await act(async () => {
+      await result.current.onMergeBackup(file)
+    })
+    expect(persistNow).toHaveBeenCalledTimes(2)
+    expect(flash.mock.calls.at(-1)?.[0]).toContain('合并完成')
+  })
+
   it('坏文件：提示失败，不写库', async () => {
-    const { result, persist, flash } = setup()
+    const { result, persistNow, flash } = setup()
     await act(async () => {
       await result.current.onMergeBackup(fileOf('{'))
     })
-    expect(persist).not.toHaveBeenCalled()
+    expect(persistNow).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('合并失败：不是有效的 JSON 备份')
   })
 })

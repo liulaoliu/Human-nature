@@ -39,6 +39,8 @@ export interface UseExportParams {
   writingHistory: WritingRecord[]
   visibleBatch: { word: string; sentence: string }[]
   persist: (library: VocabLibrary) => void
+  /** 立刻写入并等结果（导入备份用；失败会抛给调用方） */
+  persistNow: (library: VocabLibrary) => Promise<void>
   flash: (message: string) => void
   setSaved: (list: SavedArticle[]) => void
   setWritingHistory: (v: WritingRecord[]) => void
@@ -54,6 +56,7 @@ export function useExport({
   writingHistory,
   visibleBatch,
   persist,
+  persistNow,
   flash,
   setSaved,
   setWritingHistory,
@@ -137,15 +140,18 @@ export function useExport({
   /** 导入备份（覆盖）：词库整库替换、统计整段替换，文章按 id 写入。 */
   const onImportBackup = async (file: File | null | undefined) => {
     if (!file) return
+    let phase: 'parse' | 'write' = 'parse'
     try {
       const parsed = parseBackupPayload(JSON.parse(await file.text()))
+      phase = 'write'
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
           await articles.current?.save(a)
         }
       }
       if (parsed.library) {
-        persist(parsed.library)
+        // 先等词库真正落盘，再改统计：写失败时数据保持原样，用户可以重试同一份文件。
+        await persistNow(parsed.library)
         // 整库被替换了：清掉「语言点已收」记账，让文章里的语言点重新收一遍（不然会以为收过而不再补）
         writeJson('reader:langCollected', {})
       }
@@ -168,14 +174,20 @@ export function useExport({
         `导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}` +
           (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
       )
-    } catch {
-      flash('导入失败：不是有效的 JSON 备份')
+    } catch (e) {
+      console.warn('[备份] 导入失败', e)
+      flash(
+        phase === 'parse'
+          ? '导入失败：不是有效的 JSON 备份'
+          : '导入失败：写入本机/服务端出错，数据未改动，可稍后重试',
+      )
     }
   }
 
   /** 合并导入：保留现有数据，把备份并进来（词库按 lemma 去重、统计按天累加、错题按 id 累加）。 */
   const onMergeBackup = async (file: File | null | undefined) => {
     if (!file) return
+    let phase: 'parse' | 'write' = 'parse'
     try {
       const text = await file.text()
       const fingerprint = backupFingerprint(text)
@@ -185,6 +197,7 @@ export function useExport({
         return
       }
       const parsed = parseBackupPayload(JSON.parse(text))
+      phase = 'write'
       let added = 0
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
@@ -193,7 +206,9 @@ export function useExport({
         }
       }
       const mergedLib = parsed.library ? mergeLibraries(library, parsed.library) : null
-      if (mergedLib) persist(mergedLib)
+      // 关键顺序：词库真正落盘成功之后，才写学习统计和「这份文件已导入」指纹。
+      // 否则 409 / 断网时指纹已经记上，用户再导入同一份文件会被去重直接跳过。
+      if (mergedLib) await persistNow(mergedLib)
       if (parsed.sessions) setSessions(mergeSessions(sessions, parsed.sessions))
       if (parsed.studyDays) setStudyDays(mergeStudyDays(studyDays, parsed.studyDays))
       if (parsed.activity) setActivity(mergeActivity(activity, parsed.activity))
@@ -212,8 +227,13 @@ export function useExport({
         `合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}` +
           (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
       )
-    } catch {
-      flash('合并失败：不是有效的 JSON 备份')
+    } catch (e) {
+      console.warn('[备份] 合并导入失败', e)
+      flash(
+        phase === 'parse'
+          ? '合并失败：不是有效的 JSON 备份'
+          : '合并失败：写入本机/服务端出错，未记导入指纹，可稍后重试同一份文件',
+      )
     }
   }
 
