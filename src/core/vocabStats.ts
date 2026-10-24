@@ -83,11 +83,15 @@ export function dueForecast(
   now = new Date(),
   days = 30,
 ): { key: string; label: string; count: number }[] {
+  const todayKey = dayKey(new Date(now))
   const byDay = new Map<string, number>()
   for (const it of items) {
     if (!it.reviewState.due) continue
     const k = dayKey(new Date(it.reviewState.due))
-    byDay.set(k, (byDay.get(k) ?? 0) + 1)
+    // 逾期（dueKey <= today）都算「今天到期」：isDue 就是 due <= now，
+    // 以前按原日期分桶会把昨天到期的词落到昨天，首行「今天」比实际到期数少。
+    const bucket = k <= todayKey ? todayKey : k
+    byDay.set(bucket, (byDay.get(bucket) ?? 0) + 1)
   }
   const out: { key: string; label: string; count: number }[] = []
   for (let i = 0; i < days; i++) {

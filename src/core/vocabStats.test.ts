@@ -84,6 +84,17 @@ describe('dueForecast', () => {
     expect(out[0]).toEqual({ key: '2026-10-05', label: '今天', count: 1 })
     expect(out[2].count).toBe(1)
   })
+
+  it('逾期词并入首行「今天」，与 isDue 口径一致', () => {
+    const now = new Date(2026, 9, 5, 10)
+    const items = [
+      mkItem({ reviewState: review(new Date(2026, 9, 4, 8).toISOString()) }), // 昨天到期
+      mkItem({ reviewState: review(new Date(2026, 9, 5, 8).toISOString()) }), // 今天到期
+    ]
+    const out = dueForecast(items, now, 30)
+    expect(out[0]).toEqual({ key: '2026-10-05', label: '今天', count: 2 })
+    expect(out[1].count).toBe(0)
+  })
 })
 
 describe('wordsByArticle', () => {
