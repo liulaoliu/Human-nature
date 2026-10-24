@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "serve": "node server/appServer.js",
+    "serve": "node server/appServer.ts",
     "ai:pack": "node tools/ai-pack.mjs",
     "ai:agent": "node tools/ai-agent.mjs",
     "ecdict:build": "node tools/build-ecdict.mjs",
@@ -27,7 +27,7 @@
     "check:arch": "node tool/check_architecture.mjs",
     "check:vocab": "node tool/check_vocab_sense.mjs",
     "check:dev": "node tool/check_dev_modules.mjs",
-    "app": "npm run build && node server/appServer.js",
+    "app": "npm run build && node server/appServer.ts",
     "typecheck:server": "tsc -p tsconfig.server.json"
   },
   "dependencies": {

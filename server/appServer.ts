@@ -4,6 +4,16 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { createRequestHandler, loadPort } from './httpApp.ts'
 
+// 版本守卫：Node 原生 type stripping 需要 >= 23.6（BACKEND-TS-MIGRATION §2）。
+// 低于这个版本时 `node server/appServer.ts` 会静默当 JS 解析、语法报错难排查，
+// 这里给一个明确的、可读的错误。
+const major = Number(process.versions.node.split('.')[0])
+const minor = Number(process.versions.node.split('.')[1] ?? 0)
+if (major < 23 || (major === 23 && minor < 6)) {
+  console.error('需要 Node >= 23.6（原生 TypeScript type stripping）')
+  process.exit(1)
+}
+
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
 const distDir = join(root, 'dist')
@@ -34,7 +44,7 @@ const server = createServer(
     dbPath: process.env.XUEBA_DB || join(root, 'data', 'xueba.db'),
   }),
 )
-server.on('error', (e) => {
+server.on('error', (e: NodeJS.ErrnoException) => {
   if (e.code === 'EADDRINUSE') {
     console.error(`端口 ${port} 被占用：可能是开发服务器（npm run dev）还在跑，先关掉它，或运行 停止服务.cmd。`)
   } else {

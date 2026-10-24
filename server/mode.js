@@ -8,11 +8,11 @@ import { join } from 'node:path'
  */
 export function resolveChild(root, mode) {
   if (mode === 'static') {
-    return { cmd: process.execPath, args: [join(root, 'server', 'appServer.js')] }
+    return { cmd: process.execPath, args: [join(root, 'server', 'appServer.ts')] }
   }
   const viteBin = join(root, 'node_modules', 'vite', 'bin', 'vite.js')
   if (existsSync(viteBin)) return { cmd: process.execPath, args: [viteBin] }
-  return { cmd: process.execPath, args: [join(root, 'server', 'appServer.js')] }
+  return { cmd: process.execPath, args: [join(root, 'server', 'appServer.ts')] }
 }
 
 export function loadMode(root) {
