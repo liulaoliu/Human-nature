@@ -1,7 +1,7 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { SCHEMA_VERSION } from './sqliteSchema.js'
+import { SCHEMA_VERSION } from './sqliteSchema.ts'
 import { localDayKey } from './localDate.ts'
 
 /** schema 迁移前的整库备份，留最近 5 份。 */

@@ -11,7 +11,7 @@ import {
   SCHEMA_V6,
   SCHEMA_V7,
   SCHEMA_VERSION,
-} from './sqliteSchema.js'
+} from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.js'
 import {
   hasLearningRows,
@@ -64,7 +64,7 @@ try {
 }
 
 
-export { SCHEMA_VERSION } from './sqliteSchema.js'
+export { SCHEMA_VERSION } from './sqliteSchema.ts'
 /**
  * 留最近 5 版 + 历史最大的一版。
  *
