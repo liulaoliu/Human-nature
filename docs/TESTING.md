@@ -454,7 +454,7 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
 ## 六、执行
 
 ```bash
-npm test                      # 全部（270 个文件 / ~2475 项，约 45 秒）
+npm test                      # 全部（272 个文件 / ~2483 项，约 45 秒）
 npx vitest run src/core/langPoints.test.ts   # 定向：开发循环用这个
 npm run gates:fast            # 改动相关测试 + tsc + 静态门禁（开发循环）
 npm run gates:core            # 只跑 core / adapters
