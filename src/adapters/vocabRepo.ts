@@ -5,7 +5,11 @@ import { StoreConflictError, storeHealth, storeRequest } from './storeApi'
 import { HybridMode } from './hybridMode'
 
 const DB_NAME = 'shadowing-vocab'
-const DB_VERSION = 1
+/**
+ * v1 只建了 `library`，`snapshots` 从来不存在；v2 补建。
+ * 升级必须在 `onupgradeneeded` 里同时建两个 store，不能等到写入时再建。
+ */
+const DB_VERSION = 2
 const STORE = 'library'
 const KEY = 'library'
 /** 覆盖前把旧值留一份（防「读失败 → 写空库」这类事故；换机器/误删时能救回） */
@@ -25,54 +29,83 @@ const SNAP_KEEP = 5
 export class IdbVocabRepo implements VocabRepoPort {
   private db: Promise<IDBDatabase> | null = null
 
+  constructor(private readonly dbName: string = DB_NAME) {}
+
   private open(): Promise<IDBDatabase> {
     if (!this.db) {
       this.db = new Promise((resolve, reject) => {
-        const req = indexedDB.open(DB_NAME, DB_VERSION)
+        const req = indexedDB.open(this.dbName, DB_VERSION)
         req.onupgradeneeded = () => {
-          if (!req.result.objectStoreNames.contains(STORE)) {
-            req.result.createObjectStore(STORE)
-          }
+          const db = req.result
+          if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
+          if (!db.objectStoreNames.contains(SNAP_STORE)) db.createObjectStore(SNAP_STORE)
         }
         req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
+        req.onerror = () => {
+          this.db = null
+          reject(req.error)
+        }
+        // 另一个标签页还开着旧版本会卡在 blocked；不能让它永远 pending
+        req.onblocked = () => {
+          this.db = null
+          reject(new Error('IndexedDB 升级被其它标签页占用，请关掉旧页面再试'))
+        }
       })
     }
     return this.db
   }
 
-  private async run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  /**
+   * 在指定 store 上跑一次请求。
+   *
+   * 写事务要等 `oncomplete` 才算落盘（request 的 success 早于事务提交）；
+   * 只等 request 会在页面立刻关闭时丢掉最后一批快照。
+   */
+  private async run<T>(
+    storeName: string,
+    mode: IDBTransactionMode,
+    fn: (store: IDBObjectStore) => IDBRequest<T>,
+  ): Promise<T> {
     const db = await this.open()
     return new Promise<T>((resolve, reject) => {
-      const t = db.transaction(STORE, mode)
-      const req = fn(t.objectStore(STORE))
-      req.onsuccess = () => resolve(req.result)
+      let t: IDBTransaction
+      try {
+        t = db.transaction(storeName, mode)
+      } catch (e) {
+        reject(e)
+        return
+      }
+      let result: T
+      const req = fn(t.objectStore(storeName))
+      req.onsuccess = () => {
+        result = req.result
+        if (mode === 'readonly') resolve(result)
+      }
       req.onerror = () => reject(req.error)
+      t.onabort = () => reject(t.error ?? new Error('IndexedDB 事务中止'))
+      if (mode !== 'readonly') {
+        t.oncomplete = () => resolve(result)
+      }
     })
   }
 
   async load(): Promise<VocabLibrary> {
-    const value = await this.run<VocabLibrary | undefined>('readonly', (s) => s.get(KEY))
+    const value = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
     return value ?? createLibrary()
   }
 
   /** 往快照库追加一版，并按策略瘦身（留最近 N 版 + 历史最大的一版）。 */
   private async snapshot(library: VocabLibrary, at: string): Promise<void> {
     const db = await this.open()
-    await new Promise<void>((resolve, reject) => {
-      const t = db.transaction(SNAP_STORE, 'readwrite')
-      const s = t.objectStore(SNAP_STORE)
-      s.put(library, at)
-      t.oncomplete = () => resolve()
-      t.onerror = () => reject(t.error)
-    })
-    // 瘦身：取全部元信息（不读正文）
-    const keys = await new Promise<string[]>((resolve) => {
-      const t = db.transaction(SNAP_STORE, 'readonly')
-      const req = t.objectStore(SNAP_STORE).getAllKeys()
-      req.onsuccess = () => resolve((req.result as string[]) ?? [])
-      req.onerror = () => resolve([])
-    })
+    await this.run(SNAP_STORE, 'readwrite', (s) => s.put(library, at))
+    // 瘦身：取全部 key（不读正文）
+    let keys: string[] = []
+    try {
+      keys = await this.run<string[]>(SNAP_STORE, 'readonly', (s) => s.getAllKeys() as IDBRequest<string[]>)
+    } catch {
+      // 快照清理失败不影响主流程
+      return
+    }
     const sorted = [...keys].sort() // 老的在前
     if (sorted.length <= SNAP_KEEP + 1) return
     // 找出「历史最大的一版」所在的 key，永不淘汰
@@ -107,7 +140,13 @@ export class IdbVocabRepo implements VocabRepoPort {
   async listSnapshots(): Promise<VocabSnapshot[]> {
     const db = await this.open()
     const rows = await new Promise<{ at: string; count: number }[]>((resolve) => {
-      const t = db.transaction(SNAP_STORE, 'readonly')
+      let t: IDBTransaction
+      try {
+        t = db.transaction(SNAP_STORE, 'readonly')
+      } catch {
+        resolve([])
+        return
+      }
       const req = t.objectStore(SNAP_STORE).openCursor()
       const out: { at: string; count: number }[] = []
       req.onsuccess = () => {
@@ -118,13 +157,14 @@ export class IdbVocabRepo implements VocabRepoPort {
         c.continue()
       }
       req.onerror = () => resolve(out)
+      t.onabort = () => resolve(out)
     })
     return rows.sort((a, b) => b.at.localeCompare(a.at))
   }
 
   async loadSnapshot(at: string): Promise<VocabLibrary | null> {
     try {
-      return (await this.run<VocabLibrary | undefined>('readonly', (s) => s.get(at))) ?? null
+      return (await this.run<VocabLibrary | undefined>(SNAP_STORE, 'readonly', (s) => s.get(at))) ?? null
     } catch {
       return null
     }
@@ -133,16 +173,16 @@ export class IdbVocabRepo implements VocabRepoPort {
   async save(library: VocabLibrary): Promise<void> {
     // 先读了旧值放 backup，再写新的：任何一次覆盖之后都还有「上一版」可退
     try {
-      const prev = await this.run<VocabLibrary | undefined>('readonly', (s) => s.get(KEY))
+      const prev = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
       // 上一版 = 刚被覆盖的那一版（和 SQLite 那边同一口径）。旧规则「只留更大的那份」
       // 会让历史最大值永远占着 prev，之后所有缩水事故都退不回去。空库不算上一版。
       if (prev && prev.items.length > 0) {
-        await this.run('readwrite', (s) => s.put(prev, PREV_KEY))
+        await this.run(STORE, 'readwrite', (s) => s.put(prev, PREV_KEY))
       }
     } catch {
       // 备份失败不挡主流程
     }
-    await this.run('readwrite', (s) => s.put(library, KEY))
+    await this.run(STORE, 'readwrite', (s) => s.put(library, KEY))
     // 再落一版历史快照（多步可退；失败不影响主流程）
     try {
       await this.snapshot(library, new Date().toISOString())
@@ -154,14 +194,14 @@ export class IdbVocabRepo implements VocabRepoPort {
   /** 取「上一版」快照（没有就 null）。 */
   async loadPrev(): Promise<VocabLibrary | null> {
     try {
-      return (await this.run<VocabLibrary | undefined>('readonly', (s) => s.get(PREV_KEY))) ?? null
+      return (await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(PREV_KEY))) ?? null
     } catch {
       return null
     }
   }
 
   async clear(): Promise<void> {
-    await this.run('readwrite', (s) => s.delete(KEY))
+    await this.run(STORE, 'readwrite', (s) => s.delete(KEY))
   }
 }
 
@@ -218,6 +258,11 @@ function createLocalVocabRepo(): VocabRepoPort {
  *
  * 模式选择与重试见 `HybridMode`：服务恢复后会自动切回 SQLite，不会整个会话锁死在本地。
  */
+/** 词库 PUT 可能传 16MB，给足时间，但绝不能无限挂住合并写队列。 */
+const SAVE_TIMEOUT_MS = 12_000
+/** 读词库 / 恢复版本：同样要有上限，否则启动或恢复会一直转圈。 */
+const READ_TIMEOUT_MS = 8_000
+
 export class HybridVocabRepo implements VocabRepoPort {
   private readonly hybrid = new HybridMode(() => storeHealth())
   /**
@@ -225,6 +270,14 @@ export class HybridVocabRepo implements VocabRepoPort {
    * 旧标签页的 ref 停在它自己读到的那一版，所以它的保存会被 409 挡掉，而不是把别处的改动抹平。
    */
   private revision: string | null = null
+  /**
+   * `revision` 是否可信。
+   *
+   * 读失败时不能继续用 `revision = null` 去 PUT —— 服务端会把它当成「没有 base，强制覆盖」，
+   * 于是本地旧镜像把别的页面/别的设备刚写的词库抹掉。未知时先补一次 GET：
+   * 服务端空库才允许写，已有数据就按冲突处理，让用户刷新。
+   */
+  private revisionKnown = false
 
   constructor(private readonly local: VocabRepoPort = createLocalVocabRepo()) {}
 
@@ -232,11 +285,22 @@ export class HybridVocabRepo implements VocabRepoPort {
     return this.hybrid.useSqlite()
   }
 
+  private async loadServerRevision(): Promise<{ value: VocabLibrary | null; updatedAt: string | null }> {
+    const r = await storeRequest<{ value: VocabLibrary | null; updatedAt?: string | null }>(
+      '/vocab',
+      {},
+      undefined,
+      READ_TIMEOUT_MS,
+    )
+    this.revision = r.updatedAt ?? null
+    this.revisionKnown = true
+    return { value: r.value, updatedAt: this.revision }
+  }
+
   async load(): Promise<VocabLibrary> {
     if (await this.useSqlite()) {
       try {
-        const r = await storeRequest<{ value: VocabLibrary | null; updatedAt?: string | null }>('/vocab')
-        this.revision = r.updatedAt ?? null
+        const r = await this.loadServerRevision()
         if (r.value) return r.value
         // 服务端还是空库：把浏览器里的旧词库迁上去（首次升级走这里）。
         const local = await this.local.load()
@@ -245,27 +309,52 @@ export class HybridVocabRepo implements VocabRepoPort {
             migrated: boolean
             value: VocabLibrary | null
             updatedAt?: string | null
-          }>('/vocab/if-empty', { method: 'PUT', body: JSON.stringify(local) })
+          }>('/vocab/if-empty', { method: 'PUT', body: JSON.stringify(local) }, undefined, SAVE_TIMEOUT_MS)
           this.revision = migrated.updatedAt ?? null
+          this.revisionKnown = true
           return migrated.value ?? local
         }
         return createLibrary()
       } catch {
+        this.revisionKnown = false
         this.hybrid.fail()
       }
     }
     return this.local.load()
   }
 
+  /**
+   * 读失败后第一次写之前补版本号。
+   *
+   * 服务端已有数据时**不能**拿本地旧镜像直接覆盖（那正是 P1-3 的事故）；
+   * 抛冲突让上层提示刷新。只有服务端确实为空才允许写。
+   */
+  private async ensureRevisionKnown(): Promise<void> {
+    const { value } = await this.loadServerRevision()
+    if (value && value.items.length > 0) {
+      throw new StoreConflictError('词库读取失败后服务端已有数据，请刷新后再改', {
+        updatedAt: this.revision,
+        count: value.items.length,
+      })
+    }
+  }
+
   async save(library: VocabLibrary): Promise<void> {
     if (await this.useSqlite()) {
       try {
-        const r = await storeRequest<{ updatedAt?: string }>('/vocab', {
-          method: 'PUT',
-          body: JSON.stringify(library),
-          ...(this.revision ? { headers: { 'X-Vocab-Base': this.revision } } : {}),
-        })
+        if (!this.revisionKnown) await this.ensureRevisionKnown()
+        const r = await storeRequest<{ updatedAt?: string }>(
+          '/vocab',
+          {
+            method: 'PUT',
+            body: JSON.stringify(library),
+            ...(this.revision ? { headers: { 'X-Vocab-Base': this.revision } } : {}),
+          },
+          undefined,
+          SAVE_TIMEOUT_MS,
+        )
         if (r?.updatedAt) this.revision = r.updatedAt
+        this.revisionKnown = true
         // 镜像到 IndexedDB：SQLite 文件损坏/服务起不来时还有本机一份。
         void this.local.save(library).catch((e) => console.warn('[词库] 镜像到 IndexedDB 失败', e))
         return
@@ -275,8 +364,10 @@ export class HybridVocabRepo implements VocabRepoPort {
           // 也不能悄悄重试——先把服务器版本记下来（用户若坚持再存一次会覆盖，另有 prev/快照兜底），
           // 把冲突抛上去让界面明确告诉他发生了什么。
           this.revision = e.updatedAt
+          this.revisionKnown = true
           throw e
         }
+        this.revisionKnown = false
         this.hybrid.fail()
       }
     }
@@ -286,7 +377,9 @@ export class HybridVocabRepo implements VocabRepoPort {
   async loadPrev(): Promise<VocabLibrary | null> {
     if (await this.useSqlite()) {
       try {
-        return (await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev')).value
+        return (
+          await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev', {}, undefined, READ_TIMEOUT_MS)
+        ).value
       } catch {
         this.hybrid.fail()
       }
@@ -297,7 +390,9 @@ export class HybridVocabRepo implements VocabRepoPort {
   async listSnapshots(): Promise<VocabSnapshot[]> {
     if (await this.useSqlite()) {
       try {
-        return (await storeRequest<{ snapshots: VocabSnapshot[] }>('/vocab/snapshots')).snapshots
+        return (
+          await storeRequest<{ snapshots: VocabSnapshot[] }>('/vocab/snapshots', {}, undefined, READ_TIMEOUT_MS)
+        ).snapshots
       } catch {
         this.hybrid.fail()
       }
@@ -309,7 +404,12 @@ export class HybridVocabRepo implements VocabRepoPort {
     if (await this.useSqlite()) {
       try {
         return (
-          await storeRequest<{ value: VocabLibrary | null }>(`/vocab/snapshots/${encodeURIComponent(at)}`)
+          await storeRequest<{ value: VocabLibrary | null }>(
+            `/vocab/snapshots/${encodeURIComponent(at)}`,
+            {},
+            undefined,
+            READ_TIMEOUT_MS,
+          )
         ).value
       } catch {
         this.hybrid.fail()
@@ -321,10 +421,12 @@ export class HybridVocabRepo implements VocabRepoPort {
   async clear(): Promise<void> {
     if (await this.useSqlite()) {
       try {
-        await storeRequest('/vocab', { method: 'DELETE' })
+        await storeRequest('/vocab', { method: 'DELETE' }, undefined, SAVE_TIMEOUT_MS)
         // 服务器上已经没有词库了，下次写入不该再拿旧版本号去对
         this.revision = null
+        this.revisionKnown = true
       } catch {
+        this.revisionKnown = false
         this.hybrid.fail()
       }
     }

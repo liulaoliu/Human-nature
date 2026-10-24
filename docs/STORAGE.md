@@ -73,6 +73,13 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 - 文章的 `createdAt` 由服务端在覆盖保存时保留（客户端没带也不重置）；列表日期以建立日为主，
   只有内容真的改过才显示修改日。
 - 服务端写失败会降到 IndexedDB 继续写，不让功能卡死；下次刷新会重新探测。
+- **读失败后不许拿 `null` 当版本号写回**：`HybridVocabRepo` 会记 `revisionKnown=false`，
+  服务恢复后的第一次写先补一次 `GET /vocab`；服务端已有词条就按 409 冲突提示刷新，
+  只有服务端确实为空才允许 PUT（否则本地旧镜像会强制覆盖别处的新数据）。
+- 词库 PUT 有 12s 超时；`useVocabLibrary` 保存失败会把那一版放回待写队列并按 1s→2s→4s…（封顶 15s）
+  自动重试，成功一次清零。版本冲突不自动重试（重试等于替用户决定覆盖服务器）。
+- IndexedDB 兜底库 `shadowing-vocab` 从 v1 升到 v2：v1 只建了 `library`，`snapshots` 从未创建；
+  v2 在 `onupgradeneeded` 里同时建两个 store，旧词库保留。快照读写都走 `snapshots` store。
 - **没有本地服务时**（把 `dist` 丢到任意静态服务器 / GitHub Pages）行为跟以前一样，只是没有 SQLite。
 
 ## 四、数据库长什么样

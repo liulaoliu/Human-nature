@@ -32,6 +32,9 @@ export interface UseVocabLibraryParams {
 export const PERSIST_DELAY_MS = 300
 /** 合并上限：一直有操作时也不能无限往后推（最迟这么久必须落一次盘）。 */
 export const PERSIST_MAX_WAIT_MS = 1200
+/** 写失败后的重试退避：1s → 2s → 4s …，封顶 15s（页面还开着就一直试）。 */
+export const PERSIST_RETRY_BASE_MS = 1000
+export const PERSIST_RETRY_MAX_MS = 15_000
 
 export interface UseVocabLibraryResult {
   library: VocabLibrary
@@ -63,6 +66,10 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
   const chainRef = useRef<Promise<void>>(Promise.resolve())
   /** flush 的稳定句柄（卸载 / 页面隐藏的回调只注册一次）。 */
   const flushRef = useRef<() => void>(() => {})
+  /** 连续失败次数：决定退避时长；成功一次就清零。 */
+  const retryCountRef = useRef(0)
+  /** 组件是否还挂着：卸载后不再起重试定时器。 */
+  const aliveRef = useRef(true)
   /** flash 的最新引用：保存回来时组件可能已经重渲染过。 */
   const flashRef = useRef(flash)
   flashRef.current = flash
@@ -169,17 +176,35 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     chainRef.current = chainRef.current.then(async () => {
       try {
         await repoNow.save(lib)
+        retryCountRef.current = 0
       } catch (e) {
         // 版本冲突和「存不上」是两件事：冲突说明别处已经写过，**这次改动根本没落盘**，
         // 必须让用户知道（否则他以为保存成功了，实际刷新就没了）。
         if (e instanceof StoreConflictError) {
+          // 不自动重试：重试就等于替用户决定「用本页覆盖服务器」。
+          retryCountRef.current = 0
           flashRef.current(
             `词库在别的页面被改过（服务器现有 ${e.count} 条），这次改动没保存；刷新后再改，或再存一次用本页覆盖`,
           )
           return
         }
         console.warn('[词库] 保存失败', e)
-        flashRef.current('词库保存失败：界面已更新，但可能没落盘；请稍后重试或导出备份')
+        flashRef.current('词库保存失败：界面已更新，但可能没落盘；正在自动重试，也可先导出备份')
+        // 失败的那版放回待写队列；如果保存期间又来了更新的版本，以新版为准。
+        if (pendingRef.current == null) pendingRef.current = lib
+        if (firstPendingAtRef.current === 0) firstPendingAtRef.current = Date.now()
+        if (!aliveRef.current) return
+        // 已有更新版本安排的合并写定时器就让它先跑，不额外插队。
+        if (timerRef.current != null) return
+        const delay = Math.min(
+          PERSIST_RETRY_BASE_MS * 2 ** retryCountRef.current,
+          PERSIST_RETRY_MAX_MS,
+        )
+        retryCountRef.current += 1
+        timerRef.current = window.setTimeout(() => {
+          timerRef.current = null
+          flushRef.current()
+        }, delay)
       }
     })
   }, [])
@@ -197,6 +222,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     window.addEventListener('pagehide', flushNow)
     document.addEventListener('visibilitychange', onVisibility)
     return () => {
+      aliveRef.current = false
       window.removeEventListener('pagehide', flushNow)
       document.removeEventListener('visibilitychange', onVisibility)
       flushNow()

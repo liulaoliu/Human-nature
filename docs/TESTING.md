@@ -513,3 +513,14 @@ npm run gates                 # 收尾门禁（提交前必跑）
     测试要覆盖“水合 pending 时不能出现 ReaderApp”“失败/超时仍能画”。学习记录的 localStorage
     键只在 `core/learning.ts` 的 `LEARNING_KEYS` 里写一次；新加字段时 `LEARNING_KEYS` 与
     `LearningData` 必须同步，`core/learning.test.ts` 会查两张表是否一一对应。
+40. **IndexedDB 升级只建一半 store，功能会静默失效**（2026-10-24）。`shadowing-vocab` v1 只建了
+    `library`，`snapshots` 不存在；`db.transaction('snapshots')` 同步抛 `NotFoundError`，被
+    `save()` 的 try/catch 吞掉 —— 快照从来没写成过，`loadSnapshot()` 还从 `library` 里取，永远 null。
+    改 store 时 `onupgradeneeded` 必须把**所有** store 建齐，并升 `DB_VERSION`；写事务等
+    `oncomplete` 再 resolve（request success 早于提交）。测试用 `fake-indexeddb` 真开库，
+    覆盖「新库两个 store」和「v1 旧库升级保留数据」。只 mock `indexedDB` 的 open 调用测不出来。
+41. **读失败后的 `revision=null` 不是“没有版本”**（2026-10-24）。`HybridVocabRepo` 读 `/vocab` 失败时
+    如果继续用 `null` 当 base 去 PUT，服务端会当成强制覆盖，本地旧镜像把别处的新词库抹掉。
+    现在 `revisionKnown=false`，恢复后第一次写先补 `GET /vocab`：服务端有数据就按 409 冲突拒绝，
+    只有空库才允许写。测试要模拟「读失败 → 30s 后服务恢复」，断言**没有发无 base 的 PUT**；
+    同时覆盖 `useVocabLibrary` 保存失败后自动退避重试（1s 起）。

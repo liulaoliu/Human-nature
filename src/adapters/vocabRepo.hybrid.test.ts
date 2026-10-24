@@ -1,0 +1,82 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { HybridVocabRepo, MemoryVocabRepo } from './vocabRepo'
+import { StoreConflictError } from './storeApi'
+import { createLibrary } from '../core/vocab'
+import { vocabItem } from '../core/testFixtures'
+
+const { storeHealth, storeRequest } = vi.hoisted(() => ({
+  storeHealth: vi.fn(),
+  storeRequest: vi.fn(),
+}))
+
+vi.mock('./storeApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./storeApi')>()
+  return { ...actual, storeHealth, storeRequest }
+})
+
+const lib = (n: number) => ({
+  ...createLibrary(),
+  items: Array.from({ length: n }, (_, i) => vocabItem({ id: `w${i}`, word: `w${i}`, lemma: `w${i}` })),
+})
+
+beforeEach(() => {
+  storeHealth.mockReset()
+  storeRequest.mockReset()
+  storeHealth.mockResolvedValue(true)
+  vi.useFakeTimers()
+  vi.setSystemTime(new Date('2026-10-24T00:00:00.000Z'))
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
+
+describe('HybridVocabRepo：读失败后不许强制覆盖', () => {
+  it('读失败 → 服务恢复后先补 GET；服务端已有数据则按冲突拒绝，不发 PUT', async () => {
+    const local = new MemoryVocabRepo()
+    await local.save(lib(2))
+    storeRequest.mockRejectedValueOnce(new Error('read failed'))
+    const repo = new HybridVocabRepo(local)
+
+    expect((await repo.load()).items).toHaveLength(2)
+    // 跳过 HybridMode 的 30s 退避，模拟服务恢复
+    vi.advanceTimersByTime(30_001)
+    storeRequest.mockResolvedValueOnce({ value: lib(5), updatedAt: 'srv-2' })
+
+    await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
+    expect(storeRequest).toHaveBeenCalledTimes(2)
+    expect(storeRequest.mock.calls[1][0]).toBe('/vocab')
+    expect(storeRequest.mock.calls[1][1]).toEqual({})
+    // 没有 base 的 PUT 会强制覆盖服务器，绝不能发
+    expect(storeRequest.mock.calls.some((c) => c[1]?.method === 'PUT')).toBe(false)
+  })
+
+  it('读失败但服务端确实为空：补 GET 后允许写入，且 PUT 带超时', async () => {
+    const local = new MemoryVocabRepo()
+    storeRequest.mockRejectedValueOnce(new Error('read failed'))
+    const repo = new HybridVocabRepo(local)
+
+    await repo.load()
+    vi.advanceTimersByTime(30_001)
+    storeRequest
+      .mockResolvedValueOnce({ value: null, updatedAt: null })
+      .mockResolvedValueOnce({ updatedAt: 'srv-1' })
+
+    await repo.save(lib(3))
+    const put = storeRequest.mock.calls.find((c) => c[1]?.method === 'PUT')
+    expect(put?.[0]).toBe('/vocab')
+    expect(put?.[3]).toBe(12_000)
+    expect((put?.[1]?.headers as Record<string, string> | undefined)?.['X-Vocab-Base']).toBeUndefined()
+  })
+
+  it('正常读到的版本号会作为下次 PUT 的 base', async () => {
+    storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-1' })
+    const repo = new HybridVocabRepo(new MemoryVocabRepo())
+    await repo.load()
+
+    storeRequest.mockResolvedValueOnce({ updatedAt: 'srv-2' })
+    await repo.save(lib(4))
+    const put = storeRequest.mock.calls.find((c) => c[1]?.method === 'PUT')
+    expect((put?.[1]?.headers as Record<string, string>)?.['X-Vocab-Base']).toBe('srv-1')
+  })
+})

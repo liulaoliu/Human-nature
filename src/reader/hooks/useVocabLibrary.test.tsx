@@ -163,6 +163,30 @@ describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB�
     expect(saved.length).toBeGreaterThanOrEqual(1)
   })
 
+  it('保存失败后自动退避重试，不需要用户再点一次', async () => {
+    let attempts = 0
+    const saved: number[] = []
+    const repo: VocabRepoPort = {
+      load: async () => lib(0),
+      save: async (l) => {
+        attempts++
+        if (attempts === 1) throw new Error('network down')
+        saved.push(l.items.length)
+      },
+      clear: async () => {},
+      loadPrev: async () => null,
+    }
+    const { result, flash } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => result.current.persist(lib(2)))
+    await waitFor(() => expect(flash).toHaveBeenCalledWith(expect.stringContaining('正在自动重试')), {
+      timeout: 2000,
+    })
+    await waitFor(() => expect(saved).toEqual([2]), { timeout: 4000 })
+    expect(attempts).toBe(2)
+  })
+
   it('保存按顺序串行：前一次没回来不发下一次（否则必撞 409）', async () => {
     let inFlight = 0
     let maxInFlight = 0
