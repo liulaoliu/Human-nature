@@ -77,7 +77,7 @@ types ← core ← adapters ← reader
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` | 六个表格型任务；自动标词（要离线词典）与查词（要来源句）仍留在 `useApplyTaskResult` |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` | 范围 × 题型 → 候选词与题量；设置持久化在 `hooks/useQuizSettings` |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
-| 服务端跑批（起跑 + 轮询） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；hooks 里别自己 `fetch('/api/ai/run')` |
+| 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方** |
 | 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
 | 面板 / 列表 / 对话框 | `src/reader/panels/*.tsx` | 不准塞领域判断；判断回 core |

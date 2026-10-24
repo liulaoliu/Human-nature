@@ -472,7 +472,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     }
   }, [localRunning, pending, round, runBatchOnServer, settle, setDoneIds, onReport, flash, jobsInput.scope])
 
-  /** 取消正在跑的一键跑批（打断轮询；服务端已发出的请求不撤回）。 */
+  /** 取消正在跑的一键跑批：先叫服务端停（别继续花额度），再打断本地轮询。 */
   const cancelLocal = useCallback(() => {
     localAbortRef.current?.abort()
   }, [])

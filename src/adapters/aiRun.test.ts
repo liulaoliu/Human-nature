@@ -124,4 +124,35 @@ describe('runAiBatch：轮询到结束', () => {
     expect(polls).toHaveBeenCalledTimes(1)
     expect(vi.getTimerCount()).toBe(0)
   })
+
+  it('取消会先通知服务端 /api/ai/cancel（带 runId），别让服务端继续花额度', async () => {
+    vi.useFakeTimers()
+    const ctrl = new AbortController()
+    const calls: { url: string; init?: RequestInit }[] = []
+    const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      if (url === '/api/ai/run') return json({ runId: 'r9' })
+      if (url.startsWith('/api/ai/run?id=')) return json({ state: 'running', done: 1 })
+      return json({ runId: 'r9', state: 'cancelled' })
+    }) as unknown as typeof fetch
+
+    const p = runAiBatch(jobs, { signal: ctrl.signal, fetchImpl })
+    const guard = expect(p).rejects.toThrow(CANCEL_MESSAGE)
+    await vi.advanceTimersByTimeAsync(1500)
+    ctrl.abort()
+    await guard
+
+    const cancel = calls.find((c) => c.url === '/api/ai/cancel')
+    expect(cancel?.init?.method).toBe('POST')
+    expect(JSON.parse(String(cancel?.init?.body))).toEqual({ runId: 'r9' })
+  })
+
+  it('服务端已被别处取消 → 按取消处理，不报成跑批错误', async () => {
+    vi.useFakeTimers()
+    const fetchImpl = stubFetch(async () => json({ state: 'cancelled', done: 1 }))
+    const p = runAiBatch(jobs, { signal: new AbortController().signal, fetchImpl })
+    const guard = expect(p).rejects.toThrow(CANCEL_MESSAGE)
+    await vi.advanceTimersByTimeAsync(1500)
+    await guard
+  })
 })

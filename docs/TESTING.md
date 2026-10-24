@@ -524,3 +524,11 @@ npm run gates                 # 收尾门禁（提交前必跑）
     现在 `revisionKnown=false`，恢复后第一次写先补 `GET /vocab`：服务端有数据就按 409 冲突拒绝，
     只有空库才允许写。测试要模拟「读失败 → 30s 后服务恢复」，断言**没有发无 base 的 PUT**；
     同时覆盖 `useVocabLibrary` 保存失败后自动退避重试（1s 起）。
+42. **服务端有值 ≠ 服务端最新**（2026-10-24）。离线期间写进 IndexedDB 的词库改动，如果
+    `load()` 看到 `/vocab` 有值就直接返回，下次启动会被服务端旧版顶掉。现在比较本机镜像最后写入
+    时间（`snapshots` 最新 key，老库退回词条 `updatedAt`）和 `/vocab` 的 `updatedAt`，本地更新时
+    以本地为准。测试要覆盖「本地较新 → 用本地」「服务端较新 → 用服务端」两个方向。
+43. **取消跑批只 abort 本地轮询 = 服务端继续花额度**（2026-10-24）。`runJobs` 现在接收
+    `AbortSignal`（每轮/每次请求前检查、退避等待可打断），`/api/ai/run` 返回 `runId`，
+    `POST /api/ai/cancel` 真正停服务端；客户端先调取消接口再 abort 本地。测试要断言取消后
+    **不再发新的模型请求**（`tools/ai-core.test.mjs` + `adapters/aiRun.test.ts`）。

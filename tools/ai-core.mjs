@@ -44,7 +44,7 @@ export function loadAiConfig(root = process.cwd()) {
   return cfg
 }
 
-async function callOnce(cfg, prompt) {
+async function callOnce(cfg, prompt, signal) {
   const res = await fetch(`${cfg.baseUrl.replace(/\/$/, '')}/chat/completions`, {
     method: 'POST',
     headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.apiKey}` },
@@ -56,6 +56,7 @@ async function callOnce(cfg, prompt) {
         { role: 'user', content: prompt },
       ],
     }),
+    signal,
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -65,14 +66,41 @@ async function callOnce(cfg, prompt) {
   return data?.choices?.[0]?.message?.content ?? ''
 }
 
-async function callWithRetry(cfg, prompt, tries = 3) {
+function abortError() {
+  const err = new Error('已取消')
+  err.name = 'AbortError'
+  return err
+}
+
+/** 可被 abort 打断的等待（重试退避时取消要立刻生效）。 */
+function delay(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError())
+      return
+    }
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort)
+      resolve()
+    }, ms)
+    const onAbort = () => {
+      clearTimeout(timer)
+      reject(abortError())
+    }
+    signal?.addEventListener('abort', onAbort, { once: true })
+  })
+}
+
+async function callWithRetry(cfg, prompt, tries = 3, signal) {
   let lastErr
   for (let i = 0; i < tries; i++) {
+    if (signal?.aborted) throw abortError()
     try {
-      return await callOnce(cfg, prompt)
+      return await callOnce(cfg, prompt, signal)
     } catch (e) {
+      if (signal?.aborted) throw abortError()
       lastErr = e
-      await new Promise((r) => setTimeout(r, 800 * (i + 1)))
+      await delay(800 * (i + 1), signal)
     }
   }
   throw lastErr
@@ -81,22 +109,28 @@ async function callWithRetry(cfg, prompt, tries = 3) {
 /**
  * 逐条跑完 jobs（并发 = cfg.concurrency）。
  * onProgress(done, total, result) 每完成一条回调一次；失败的 raw 为空串。
+ *
+ * `signal` abort 后：不再取新 job、不再发新请求，在途 fetch 会被取消；
+ * 已完成的条目保留在结果数组里（调用方自己决定怎么展示）。
  */
-export async function runJobs(jobs, cfg, { onProgress } = {}) {
+export async function runJobs(jobs, cfg, { onProgress, signal } = {}) {
   const results = new Array(jobs.length)
   let cursor = 0
   let done = 0
   const worker = async () => {
     while (cursor < jobs.length) {
+      if (signal?.aborted) return
       const i = cursor++
       const job = jobs[i]
       let raw = ''
       let error = ''
       try {
-        raw = await callWithRetry(cfg, job.prompt)
+        raw = await callWithRetry(cfg, job.prompt, 3, signal)
       } catch (e) {
+        if (signal?.aborted) return
         error = String((e && e.message) || e)
       }
+      if (signal?.aborted) return
       const entry = { id: job.id, task: job.task, raw, error }
       results[i] = entry
       done++
@@ -132,7 +166,12 @@ function readBody(req, limit = 8 * 1024 * 1024) {
 
 function gcRuns() {
   const now = Date.now()
-  for (const [id, r] of runs) if (now - r.startedAt > RUN_TTL) runs.delete(id)
+  for (const [id, r] of runs) {
+    if (now - r.startedAt > RUN_TTL) {
+      r.controller?.abort()
+      runs.delete(id)
+    }
+  }
 }
 
 /**
@@ -140,6 +179,7 @@ function gcRuns() {
  *   GET  /api/ai/status      → { configured, model }（**绝不回传 key**）
  *   POST /api/ai/run  { jobs } → { runId, total }（后台开跑）
  *   GET  /api/ai/run?id=     → { state, done, total, results, error }
+ *   POST /api/ai/cancel { runId } → { runId, state, done, total }（真正停掉服务端跑批）
  */
 export function handleAiApi(req, res, { root = process.cwd() } = {}) {
   const [path, query] = (req.url || '').split('?')
@@ -171,9 +211,20 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       }
       gcRuns()
       const runId = 'run-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-      const run = { state: 'running', done: 0, total: jobs.length, results: [], failed: [], startedAt: Date.now(), error: '' }
+      const controller = new AbortController()
+      const run = {
+        state: 'running',
+        done: 0,
+        total: jobs.length,
+        results: [],
+        failed: [],
+        startedAt: Date.now(),
+        error: '',
+        controller,
+      }
       runs.set(runId, run)
       runJobs(jobs, cfg, {
+        signal: controller.signal,
         onProgress: (done, total, last) => {
           run.done = done
           run.total = total
@@ -182,18 +233,50 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
         },
       })
         .then((all) => {
-          run.results = all.filter((r) => r.raw && r.raw.trim())
+          if (run.state === 'cancelled') {
+            // 取消时保留已完成的部分，别把 results 清空
+            run.results = all.filter((r) => r && r.raw && r.raw.trim())
+            run.failed = all
+              .filter((r) => r && !(r.raw && r.raw.trim()))
+              .map((r) => ({ id: r.id, error: r.error || '空回复' }))
+            return
+          }
+          run.results = all.filter((r) => r && r.raw && r.raw.trim())
           run.failed = all
-            .filter((r) => !(r.raw && r.raw.trim()))
+            .filter((r) => r && !(r.raw && r.raw.trim()))
             .map((r) => ({ id: r.id, error: r.error || '空回复' }))
           run.done = all.length
           run.state = 'done'
         })
         .catch((e) => {
+          if (run.state === 'cancelled') return
           run.state = 'error'
           run.error = String((e && e.message) || e)
         })
       sendJson(res, 200, { runId, total: jobs.length })
+    })
+    return
+  }
+
+  if (path === '/api/ai/cancel' && req.method === 'POST') {
+    readBody(req).then((body) => {
+      let runId = new URLSearchParams(query || '').get('id') || ''
+      try {
+        if (!runId) runId = String(JSON.parse(body).runId || '')
+      } catch {
+        // body 不是 JSON：继续用 query
+      }
+      const run = runs.get(runId)
+      if (!run) {
+        sendJson(res, 404, { error: 'no-run' })
+        return
+      }
+      if (run.state === 'running') {
+        run.state = 'cancelled'
+        run.error = '已取消'
+        run.controller?.abort()
+      }
+      sendJson(res, 200, { runId, state: run.state, done: run.done, total: run.total })
     })
     return
   }

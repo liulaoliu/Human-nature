@@ -92,7 +92,8 @@ function normalizeAiFailed(raw: unknown): AiRunFailed[] {
  * 把一批任务发给服务端跑，轮询到结束为止。
  *
  * 有界：40 分钟超时；连续 20 次取不到进度判失联。
- * 可取消：`signal` abort 后抛 `CANCEL_MESSAGE`，定时器清干净。
+ * 可取消：`signal` abort 后**先叫服务端停**（否则服务端会继续花 API 额度跑完所有 job），
+ * 再抛 `CANCEL_MESSAGE`，定时器清干净。
  */
 export async function runAiBatch(
   jobs: AiRunJob[],
@@ -117,41 +118,60 @@ export async function runAiBatch(
   }
   const { runId } = (await res.json()) as { runId: string }
 
+  /** 通知服务端停下：不传本地 signal（它已经 abort 了，带上会连取消请求都发不出去）。 */
+  const cancelOnServer = () => {
+    void f('/api/ai/cancel', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ runId }),
+    }).catch(() => {
+      // 服务端已经停了 / 断网：本地仍然按取消处理
+    })
+  }
+  const onAbort = () => cancelOnServer()
+  signal.addEventListener('abort', onAbort, { once: true })
+  if (signal.aborted) cancelOnServer()
+
   const startedAt = Date.now()
   let misses = 0
-  for (;;) {
-    await sleep(POLL_INTERVAL_MS, signal)
-    if (Date.now() - startedAt > MAX_POLL_MS) {
-      throw new Error('跑批超时（40 分钟没有结果）：请稍后重试，或改用网页版工作包')
-    }
-    let p: {
-      state?: string
-      done?: number
-      results?: unknown
-      failed?: unknown
-      error?: string
-    } | null = null
-    try {
-      p = await (await f('/api/ai/run?id=' + encodeURIComponent(runId), { signal })).json()
-    } catch {
-      if (signal.aborted) throw new Error(CANCEL_MESSAGE)
-      misses += 1
-      if (misses >= MAX_POLL_MISSES) {
-        throw new Error('与服务端失联（约 30 秒取不到进度）：确认服务还在运行后重试')
+  try {
+    for (;;) {
+      await sleep(POLL_INTERVAL_MS, signal)
+      if (Date.now() - startedAt > MAX_POLL_MS) {
+        throw new Error('跑批超时（40 分钟没有结果）：请稍后重试，或改用网页版工作包')
       }
-      continue
-    }
-    misses = 0
-    if (!p) continue
-    onProgress?.(p.done ?? 0)
-    if (p.state === 'done') {
-      const normalized = normalizeAiResults(p.results)
-      return {
-        results: normalized.results,
-        failed: normalizeAiFailed(p.failed),
-        dropped: normalized.dropped,
+      let p: {
+        state?: string
+        done?: number
+        results?: unknown
+        failed?: unknown
+        error?: string
+      } | null = null
+      try {
+        p = await (await f('/api/ai/run?id=' + encodeURIComponent(runId), { signal })).json()
+      } catch {
+        if (signal.aborted) throw new Error(CANCEL_MESSAGE)
+        misses += 1
+        if (misses >= MAX_POLL_MISSES) {
+          throw new Error('与服务端失联（约 30 秒取不到进度）：确认服务还在运行后重试')
+        }
+        continue
       }
+      misses = 0
+      if (!p) continue
+      onProgress?.(p.done ?? 0)
+      if (p.state === 'done') {
+        const normalized = normalizeAiResults(p.results)
+        return {
+          results: normalized.results,
+          failed: normalizeAiFailed(p.failed),
+          dropped: normalized.dropped,
+        }
+      }
+      if (p.state === 'cancelled') throw new Error(CANCEL_MESSAGE)
+      if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
     }
-    if (p.state === 'error') throw new Error('跑批出错：' + (p.error || '未知错误'))
+  } finally {
+    signal.removeEventListener('abort', onAbort)
   }
 }
