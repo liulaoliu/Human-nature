@@ -22,7 +22,11 @@
 ## 二、核心结构（`src/types/document.ts`）
 
 ```
-VocabLibrary { schemaVersion, items: VocabItem[], articleEntries?, sentenceTexts?: { [articleId|sentenceId]: string } }
+VocabLibrary {
+  schemaVersion, items: VocabItem[], articleEntries?,
+  sentenceTexts?: { [articleId|sentenceId]: string },
+  tombstones?: { kind: 'item'|'article', key, at, lemma? }[]
+}
 VocabItem {
   id: `vocab:${lemma}`；word/lemma；kind?: 'word'|'phrase'|'idiom'|'usage'；langPointId?
   phonetic/partOfSpeech/meaning/definition/grammarMarks

@@ -19,6 +19,7 @@ import type {
   VocabOrigin,
 } from '../types/document'
 import { hydrateSentenceTexts } from './vocab/sentenceTexts'
+import { applyTombstones } from './vocab/tombstones'
 import { SCHEMA_VERSION, defaultReviewState } from '../types/document'
 import { KIND_ORDER } from './entryKind'
 import { cleanGloss, dedupeLibrary, normalizeGrammarMarks } from './vocab'
@@ -339,16 +340,20 @@ export function migrateLibrary(raw: unknown, now: Date = new Date()): VocabLibra
     o.sentenceTexts && typeof o.sentenceTexts === 'object'
       ? (o.sentenceTexts as Record<string, string>)
       : undefined
+  const tombstones = Array.isArray(o.tombstones)
+    ? (o.tombstones as VocabLibrary['tombstones'])
+    : undefined
   const library: VocabLibrary = {
     schemaVersion: SCHEMA_VERSION,
     items,
     articleEntries,
     ...(sentenceTexts ? { sentenceTexts } : {}),
+    ...(tombstones ? { tombstones } : {}),
   }
   // 先修类型/旧键，再按 lemma 去重：否则旧 usage 笔记的坏键会和同名真单词合并，
   // 修完键之后才去重才能把「笔记」和「单词」分开。
   const normalized = normalizeGrammarMarks(dedupeLibrary(repairLanguageKinds(library)))
-  return hydrateSentenceTexts(normalized)
+  return hydrateSentenceTexts(applyTombstones(normalized))
 }
 
 /** 老版本 → 当前版本要做的破坏性兼容都写在这里（现在只有 v1，占位给未来）。 */

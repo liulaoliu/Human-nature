@@ -13,6 +13,7 @@
 import type { VocabLibrary } from '../types/document'
 import { dedupeLibrary } from './vocab'
 import { mergeArticleEntries } from './articleVocab'
+import { applyTombstones, mergeTombstones } from './vocab/tombstones'
 import type { PickSession, StudyDay } from './vocabStats'
 import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
 import type { WritingRecord } from './writing'
@@ -24,12 +25,16 @@ import type { AnswerEvent } from './answerEvents'
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段；按篇条目取并集。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
   const sentenceTexts = { ...(current.sentenceTexts ?? {}), ...(incoming.sentenceTexts ?? {}) }
-  return dedupeLibrary({
-    schemaVersion: current.schemaVersion,
-    items: [...current.items, ...incoming.items],
-    articleEntries: mergeArticleEntries(current.articleEntries ?? [], incoming.articleEntries ?? []),
-    ...(Object.keys(sentenceTexts).length ? { sentenceTexts } : {}),
-  })
+  const tombstones = mergeTombstones(current.tombstones, incoming.tombstones)
+  return applyTombstones(
+    dedupeLibrary({
+      schemaVersion: current.schemaVersion,
+      items: [...current.items, ...incoming.items],
+      articleEntries: mergeArticleEntries(current.articleEntries ?? [], incoming.articleEntries ?? []),
+      ...(Object.keys(sentenceTexts).length ? { sentenceTexts } : {}),
+      ...(tombstones.length ? { tombstones } : {}),
+    }),
+  )
 }
 
 const SESSION_CAP = 500

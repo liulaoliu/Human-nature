@@ -454,14 +454,23 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
 ## 六、执行
 
 ```bash
-npm test                      # 全部（约 800 项，几秒）
+npm test                      # 全部（270 个文件 / ~2475 项，约 45 秒）
 npx vitest run src/core/langPoints.test.ts   # 定向：开发循环用这个
-npm run gates                 # 收尾门禁（提交前必跑）
+npm run gates:fast            # 改动相关测试 + tsc + 静态门禁（开发循环）
+npm run gates:core            # 只跑 core / adapters
+npm run gates:ui              # 只跑 reader / ui / state
+npm run gates:server          # 只跑 server / tools
+npm run gates:static          # 只跑上帝文件 / 架构 / 词汇义项
+npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
 ```
 
-- **别加 `--no-file-parallelism`**：全量 242 个文件串行要 ~10 分钟（jsdom 环境是大头），
-  并行只要 **2 分半**。要限并发就 `--pool=forks --maxWorkers=4 --minWorkers=1`
+- **分层不是替代全量**：`gates:fast` 只看“改动的文件有没有同名测试”，
+  共享 core / 类型改动可能影响 import 方；提交前仍必须跑 `npm run gates`。
+- **别加 `--no-file-parallelism`**：全量 270 个文件串行要 ~10 分钟（jsdom 环境是大头），
+  并行只要 **45 秒左右**。要限并发就 `--pool=forks --maxWorkers=4 --minWorkers=1`
   （只给 `--maxWorkers` 会和默认的 minForks 打架，报 `options.minThreads and options.maxThreads must not conflict`）。
+- **`check_vocab_sense` 读的是压缩 payload**：`data/xueba.db` 的 `vocab.payload` 现在是
+  gzip BLOB，脚本里必须 `gunzip` 后再 `JSON.parse`；直接 `String(payload)` 会得到一串逗号数字。
 - 机器是 **16GB 物理内存**（开发机），并发开满会互相挤；tsc 报
   `Fatal process out of memory: Zone` 是系统提交内存（物理 + 页面文件）见底，不是配置问题：
   等一会儿再跑，或 `--max-old-space-size=2048`。
@@ -548,3 +557,9 @@ npm run gates                 # 收尾门禁（提交前必跑）
     `library.sentenceTexts`，键 = `articleId|fileName` + NUL + `sentenceId`），读出走
     `hydrateSentenceTexts` 补回。**同键文本不一致时不要合并**（可能改过正文），保留各自原文；
     `compact` 必须幂等，测试覆盖 source / contexts / articleEntries 三处和冲突分支。
+45. **没有墓碑的“合并”会把删掉的词复活**（2026-10-24）。本机删了词、服务端还留着，
+    只按 lemma 取并集就会把它并回来；整库二选一又会丢另一边的新增。现在删除写
+    `library.tombstones`（`kind` + `key` + `at`），合并时按 `updatedAt` / `addedAt`
+    与墓碑时间比较：比墓碑旧的删除，比墓碑新的保留（删完又加回来）。
+    测试要覆盖「本机删 / 服务端有」「服务端删 / 本机有更新版本」「篇条目墓碑」
+    「删全库连带清篇收录」；只测 `removeItem` 不测合并等于没测。

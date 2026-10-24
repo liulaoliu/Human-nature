@@ -4,6 +4,7 @@ import { dayKeyLocal } from '../activity'
 import { articleItemsOf } from '../articleVocab'
 import { VOCAB_FIELDS } from '../vocabFields'
 import { lemmaOf } from './word'
+import { addItemTombstone } from './tombstones'
 
 /**
  * 词库本身的增删改与查询：新建、编辑、状态、删除、打印标记、优先重排、
@@ -66,7 +67,9 @@ export function removeItem(library: VocabLibrary, id: string): VocabLibrary {
   const target = library.items.find((it) => it.id === id)
   const items = library.items.filter((it) => it.id !== id)
   const entries = target ? (library.articleEntries ?? []).filter((e) => e.lemma !== target.lemma) : library.articleEntries
-  return { ...library, items, articleEntries: entries }
+  const next: VocabLibrary = { ...library, items, articleEntries: entries }
+  // 记墓碑：合并本机/服务端时才不会把用户删掉的词又并回来。
+  return target ? addItemTombstone(next, target) : next
 }
 
 /**

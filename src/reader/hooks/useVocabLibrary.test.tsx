@@ -54,6 +54,23 @@ describe('useVocabLibrary：读成功', () => {
   })
 })
 
+describe('useVocabLibrary：加载时合并', () => {
+  it('notice.needsSave → 挂载后立刻把合并结果写回服务端', async () => {
+    const saved: VocabLibrary[] = []
+    const base = fakeRepo({ load: async () => lib(2) }).repo
+    const repo: VocabRepoPort = {
+      ...base,
+      save: async (l) => void saved.push(l),
+      takeNotice: () => ({ message: '已合并本机与服务端的词库改动', needsSave: true }),
+    }
+    const { result, flash } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+    await waitFor(() => expect(saved).toHaveLength(1))
+    expect(flash).toHaveBeenCalledWith('已合并本机与服务端的词库改动')
+    expect(saved[0].items).toHaveLength(2)
+  })
+})
+
 describe('useVocabLibrary：persistNow', () => {
   it('等真正落盘；失败抛给调用方，后续写入还能继续', async () => {
     let fail = true

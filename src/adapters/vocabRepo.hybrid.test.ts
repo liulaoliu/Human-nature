@@ -97,8 +97,9 @@ describe('HybridVocabRepo：本地镜像比服务端新', () => {
 
     const repo = new HybridVocabRepo(local)
     const loaded = await repo.load()
-    expect(loaded.items.map((it) => it.id)).toEqual(['local'])
-    expect(repo.takeNotice()).toContain('未同步')
+    // 本机离线词 + 服务端旧词都保留：按 lemma 合并，不再整库二选一。
+    expect(loaded.items.map((it) => it.id)).toEqual(['server', 'local'])
+    expect(repo.takeNotice()?.message).toContain('已合并')
   })
 
   it('服务端确实更新时仍用服务端版本', async () => {

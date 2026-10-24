@@ -90,7 +90,16 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         // 老数据兼容 / 清洗 / 去重**统一收口**在 core/migrations；顺手自检不变量
         const fixed = migrateLibrary(raw)
         const notice = r.takeNotice?.()
-        if (notice) flash(notice)
+        if (notice) {
+          flash(notice.message)
+          // 本机/服务端合并过：趁刚读到版本号，尽快把合并结果写回去。
+          if (notice.needsSave) {
+            r.save(fixed).catch((e) => {
+              console.warn('[词库] 合并结果写回失败', e)
+              flash('词库合并结果写回失败；本机改动还在，稍后会自动重试')
+            })
+          }
+        }
         if (import.meta.env?.DEV) {
           const errors = libraryErrors(fixed)
           if (errors.length) console.warn('[词库] 迁移后仍有问题：', errors.slice(0, 10))
@@ -108,7 +117,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
           fixed.items.length !== raw.items.length ||
           fixed.items.some((it, i) => it !== raw.items[i]) ||
           entriesDirty
-        if (dirty) {
+        if (dirty && !notice?.needsSave) {
           r.save(fixed).catch((e) => {
             // 迁移结果没写回去不影响本次使用，但要让用户知道下次打开可能还要再修一遍
             console.warn('[词库] 迁移结果写回失败', e)

@@ -18,6 +18,7 @@ import type {
   VocabVia,
 } from '../types/document'
 import { kindOf } from './entryKind'
+import { addArticleTombstone } from './vocab/tombstones'
 
 export interface ArticleEntryView {
   entry: ArticleVocabEntry
@@ -140,7 +141,9 @@ export function addArticleEntry(
 export function removeArticleEntry(library: VocabLibrary, articleId: string, lemma: string): VocabLibrary {
   const list = articleEntries(library)
   const next = list.filter((e) => !(e.articleId === articleId && e.lemma === lemma))
-  return next.length === list.length ? library : { ...library, articleEntries: next }
+  if (next.length === list.length) return library
+  // 记墓碑：备份合并 / 本机与服务端合并时不会把这篇的收录又并回来。
+  return addArticleTombstone({ ...library, articleEntries: next }, articleId, lemma)
 }
 
 /** 记录「这一篇的这几个词打印过」；打印状态按篇独立，不污染别的篇。 */

@@ -2,6 +2,7 @@ import type { VocabRepoPort, VocabSnapshot } from '../core/ports'
 import type { VocabLibrary } from '../types/document'
 import { createLibrary } from '../core/vocab'
 import { compactSentenceTexts, hydrateSentenceTexts } from '../core/vocab/sentenceTexts'
+import { mergeLibrariesForSync, sameLibrary } from '../core/vocab/tombstones'
 import { StoreConflictError, storeHealth, storeRequest } from './storeApi'
 import { HybridMode } from './hybridMode'
 
@@ -322,11 +323,11 @@ export class HybridVocabRepo implements VocabRepoPort {
    */
   private revisionKnown = false
   /** 加载时需要提示用户的一次性消息（例如“本机有未同步改动”）。 */
-  private notice: string | null = null
+  private notice: { message: string; needsSave?: boolean } | null = null
 
   constructor(private readonly local: VocabRepoPort = createLocalVocabRepo()) {}
 
-  takeNotice(): string | null {
+  takeNotice(): { message: string; needsSave?: boolean } | null {
     const n = this.notice
     this.notice = null
     return n
@@ -387,17 +388,29 @@ export class HybridVocabRepo implements VocabRepoPort {
           // 会把另一台设备刚写入的词库当成旧版。老实现没有 isDirty 时退回时间比较。
           try {
             const local = await this.local.load()
+            const server = hydrateSentenceTexts(r.value)
             if (typeof this.local.isDirty === 'function') {
               if (await this.local.isDirty()) {
-                this.notice =
-                  '本机有未同步的词库改动，已优先使用本机版本；如果另一台设备也改过词库，请先导出备份再覆盖'
-                return local
+                const merged = mergeLibrariesForSync(local, server)
+                if (sameLibrary(merged, server)) {
+                  // 本机改动已经被服务端覆盖（例如别处更新更晚），清脏即可。
+                  try {
+                    await this.local.clearDirty?.()
+                  } catch {
+                    // 清标记失败不影响使用
+                  }
+                  return server
+                }
+                this.notice = sameLibrary(merged, local)
+                  ? { message: '本机有未同步的词库改动，正在尝试同步到服务端', needsSave: true }
+                  : { message: '已合并本机与服务端的词库改动，正在写回服务端', needsSave: true }
+                return merged
               }
             } else {
               const localAt = await this.localSavedAt(local)
               const serverAt = r.updatedAt ? Date.parse(r.updatedAt) : 0
               if (localAt > serverAt) {
-                this.notice = '本机镜像比服务端新，已优先使用本机；如另一台设备也改过，请先导出备份'
+                this.notice = { message: '本机镜像比服务端新，已优先使用本机；如另一台设备也改过，请先导出备份' }
                 return local
               }
             }

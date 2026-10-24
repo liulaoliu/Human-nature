@@ -77,6 +77,9 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 - 词库里的句子原文按 `sentenceId` 共享：落盘前 `compactSentenceTexts` 收进
   `library.sentenceTexts`，读出来 `hydrateSentenceTexts` 补回 `source` / `contexts` /
   `articleEntries`。同一键文本不一致（改过正文）时不合并，避免张冠李戴。
+- 删除写墓碑（`library.tombstones`）：本机/服务端合并时按 `updatedAt` / `addedAt`
+  和墓碑时间比较，**已删词不会因为并集复活**；删完又加回来的新版本（时间更晚）保留。
+  删全库词条会连带清掉各篇收录，避免留下孤儿 `articleEntries`。
 - 文章的 `createdAt` 由服务端在覆盖保存时保留（客户端没带也不重置）；列表日期以建立日为主，
   只有内容真的改过才显示修改日。
 - 服务端写失败会降到 IndexedDB 继续写，不让功能卡死；下次刷新会重新探测。

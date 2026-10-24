@@ -324,11 +324,30 @@ export interface ArticleVocabEntry {
 }
 
 /** 词库。跨文章累积，独立于任何单篇文档。 */
+/**
+ * 删除墓碑。
+ *
+ * 没有它，合并两份词库时无法区分「本机删了」和「本机没有」——
+ * 直接并集会把用户删掉的词复活。`at` 用于和词条 `updatedAt` / 篇条目 `addedAt` 比较：
+ * 删除之后又重新加回来的词（更新时间更晚）不会被墓碑误删。
+ */
+export interface VocabTombstone {
+  kind: 'item' | 'article'
+  /** item: `item:<id>`；article: `article:<articleId>\0<lemma>` */
+  key: string
+  /** 删除时刻 ISO */
+  at: string
+  /** 全库词条删除时记 lemma，合并时可按 lemma 兜底 */
+  lemma?: string
+}
+
 export interface VocabLibrary {
   schemaVersion: number
   items: VocabItem[]
   /** 按篇收录表；老数据没有该字段，迁移时从来源/语境补出来 */
   articleEntries?: ArticleVocabEntry[]
+  /** 删除墓碑：合并本机/服务端时防止已删词复活 */
+  tombstones?: VocabTombstone[]
   /**
    * 句子原文的共享表（键见 `core/vocab/sentenceTexts`）。
    *

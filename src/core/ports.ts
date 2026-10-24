@@ -265,6 +265,9 @@ export interface VocabRepoPort {
   markDirty?(): Promise<void>
   isDirty?(): Promise<boolean>
   clearDirty?(): Promise<void>
-  /** 取一条“这次加载需要让用户知道”的提示（取完即清，避免每次渲染重复弹）。 */
-  takeNotice?(): string | null
+  /**
+   * 取一条“这次加载需要让用户知道”的提示（取完即清，避免每次渲染重复弹）。
+   * `needsSave` 表示合并结果需要回写一次服务端。
+   */
+  takeNotice?(): { message: string; needsSave?: boolean } | null
 }
