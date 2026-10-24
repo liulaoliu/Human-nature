@@ -171,7 +171,7 @@
   border-radius: 999px;
 }
 
-/* 超时「强制锤炼」：默认深色暖调（非护眼主题），护眼主题另见下方覆盖 */
+/* 强制锤炼：默认深色暖调（非护眼主题），护眼主题另见下方覆盖 */
 .drill {
   margin-top: 12px;
   padding: 14px 16px;
@@ -180,8 +180,14 @@
   background: linear-gradient(180deg, rgba(224, 138, 60, 0.12), rgba(224, 138, 60, 0.04)), var(--panel);
   color: var(--fg);
 }
+/* 重学补考（忘过的词，评分前补一道题）换成冷色，跟「超时锤炼」一眼分得开 */
+.drill.drill-relearn {
+  border-color: #4a86c8;
+  background: linear-gradient(180deg, rgba(90, 169, 255, 0.14), rgba(90, 169, 255, 0.05)), var(--panel);
+}
 .drill-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
 .drill-head b { color: #f0a94a; }
+.drill.drill-relearn .drill-head b { color: #7fb8ff; }
 .drill-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .drill .study-input { width: 100%; max-width: 460px; }
 .drill .quiz-options { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }

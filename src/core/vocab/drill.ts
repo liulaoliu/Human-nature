@@ -54,7 +54,21 @@ export interface DrillInput {
   cleared: boolean
 }
 
+/**
+ * 锤炼的触发原因——界面要据此换标题（「超时锤炼」/「重学补考」），
+ * 两者是**不同的门禁**，混成一句话用户会以为是自己点错了。
+ */
+export type DrillReason = 'timeout' | 'relearn'
+
+/** 返回触发原因；null = 不锤炼。两条同时成立时算「超时」（更早发生、更好解释）。 */
+export function drillReason(input: DrillInput): DrillReason | null {
+  if (!input.active || input.spellMiss || input.learnPhase || input.parked || input.cleared) return null
+  if (input.timedOut) return 'timeout'
+  if (input.relearnScoring) return 'relearn'
+  return null
+}
+
+/** 要不要进锤炼（只问「有没有」，原因见 `drillReason`）。 */
 export function shouldDrill(input: DrillInput): boolean {
-  if (!input.active || input.spellMiss || input.learnPhase || input.parked || input.cleared) return false
-  return input.timedOut || input.relearnScoring
+  return drillReason(input) !== null
 }

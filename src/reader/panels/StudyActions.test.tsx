@@ -18,7 +18,7 @@ function props(over: Partial<StudyActionsProps> = {}): StudyActionsProps {
     card,
     items: [card],
     mode: 'review',
-    drillOn: false,
+    drillReason: null,
     learnQuizOn: false,
     learnReveal: null,
     learnGraded: false,
@@ -67,8 +67,19 @@ describe('StudyActions：分支优先级', () => {
   })
 
   it('锤炼中整块换成 DrillBoard，评分按钮消失', () => {
-    render(<StudyActions {...props({ drillOn: true, canGrade: true })} />)
+    render(<StudyActions {...props({ drillReason: 'timeout', canGrade: true })} />)
     expect(screen.queryByText(/认识/)).toBeNull()
+  })
+
+  it('两种锤炼来路的标题分开：超时写「超时」，重学写「重学补考」', () => {
+    const { unmount } = render(<StudyActions {...props({ drillReason: 'timeout', canGrade: true })} />)
+    screen.getByText(/超时锤炼/)
+    expect(screen.queryByText(/重学补考/)).toBeNull()
+    unmount()
+
+    render(<StudyActions {...props({ drillReason: 'relearn', canGrade: true })} />)
+    screen.getByText(/重学补考/)
+    expect(screen.queryByText(/超时锤炼/)).toBeNull()
   })
 
   it('拼写模式还没检查：只给「检查」', () => {

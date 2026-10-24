@@ -45,7 +45,7 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     delArmed: false,
     forgotCount: 0,
     canRetryForgot: true,
-    drillOn: false,
+    drillReason: null,
     meaningGate: false,
     learnPhase: false,
     learnReveal: null,
@@ -176,13 +176,13 @@ describe('StudyPanel：卡片与评分', () => {
     expect(screen.queryByPlaceholderText(/拼出这个英文单词/)).toBeNull()
     expect(screen.getByText('run')).toBeTruthy()
 
-    rerender(<StudyPanel {...props({ spelling: true, relearning: true, revealed: true, drillOn: true })} />)
+    rerender(<StudyPanel {...props({ spelling: true, relearning: true, revealed: true, drillReason: 'relearn' })} />)
     expect(screen.getByPlaceholderText('拼出这个英文单词')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
   })
 
   it('超时锤炼：隐藏评分按钮，交给 DrillBoard', () => {
-    render(<StudyPanel {...props({ revealed: true, drillOn: true })} />)
+    render(<StudyPanel {...props({ revealed: true, drillReason: 'timeout' })} />)
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
   })
 

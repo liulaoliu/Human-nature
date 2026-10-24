@@ -8,7 +8,8 @@ import {
   beginExtraRound,
   displayMeaning,
   emptyExtraRound,
-  shouldDrill,
+  drillReason as getDrillReason,
+  type DrillReason,
   type ExtraRound,
   type ReviewGrade,
 } from '../../core/vocab'
@@ -488,8 +489,12 @@ export function useStudySession(params: UseStudySessionParams) {
    *
    * `cleared` 兜的是「本卡本轮已经锤炼完」：重学卡摊开过释义就一直为真，
    * 过完面板会原地重开（2026-10-22 用户报「写完搭配正确也退不出去」）。
+   *
+   * 触发原因由 `core/vocab/drill` 的 `drillReason` 一起给出：界面据此显示
+   * 「超时锤炼」还是「重学补考」。两道门禁考的是同一套题，但来路是两件事
+   * （我停太久 / 这词忘过），标题不分开用户会以为是自己点错了。
    */
-  const drillOn = shouldDrill({
+  const drillReason: DrillReason | null = getDrillReason({
     active: !!queue && !!card,
     spellMiss: !!spellMiss,
     learnPhase,
@@ -498,6 +503,7 @@ export function useStudySession(params: UseStudySessionParams) {
     relearnScoring: !!pendingScore,
     cleared: drillCleared,
   })
+  const drillOn = drillReason !== null
 
   /** 面板「认识 / 模糊 / 忘记了」按钮的入口：复习模式走三键状态机，其它模式走原来的评分。 */
   const pressGrade = useCallback(
@@ -654,6 +660,8 @@ export function useStudySession(params: UseStudySessionParams) {
     dueCount,
     newCount,
     drillOn,
+    /** 锤炼的来路：'timeout' 停太久 / 'relearn' 重学卡评分门禁（界面据此换标题）。 */
+    drillReason,
     meaningGate,
     /** 学习模式：这一卡正在过「4 条中文释义」这一关（判完才进单词卡）。 */
     learnPhase,

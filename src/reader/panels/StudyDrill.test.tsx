@@ -25,7 +25,7 @@ const items = [
 function setup() {
   const onDone = vi.fn()
   const onSpellMiss = vi.fn()
-  render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} />)
+  render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} reason="timeout" />)
   // 第一步是拼写：答对后进入「选词义」
   const input = screen.getByPlaceholderText('拼出这个英文单词')
   fireEvent.change(input, { target: { value: 'abandon' } })
@@ -100,7 +100,7 @@ describe('DrillBoard：拼写只判一次', () => {
   it('拼错立即回调 onSpellMiss（带输入），不留在本步重试', () => {
     const onDone = vi.fn()
     const onSpellMiss = vi.fn()
-    render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} />)
+    render(<DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={onSpellMiss} reason="timeout" />)
 
     const input = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(input, { target: { value: 'abandan' } })
@@ -111,6 +111,25 @@ describe('DrillBoard：拼写只判一次', () => {
     expect(onDone).not.toHaveBeenCalled()
     // 不再出现「再来一次」这种可反复输入的提示
     expect(screen.queryByText('✘ 不对，再来一次')).toBeNull()
+  })
+})
+
+describe('DrillBoard：两种来路的标题分开（用户要求，别让人以为自己点错了）', () => {
+  it('超时 → 「超时锤炼」+ 暖色类名', () => {
+    render(
+      <DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={vi.fn()} onSpellMiss={vi.fn()} reason="timeout" />,
+    )
+    expect(screen.getByText(/超时锤炼/)).toBeTruthy()
+    expect(document.querySelector('.drill.drill-timeout')).toBeTruthy()
+  })
+
+  it('重学 → 「重学补考」+ 冷色类名，且不再出现「超时锤炼」', () => {
+    render(
+      <DrillBoard card={card} items={items} onSpeak={vi.fn()} onDone={vi.fn()} onSpellMiss={vi.fn()} reason="relearn" />,
+    )
+    expect(screen.getByText(/重学补考/)).toBeTruthy()
+    expect(document.querySelector('.drill.drill-relearn')).toBeTruthy()
+    expect(screen.queryByText(/超时锤炼/)).toBeNull()
   })
 })
 
@@ -126,7 +145,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
 
   it('写出用法 / 词组任意一条 → onDone 只调一次（用户报「写完搭配退不出去」）', () => {
     const onDone = vi.fn()
-    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} reason="timeout" />)
 
     // 拼写 → 选义 → 看卡 → 写搭配
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
@@ -150,7 +169,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
 
   it('看卡步按回车 → 进写搭配（按钮写着「回车」就得真能按）', () => {
     const onDone = vi.fn()
-    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} reason="timeout" />)
 
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(spell, { target: { value: 'abandon' } })
@@ -168,7 +187,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
 
   it('写错留在本步，给出参考搭配', () => {
     const onDone = vi.fn()
-    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} reason="timeout" />)
 
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(spell, { target: { value: 'abandon' } })

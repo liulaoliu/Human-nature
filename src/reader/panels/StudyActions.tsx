@@ -1,6 +1,6 @@
 import type { VocabItem } from '../../types/document'
 import { fmtInterval } from '../format'
-import { review, type ReviewGrade, type StudyMode } from '../../core/vocab'
+import { review, type DrillReason, type ReviewGrade, type StudyMode } from '../../core/vocab'
 import DrillBoard, { type MeaningReveal } from './StudyDrill'
 
 /**
@@ -17,8 +17,8 @@ export interface StudyActionsProps {
   card: VocabItem
   items: VocabItem[]
   mode: StudyMode
-  /** 超时未评分 → 强制锤炼，锤炼完才回到评分。 */
-  drillOn: boolean
+  /** 超时未评分 / 重学卡要评分 → 强制锤炼；null = 不锤炼，非空即锤炼中。 */
+  drillReason: DrillReason | null
   /** 学习模式的「4 条释义」页（做题中 + 揭示后停留）。 */
   learnQuizOn: boolean
   learnReveal: MeaningReveal | null
@@ -48,7 +48,7 @@ export default function StudyActions(props: StudyActionsProps) {
     card,
     items,
     mode,
-    drillOn,
+    drillReason,
     learnQuizOn,
     learnReveal,
     learnGraded,
@@ -71,9 +71,18 @@ export default function StudyActions(props: StudyActionsProps) {
     onReveal,
   } = props
 
-  // 超时未评分 → 强制锤炼
-  if (drillOn) {
-    return <DrillBoard card={card} items={items} onSpeak={onSpeak} onDone={onDrillCleared} onSpellMiss={onSpellMiss} />
+  // 超时未评分 / 重学卡要评分 → 强制锤炼
+  if (drillReason) {
+    return (
+      <DrillBoard
+        card={card}
+        items={items}
+        onSpeak={onSpeak}
+        onDone={onDrillCleared}
+        onSpellMiss={onSpellMiss}
+        reason={drillReason}
+      />
+    )
   }
 
   if (learnQuizOn) {

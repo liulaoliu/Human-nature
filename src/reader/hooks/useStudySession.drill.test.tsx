@@ -113,6 +113,8 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
     // 真正要拦的是「评分」那一刻：锤炼是评分门禁。
     act(() => api!.answerReview('good'))
     expect(api!.drillOn).toBe(true)
+    // 来路要标对：这是「重学补考」，不是「停太久超时」
+    expect(api!.drillReason).toBe('relearn')
 
     // 过了锤炼 → 自动按他点的「认识」落库并推进（不用再点一次）。
     act(() => api!.clearDrill())
@@ -234,6 +236,8 @@ describe('useStudySession：超时秒数不泄漏到下一张新卡', () => {
     })
     expect(api!.card?.id).toBe('r1')
     expect(api!.drillOn).toBe(true)
+    // 来路要标对：这张卡没被标重学，只是停太久
+    expect(api!.drillReason).toBe('timeout')
 
     // 完成锤炼解锁评分，再评「认识」推进到下一张新卡
     act(() => api!.clearDrill())

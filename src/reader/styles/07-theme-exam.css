@@ -66,6 +66,9 @@
 :root[data-theme='green'] .study-card.heat-4 { background: linear-gradient(180deg, #fdecea, var(--panel)); }
 :root[data-theme='green'] .drill { background: #fff8f0; }
 :root[data-theme='green'] .drill-head b { color: #b5651d; }
+/* 护眼主题下也要保住「重学补考」的冷色区分（否则两种锤炼长得一样） */
+:root[data-theme='green'] .drill.drill-relearn { background: #f1f7ff; }
+:root[data-theme='green'] .drill.drill-relearn .drill-head b { color: #2f6fb3; }
 :root[data-theme='green'] .toast { background: rgba(255, 255, 255, 0.96); border-color: #c9dcc6; color: #243026; }
 
 /* 背单词卡正面：用法 */

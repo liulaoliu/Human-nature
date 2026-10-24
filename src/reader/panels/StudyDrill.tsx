@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import { useHotkeys } from '../useHotkeys'
-import { canQuizMeaning, displayMeaning, meaningOptions, normalizePos } from '../../core/vocab'
+import { canQuizMeaning, displayMeaning, meaningOptions, normalizePos, type DrillReason } from '../../core/vocab'
 
 const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 /** 去掉首尾标点，便于搭配比对。 */
@@ -178,6 +178,17 @@ const STEP_LABEL: Record<DrillStep['kind'], string> = {
   usage: '写搭配',
 }
 
+/**
+ * 两种来路在界面上必须分得开（用户要求）：
+ *   - `timeout`：这张卡停太久，按「超时」说；
+ *   - `relearn`：这个词忘过 / 标过「不认识」，评分前要补一道题，按「重学补考」说。
+ * 题是同一套，但用户在意的不是题，而是「我为什么又被拦下了」。
+ */
+const DRILL_HEAD: Record<DrillReason, { title: string; hint: string }> = {
+  timeout: { title: '⏱ 超时锤炼', hint: '这张卡停太久了 · 过完才能评分' },
+  relearn: { title: '♻️ 重学补考', hint: '忘过 / 标过「不认识」· 过完才按你点的分记' },
+}
+
 /** 超时「强制锤炼」/ 重学卡：拼写 → 选词义 → 写搭配，全过才解锁评分。 */
 export default function DrillBoard({
   card,
@@ -185,6 +196,7 @@ export default function DrillBoard({
   onSpeak,
   onDone,
   onSpellMiss,
+  reason,
 }: {
   card: VocabItem
   items: VocabItem[]
@@ -192,6 +204,8 @@ export default function DrillBoard({
   onDone: () => void
   /** 拼错：立即判为不认识（一次判定，不提供重试）。 */
   onSpellMiss: (typed: string) => void
+  /** 为什么进锤炼：停太久 / 重学卡评分门禁（只影响标题与配色，题一样）。 */
+  reason: DrillReason
 }) {
   const steps = useMemo(() => buildSteps(card, items), [card, items])
   const [step, setStep] = useState(0)
@@ -261,14 +275,16 @@ export default function DrillBoard({
     )
   }
 
+  const head = DRILL_HEAD[reason]
+
   return (
-    <div className="drill">
+    <div className={`drill drill-${reason}`}>
       <div className="drill-head">
-        <b>⛓ 强制锤炼</b>
+        <b>{head.title}</b>
         <span className="muted">
           {step + 1}/{total} · {STEP_LABEL[cur.kind]}
         </span>
-        <span className="muted">全过才能评分（时间越长=越难记）</span>
+        <span className="muted">{head.hint}</span>
       </div>
 
       {cur.kind === 'spell' && (

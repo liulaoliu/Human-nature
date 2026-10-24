@@ -8,6 +8,7 @@ import {
   normalizePos,
   spellingMatches,
   vocabCardBlocks,
+  type DrillReason,
   type ReviewGrade,
   type StudyMode,
 } from '../../core/vocab'
@@ -71,8 +72,8 @@ export interface StudyPanelProps {
   /** 学习模式每组多少词（0 = 跟随范围：本篇 = 全部）。 */
   groupSize: number
   onGroupSizeChange: (n: number) => void
-  /** 超过 drillAfter 秒未评分 → 强制锤炼（拼写/选义/搭配/听写），完成后才能评分。 */
-  drillOn: boolean
+  /** 超时未评分 / 重学卡要评分 → 强制锤炼；null = 不锤炼。 */
+  drillReason: DrillReason | null
   /** 标过「不认识」的词在复习 / 加练时先选中文释义（规则在 core/vocab/review）。 */
   meaningGate: boolean
   /** 学习模式：这一卡正在过「4 条中文释义」这一关（判完才进单词卡）。 */
@@ -162,7 +163,7 @@ export default function StudyPanel({
   delArmed,
   forgotCount,
   canRetryForgot,
-  drillOn,
+  drillReason,
   meaningGate,
   learnPhase,
   learnReveal,
@@ -315,7 +316,7 @@ export default function StudyPanel({
           </div>
         ) : card ? (
           <>
-            {!drillOn && (learnQuizOn ? (
+            {!drillReason && (learnQuizOn ? (
               <MeaningQuiz
                 card={card}
                 items={items}
@@ -442,7 +443,7 @@ export default function StudyPanel({
             {/* 卡内维护：改词形/释义、删误加的词。
                 只要停在单词卡上就可用——判完等「下一词」、模糊待定、复习已判也都是在这张卡上。
                 （之前只在「还没评分」那条分支里渲染，结果学习模式判完就没有编辑入口了。） */}
-            {!drillOn && !learnQuizOn && !showMeaningGate && (
+            {!drillReason && !learnQuizOn && !showMeaningGate && (
               <>
                 <div className="bar study-tools">
                   <button onClick={onOpenEdit} title="改单词/音标/词性/释义/用法（会持久保存）">
@@ -465,13 +466,13 @@ export default function StudyPanel({
               </>
             )}
 
-            {/* 超时未评分 → 强制锤炼 / 学习释义页 / 判完等下一词 / 复习三态 / 评分或翻面：
+            {/* 超时未评分 / 重学卡要评分 → 强制锤炼 / 学习释义页 / 判完等下一词 / 复习三态 / 评分或翻面：
                 这一整条状态机在 StudyActions 里，优先级与按钮组都在那儿排好了 */}
             <StudyActions
               card={card}
               items={items}
               mode={mode}
-              drillOn={drillOn}
+              drillReason={drillReason}
               learnQuizOn={learnQuizOn}
               learnReveal={learnReveal}
               learnGraded={learnGraded}
