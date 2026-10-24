@@ -7,7 +7,7 @@ const idle: DrillInput = {
   learnPhase: false,
   parked: false,
   timedOut: false,
-  relearnRevealed: false,
+  relearnScoring: false,
   cleared: false,
 }
 
@@ -26,17 +26,17 @@ describe('shouldDrill：锤炼的触发条件', () => {
     expect(shouldDrill({ ...idle, timedOut: true })).toBe(true)
   })
 
-  it('重学卡摊开释义 → 锤炼', () => {
-    expect(shouldDrill({ ...idle, relearnRevealed: true })).toBe(true)
+  it('重学卡正要评分 → 锤炼（评分门禁）', () => {
+    expect(shouldDrill({ ...idle, relearnScoring: true })).toBe(true)
   })
 
   it('已判完停在卡上等「下一词」时，超时或重学都不抢（否则看不到单词卡）', () => {
     expect(shouldDrill({ ...idle, parked: true, timedOut: true })).toBe(false)
-    expect(shouldDrill({ ...idle, parked: true, relearnRevealed: true })).toBe(false)
+    expect(shouldDrill({ ...idle, parked: true, relearnScoring: true })).toBe(false)
   })
 
   it('本轮已经锤炼过 → 不再拦（重学卡摊开过就一直是摊开，否则面板原地重开退不出去）', () => {
-    expect(shouldDrill({ ...idle, cleared: true, relearnRevealed: true })).toBe(false)
+    expect(shouldDrill({ ...idle, cleared: true, relearnScoring: true })).toBe(false)
     expect(shouldDrill({ ...idle, cleared: true, timedOut: true })).toBe(false)
   })
 })

@@ -235,7 +235,7 @@ describe('useStudySession：拼错即判「不认识」并从头重学', () => {
     unmount()
   })
 
-  it('重学卡：不直接考拼写；揭示后强制锤炼', () => {
+  it('重学卡：不直接考拼写；摊开释义不劫持，评分时才强制锤炼', () => {
     const { unmount } = render(
       <Harness
         library={lib([
@@ -254,7 +254,11 @@ describe('useStudySession：拼错即判「不认识」并从头重学', () => {
     expect(api!.relearning).toBe(true)
     expect(api!.drillOn).toBe(false)
 
+    // 摊开释义只是「看」，不是考核 → 不该被劫持进锤炼（2026-10-24 改）
     act(() => api!.setRevealed(true))
+    expect(api!.drillOn).toBe(false)
+    // 评分那一刻才拦（锤炼是评分门禁）
+    act(() => api!.answerReview('good'))
     expect(api!.drillOn).toBe(true)
     unmount()
   })

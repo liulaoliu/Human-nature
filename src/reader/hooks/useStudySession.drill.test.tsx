@@ -80,7 +80,7 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
     unmount()
   })
 
-  it('下一张重学卡到了才锤炼：摊开释义就进', () => {
+  it('下一张重学卡到了才拦：摊开释义不劫持，评分那一刻才锤炼', () => {
     const { unmount } = render(
       <Harness
         library={lib([
@@ -91,6 +91,13 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
             meaning: '跑',
             reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
           }),
+          vocabItem({
+            id: 'x2',
+            word: 'walk',
+            lemma: 'walk',
+            meaning: '走',
+            reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+          }),
         ])}
       />,
     )
@@ -99,7 +106,18 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
     expect(api!.relearning).toBe(true)
     expect(api!.drillOn).toBe(false) // 还没摊释义
     act(() => api!.setRevealed(true))
-    expect(api!.drillOn).toBe(true) // 重学卡摊开 → 先做题才能评分
+    // ← 回归点（用户报「点显示释义就直接进锤炼」）：摊开释义是**看**，不是考核，不该被劫持。
+    expect(api!.revealed).toBe(true)
+    expect(api!.drillOn).toBe(false)
+
+    // 真正要拦的是「评分」那一刻：锤炼是评分门禁。
+    act(() => api!.answerReview('good'))
+    expect(api!.drillOn).toBe(true)
+
+    // 过了锤炼 → 自动按他点的「认识」落库并推进（不用再点一次）。
+    act(() => api!.clearDrill())
+    expect(api!.drillOn).toBe(false)
+    expect(api!.card?.id).toBe('x2')
     unmount()
   })
 
@@ -114,17 +132,26 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
             meaning: '跑',
             reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
           }),
+          vocabItem({
+            id: 'x2',
+            word: 'walk',
+            lemma: 'walk',
+            meaning: '走',
+            reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+          }),
         ])}
       />,
     )
     act(() => api!.start({ mode: 'review', scope: 'all' }))
     act(() => api!.setRevealed(true))
+    act(() => api!.answerReview('good')) // 评分 → 进锤炼
     expect(api!.drillOn).toBe(true)
 
     act(() => api!.clearDrill())
-    // ← 回归点：摊开释义的标记还在（`revealed` 仍为 true），但不能因此把面板又拉回来
-    expect(api!.revealed).toBe(true)
+    // ← 回归点：过完锤炼面板就退出，不会原地重开（2026-10-22 修的那个「退不出去」）。
+    // 评分是「押后」的，所以过完锤炼会**自动落库并推进到下一张**——`revealed` 随换卡复位。
     expect(api!.drillOn).toBe(false)
+    expect(api!.card?.id).toBe('x2')
     unmount()
   })
 })

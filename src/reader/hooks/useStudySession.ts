@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   canQuizMeaning,
   isRelearning,
@@ -129,6 +129,17 @@ export function useStudySession(params: UseStudySessionParams) {
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
   /**
+   * 重学卡上「押后」的评分：用户点了认识/模糊/忘记了，但这一卡还没过锤炼。
+   *
+   * 锤炼是**评分门禁**，不是查看门禁（2026-10-24 改）：摊开释义只是「看」，
+   * 不该被劫持进锤炼（用户报「点显示释义就直接进锤炼」）；真正要拦的是**评分那一刻**——
+   * 重学卡先做一道题（拼写 / 选义 / 搭配），过了才把这次评分落库。
+   *
+   * 押后而不是直接拦：用户点完「认识」看到的是锤炼板，过完自动按他点的那个分落库，
+   * 不用再点一次；也避免「拦下了但没记住他想按哪个」的尴尬。
+   */
+  const [pendingScore, setPendingScore] = useState<{ grade: ReviewGrade; advance: boolean } | null>(null)
+  /**
    * 学习模式「4 条释义」那一关的状态（做题 / 揭示 / 等待下一词）。
    * 定义在 `resetCardUi` 之后也没关系：换卡时通过这个 ref 调它的 `reset`。
    */
@@ -218,6 +229,21 @@ export function useStudySession(params: UseStudySessionParams) {
     // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
     setMeaningCleared(true)
   }, [])
+
+  /**
+   * 锤炼通过 → 把「押后」的评分落库（重学卡上先做一道题，过了才按他点的分记）。
+   *
+   * 走 ref 而不是直接调 `applyGrade`：`applyGrade` 定义在下面（它依赖 `advanceFrom` 等），
+   * 而且它内部要读 `drillCleared`——同一个 render 里 `setDrillCleared(true)` 还没生效，
+   * 直接调会被当成「还没过锤炼」再押一次。放进 effect 后，`drillCleared` 已经是新值。
+   */
+  const applyGradeRef = useRef<(g: ReviewGrade, opts?: { advance?: boolean; learnPass?: boolean }) => void>(() => {})
+  useEffect(() => {
+    if (!drillCleared || !pendingScore) return
+    const p = pendingScore
+    setPendingScore(null)
+    applyGradeRef.current(p.grade, { advance: p.advance })
+  }, [drillCleared, pendingScore])
 
   /** 换卡时重置卡片 UI 状态。 */
   const resetCardUi = useCallback(() => {
@@ -362,6 +388,12 @@ export function useStudySession(params: UseStudySessionParams) {
       if (!queue) return
       const queued = queue[index]
       if (!queued) return
+      // 重学卡 + 还没过锤炼 → 这次评分**押后**：先进锤炼板，过了再落库。
+      // （锤炼是评分门禁，不是查看门禁——摊开释义不劫持，2026-10-24 改）
+      if (relearning && !drillCleared && !pendingScore) {
+        setPendingScore({ grade: g, advance: opts?.advance !== false })
+        return
+      }
       grading.recordGrade(g, queued, opts?.learnPass)
       setRevealed(false)
       setInput('')
@@ -377,8 +409,9 @@ export function useStudySession(params: UseStudySessionParams) {
         else setIndex((i) => i + 1)
       }
     },
-    [queue, index, grading.recordGrade, spellMiss, spellingRound.test, mode, advanceFrom],
+    [queue, index, grading.recordGrade, spellMiss, spellingRound.test, mode, advanceFrom, relearning, drillCleared, pendingScore],
   )
+  applyGradeRef.current = applyGrade
 
   /**
    * 学习模式「4 条中文释义」这一关：做题 → 判定 → 揭示停留 → 进单词卡 → 等「下一词」。
@@ -417,14 +450,18 @@ export function useStudySession(params: UseStudySessionParams) {
    * 复习模式「只显示单词 + 三键」（Spec 2026-10-22）。
    *
    * 认识直接换下一张（组末拼写核验）；模糊先不写库、摊卡等「下一词 / 记错了」；
-   * 忘记立刻判不认识并停卡。重学卡 / 释义门禁 / 锤炼进行中不抢这条路。
+   * 忘记立刻判不认识并停卡。释义门禁 / 锤炼进行中不抢这条路。
    *
    * 拼写模式开着时，判卷前输入框还在用：`!(spelling && !checked)` 把这一小段让给输入框。
+   *
+   * `!relearning` 去掉了（2026-10-24）：重学卡的三键以前永远不可点（`ready` 为 false），
+   * 于是「点认识 → 落库」这条路被堵死；而现在重学卡的评分改由 `applyGrade` 里的
+   * 「押后 → 锤炼 → 过了落库」处理，三键必须能点出去。
    */
   const reviewStep = useStudyReviewStep({
     mode,
     active: !!queue && !!card,
-    ready: !relearning && !meaningGate && !drillTimedOut && !learnPhase && !spellMiss && !(spelling && !checked),
+    ready: !meaningGate && !drillTimedOut && !learnPhase && !spellMiss && !(spelling && !checked),
     judge: (g, advance) => {
       applyGrade(g, { advance })
     },
@@ -433,13 +470,19 @@ export function useStudySession(params: UseStudySessionParams) {
   reviewResetRef.current = reviewStep.reset
 
   /**
-   * 本卡是否处于「强制锤炼」（超时 / 重学卡揭示释义后）。
+   * 本卡是否处于「强制锤炼」（超时 / 重学卡正要评分）。
    *
    * 规则在 `core/vocab/drill`：**已经判完停着等「下一词」的卡不锤炼**——
    * 打分都落库了，再考一次也解锁不了什么，但会把「看一眼单词卡」顶掉
    * （选错释义 → 判 again → 这词立刻进重学，点「继续」就会撞上重学分支）。
    *
-   * `cleared` 兜的是「本卡本轮已经锤炼完」：重学卡的 `relearnRevealed` 一旦摊开就一直为真，
+   * `relearnScoring` 不是「摊开过释义」而是「**正要评分**」（2026-10-24 改）：
+   * 摊开释义是**看**（用户只想知道这词什么意思），锤炼是**考核**（拼写 + 选义 + 搭配）。
+   * 两者混在一起的后果：点一下「显示释义」整页就被锤炼接管，释义一帧都没露；
+   * 而且 `relearn` 标记来源极隐蔽（按一次 U「不认识」或 3「忘记了」就永久写上），
+   * 用户压根不记得这个词被标过，于是表现为「莫名其妙就进锤炼」。
+   *
+   * `cleared` 兜的是「本卡本轮已经锤炼完」：重学卡摊开过释义就一直为真，
    * 过完面板会原地重开（2026-10-22 用户报「写完搭配正确也退不出去」）。
    */
   const drillOn = shouldDrill({
@@ -448,7 +491,7 @@ export function useStudySession(params: UseStudySessionParams) {
     learnPhase,
     parked: learnGraded || reviewStep.graded || reviewStep.fuzzy,
     timedOut: drillTimedOut,
-    relearnRevealed: relearning && revealed,
+    relearnScoring: !!pendingScore,
     cleared: drillCleared,
   })
 
