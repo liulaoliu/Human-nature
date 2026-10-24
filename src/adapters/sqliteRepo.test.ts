@@ -45,6 +45,7 @@ function mockStore(handlers: Record<string, (init?: RequestInit) => Response>) {
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
+  vi.useRealTimers()
 })
 
 describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
@@ -67,11 +68,16 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
   })
 
   it('服务端已有词库时以 SQLite 为准，不被旧 IndexedDB 覆盖', async () => {
+    vi.useFakeTimers()
+    // 本地镜像是「旧」的：先存，再把系统时间往后拨，服务端才是最新。
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
     const local = new MemoryVocabRepo()
     await local.save(lib(2))
+    vi.setSystemTime(new Date('2026-10-24T00:00:00.000Z'))
     mockStore({
       '/api/store/health': () => jsonResponse({ ok: true }),
-      '/api/store/vocab': () => jsonResponse({ ok: true, value: lib(7) }),
+      '/api/store/vocab': () =>
+        jsonResponse({ ok: true, value: lib(7), updatedAt: '2026-10-01T00:00:00.000Z' }),
     })
 
     const repo = new HybridVocabRepo(local)
