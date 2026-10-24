@@ -218,6 +218,8 @@
 | 备份损坏自愈 | 停服务 → 把当天 `data/backups/xueba-daily-*.db` 覆盖成任意文本 → 重启 | 日志出现「当天备份校验失败，重新生成」；备份文件恢复为可 `quick_check` 的正常库 |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
 | 学习记录「重建并核对」 | 侧栏「统计」→ 底部「重建并核对」 | 服务在跑：提示「核对一致」或列出差异项（只读，不改本地）；服务没起：提示重建失败，页面数据不变 |
+| 旧地址兼容 | 浏览器打开 `/reader.html#/a/<slug>`（收藏夹里的老链接） | 地址栏 `replaceState` 成 `/reader/a/<slug>`，文章正常打开；普通路径不被改写 |
+| dev SPA 回落 | dev server 跑着时：`curl -s -o /dev/null -w '%{http_code} %{content_type}' http://localhost:5173/reader`；再试 `/reader/a/x`、`/assets/nope.js`、`/reader/missing.js` | `/reader` 与 `/reader/a/x` 返回 `200 text/html`；两个带扩展名的缺失资源返回 `404`（不能回落成 HTML） |
 
 ## 五、已经就绪的层 / 还差什么
 

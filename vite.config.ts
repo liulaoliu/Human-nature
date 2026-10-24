@@ -13,6 +13,8 @@ import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
 import { storeEndpointPlugin } from './tools/vite-store-endpoint.mjs'
 // @ts-expect-error .js 没有类型声明
 import { PRIVATE_FS_DENY } from './server/privatePaths.js'
+// @ts-expect-error .mjs 没有类型声明
+import { devSpaRewrite } from './tools/spa-route.mjs'
 
 /**
  * 单入口 SPA 的 dev 回落：`/reader`、`/reader/**` 和旧地址 `/reader.html`
@@ -26,11 +28,7 @@ function spaRoutePlugin() {
     name: 'spa-route-fallback',
     configureServer(server: { middlewares: { use: (fn: (req: { url?: string }, res: unknown, next: () => void) => void) => void } }) {
       server.middlewares.use((req, _res, next) => {
-        const url = req.url || ''
-        const [path, query] = url.split('?')
-        if (path === '/reader' || path.startsWith('/reader/') || path === '/reader.html') {
-          req.url = '/index.html' + (query ? `?${query}` : '')
-        }
+        req.url = devSpaRewrite(req.url || '')
         next()
       })
     },
