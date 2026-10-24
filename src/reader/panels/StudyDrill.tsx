@@ -286,23 +286,6 @@ export default function DrillBoard({
 
       {cur.kind === 'usage' && (
         <div className="drill-body">
-          {/* 写搭配前的「先看一眼」：释义摆在这里，提示语说清下一步要考什么。
-              不单独占一步、也不要点击——删掉「看卡」那步之后用户要的正是这个。 */}
-          <div className="drill-prep">
-            <div className={`drill-prep-hint${text ? ' is-typing' : ''}`}>
-              👀 马上要考你搭配了 · 先看一眼释义，再写
-            </div>
-            <div className="study-word">
-              {card.word}
-              <button className="speak" onClick={() => onSpeak(card.word)} title="朗读" aria-label="朗读">
-                🔊
-              </button>
-            </div>
-            <div className="study-meaning">
-              {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
-              {displayMeaning(card) || '（无释义）'}
-            </div>
-          </div>
           <input
             className="study-input"
             autoFocus

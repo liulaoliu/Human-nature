@@ -164,7 +164,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     expect(onDone).toHaveBeenCalledTimes(1)
   })
 
-  it('选义答对后直接进「写搭配」，不再多一步「继续写搭配」', () => {
+  it('选义答对后直接进「写搭配」：只有输入框，不显示单词/释义/提示语', () => {
     render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={vi.fn()} onSpellMiss={vi.fn()} reason="timeout" />)
 
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
@@ -176,16 +176,11 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     // ← 回归点：这一步以前要多按一次「继续写搭配（回车）」，纯空转
     expect(screen.queryByRole('button', { name: /继续写搭配/ })).toBeNull()
     expect(screen.getByPlaceholderText('写出它的一个搭配 / 用法')).toBeTruthy()
-    // 但「先看一眼释义」不能一起丢掉：提示语 + 词形 + 释义都在写搭配这一步
-    const hint = screen.getByText(/马上要考你搭配了/)
-    expect(hint.className).not.toContain('is-typing')
-    expect(screen.getByText('放弃')).toBeTruthy()
-
-    // 一敲键盘提示语收起来（高度留着，输入框不跳）
-    const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
-    fireEvent.change(usageInput, { target: { value: 'a' } })
-    expect(hint.className).toContain('is-typing')
-    // 步数也从 4 步变 3 步
+    // ← 2026-10-24 用户要求：只留输入框，不剧透原文、不摆释义、不要提示语
+    expect(screen.queryByText('abandon')).toBeNull()
+    expect(screen.queryByText('放弃')).toBeNull()
+    expect(screen.queryByText(/马上要考你搭配了/)).toBeNull()
+    // 步数从 4 步变 3 步
     expect(screen.getByText(/3\/3 · 写搭配/)).toBeTruthy()
   })
 
