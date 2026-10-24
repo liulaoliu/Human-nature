@@ -101,40 +101,74 @@ export async function runAiBatch(
 ): Promise<AiRunOutcome> {
   const f = resolveFetch(opts.fetchImpl)
   const { signal, onProgress } = opts
+  if (signal.aborted) throw new Error(CANCEL_MESSAGE)
 
-  const res = await f('/api/ai/run', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ jobs: jobs.map((j) => ({ id: j.id, task: j.task, prompt: j.prompt })) }),
-    signal,
-  })
-  if (!res.ok) {
-    const info = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
-    throw new Error(
-      info.error === 'no-key'
-        ? '服务端未配置 key：把 key 填进 config.local.json 的 ai.apiKey'
-        : '启动失败：' + (info.message || res.status),
-    )
-  }
-  const { runId } = (await res.json()) as { runId: string }
-
+  /**
+   * 客户端自己生成 runId，**在启动请求之前**注册取消监听。
+   *
+   * 旧实现要等 `POST /api/ai/run` 回来才拿到 runId；用户在这之前点取消时，
+   * 服务端可能已经把跑批开起来了，却没有 id 可停。现在 runId 跟启动请求一起发，
+   * 服务端先占位再读 body，取消请求无论先到还是后到都能命中。
+   */
+  const runId = 'run-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+  let cancelRunId = runId
+  let cancelPromise: Promise<void> | null = null
   /** 通知服务端停下：不传本地 signal（它已经 abort 了，带上会连取消请求都发不出去）。 */
   const cancelOnServer = () => {
-    void f('/api/ai/cancel', {
+    if (cancelPromise) return cancelPromise
+    cancelPromise = f('/api/ai/cancel', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ runId }),
-    }).catch(() => {
-      // 服务端已经停了 / 断网：本地仍然按取消处理
+      body: JSON.stringify({ runId: cancelRunId }),
+      // 页面关掉/刷新时普通请求会被浏览器取消，keepalive 让它尽量发出去。
+      keepalive: true,
     })
+      .then(() => undefined)
+      .catch(() => {
+        // 服务端已经停了 / 断网：本地仍然按取消处理
+      })
+    return cancelPromise
   }
-  const onAbort = () => cancelOnServer()
+  const onAbort = () => {
+    void cancelOnServer()
+  }
   signal.addEventListener('abort', onAbort, { once: true })
-  if (signal.aborted) cancelOnServer()
 
-  const startedAt = Date.now()
-  let misses = 0
   try {
+    const res = await f('/api/ai/run?runId=' + encodeURIComponent(runId), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jobs: jobs.map((j) => ({ id: j.id, task: j.task, prompt: j.prompt })) }),
+      signal,
+    })
+    if (signal.aborted) throw new Error(CANCEL_MESSAGE)
+    if (!res.ok) {
+      const info = (await res.json().catch(() => ({}))) as { error?: string; message?: string }
+      throw new Error(
+        info.error === 'no-key'
+          ? '服务端未配置 key：把 key 填进 config.local.json 的 ai.apiKey'
+          : '启动失败：' + (info.message || res.status),
+      )
+    }
+    const started = (await res.json()) as { runId?: string }
+    // 正常情况下服务端会原样用客户端 runId；万一它补了一个，取消仍按实际 id 来。
+    const actualRunId = typeof started.runId === 'string' && started.runId ? started.runId : runId
+    cancelRunId = actualRunId
+    if (signal.aborted) {
+      // 启动响应回来之前已经点过取消：确保取消请求带的是服务端真正认的 id。
+      if (actualRunId !== runId) {
+        await f('/api/ai/cancel', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ runId: actualRunId }),
+          keepalive: true,
+        }).catch(() => undefined)
+      }
+      throw new Error(CANCEL_MESSAGE)
+    }
+
+    const startedAt = Date.now()
+    let misses = 0
     for (;;) {
       await sleep(POLL_INTERVAL_MS, signal)
       if (Date.now() - startedAt > MAX_POLL_MS) {
@@ -148,7 +182,7 @@ export async function runAiBatch(
         error?: string
       } | null = null
       try {
-        p = await (await f('/api/ai/run?id=' + encodeURIComponent(runId), { signal })).json()
+        p = await (await f('/api/ai/run?id=' + encodeURIComponent(actualRunId), { signal })).json()
       } catch {
         if (signal.aborted) throw new Error(CANCEL_MESSAGE)
         misses += 1
@@ -173,5 +207,7 @@ export async function runAiBatch(
     }
   } finally {
     signal.removeEventListener('abort', onAbort)
+    // 取消已经发生：等取消请求发出去再退出，别让调用方/页面先走导致请求被掐掉。
+    if (signal.aborted && cancelPromise) await cancelPromise
   }
 }

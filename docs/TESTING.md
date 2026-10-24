@@ -531,6 +531,9 @@ npm run gates                 # 收尾门禁（提交前必跑）
     时间（`snapshots` 最新 key，老库退回词条 `updatedAt`）和 `/vocab` 的 `updatedAt`，本地更新时
     以本地为准。测试要覆盖「本地较新 → 用本地」「服务端较新 → 用服务端」两个方向。
 43. **取消跑批只 abort 本地轮询 = 服务端继续花额度**（2026-10-24）。`runJobs` 现在接收
-    `AbortSignal`（每轮/每次请求前检查、退避等待可打断），`/api/ai/run` 返回 `runId`，
-    `POST /api/ai/cancel` 真正停服务端；客户端先调取消接口再 abort 本地。测试要断言取消后
-    **不再发新的模型请求**（`tools/ai-core.test.mjs` + `adapters/aiRun.test.ts`）。
+    `AbortSignal`（每轮/每次请求前检查、退避等待可打断），`POST /api/ai/cancel` 真正停服务端。
+    **启动窗口也要能取消**：runId 由客户端生成（`/api/ai/run?runId=`），服务端在 `readBody`
+    之前就 `runs.set` 占位；取消请求先到则留墓碑（`cancelledRuns`），后到的启动直接判取消。
+    取消了就 `keepalive: true` 发取消请求，并在 `finally` 里等它发完。测试要断言
+    **取消后不再发新的模型请求**，且启动响应没回来时取消也能命中
+    （`tools/ai-core.test.mjs` 的 `handleAiApi` 用例 + `adapters/aiRun.test.ts`）。

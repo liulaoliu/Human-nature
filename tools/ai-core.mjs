@@ -144,7 +144,19 @@ export async function runJobs(jobs, cfg, { onProgress, signal } = {}) {
 // ---------- HTTP 接口（生产 httpApp.js 与 dev vite 插件共用） ----------
 
 const runs = new Map()
+/** 客户端先发取消、启动请求后到（网络乱序）时，用这个墓碑把新 run 直接判取消。 */
+const cancelledRuns = new Map()
 const RUN_TTL = 30 * 60 * 1000
+const MAX_CANCELLED_IDS = 500
+
+/** 客户端生成的 runId 只允许安全字符，避免被拿来拼 key / 注入。 */
+function isRunId(value) {
+  return typeof value === 'string' && /^run-[A-Za-z0-9_-]{4,64}$/.test(value)
+}
+
+function newRunId() {
+  return 'run-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
+}
 
 function sendJson(res, code, obj) {
   res.statusCode = code
@@ -172,6 +184,15 @@ function gcRuns() {
       runs.delete(id)
     }
   }
+  for (const [id, at] of cancelledRuns) {
+    if (now - at > RUN_TTL) cancelledRuns.delete(id)
+  }
+  // 防止有人刷取消接口把内存撑大
+  while (cancelledRuns.size > MAX_CANCELLED_IDS) {
+    const oldest = cancelledRuns.keys().next().value
+    if (oldest === undefined) break
+    cancelledRuns.delete(oldest)
+  }
 }
 
 /**
@@ -198,6 +219,30 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       })
       return
     }
+    gcRuns()
+    // 先占位再读 body：客户端在启动请求还没回来时点取消，也能按 runId 找到它。
+    // runId 由客户端生成（query 传），服务端只在缺失/非法时补一个。
+    const requested = new URLSearchParams(query || '').get('runId') || ''
+    const runId = isRunId(requested) && !runs.has(requested) ? requested : newRunId()
+    const controller = new AbortController()
+    const run = {
+      state: 'running',
+      done: 0,
+      total: 0,
+      results: [],
+      failed: [],
+      startedAt: Date.now(),
+      error: '',
+      controller,
+    }
+    runs.set(runId, run)
+    // 取消请求先到：启动时直接判取消，别等 body 读完再开跑。
+    if (cancelledRuns.has(runId)) {
+      cancelledRuns.delete(runId)
+      run.state = 'cancelled'
+      run.error = '已取消'
+      controller.abort()
+    }
     readBody(req).then((body) => {
       let jobs
       try {
@@ -206,23 +251,16 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
         jobs = null
       }
       if (!Array.isArray(jobs) || !jobs.length) {
+        run.state = 'error'
+        run.error = 'bad-jobs'
         sendJson(res, 400, { error: 'bad-jobs', message: '缺少 jobs 数组' })
         return
       }
-      gcRuns()
-      const runId = 'run-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8)
-      const controller = new AbortController()
-      const run = {
-        state: 'running',
-        done: 0,
-        total: jobs.length,
-        results: [],
-        failed: [],
-        startedAt: Date.now(),
-        error: '',
-        controller,
+      run.total = jobs.length
+      if (run.state === 'cancelled') {
+        sendJson(res, 200, { runId, state: 'cancelled', total: jobs.length })
+        return
       }
-      runs.set(runId, run)
       runJobs(jobs, cfg, {
         signal: controller.signal,
         onProgress: (done, total, last) => {
@@ -268,6 +306,11 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       }
       const run = runs.get(runId)
       if (!run) {
+        // 取消可能比启动请求先到（网络乱序）：留个墓碑，启动时直接判取消。
+        if (isRunId(runId)) {
+          gcRuns()
+          cancelledRuns.set(runId, Date.now())
+        }
         sendJson(res, 404, { error: 'no-run' })
         return
       }

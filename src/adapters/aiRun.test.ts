@@ -15,7 +15,7 @@ const jobs = [
 function stubFetch(poll: () => Promise<Response>, post: () => Promise<Response> = async () => json({ runId: 'r1' })) {
   const f = vi.fn(async (url: string) => {
     if (url.startsWith('/api/ai/run?id=')) return poll()
-    if (url === '/api/ai/run') return post()
+    if (url.startsWith('/api/ai/run?')) return post()
     return json({ configured: true })
   })
   return f as unknown as typeof fetch
@@ -131,7 +131,7 @@ describe('runAiBatch：轮询到结束', () => {
     const calls: { url: string; init?: RequestInit }[] = []
     const fetchImpl = vi.fn(async (url: string, init?: RequestInit) => {
       calls.push({ url, init })
-      if (url === '/api/ai/run') return json({ runId: 'r9' })
+      if (url.startsWith('/api/ai/run?')) return json({ runId: 'r9' })
       if (url.startsWith('/api/ai/run?id=')) return json({ state: 'running', done: 1 })
       return json({ runId: 'r9', state: 'cancelled' })
     }) as unknown as typeof fetch
@@ -145,6 +145,34 @@ describe('runAiBatch：轮询到结束', () => {
     const cancel = calls.find((c) => c.url === '/api/ai/cancel')
     expect(cancel?.init?.method).toBe('POST')
     expect(JSON.parse(String(cancel?.init?.body))).toEqual({ runId: 'r9' })
+  })
+
+  it('启动请求还没回来就取消：带客户端 runId 通知服务端，不进入轮询', async () => {
+    const ctrl = new AbortController()
+    const calls: { url: string; init?: RequestInit }[] = []
+    let release!: (r: Response) => void
+    const fetchImpl = vi.fn((url: string, init?: RequestInit) => {
+      calls.push({ url, init })
+      if (url.startsWith('/api/ai/run?')) {
+        // 模拟启动响应很慢：这期间用户点了取消
+        return new Promise<Response>((resolve) => {
+          release = resolve
+        })
+      }
+      return Promise.resolve(json({ runId: 'server-x', state: 'cancelled' }))
+    }) as unknown as typeof fetch
+
+    const p = runAiBatch(jobs, { signal: ctrl.signal, fetchImpl })
+    const guard = expect(p).rejects.toThrow(CANCEL_MESSAGE)
+    ctrl.abort()
+    release(json({ runId: 'server-x' }))
+    await guard
+
+    const start = calls.find((c) => c.url.startsWith('/api/ai/run?'))
+    const clientRunId = new URL('http://x' + String(start?.url)).searchParams.get('runId')
+    const cancel = calls.find((c) => c.url === '/api/ai/cancel')
+    expect(JSON.parse(String(cancel?.init?.body))).toEqual({ runId: clientRunId })
+    expect(calls.some((c) => c.url.startsWith('/api/ai/run?id='))).toBe(false)
   })
 
   it('服务端已被别处取消 → 按取消处理，不报成跑批错误', async () => {

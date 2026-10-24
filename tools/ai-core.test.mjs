@@ -1,5 +1,6 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { runJobs } from './ai-core.mjs'
+import { Readable } from 'node:stream'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { handleAiApi, runJobs } from './ai-core.mjs'
 
 const cfg = { baseUrl: 'http://api.test', apiKey: 'k', model: 'm', concurrency: 1 }
 
@@ -9,9 +10,54 @@ const reply = (raw) => ({
   text: async () => '',
 })
 
+const ENV_KEYS = ['DEEPSEEK_API_KEY', 'OPENAI_API_KEY', 'AI_BASE_URL', 'AI_MODEL']
+let savedEnv = {}
+
+beforeEach(() => {
+  savedEnv = Object.fromEntries(ENV_KEYS.map((k) => [k, process.env[k]]))
+  process.env.DEEPSEEK_API_KEY = 'test-key'
+  process.env.AI_BASE_URL = 'http://api.test'
+})
+
 afterEach(() => {
   vi.unstubAllGlobals()
+  for (const k of ENV_KEYS) {
+    if (savedEnv[k] === undefined) delete process.env[k]
+    else process.env[k] = savedEnv[k]
+  }
 })
+
+function fakeReq({ url, method = 'POST', body = '' }) {
+  const req = Readable.from(body ? [body] : [])
+  req.url = url
+  req.method = method
+  return req
+}
+
+function fakeRes() {
+  let finish
+  const done = new Promise((resolve) => {
+    finish = resolve
+  })
+  const res = {
+    statusCode: 0,
+    body: '',
+    setHeader() {},
+    end(chunk = '') {
+      this.body += chunk
+      finish()
+    },
+  }
+  return { res, done }
+}
+
+/** 真正走一遍 handleAiApi 的 HTTP 分支（不是只测 runJobs）。 */
+async function callApi(req) {
+  const { res, done } = fakeRes()
+  handleAiApi(req, res, { root: process.cwd() })
+  await done
+  return { status: res.statusCode, body: JSON.parse(res.body || '{}') }
+}
 
 describe('runJobs：取消后不再花额度', () => {
   it('abort 后不再发新请求，在途那条也不记成失败', async () => {
@@ -73,5 +119,67 @@ describe('runJobs：取消后不再花额度', () => {
 
     expect(out.map((r) => r.raw)).toEqual(['p1', 'p2'])
     expect(onProgress).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('handleAiApi：启动/取消的 HTTP 语义', () => {
+  it('启动后取消：状态变 cancelled，在途模型请求被打断，不再发新的', async () => {
+    let modelCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_url, init) => {
+        modelCalls += 1
+        return new Promise((_resolve, reject) => {
+          init.signal?.addEventListener('abort', () => {
+            const err = new Error('aborted')
+            err.name = 'AbortError'
+            reject(err)
+          })
+        })
+      }),
+    )
+    const runId = 'run-test-cancel-1'
+    const start = await callApi(
+      fakeReq({
+        url: `/api/ai/run?runId=${runId}`,
+        body: JSON.stringify({ jobs: [{ id: 'a', task: 't', prompt: 'p' }] }),
+      }),
+    )
+    expect(start.status).toBe(200)
+    expect(start.body).toMatchObject({ runId, total: 1 })
+    // 让 runJobs 真正把模型请求发出去
+    await new Promise((r) => setTimeout(r, 0))
+    expect(modelCalls).toBe(1)
+
+    const cancel = await callApi(fakeReq({ url: '/api/ai/cancel', body: JSON.stringify({ runId }) }))
+    expect(cancel.body).toMatchObject({ runId, state: 'cancelled', done: 0, total: 1 })
+
+    const poll = await callApi(fakeReq({ url: `/api/ai/run?id=${runId}`, method: 'GET' }))
+    expect(poll.body.state).toBe('cancelled')
+    expect(modelCalls).toBe(1)
+  })
+
+  it('取消比启动先到：墓碑让后续启动直接取消，一个模型请求都不发', async () => {
+    let modelCalls = 0
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        modelCalls += 1
+        return reply('x')
+      }),
+    )
+    const runId = 'run-test-late-1'
+    const cancel = await callApi(fakeReq({ url: '/api/ai/cancel', body: JSON.stringify({ runId }) }))
+    expect(cancel.status).toBe(404)
+
+    const start = await callApi(
+      fakeReq({
+        url: `/api/ai/run?runId=${runId}`,
+        body: JSON.stringify({ jobs: [{ id: 'a', task: 't', prompt: 'p' }] }),
+      }),
+    )
+    expect(start.status).toBe(200)
+    expect(start.body).toMatchObject({ runId, state: 'cancelled' })
+    expect(modelCalls).toBe(0)
   })
 })
