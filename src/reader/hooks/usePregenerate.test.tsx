@@ -92,6 +92,39 @@ describe('usePregenerate', () => {
     expect(result.current.pregen.running).toBe(false)
   })
 
+  it('换文章后旧 run 被取消：不再推进度，也不把结果写到新文章上', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => {
+      release = r
+    })
+    const signals: (AbortSignal | undefined)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        signals.push(init?.signal ?? undefined)
+        await gate
+        return { ok: true, json: async () => ({ cached: false }) } as Response
+      }),
+    )
+    const { result, rerender } = renderHook((props) => usePregenerate(props), {
+      initialProps: { sentences: [{ text: 'old' }], voice: 'v1' },
+    })
+
+    let run!: Promise<void>
+    act(() => {
+      run = result.current.pregenerateAll()
+    })
+    rerender({ sentences: [{ text: 'new' }], voice: 'v1' })
+    release()
+    await act(async () => {
+      await run
+    })
+
+    expect(signals[0]).toBeInstanceOf(AbortSignal)
+    expect(result.current.pregen.done).toBe(0)
+    expect(result.current.pregen.running).toBe(false)
+  })
+
   it('换音色后「已全部缓存」失效', async () => {
     mockTts(() => true)
     const sentences = [{ text: 'hello' }]
