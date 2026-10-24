@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 
 const here = dirname(fileURLToPath(import.meta.url))
 
-function killByPidFile(file) {
+function killByPidFile(file: string): boolean {
   const p = join(here, file)
   if (!existsSync(p)) return false
   let pid = 0
