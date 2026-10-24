@@ -542,3 +542,9 @@ npm run gates                 # 收尾门禁（提交前必跑）
     取消了就 `keepalive: true` 发取消请求，并在 `finally` 里等它发完。测试要断言
     **取消后不再发新的模型请求**，且启动响应没回来时取消也能命中
     （`tools/ai-core.test.mjs` 的 `handleAiApi` 用例 + `adapters/aiRun.test.ts`）。
+44. **句子原文别按词重复存**（2026-10-24）。同一个 `sentenceId` 会被 `source` /
+    `contexts` / `articleEntries` 多处引用，每处各存一份 `sentenceText` 会多出几 MB。
+    落盘统一走 `core/vocab/sentenceTexts` 的 `compactSentenceTexts`（收进
+    `library.sentenceTexts`，键 = `articleId|fileName` + NUL + `sentenceId`），读出走
+    `hydrateSentenceTexts` 补回。**同键文本不一致时不要合并**（可能改过正文），保留各自原文；
+    `compact` 必须幂等，测试覆盖 source / contexts / articleEntries 三处和冲突分支。

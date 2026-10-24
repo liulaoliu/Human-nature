@@ -1,6 +1,7 @@
 import type { VocabRepoPort, VocabSnapshot } from '../core/ports'
 import type { VocabLibrary } from '../types/document'
 import { createLibrary } from '../core/vocab'
+import { compactSentenceTexts, hydrateSentenceTexts } from '../core/vocab/sentenceTexts'
 import { StoreConflictError, storeHealth, storeRequest } from './storeApi'
 import { HybridMode } from './hybridMode'
 
@@ -95,7 +96,7 @@ export class IdbVocabRepo implements VocabRepoPort {
 
   async load(): Promise<VocabLibrary> {
     const value = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
-    return value ?? createLibrary()
+    return hydrateSentenceTexts(value ?? createLibrary())
   }
 
   async markDirty(): Promise<void> {
@@ -189,28 +190,30 @@ export class IdbVocabRepo implements VocabRepoPort {
 
   async loadSnapshot(at: string): Promise<VocabLibrary | null> {
     try {
-      return (await this.run<VocabLibrary | undefined>(SNAP_STORE, 'readonly', (s) => s.get(at))) ?? null
+      const value = (await this.run<VocabLibrary | undefined>(SNAP_STORE, 'readonly', (s) => s.get(at))) ?? null
+      return value ? hydrateSentenceTexts(value) : null
     } catch {
       return null
     }
   }
 
   async save(library: VocabLibrary): Promise<void> {
+    const next = compactSentenceTexts(library)
     // 先读了旧值放 backup，再写新的：任何一次覆盖之后都还有「上一版」可退
     try {
       const prev = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
       // 上一版 = 刚被覆盖的那一版（和 SQLite 那边同一口径）。旧规则「只留更大的那份」
       // 会让历史最大值永远占着 prev，之后所有缩水事故都退不回去。空库不算上一版。
       if (prev && prev.items.length > 0) {
-        await this.run(STORE, 'readwrite', (s) => s.put(prev, PREV_KEY))
+        await this.run(STORE, 'readwrite', (s) => s.put(compactSentenceTexts(prev), PREV_KEY))
       }
     } catch {
       // 备份失败不挡主流程
     }
-    await this.run(STORE, 'readwrite', (s) => s.put(library, KEY))
+    await this.run(STORE, 'readwrite', (s) => s.put(next, KEY))
     // 再落一版历史快照（多步可退；失败不影响主流程）
     try {
-      await this.snapshot(library, new Date().toISOString())
+      await this.snapshot(next, new Date().toISOString())
     } catch {
       // 快照失败不挡主流程
     }
@@ -219,7 +222,8 @@ export class IdbVocabRepo implements VocabRepoPort {
   /** 取「上一版」快照（没有就 null）。 */
   async loadPrev(): Promise<VocabLibrary | null> {
     try {
-      return (await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(PREV_KEY))) ?? null
+      const value = (await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(PREV_KEY))) ?? null
+      return value ? hydrateSentenceTexts(value) : null
     } catch {
       return null
     }
@@ -238,7 +242,7 @@ export class MemoryVocabRepo implements VocabRepoPort {
   private snaps = new Map<string, VocabLibrary>()
   private dirty = false
   async load(): Promise<VocabLibrary> {
-    return this.library
+    return hydrateSentenceTexts(this.library)
   }
   async markDirty(): Promise<void> {
     this.dirty = true
@@ -250,13 +254,14 @@ export class MemoryVocabRepo implements VocabRepoPort {
     this.dirty = false
   }
   async save(library: VocabLibrary): Promise<void> {
+    const next = compactSentenceTexts(library)
     // 同 IDB 实现：上一版 = 刚被覆盖的那一版；空库不算上一版
     if (this.library.items.length > 0) this.prev = this.library
-    this.library = library
-    this.snaps.set(new Date().toISOString() + ':' + this.snaps.size, library)
+    this.library = next
+    this.snaps.set(new Date().toISOString() + ':' + this.snaps.size, next)
   }
   async loadPrev(): Promise<VocabLibrary | null> {
-    return this.prev
+    return this.prev ? hydrateSentenceTexts(this.prev) : null
   }
   async listSnapshots(): Promise<VocabSnapshot[]> {
     return [...this.snaps.entries()]
@@ -264,7 +269,8 @@ export class MemoryVocabRepo implements VocabRepoPort {
       .sort((a, b) => b.at.localeCompare(a.at))
   }
   async loadSnapshot(at: string): Promise<VocabLibrary | null> {
-    return this.snaps.get(at) ?? null
+    const value = this.snaps.get(at) ?? null
+    return value ? hydrateSentenceTexts(value) : null
   }
   async clear(): Promise<void> {
     this.prev = this.library
@@ -398,7 +404,7 @@ export class HybridVocabRepo implements VocabRepoPort {
           } catch {
             // 本地镜像读失败：退回服务端版本
           }
-          return r.value
+          return hydrateSentenceTexts(r.value)
         }
         // 服务端还是空库：把浏览器里的旧词库迁上去（首次升级走这里）。
         const local = await this.local.load()
@@ -415,7 +421,7 @@ export class HybridVocabRepo implements VocabRepoPort {
           } catch {
             // 清标记失败不影响迁移结果
           }
-          return migrated.value ?? local
+          return hydrateSentenceTexts(migrated.value ?? local)
         }
         return createLibrary()
       } catch {
@@ -443,6 +449,8 @@ export class HybridVocabRepo implements VocabRepoPort {
   }
 
   async save(library: VocabLibrary): Promise<void> {
+    // 落盘前把重复的句子原文收进共享表（UI/业务仍然拿 hydrated 的 library）。
+    const next = compactSentenceTexts(library)
     if (await this.useSqlite()) {
       try {
         if (!this.revisionKnown) await this.ensureRevisionKnown()
@@ -450,7 +458,7 @@ export class HybridVocabRepo implements VocabRepoPort {
           '/vocab',
           {
             method: 'PUT',
-            body: JSON.stringify(library),
+            body: JSON.stringify(next),
             ...(this.revision ? { headers: { 'X-Vocab-Base': this.revision } } : {}),
           },
           undefined,
@@ -461,7 +469,7 @@ export class HybridVocabRepo implements VocabRepoPort {
         // 镜像到 IndexedDB：SQLite 文件损坏/服务起不来时还有本机一份。
         // 这次服务端写成功了，清掉之前失败留下的“未同步”标记。
         void this.local
-          .save(library)
+          .save(next)
           .then(async () => {
             try {
               await this.local.clearDirty?.()
@@ -486,7 +494,7 @@ export class HybridVocabRepo implements VocabRepoPort {
     }
     // 服务端没写成（或服务没起）：本地这份是**未同步**的，必须置脏；
     // 下次启动只有这种标记才允许本机优先。
-    await this.local.save(library)
+    await this.local.save(next)
     try {
       await this.local.markDirty?.()
     } catch {
@@ -497,9 +505,10 @@ export class HybridVocabRepo implements VocabRepoPort {
   async loadPrev(): Promise<VocabLibrary | null> {
     if (await this.useSqlite()) {
       try {
-        return (
+        const value = (
           await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev', {}, undefined, READ_TIMEOUT_MS)
         ).value
+        return value ? hydrateSentenceTexts(value) : null
       } catch {
         this.hybrid.fail()
       }
@@ -523,7 +532,7 @@ export class HybridVocabRepo implements VocabRepoPort {
   async loadSnapshot(at: string): Promise<VocabLibrary | null> {
     if (await this.useSqlite()) {
       try {
-        return (
+        const value = (
           await storeRequest<{ value: VocabLibrary | null }>(
             `/vocab/snapshots/${encodeURIComponent(at)}`,
             {},
@@ -531,6 +540,7 @@ export class HybridVocabRepo implements VocabRepoPort {
             READ_TIMEOUT_MS,
           )
         ).value
+        return value ? hydrateSentenceTexts(value) : null
       } catch {
         this.hybrid.fail()
       }

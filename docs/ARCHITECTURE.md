@@ -111,6 +111,7 @@ types ← core ← adapters ← reader
 - 词条类型：`core/entryKind.ts`（`KIND_LABEL` / `KIND_ORDER`）。
 - 按篇收录 / 编号 / 语境释义：`core/articleVocab.ts`（`ArticleVocabEntry` 唯一 SSOT）、
   `core/articleNums.ts`、`core/articleMeaning.ts`。视图里不许再过一遍「正文 ∩ 词库」。
+- 句子原文共享：`core/vocab/sentenceTexts.ts`（落盘 `compact`、读出 `hydrate`；同一句只存一份）。
 - 打印范围/内容/分组：`core/printPlan.ts`（同时是文案来源 `PRINT_*_LABEL`）。
 - 日期：`core/activity.ts`。
 - 语言点的键与签名：`core/langPoints.ts`。

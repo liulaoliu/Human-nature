@@ -23,10 +23,12 @@ import type { AnswerEvent } from './answerEvents'
 
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段；按篇条目取并集。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
+  const sentenceTexts = { ...(current.sentenceTexts ?? {}), ...(incoming.sentenceTexts ?? {}) }
   return dedupeLibrary({
     schemaVersion: current.schemaVersion,
     items: [...current.items, ...incoming.items],
     articleEntries: mergeArticleEntries(current.articleEntries ?? [], incoming.articleEntries ?? []),
+    ...(Object.keys(sentenceTexts).length ? { sentenceTexts } : {}),
   })
 }
 

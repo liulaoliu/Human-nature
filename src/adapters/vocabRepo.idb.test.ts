@@ -39,6 +39,26 @@ function deleteDb(name: string): Promise<void> {
   })
 }
 
+function readRaw(name: string): Promise<Record<string, unknown>> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(name)
+    req.onsuccess = () => {
+      const db = req.result
+      const t = db.transaction('library', 'readonly')
+      const get = t.objectStore('library').get('library')
+      get.onsuccess = () => {
+        db.close()
+        resolve(get.result as Record<string, unknown>)
+      }
+      get.onerror = () => {
+        db.close()
+        reject(get.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
 afterEach(async () => {
   await Promise.all(names.splice(0).map(deleteDb))
 })
@@ -55,6 +75,28 @@ describe('IdbVocabRepo：快照库', () => {
     const back = await repo.loadSnapshot(snapshots[0].at)
     expect(back?.items).toHaveLength(3)
     expect(back?.items[0].word).toBe('w0')
+  })
+
+  it('保存时把重复句子原文收进 sentenceTexts，读回仍完整', async () => {
+    const name = dbName()
+    const repo = new IdbVocabRepo(name)
+    const source = { articleId: 'art-1', fileName: null, sentenceId: 's1', sentenceText: 'The bank raised its rate.' }
+    await repo.save({
+      ...createLibrary(),
+      items: [
+        vocabItem({ id: 'a', lemma: 'bank', source }),
+        vocabItem({ id: 'b', lemma: 'rate', source }),
+      ],
+    })
+
+    const raw = await readRaw(name)
+    expect(Object.keys(raw.sentenceTexts as Record<string, string>)).toHaveLength(1)
+    const rawItems = raw.items as { source?: { sentenceText?: string } }[]
+    expect(rawItems[0].source?.sentenceText).toBe('')
+
+    const back = await repo.load()
+    expect(back.items[0].source?.sentenceText).toBe('The bank raised its rate.')
+    expect(back.items[1].source?.sentenceText).toBe('The bank raised its rate.')
   })
 
   it('未同步标记能落盘、读回并清除（v3 的 meta store）', async () => {

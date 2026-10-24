@@ -329,6 +329,14 @@ export interface VocabLibrary {
   items: VocabItem[]
   /** 按篇收录表；老数据没有该字段，迁移时从来源/语境补出来 */
   articleEntries?: ArticleVocabEntry[]
+  /**
+   * 句子原文的共享表（键见 `core/vocab/sentenceTexts`）。
+   *
+   * 同一句会被多个词条的 `source` / `contexts` / `articleEntries` 引用；只在
+   * 落盘时把原文收进这里，读出来再补回各自字段。老数据没有该字段，照常从
+   * 各处的 `sentenceText` 读。
+   */
+  sentenceTexts?: Record<string, string>
 }
 
 /**
