@@ -10,7 +10,7 @@ const watchdogPid = join(here, '.watchdog.pid')
 const childPid = join(here, '.child.pid')
 
 writeFileSync(watchdogPid, String(process.pid), 'utf8')
-const cleanup = () => {
+const cleanup = (): void => {
   for (const f of [watchdogPid, childPid]) {
     try {
       rmSync(f, { force: true })
@@ -33,14 +33,14 @@ const wd = new Watchdog({
   maxRestarts: 10,
   restartDelayMs: 2000,
 })
-wd.on('spawn', (pid) => {
+wd.on('spawn', (pid: number | undefined) => {
   try {
     writeFileSync(childPid, String(pid), 'utf8')
   } catch {
     // ignore
   }
 })
-wd.on('exit', (info) => {
+wd.on('exit', (info: { message: string; code?: number | null }) => {
   console.log(`[watchdog] ${info.message}${info.code != null ? ` (code ${info.code})` : ''}`)
 })
 wd.start()

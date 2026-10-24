@@ -3,7 +3,7 @@
 # ~/.config/systemd/user/shadowing-reader.service。
 # 角色对应 Windows 的「注册表 Run 键 + silent-start.vbs」：登录后后台拉起本地服务。
 #
-# 崩溃重启沿用仓库自带的 Node watchdog（server/watchdog-cli.js）：
+# 崩溃重启沿用仓库自带的 Node watchdog（server/watchdog-cli.ts）：
 #   systemd 守护 watchdog，watchdog 守护 Vite/appServer。分层和 Windows 一致。
 [Unit]
 Description=Shadowing Reader (学吧老哥) local service
@@ -14,7 +14,7 @@ After=network.target
 Type=simple
 WorkingDirectory=__ROOT__
 Environment=PATH=__NODE_DIR__:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-ExecStart=__NODE__ __ROOT__/server/watchdog-cli.js
+ExecStart=__NODE__ __ROOT__/server/watchdog-cli.ts
 Restart=always
 RestartSec=2
 # 停服务时把整个 cgroup（watchdog + 子进程 Vite/appServer）一起收掉

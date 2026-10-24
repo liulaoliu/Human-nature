@@ -7,7 +7,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 // 后台静默启动 watchdog（崩溃自动重启）。
 // detached + windowsHide + stdio ignore：完全脱离控制台，关掉命令行窗口不影响运行。
 export function spawnDetachedServer(spawnFn = spawn) {
-  const child = spawnFn(process.execPath, [join(here, 'watchdog-cli.js')], {
+  const child = spawnFn(process.execPath, [join(here, 'watchdog-cli.ts')], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
