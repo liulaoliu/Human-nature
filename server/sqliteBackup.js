@@ -2,7 +2,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, st
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { SCHEMA_VERSION } from './sqliteSchema.js'
-import { localDayKey } from './localDate.js'
+import { localDayKey } from './localDate.ts'
 
 /** schema 迁移前的整库备份，留最近 5 份。 */
 const DB_BACKUP_KEEP = 5

@@ -13,7 +13,7 @@ import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
 import { allowLocalRequest } from './sameOrigin.js'
 import { PRIVATE_FS_DENY } from './privatePaths.js'
-import { localDayKey } from './localDate.js'
+import { localDayKey } from './localDate.ts'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')

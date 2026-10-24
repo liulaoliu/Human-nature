@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION } from './sqliteStore.js'
 import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.js'
-import { localDayKey } from './localDate.js'
+import { localDayKey } from './localDate.ts'
 import { gzip } from 'node:zlib'
 import { promisify } from 'node:util'
 

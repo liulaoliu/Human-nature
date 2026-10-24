@@ -5,7 +5,7 @@
  * 导出的文件会标成前一天，备份也会落到前一天的文件名上。这里不引入 04:00 结算
  * （那是学习统计的口径），文件名只表达“本机今天”。
  */
-export function localDayKey(d = new Date()) {
-  const pad = (n) => String(n).padStart(2, '0')
+export function localDayKey(d: Date = new Date()): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
