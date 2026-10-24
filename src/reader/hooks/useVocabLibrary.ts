@@ -89,6 +89,8 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       .then((raw) => {
         // 老数据兼容 / 清洗 / 去重**统一收口**在 core/migrations；顺手自检不变量
         const fixed = migrateLibrary(raw)
+        const notice = r.takeNotice?.()
+        if (notice) flash(notice)
         if (import.meta.env?.DEV) {
           const errors = libraryErrors(fixed)
           if (errors.length) console.warn('[词库] 迁移后仍有问题：', errors.slice(0, 10))

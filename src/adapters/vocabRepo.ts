@@ -6,16 +6,19 @@ import { HybridMode } from './hybridMode'
 
 const DB_NAME = 'shadowing-vocab'
 /**
- * v1 只建了 `library`，`snapshots` 从来不存在；v2 补建。
- * 升级必须在 `onupgradeneeded` 里同时建两个 store，不能等到写入时再建。
+ * v1 只建了 `library`，`snapshots` 从来不存在；v2 补建；v3 再补 `meta`（记未同步标记）。
+ * 升级必须在 `onupgradeneeded` 里把**所有** store 建齐，不能等到写入时再建。
  */
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE = 'library'
 const KEY = 'library'
 /** 覆盖前把旧值留一份（防「读失败 → 写空库」这类事故；换机器/误删时能救回） */
 const PREV_KEY = 'library:prev'
 /** 历史快照库（同一 IndexedDB 里另开一个 store：记录单条几 MB 也能接受） */
 const SNAP_STORE = 'snapshots'
+/** 元数据：只放“本机有未同步改动”这类小标记，不跟词库正文混在一起 */
+const META_STORE = 'meta'
+const DIRTY_KEY = 'vocab:dirty'
 /** 保留最近多少版（外加「历史最大的一版」永远不淘汰） */
 const SNAP_KEEP = 5
 
@@ -39,6 +42,7 @@ export class IdbVocabRepo implements VocabRepoPort {
           const db = req.result
           if (!db.objectStoreNames.contains(STORE)) db.createObjectStore(STORE)
           if (!db.objectStoreNames.contains(SNAP_STORE)) db.createObjectStore(SNAP_STORE)
+          if (!db.objectStoreNames.contains(META_STORE)) db.createObjectStore(META_STORE)
         }
         req.onsuccess = () => resolve(req.result)
         req.onerror = () => {
@@ -92,6 +96,27 @@ export class IdbVocabRepo implements VocabRepoPort {
   async load(): Promise<VocabLibrary> {
     const value = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
     return value ?? createLibrary()
+  }
+
+  async markDirty(): Promise<void> {
+    await this.run(META_STORE, 'readwrite', (s) => s.put(new Date().toISOString(), DIRTY_KEY))
+  }
+
+  async isDirty(): Promise<boolean> {
+    try {
+      return !!(await this.run<string | undefined>(META_STORE, 'readonly', (s) => s.get(DIRTY_KEY)))
+    } catch {
+      // 老库升级失败 / 隐私模式：宁可当没脏，也别因此拒绝读服务端
+      return false
+    }
+  }
+
+  async clearDirty(): Promise<void> {
+    try {
+      await this.run(META_STORE, 'readwrite', (s) => s.delete(DIRTY_KEY))
+    } catch {
+      // 清标记失败不影响主流程；下次保存成功会再清一次
+    }
   }
 
   /** 往快照库追加一版，并按策略瘦身（留最近 N 版 + 历史最大的一版）。 */
@@ -202,6 +227,7 @@ export class IdbVocabRepo implements VocabRepoPort {
 
   async clear(): Promise<void> {
     await this.run(STORE, 'readwrite', (s) => s.delete(KEY))
+    await this.clearDirty()
   }
 }
 
@@ -210,8 +236,18 @@ export class MemoryVocabRepo implements VocabRepoPort {
   private library: VocabLibrary = createLibrary()
   private prev: VocabLibrary | null = null
   private snaps = new Map<string, VocabLibrary>()
+  private dirty = false
   async load(): Promise<VocabLibrary> {
     return this.library
+  }
+  async markDirty(): Promise<void> {
+    this.dirty = true
+  }
+  async isDirty(): Promise<boolean> {
+    return this.dirty
+  }
+  async clearDirty(): Promise<void> {
+    this.dirty = false
   }
   async save(library: VocabLibrary): Promise<void> {
     // 同 IDB 实现：上一版 = 刚被覆盖的那一版；空库不算上一版
@@ -233,6 +269,7 @@ export class MemoryVocabRepo implements VocabRepoPort {
   async clear(): Promise<void> {
     this.prev = this.library
     this.library = createLibrary()
+    this.dirty = false
   }
 }
 
@@ -278,8 +315,16 @@ export class HybridVocabRepo implements VocabRepoPort {
    * 服务端空库才允许写，已有数据就按冲突处理，让用户刷新。
    */
   private revisionKnown = false
+  /** 加载时需要提示用户的一次性消息（例如“本机有未同步改动”）。 */
+  private notice: string | null = null
 
   constructor(private readonly local: VocabRepoPort = createLocalVocabRepo()) {}
+
+  takeNotice(): string | null {
+    const n = this.notice
+    this.notice = null
+    return n
+  }
 
   private useSqlite(): Promise<boolean> {
     return this.hybrid.useSqlite()
@@ -331,14 +376,25 @@ export class HybridVocabRepo implements VocabRepoPort {
       try {
         const r = await this.loadServerRevision()
         if (r.value) {
-          // 服务端有值不代表它最新：离线期间写进 IndexedDB 的改动可能更新。
-          // 本地镜像更新时以本地为准（下一次保存会带着服务端版本号写回去），
-          // 不能静默用服务端旧版把它顶掉。
+          // 只有「本机确实有未同步改动」才允许本地优先。
+          // 不能只看本机镜像写入时间：每次服务端保存成功也会写镜像，时间经常比服务端晚，
+          // 会把另一台设备刚写入的词库当成旧版。老实现没有 isDirty 时退回时间比较。
           try {
             const local = await this.local.load()
-            const localAt = await this.localSavedAt(local)
-            const serverAt = r.updatedAt ? Date.parse(r.updatedAt) : 0
-            if (localAt > serverAt) return local
+            if (typeof this.local.isDirty === 'function') {
+              if (await this.local.isDirty()) {
+                this.notice =
+                  '本机有未同步的词库改动，已优先使用本机版本；如果另一台设备也改过词库，请先导出备份再覆盖'
+                return local
+              }
+            } else {
+              const localAt = await this.localSavedAt(local)
+              const serverAt = r.updatedAt ? Date.parse(r.updatedAt) : 0
+              if (localAt > serverAt) {
+                this.notice = '本机镜像比服务端新，已优先使用本机；如另一台设备也改过，请先导出备份'
+                return local
+              }
+            }
           } catch {
             // 本地镜像读失败：退回服务端版本
           }
@@ -354,6 +410,11 @@ export class HybridVocabRepo implements VocabRepoPort {
           }>('/vocab/if-empty', { method: 'PUT', body: JSON.stringify(local) }, undefined, SAVE_TIMEOUT_MS)
           this.revision = migrated.updatedAt ?? null
           this.revisionKnown = true
+          try {
+            await this.local.clearDirty?.()
+          } catch {
+            // 清标记失败不影响迁移结果
+          }
           return migrated.value ?? local
         }
         return createLibrary()
@@ -398,7 +459,17 @@ export class HybridVocabRepo implements VocabRepoPort {
         if (r?.updatedAt) this.revision = r.updatedAt
         this.revisionKnown = true
         // 镜像到 IndexedDB：SQLite 文件损坏/服务起不来时还有本机一份。
-        void this.local.save(library).catch((e) => console.warn('[词库] 镜像到 IndexedDB 失败', e))
+        // 这次服务端写成功了，清掉之前失败留下的“未同步”标记。
+        void this.local
+          .save(library)
+          .then(async () => {
+            try {
+              await this.local.clearDirty?.()
+            } catch {
+              // 清标记失败不影响已成功的服务端保存
+            }
+          })
+          .catch((e) => console.warn('[词库] 镜像到 IndexedDB 失败', e))
         return
       } catch (e) {
         if (e instanceof StoreConflictError) {
@@ -413,7 +484,14 @@ export class HybridVocabRepo implements VocabRepoPort {
         this.hybrid.fail()
       }
     }
+    // 服务端没写成（或服务没起）：本地这份是**未同步**的，必须置脏；
+    // 下次启动只有这种标记才允许本机优先。
     await this.local.save(library)
+    try {
+      await this.local.markDirty?.()
+    } catch {
+      // 标记失败不影响本地保存；只是下次可能退回服务端版本
+    }
   }
 
   async loadPrev(): Promise<VocabLibrary | null> {

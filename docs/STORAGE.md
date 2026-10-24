@@ -69,9 +69,10 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ```
 
 - 迁移是**一次性、自动**的：服务端空库才把 IndexedDB 旧数据迁上去。
-- 服务端有值也不代表它最新：`HybridVocabRepo.load()` 比较本机镜像最后一次写入时间
-  （`snapshots` 最新 key，老库退回词条 `updatedAt`）与 `/vocab` 的 `updatedAt`；
-  **本地更新时以本地为准**，不会静默用服务端旧版把离线改动顶掉。下一次保存会带服务端版本号写回。
+- 服务端有值也不代表它最新：`HybridVocabRepo` 只在**服务端写失败/服务不可用**时给 IndexedDB
+  镜像置 `vocab:dirty`（v3 的 `meta` store）。`load()` 看到脏标记才以本地为准，不会静默用
+  服务端旧版把离线改动顶掉；正常镜像（只是成功保存后的副本）一律用服务端。下一次保存会带
+  服务端版本号写回，成功后清脏。两边都改过的真冲突目前仍本机优先并提示用户，合并选择是后续债务。
 - 同一 id 的文章两边都有时，`updatedAt` 更新的那一版优先（离线改过的不会被旧库盖掉）。
 - 文章的 `createdAt` 由服务端在覆盖保存时保留（客户端没带也不重置）；列表日期以建立日为主，
   只有内容真的改过才显示修改日。
@@ -81,8 +82,9 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
   只有服务端确实为空才允许 PUT（否则本地旧镜像会强制覆盖别处的新数据）。
 - 词库 PUT 有 12s 超时；`useVocabLibrary` 保存失败会把那一版放回待写队列并按 1s→2s→4s…（封顶 15s）
   自动重试，成功一次清零。版本冲突不自动重试（重试等于替用户决定覆盖服务器）。
-- IndexedDB 兜底库 `shadowing-vocab` 从 v1 升到 v2：v1 只建了 `library`，`snapshots` 从未创建；
-  v2 在 `onupgradeneeded` 里同时建两个 store，旧词库保留。快照读写都走 `snapshots` store。
+- IndexedDB 兜底库 `shadowing-vocab` 从 v1 升到 v3：v1 只建了 `library`，`snapshots` 从未创建；
+  v2 补 `snapshots`，v3 再补 `meta`（只放未同步标记）。`onupgradeneeded` 必须把三个 store
+  一次建齐，旧词库保留。快照读写都走 `snapshots` store。
 - **没有本地服务时**（把 `dist` 丢到任意静态服务器 / GitHub Pages）行为跟以前一样，只是没有 SQLite。
 
 ## 四、数据库长什么样

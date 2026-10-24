@@ -255,4 +255,16 @@ export interface VocabRepoPort {
   listSnapshots?(): Promise<VocabSnapshot[]>
   /** 按时刻取回某一版快照 */
   loadSnapshot?(at: string): Promise<VocabLibrary | null>
+  /**
+   * 本机是否有**未同步到服务端**的改动。
+   *
+   * 不能拿「本机写入时间 > 服务端 updatedAt」代替：每次服务端保存成功也会写本机镜像，
+   * 镜像时间经常比服务端晚几毫秒，结果把别处的新词库当成旧版。只有服务端写失败/离线
+   * 落盘时才置脏，读的时候才允许本机优先。
+   */
+  markDirty?(): Promise<void>
+  isDirty?(): Promise<boolean>
+  clearDirty?(): Promise<void>
+  /** 取一条“这次加载需要让用户知道”的提示（取完即清，避免每次渲染重复弹）。 */
+  takeNotice?(): string | null
 }

@@ -89,13 +89,16 @@ describe('HybridVocabRepo：本地镜像比服务端新', () => {
       items: [vocabItem({ id: 'local', word: 'local', lemma: 'local' })],
     }
     await local.save(localLib) // fake time 2026-10-24
+    await local.markDirty() // 模拟离线期间服务端写失败
     storeRequest.mockResolvedValueOnce({
       value: { ...lib(1), items: [vocabItem({ id: 'server', word: 'server', lemma: 'server' })] },
       updatedAt: '2026-10-23T00:00:00.000Z',
     })
 
-    const loaded = await new HybridVocabRepo(local).load()
+    const repo = new HybridVocabRepo(local)
+    const loaded = await repo.load()
     expect(loaded.items.map((it) => it.id)).toEqual(['local'])
+    expect(repo.takeNotice()).toContain('未同步')
   })
 
   it('服务端确实更新时仍用服务端版本', async () => {
@@ -110,5 +113,43 @@ describe('HybridVocabRepo：本地镜像比服务端新', () => {
 
     const loaded = await new HybridVocabRepo(local).load()
     expect(loaded.items.map((it) => it.id)).toEqual(['server-new'])
+  })
+
+  it('镜像时间更晚但没有未同步标记 → 仍用服务端（别把镜像当成改动）', async () => {
+    const local = new MemoryVocabRepo()
+    await local.save(lib(2)) // 只是成功保存后的镜像，没有 markDirty
+    storeRequest.mockResolvedValueOnce({
+      value: { ...lib(1), items: [vocabItem({ id: 'server', word: 'server', lemma: 'server' })] },
+      updatedAt: '2026-10-23T00:00:00.000Z',
+    })
+
+    const loaded = await new HybridVocabRepo(local).load()
+    expect(loaded.items.map((it) => it.id)).toEqual(['server'])
+  })
+
+  it('服务端保存失败 → 本机置脏，下次启动才允许本机优先', async () => {
+    const local = new MemoryVocabRepo()
+    storeRequest.mockRejectedValueOnce(new Error('offline'))
+    const repo = new HybridVocabRepo(local)
+
+    await repo.save(lib(3))
+
+    expect(await local.isDirty()).toBe(true)
+    expect((await local.load()).items).toHaveLength(3)
+  })
+
+  it('服务端保存成功 → 清掉之前的未同步标记', async () => {
+    const local = new MemoryVocabRepo()
+    await local.markDirty()
+    storeRequest
+      .mockResolvedValueOnce({ value: null, updatedAt: null }) // ensureRevisionKnown：服务端为空
+      .mockResolvedValueOnce({ updatedAt: 'srv-1' }) // PUT 成功
+    const repo = new HybridVocabRepo(local)
+
+    await repo.save(lib(2))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(await local.isDirty()).toBe(false)
   })
 })

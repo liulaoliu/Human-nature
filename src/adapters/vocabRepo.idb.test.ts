@@ -57,6 +57,15 @@ describe('IdbVocabRepo：快照库', () => {
     expect(back?.items[0].word).toBe('w0')
   })
 
+  it('未同步标记能落盘、读回并清除（v3 的 meta store）', async () => {
+    const repo = new IdbVocabRepo(dbName())
+    expect(await repo.isDirty()).toBe(false)
+    await repo.markDirty()
+    expect(await repo.isDirty()).toBe(true)
+    await repo.clearDirty()
+    expect(await repo.isDirty()).toBe(false)
+  })
+
   it('从 v1 旧库升级：补建 snapshots，旧词库还在', async () => {
     const name = dbName()
     // 模拟线上旧库：version 1，只有 library store
