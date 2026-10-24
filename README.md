@@ -66,7 +66,7 @@ npm run dev
 **看真实体感（或自己天天用）跑生产构建**：
 
 ```
-npm run app        # = npm run build && node server/appServer.js，还是 5173 端口
+npm run app        # = npm run build && node server/appServer.ts，还是 5173 端口
 ```
 
 首屏从「219 个模块」变成「1 个 chunk（gzip 后 203KB）+ 一个 css」，静态资源已开 gzip。
@@ -92,7 +92,7 @@ npm run app        # = npm run build && node server/appServer.js，还是 5173 �
 - **服务 = 实时开发服务器**：AI 改完源码，页面自动热更新，无需重启、无需构建。`npm test` / 类型检查不受影响。
 - **端口 5173**（`config.json`）：同 origin 保数据。
 - 崩了 **watchdog 自动重启**（连续 10 次则停）；PID 在 `server\.watchdog.pid` / `.child.pid`。
-- 随时 `node server/status.js` 看状态（PID / 运行时长 / 地址）。
+- 随时 `node server/status.ts` 看状态（PID / 运行时长 / 地址）。
 - 「存入项目」可用（`POST /__state` → `public\shadowing-state.json`）。
 
 ### 想换成"冻结版"不被打扰？（可选）
@@ -125,21 +125,21 @@ watchdog、PID 文件、`status.js` / `stop.js` 全部复用，不重复造轮�
 
 - 服务单元：`~/.config/systemd/user/shadowing-reader.service`，由 `server/shadowing-reader.service.template`
   生成（写入时替换项目路径与 node 绝对路径）。
-- **分层和 Windows 完全一致**：`systemd` 守护 `server/watchdog-cli.js`，watchdog 再守护 Vite/appServer；
-  `node server/status.js` 照常能看状态。
+- **分层和 Windows 完全一致**：`systemd` 守护 `server/watchdog-cli.ts`，watchdog 再守护 Vite/appServer；
+  `node server/status.ts` 照常能看状态。
 - `安装开机自启.sh` 会顺带 `loginctl enable-linger $USER`：除了登录，**开机（未登录）也会启动**。
   不想要就 `loginctl disable-linger $USER`。
 - 状态与日志：
 
 ```
-node server/status.js                        # 或 ./启动服务.sh
+node server/status.ts                        # 或 ./启动服务.sh
 systemctl --user status shadowing-reader.service
 journalctl --user -u shadowing-reader.service -f   # 实时日志
 ```
 
 - 首次使用、或 node 版本升级（nvm 路径变了）后，重新跑一次 `./安装开机自启.sh` 刷新路径即可。
 - 脚本写法与 Windows 一致：`.sh` 用 LF 行尾，名称对应同一角色；没装 systemd 时 `启动服务.sh` / `停止服务.sh`
-  会自动退回仓库自带的 Node 分离进程（`server/silent-start.js`）。
+  会自动退回仓库自带的 Node 分离进程（`server/silent-start.ts`）。
 
 
 ## 学吧老哥 · 生词本 / 精读（`/reader`）
@@ -277,7 +277,7 @@ journalctl --user -u shadowing-reader.service -f   # 实时日志
   也可用 `GET /api/tts/words?voice=…&text=…` 取——方便做逐词高亮 / 卡拉OK / 点词跳转
   （Edge 来自 `WordBoundary`；SAPI 来自 `SpeakProgress` 事件）。**Piper 不提供时间戳**，该路返回 `[]`，
   逐词高亮会自动跳过，音频照常播放。
-- **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.js`；
+- **接口由谁提供**：dev 走 Vite 插件 `tools/vite-tts-endpoint.mjs`；static 走 `server/httpApp.ts`；
   引擎与缓存逻辑共用 `tools/tts-core.mjs`。在线那路用 [`node-edge-tts`](https://www.npmjs.com/package/node-edge-tts)（MIT，免 key）。
   加固：并发上限 2、硬超时 20s、失败重试 1 次、`.part` 清理。
 - **合法替代**：内置 Piper 已经比系统机器人音自然很多；想更接近真人可再换 XTTS-v2 / Kokoro / Azure 语音（未内置，留作扩展点）。
@@ -542,12 +542,12 @@ tools/              构建期脚本（Python 抽取 + Node 小工具）
   build-ecdict.mjs         ECDICT csv → public/ecdict*.tsv（离线词典索引）
   build-mwld.mjs           M-W notes.csv → public/mwld.tsv（真 IPA + 英文释义）
 server/
-  appServer.js             static 模式入口（只监听 127.0.0.1）
-  sqliteStore.js           SQLite schema / 词库快照 / 文章 / 导出（Node 自带 node:sqlite）
-  sqliteLearning.js        学习记录（练习/错题/读完/写作/背词）规范化读写
-  sqliteBackup.js          迁移前 / 每日整库备份与保留策略
-  sqliteUtil.js            SQLite 事务与字段转换小工具
-  storeApi.js              /api/store/* 路由（dev 的 Vite 插件和 static 共用）
+  appServer.ts             static 模式入口（只监听 127.0.0.1）
+  sqliteStore.ts           SQLite schema / 词库快照 / 文章 / 导出（Node 自带 node:sqlite）
+  sqliteLearning.ts        学习记录（练习/错题/读完/写作/背词）规范化读写
+  sqliteBackup.ts          迁移前 / 每日整库备份与保留策略
+  sqliteUtil.ts            SQLite 事务与字段转换小工具
+  storeApi.ts              /api/store/* 路由（dev 的 Vite 插件和 static 共用）
   inspect-fonts.py     换期第一件事：核对字体命中了哪套版式档案
   extract-articles.py  从 PDF 抽正文，带 wpm 质量闸门
   validate-articles.py 单独跑质量闸门

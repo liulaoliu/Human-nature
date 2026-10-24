@@ -50,9 +50,9 @@
   取装饰图 URL。`?url` 会把**每个匹配文件**都复制进 `dist/assets`（并哈希）。100 多张图 = 几十 MB。
 - **修法**：**当静态资源由服务提供**，前端只拿「文件名清单」：
   - dev：Vite 插件中间件提供 `GET /fish`（清单）与 `GET /fish/<name>`；
-  - static：`server/httpApp.js` 同样处理；
+  - static：`server/httpApp.ts` 同样处理；
   - 前端 `fetch('/fish/manifest.json')` → 随机取一个 → `<img src="/fish/<name>">`。
-  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.js`、`src/ui/FishLayer.tsx`
+  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.ts`、`src/ui/FishLayer.tsx`
 - **教训**：
   1. **`import` 的资源会被打包；要"随便放多少都行"的素材，走静态目录 + 运行时 URL。**
   2. 素材放哪、怎么给，是**构建**问题，不是 **import** 问题。
@@ -62,7 +62,7 @@
 - **症状**：页面整体发滞，尤其某次刷新后一直在动。
 - **根因**：装饰图随机命中 **2.9MB 的动画 GIF**，浏览器持续解码 + 合成 → 主线程/合成器忙。
 - **修法**：鱼清单**排除 `.gif`**、只收 **≤600KB** 的图（不够再回退）。
-  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.js`
+  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.ts`
 - **教训**：装饰性素材要设**体积/格式上限**；动画素材慎用。
 
 ## 5. 后台服务跑错工作目录 → 页面全 404（且 status 误报）
