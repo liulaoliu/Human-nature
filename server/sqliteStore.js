@@ -23,7 +23,7 @@ import {
   restoreLearningSnapshot,
   saveDerivedBaseline,
   writeLearning,
-} from './sqliteLearning.js'
+} from './sqliteLearning.ts'
 import { list, nowIso, text, tx } from './sqliteUtil.ts'
 import { rebuildVocabProjection } from './sqliteVocab.ts'
 import {
