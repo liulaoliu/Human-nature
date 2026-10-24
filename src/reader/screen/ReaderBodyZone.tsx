@@ -4,6 +4,7 @@ import ReaderOverlaysHost from '../ReaderOverlaysHost'
 import Composer from '../panels/Composer'
 import ReaderArticle from '../ReaderArticle'
 import type { ReaderScreenProps } from '../ReaderScreen'
+import { bodyMode } from './bodyMode'
 
 /**
  * 正文槽位：会话面板路由 + 各类覆盖层 + 新建文章 + 正文。
@@ -22,6 +23,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     articleTitle,
     articleKey,
     doc,
+    articleRouting,
     selectedId,
     peekSid,
     vocabSidSet,
@@ -139,6 +141,20 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
 
   /** 本篇语境释义（速读和正文悬浮提示共用；不再全库扫） */
   const wordMeaning = (w: string, sid?: string | null) => meaningOf(w, sid)
+
+  /**
+   * 正文槽位只有四种：用户主动新建 / URL 文章加载中 / URL 文章不存在 / 正常正文。
+   * 旧条件 `composing || !doc` 会把深链接首帧误判成「新建」，先闪一下 Composer。
+   */
+  const body = bodyMode({
+    composing,
+    routeSlug: articleRouting.slug,
+    indexReady: articleRouting.indexReady,
+    routeRef: articleRouting.ref,
+    currentRef: articleRouting.currentRef,
+    hasDoc: !!doc,
+  })
+  const bodyVisible = !studyQueue && !browseAll && !examActive && !writingOpen
 
   return (
     <>
@@ -301,7 +317,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
         }}
       />
 
-      {!studyQueue && !browseAll && !examActive && (composing || !doc) && (
+      {bodyVisible && body === 'composer' && (
         <Composer
           composing={composing}
           onCancel={() => setComposing(() => false)}
@@ -322,7 +338,20 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
         />
       )}
 
-      {!studyQueue && !browseAll && !examActive && !writingOpen && doc && !composing && (
+      {bodyVisible && body === 'loading' && (
+        <div className="article-loading" aria-live="polite">
+          <p className="muted">正在打开文章…</p>
+        </div>
+      )}
+
+      {bodyVisible && body === 'missing' && (
+        <div className="article-missing">
+          <p className="muted">这篇文章不在了（可能已删除，或链接不对）。</p>
+          <p className="muted">从顶栏的「文章」重新选一篇，或点「新建」粘贴一篇。</p>
+        </div>
+      )}
+
+      {bodyVisible && body === 'article' && doc && (
         <ReaderArticle
           doc={doc}
           articleTitle={articleTitle}

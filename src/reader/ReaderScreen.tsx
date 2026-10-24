@@ -63,6 +63,16 @@ export interface ReaderScreenProps {
   articleTitle: string
   articleKey: string | null
   doc: ReaderDoc | null
+  /**
+   * URL → 文章的路由事实（正文槽位据此区分「加载中 / 这篇没了 / 正文」）。
+   * 判定在 `screen/bodyMode.ts`，别在视图里再写一份 `!doc` 条件。
+   */
+  articleRouting: {
+    slug: string
+    indexReady: boolean
+    ref: string
+    currentRef: string
+  }
   bookError: boolean
   selectedId: string | null
   exact: string

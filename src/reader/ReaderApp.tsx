@@ -583,14 +583,17 @@ export default function ReaderApp() {
   const { articleQuizCount } = viewData
 
   // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useArticleRoute ----
+  // 目录和已保存列表到齐才敢按 URL 找文章（否则 slug 反查不到，会误判"这篇没了"）。
+  // 目录加载失败（bookError）也算就绪：已保存文章仍能按 slug 打开，内置文章会明确显示"不在了"，
+  // 而不是永远停在 loading。
+  const articleIndexReady = savedLoaded && (!!book || bookError)
   const routePick = useArticleRoute({
     routeSlug: route.slug,
     routePanel: route.panel,
     currentRef,
     slugOf: articleIndex.slugOf,
     refOf: articleIndex.refOf,
-    // 目录和已保存列表到齐才敢按 URL 找文章（否则 slug 反查不到，会误判"这篇没了"）
-    indexReady: savedLoaded && !!book,
+    indexReady: articleIndexReady,
     hasDoc: !!doc,
     onPick: (ref) => workspace.docApi.onPick(ref),
     onClear: () => {
@@ -604,6 +607,20 @@ export default function ReaderApp() {
       }
     },
   })
+
+  /**
+   * 正文槽位的路由事实：URL 指向哪篇、索引是否就绪、当前打开的是哪篇。
+   * 具体显示 composer / loading / missing / article 由 `screen/bodyMode.ts` 判定。
+   */
+  const articleRouting = useMemo(
+    () => ({
+      slug: route.slug,
+      indexReady: articleIndexReady,
+      ref: route.slug ? articleIndex.refOf(route.slug) : '',
+      currentRef,
+    }),
+    [route.slug, articleIndexReady, articleIndex, currentRef],
+  )
 
   /** 文章选择器改成「只导航」，真正加载由 useArticleRoute 的第 ② 条负责。 */
   const routedWorkspace = useMemo(
@@ -720,6 +737,7 @@ export default function ReaderApp() {
       articleTitle={articleTitle}
       articleKey={articleKey}
       doc={doc}
+      articleRouting={articleRouting}
       bookError={bookError}
       selectedId={selectedId}
       exact={exact}

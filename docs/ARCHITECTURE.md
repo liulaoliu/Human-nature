@@ -394,6 +394,10 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   **点按钮打开 → push 一层；浏览器返回 → 关会话；页面内点退出 → replace 掉这一层**。
   深链接打开失败（没词可背 / 没文章）会退回文章页，别停在空界面。
 
+**正文槽位**的四种状态由 `screen/bodyMode.ts` 的纯函数判定（`composer` / `loading` / `missing` / `article`）：
+只有用户主动点「新建」才进 Composer；URL 指向文章但索引/正文还没到时显示 loading，
+索引里查无此篇显示 missing。视图里不要再写 `composing || !doc` 这种把「还没加载」当成「新建」的条件。
+
 **`<slug>` 不是内部标识**。内部标识长这样：`b:005 Leaders - Post-truth politics`、
 `s:saved:1761234567`，直接塞 URL 会变成 `b%3A005%20Leaders…` 一串乱码。
 所以地址栏里放的是**由标题算出来的可读片段**：
