@@ -25,7 +25,7 @@ import {
   writeLearning,
 } from './sqliteLearning.js'
 import { list, nowIso, text, tx } from './sqliteUtil.ts'
-import { rebuildVocabProjection } from './sqliteVocab.js'
+import { rebuildVocabProjection } from './sqliteVocab.ts'
 import {
   deleteArticleProjection,
   normalizeLegacySourceIds,
