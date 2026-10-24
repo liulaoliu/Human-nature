@@ -2,7 +2,7 @@ import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
 import { writeFileSync, rmSync } from 'node:fs'
 import { Watchdog } from './watchdog.js'
-import { resolveChild, loadMode } from './mode.js'
+import { resolveChild, loadMode } from './mode.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
