@@ -320,6 +320,58 @@ describe('useReaderDoc：副作用', () => {
     expect(repo.save).toHaveBeenCalledTimes(1)
   })
 
+  it('打开已保存文章但没改内容：不自动落盘，updatedAt 不会被顶掉', () => {
+    vi.useFakeTimers()
+    const a = article({ id: 'saved:1', title: 'A', text: 'x', createdAt: '2026-10-01T00:00:00.000Z' })
+    const { repo, result, setParams } = setup()
+    act(() => result.current.loadSaved(a))
+    act(() =>
+      setParams({
+        doc: { paragraphs: a.paragraphs, sentences: a.sentences },
+        savedId: a.id,
+        articleTitle: a.title,
+        sourceText: a.text,
+        articleBook: a.book ?? '',
+        articleOrigin: undefined,
+      }),
+    )
+
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(repo.save).not.toHaveBeenCalled()
+
+    // 真的改一点才写，而且写的是同一条记录
+    act(() => setParams({ sourceText: 'x changed' }))
+    act(() => {
+      vi.advanceTimersByTime(900)
+    })
+    expect(repo.save).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(repo.save).mock.calls[0][0]).toMatchObject({ id: 'saved:1', createdAt: '2026-10-01T00:00:00.000Z' })
+  })
+
+  it('打开后再点同一篇（内容指纹没变）也不会写库', () => {
+    vi.useFakeTimers()
+    const a = article({ id: 'saved:1', title: 'A', text: 'x' })
+    const { repo, result, setParams } = setup()
+    act(() => result.current.loadSaved(a))
+    act(() =>
+      setParams({
+        doc: { paragraphs: a.paragraphs, sentences: a.sentences },
+        savedId: a.id,
+        articleTitle: a.title,
+        sourceText: a.text,
+        articleBook: a.book ?? '',
+        articleOrigin: undefined,
+      }),
+    )
+    act(() => result.current.loadSaved(a))
+    act(() => {
+      vi.advanceTimersByTime(1000)
+    })
+    expect(repo.save).not.toHaveBeenCalled()
+  })
+
   it('pendingSave：没有保存记录也会立刻建一条', async () => {
     const { repo, setParams } = setup({ doc: seg, sourceText: 'x', articleTitle: 'A' })
     expect(repo.save).not.toHaveBeenCalled()

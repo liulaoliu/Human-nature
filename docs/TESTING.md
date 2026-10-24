@@ -482,3 +482,10 @@ npm run gates                 # 收尾门禁（提交前必跑）
     路由纯函数测试的期望路径都带 `/reader` 前缀（单入口后不再有 `basename`）。
     另外：阅读页 CSS 必须 `?inline` 注入/卸载，普通懒加载会把 `<link>` 永久留在 head，
     返回跟读页后全局样式仍被阅读页覆盖（见 `ReaderRoot`）。
+35. **打开文章不是改动，别让自动保存顶掉日期**（2026-10-24）。`useReaderDoc` 的自动落盘
+    effect 依赖 `doc` / `savedId`，点一下文章列表就会触发；以前 900ms 后无条件写库，
+    `updatedAt` 变新，列表里 10-01 建立的文章会变成「今天更新」。
+    现在用 `core/articleMeta.articleFingerprint` 比对「已落盘版本」和当前编辑器内容，
+    指纹相同就跳过；覆盖保存把原 `createdAt` 一起带上，服务端 `saveArticle` 在客户端没带时
+    也沿用 `articles.created_at`。改自动保存 / 文章日期时，测试至少覆盖：
+    打开不写库、真改才写、覆盖保存保留 `createdAt`。

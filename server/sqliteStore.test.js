@@ -297,6 +297,20 @@ describe('sqliteStore：文章', () => {
     expect(store.restoreArticlePrev('a').title).toBe('v1')
   })
 
+  it('覆盖保存时保留首次建立时间；客户端没带 createdAt 也不会重置', async () => {
+    const store = openStore(tempDb())
+    store.saveArticle(article('a', '2026-01-01T00:00:00.000Z'))
+    expect(store.getArticle('a').createdAt).toBe('2026-01-01T00:00:00.000Z')
+
+    store.saveArticle(article('a', '2026-02-01T00:00:00.000Z'))
+    expect(store.getArticle('a').updatedAt).toBe('2026-02-01T00:00:00.000Z')
+    expect(store.getArticle('a').createdAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(store.listArticles()[0].createdAt).toBe('2026-01-01T00:00:00.000Z')
+    expect(store.db.prepare('SELECT created_at FROM articles WHERE id = ?').get('a').created_at).toBe(
+      '2026-01-01T00:00:00.000Z',
+    )
+  })
+
   it('导出包含词库、快照和文章', async () => {
     const store = openStore(tempDb())
     await store.saveVocab(lib(2))

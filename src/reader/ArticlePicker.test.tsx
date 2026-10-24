@@ -80,4 +80,22 @@ describe('ArticlePicker：标题搜索', () => {
     expect(onPick).toHaveBeenCalledWith('s:s1')
     expect(screen.queryByPlaceholderText('搜索文章标题…')).toBeNull()
   })
+
+  it('显示建立日期；真的改过才附带修改日期', () => {
+    setup([
+      {
+        ...saved('s1', 'Alpha saved'),
+        createdAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-24T00:00:00.000Z',
+      },
+      {
+        ...saved('s2', 'Beta saved'),
+        createdAt: '2026-10-01T00:00:00.000Z',
+        updatedAt: '2026-10-01T00:00:00.000Z',
+      },
+    ])
+
+    expect(screen.getByText('2026-10-01 · 改 2026-10-24')).toBeTruthy()
+    expect(screen.getByText('2026-10-01')).toBeTruthy()
+  })
 })

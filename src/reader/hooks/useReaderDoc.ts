@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type Dispatch, type MutableRefObject, type RefObject, type SetStateAction } from 'react'
 import { cleanText } from '../../core/cleaner'
+import { articleFingerprint } from '../../core/articleMeta'
 import { isArticleOrigin } from '../../core/articleOrigin'
 import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
@@ -31,6 +32,24 @@ function reconstructText(a: SavedArticle): string {
   return a.paragraphs
     .map((p) => p.sentenceIds.map((id) => byId.get(id)?.text ?? '').join(' '))
     .join('\n\n')
+}
+
+/** 当前编辑器状态的内容指纹（用于判断自动落盘是不是真的有必要）。 */
+function fingerprintOf(
+  title: string,
+  book: string,
+  origin: ArticleOrigin | undefined,
+  text: string,
+  doc: ReaderDoc,
+): string {
+  return articleFingerprint({
+    title,
+    book: book || undefined,
+    origin,
+    text,
+    paragraphs: doc.paragraphs,
+    sentences: doc.sentences,
+  })
 }
 
 export interface UseReaderDocParams {
@@ -110,6 +129,10 @@ export function useReaderDoc({
   edition,
 }: UseReaderDocParams) {
   const saveDelTimerRef = useRef<number | null>(null)
+  /** 当前这篇文章的首次建立时间；覆盖保存时原样带回（列表里可能暂时读不到）。 */
+  const createdAtRef = useRef<string | null>(null)
+  /** 上次真正落盘时那篇文章的内容指纹；打开文章时同步刷新，用来跳过「无改动自动保存」。 */
+  const savedFingerprintRef = useRef<string | null>(null)
 
   const remember = useCallback((key: string | null, id: string | null) => {
     try {
@@ -132,6 +155,9 @@ export function useReaderDoc({
       setArticleOrigin('library')
       setSavedId(id)
       setBatch(batchMapRef.current[key ?? id ?? title] ?? [])
+      // 内置原文还没保存过：没有「已落盘版本」可比，保存时按新建处理。
+      savedFingerprintRef.current = null
+      createdAtRef.current = null
     },
     [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setArticleOrigin, setSavedId, setBatch, batchMapRef],
   )
@@ -139,18 +165,23 @@ export function useReaderDoc({
   /** 打开一篇已保存的文章（保留上次粘回的翻译/语法）。 */
   const loadSaved = useCallback(
     (a: SavedArticle) => {
+      const text = a.text || reconstructText(a)
+      // 服务端 / IndexedDB 的旧数据也可能带坏值；只认白名单，其余当未知。
+      const origin = isArticleOrigin(a.origin) ? a.origin : undefined
       setDoc({ paragraphs: a.paragraphs, sentences: a.sentences })
-      setSourceText(a.text || reconstructText(a))
+      setSourceText(text)
       setEditing(false)
       resetSelection()
       setArticleKey(a.sourceKey)
       setArticleTitle(a.title)
       setArticleBook(a.book ?? '')
-      // 服务端 / IndexedDB 的旧数据也可能带坏值；只认白名单，其余当未知。
-      setArticleOrigin(isArticleOrigin(a.origin) ? a.origin : undefined)
+      setArticleOrigin(origin)
       setSavedId(a.id)
       setBatch(batchMapRef.current[a.sourceKey ?? a.id ?? a.title] ?? [])
       remember(a.sourceKey, a.id)
+      // 刚打开的这一版就是「已落盘版本」：点击列表本身不算改动，不刷新 updatedAt。
+      savedFingerprintRef.current = fingerprintOf(a.title, a.book ?? '', origin, text, a)
+      createdAtRef.current = a.createdAt ?? null
     },
     [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setArticleOrigin, setSavedId, setBatch, batchMapRef, remember],
   )
@@ -182,6 +213,8 @@ export function useReaderDoc({
     if (!savedId && !title) {
       title = window.prompt('给这篇文章起个名字', articleKey ?? '未命名') || '未命名'
     }
+    // 覆盖保存必须把原来的建立时间带上：服务端 / IndexedDB 都靠它保留「新增日期」。
+    const createdAt = createdAtRef.current ?? undefined
     const article: SavedArticle = {
       id,
       title: title || '未命名',
@@ -191,11 +224,15 @@ export function useReaderDoc({
       text: sourceText,
       paragraphs: doc.paragraphs,
       sentences: doc.sentences,
+      createdAt,
       updatedAt: new Date().toISOString(),
     }
     try {
       await articles.current?.save(article)
-      setSaved((await articles.current?.list()) ?? [])
+      savedFingerprintRef.current = fingerprintOf(article.title, article.book ?? '', article.origin, article.text, article)
+      const list = (await articles.current?.list()) ?? []
+      setSaved(list)
+      createdAtRef.current = list.find((x) => x.id === id)?.createdAt ?? createdAt ?? null
       setSavedId(id)
       setArticleTitle(article.title)
       setArticleBook(article.book ?? '')
@@ -210,8 +247,11 @@ export function useReaderDoc({
   const deleteSaved = useCallback(async () => {
     if (!savedId) return
     await articles.current?.remove(savedId)
-    setSaved((await articles.current?.list()) ?? [])
+    const list = (await articles.current?.list()) ?? []
+    setSaved(list)
     setSavedId(null)
+    savedFingerprintRef.current = null
+    createdAtRef.current = null
     flash('已删除保存；正文还在，可重新保存')
   }, [savedId, articles, setSaved, setSavedId, flash])
 
@@ -246,9 +286,13 @@ export function useReaderDoc({
         text: sourceText,
         paragraphs: doc.paragraphs,
         sentences: doc.sentences,
+        createdAt: createdAtRef.current ?? undefined,
         updatedAt: new Date().toISOString(),
       })
-      setSaved((await articles.current?.list()) ?? [])
+      savedFingerprintRef.current = fingerprintOf(title, articleBook, articleOrigin, sourceText, doc)
+      const list = (await articles.current?.list()) ?? []
+      setSaved(list)
+      createdAtRef.current = list.find((x) => x.id === id)?.createdAt ?? createdAtRef.current
     }
     flash('已修改标题')
   }, [articleTitle, articleKey, articleBook, articleOrigin, savedId, doc, sourceText, articles, setArticleTitle, setSaved, flash])
@@ -273,19 +317,24 @@ export function useReaderDoc({
 
   const cancelEdit = useCallback(() => setEditing(false), [setEditing])
 
-  // 已保存的文章，改动后自动落盘（翻译/语法粘回后不丢）
+  // 已保存的文章，改动后自动落盘（翻译/语法粘回后不丢）。
+  // 打开文章本身也会换 doc / savedId，但内容指纹没变 → 不写库，列表日期不动。
   useEffect(() => {
     if (!savedId || !doc) return
+    const current = fingerprintOf(articleTitle, articleBook, articleOrigin, sourceText, doc)
+    if (current === savedFingerprintRef.current) return
     const t = window.setTimeout(() => void saveCurrent(), 900)
     return () => window.clearTimeout(t)
-  }, [doc, savedId, saveCurrent])
+  }, [doc, savedId, saveCurrent, articleTitle, articleBook, articleOrigin, sourceText])
 
-  // 应用结果 / 编辑正文后：没有保存记录就立即建一条，之后照旧自动存
+  // 应用结果 / 编辑正文后：没有保存记录就立即建一条，之后照旧自动存。
   useEffect(() => {
     if (!pendingSave || !doc) return
     setPendingSave(false)
+    const current = fingerprintOf(articleTitle, articleBook, articleOrigin, sourceText, doc)
+    if (savedId && current === savedFingerprintRef.current) return
     void saveCurrent()
-  }, [pendingSave, doc, setPendingSave, saveCurrent])
+  }, [pendingSave, doc, savedId, setPendingSave, saveCurrent, articleTitle, articleBook, articleOrigin, sourceText])
 
   // 启动后恢复「上次打开的文章」
   const restored = useRef(false)

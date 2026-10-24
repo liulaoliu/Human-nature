@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
 import { articleOriginLabel } from '../core/articleOrigin'
-import { calendarDayKey } from '../core/activity'
+import { articleDateKeys } from '../core/articleMeta'
 import { useHotkeys } from './useHotkeys'
 
 interface Props {
@@ -182,8 +182,7 @@ export default function ArticlePicker({
                       </button>
                       {(single || isOpenGroup) &&
                         list.map((a) => {
-                          const created = calendarDayKey(new Date(a.createdAt ?? a.updatedAt))
-                          const edited = calendarDayKey(new Date(a.updatedAt))
+                          const { created, updated, edited } = articleDateKeys(a)
                           const origin = articleOriginLabel(a.origin)
                           return (
                             <button
@@ -192,16 +191,18 @@ export default function ArticlePicker({
                                 'picker-item sub' + (currentValue === `s:${a.id}` ? ' on' : '') + (readOf(a.id) ? ' read' : '')
                               }
                               onClick={() => choose(`s:${a.id}`)}
-                              title={`${a.title}\n新增：${created}${edited !== created ? `\n最后修改：${edited}` : ''}${
-                                origin ? `\n来源：${origin}` : ''
-                              }${readOf(a.id) ? `\n已读：${readOf(a.id)}` : ''}`}
+                              title={`${a.title}${created ? `\n建立：${created}` : ''}${
+                                edited ? `\n最后修改：${updated}` : ''
+                              }${origin ? `\n来源：${origin}` : ''}${readOf(a.id) ? `\n已读：${readOf(a.id)}` : ''}`}
                             >
                               <span className="picker-item-title">{single ? a.title : a.title.replace(`${bookName} · `, '')}</span>
                               {origin && <span className="picker-origin">{origin}</span>}
-                              <span className="picker-item-date">
-                                {created}
-                                {edited !== created ? ` · 改 ${edited}` : ''}
-                              </span>
+                              {created && (
+                                <span className="picker-item-date">
+                                  {created}
+                                  {edited ? ` · 改 ${updated}` : ''}
+                                </span>
+                              )}
                               {readBadge(a.id)}
                             </button>
                           )

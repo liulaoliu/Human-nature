@@ -36,8 +36,9 @@ VocabItem {
 Sentence { id, paraId, text, audio, translation, grammarNote, collocations, vocab[], language?/languages[] … }
 SentenceLanguage { structure?/grammar?/idioms?[]/phrases?[]/usage?[]/source?/at? }
 SavedArticle {
-  id/title/book?/sourceKey/text/paragraphs/sentences/updatedAt
+  id/title/book?/sourceKey/text/paragraphs/sentences/createdAt?/updatedAt
   origin?: 'library'|'paste'|'epub'|'file'   // 旧数据没有 → 未知，不按 sourceKey 猜
+  // createdAt 首次建立时间；老数据没有时用 updatedAt 兜底。自动保存不能改它。
 }
 ```
 

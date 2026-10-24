@@ -145,6 +145,18 @@ function parsePayload(payload) {
   return JSON.parse(payload)
 }
 
+/**
+ * 读文章时把 `created_at` 列补回 payload。
+ *
+ * payload 是事实来源，但老版本保存的文章没写 `createdAt`；列里有迁移时回填的时间。
+ * 不补的话前端只能拿 `updatedAt` 兜底，用户每改一次「建立日期」都会跟着变。
+ */
+function articleWithCreatedAt(article, createdAt) {
+  if (!article || typeof article !== 'object') return article
+  if (text(article.createdAt)) return article
+  return { ...article, createdAt: text(createdAt) || text(article.updatedAt) || undefined }
+}
+
 function assertLibrary(lib) {
   if (!lib || typeof lib !== 'object' || !Array.isArray(lib.items)) {
     throw new Error('词库格式不对：缺少 items 数组')
@@ -606,27 +618,31 @@ export function openStore(dbPath) {
       },
       listArticles() {
         return db
-          .prepare('SELECT payload FROM articles ORDER BY updated_at DESC')
+          .prepare('SELECT payload, created_at FROM articles ORDER BY updated_at DESC')
           .all()
-          .map((r) => parsePayload(String(r.payload)))
+          .map((r) => articleWithCreatedAt(parsePayload(String(r.payload)), r.created_at))
       },
       getArticle(id) {
-        const row = db.prepare('SELECT payload FROM articles WHERE id = ?').get(String(id))
-        return row ? parsePayload(String(row.payload)) : null
+        const row = db.prepare('SELECT payload, created_at FROM articles WHERE id = ?').get(String(id))
+        return row ? articleWithCreatedAt(parsePayload(String(row.payload)), row.created_at) : null
       },
       saveArticle(article) {
         if (!article || typeof article !== 'object' || typeof article.id !== 'string' || !article.id) {
           throw new Error('文章格式不对：缺少 id')
         }
         const updatedAt = typeof article.updatedAt === 'string' && article.updatedAt ? article.updatedAt : nowIso()
-        const createdAt = typeof article.createdAt === 'string' && article.createdAt ? article.createdAt : updatedAt
+        // 客户端没带 createdAt（老文章 / 自动保存）时，必须沿用库里已有的建立时间；
+        // 不能拿 updatedAt 顶替，否则每保存一次都等于「重新建立」。
+        const prev = db.prepare('SELECT created_at FROM articles WHERE id = ?').get(String(article.id))
+        const createdAt = text(article.createdAt) || text(prev?.created_at) || updatedAt
+        const next = { ...article, createdAt, updatedAt }
         const title = typeof article.title === 'string' ? article.title : ''
         const book = typeof article.book === 'string' ? article.book : null
         const sourceKey = typeof article.sourceKey === 'string' ? article.sourceKey : null
         const sentences = list(article.sentences)
         const words = new Set()
         for (const s of sentences) for (const w of list(s?.vocab)) words.add(String(w))
-        const payload = JSON.stringify(article)
+        const payload = JSON.stringify(next)
         tx(db, () => {
           rememberArticlePrev(db, article.id, payload)
           db.prepare(`
@@ -634,7 +650,7 @@ export function openStore(dbPath) {
               id, payload, title, book, source_key, created_at, updated_at, sentence_count, word_count
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).run(article.id, payload, title, book, sourceKey, createdAt, updatedAt, sentences.length, words.size)
-          rebuildArticleProjection(db, article)
+          rebuildArticleProjection(db, next)
         })
       },
       loadArticlePrev(id) {
