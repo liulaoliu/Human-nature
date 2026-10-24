@@ -1,6 +1,6 @@
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { handleStoreApi } from '../server/storeApi.js'
+import { handleStoreApi } from '../server/storeApi.ts'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 

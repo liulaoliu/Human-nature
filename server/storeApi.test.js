@@ -4,7 +4,7 @@ import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { closeAllStores, openStore } from './sqliteStore.ts'
-import { handleStoreApi } from './storeApi.js'
+import { handleStoreApi } from './storeApi.ts'
 
 /**
  * `GET /vocab` 的响应形态：首屏要拉 16MB，所以有两条必须守住：

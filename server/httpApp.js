@@ -4,7 +4,7 @@ import { gzipSync } from 'node:zlib'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.ts'
 import { handleTts, resolveTtsCacheDir } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
-import { handleStoreApi } from './storeApi.js'
+import { handleStoreApi } from './storeApi.ts'
 import { allowLocalRequest } from './sameOrigin.ts'
 
 const DATA_FILES = new Set([

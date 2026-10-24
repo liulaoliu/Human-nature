@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { chmodSync, createReadStream, rmSync, statSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { resolveDbPath, openStore, SCHEMA_VERSION } from './sqliteStore.ts'
+import { resolveDbPath, openStore, SCHEMA_VERSION, VocabConflictError } from './sqliteStore.ts'
 import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.ts'
 import { localDayKey } from './localDate.ts'
 import { gzip } from 'node:zlib'
@@ -12,15 +13,15 @@ const gzipAsync = promisify(gzip)
 
 const MAX_BODY = 64 * 1024 * 1024
 
-function sendJson(res, code, obj, headers = {}) {
+function sendJson(res: ServerResponse, code: number, obj: unknown, headers: Record<string, string | number> = {}): void {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.setHeader('Cache-Control', 'no-store')
-  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v)
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, String(v))
   res.end(JSON.stringify(obj))
 }
 
-function fail(res, code, message) {
+function fail(res: ServerResponse, code: number, message: string): void {
   sendJson(res, code, { ok: false, error: message })
 }
 
@@ -31,8 +32,14 @@ function fail(res, code, message) {
  * （16MB gzip ≈ 280ms，而回环传 16MB 几乎不要钱），所以压缩结果按版本号缓存，
  * 同一版只压一次；换个设备/局域网访问时省的是实打实的流量。
  */
-const gzCache = new Map() // key → Buffer（最多留 2 版，避免按 db 累积）
-async function sendBigJson(req, res, code, body, cacheKey) {
+const gzCache = new Map<string, Buffer>() // key → Buffer（最多留 2 版，避免按 db 累积）
+async function sendBigJson(
+  req: IncomingMessage,
+  res: ServerResponse,
+  code: number,
+  body: string,
+  cacheKey: string,
+): Promise<void> {
   const buf = Buffer.from(body, 'utf8')
   const accepts = String(req.headers['accept-encoding'] || '').includes('gzip')
   res.statusCode = code
@@ -40,12 +47,12 @@ async function sendBigJson(req, res, code, body, cacheKey) {
   res.setHeader('Cache-Control', 'no-store')
   res.setHeader('Vary', 'Accept-Encoding')
   if (accepts && buf.length > 1024) {
-    let gz = cacheKey ? gzCache.get(cacheKey) : null
+    let gz = cacheKey ? gzCache.get(cacheKey) : undefined
     if (!gz) {
       gz = await gzipAsync(buf, { level: 6 })
       if (cacheKey) {
         gzCache.set(cacheKey, gz)
-        if (gzCache.size > 2) gzCache.delete(gzCache.keys().next().value)
+        if (gzCache.size > 2) gzCache.delete(gzCache.keys().next().value as string)
       }
     }
     res.setHeader('Content-Encoding', 'gzip')
@@ -57,12 +64,12 @@ async function sendBigJson(req, res, code, body, cacheKey) {
   res.end(buf)
 }
 
-function readBody(req, limit = MAX_BODY) {
+function readBody(req: IncomingMessage, limit = MAX_BODY): Promise<string> {
   return new Promise((resolve, reject) => {
-    const chunks = []
+    const chunks: Buffer[] = []
     let size = 0
     let tooLarge = false
-    req.on('data', (chunk) => {
+    req.on('data', (chunk: Buffer) => {
       size += chunk.length
       if (size > limit) {
         tooLarge = true
@@ -78,7 +85,7 @@ function readBody(req, limit = MAX_BODY) {
   })
 }
 
-async function readJson(req) {
+async function readJson(req: IncomingMessage): Promise<unknown> {
   const raw = await readBody(req)
   try {
     return JSON.parse(raw)
@@ -91,11 +98,11 @@ async function readJson(req) {
  * 写接口必须同源：本地服务没有登录态，任何网页都能往 127.0.0.1 POST。
  * 校验 Origin（有就必填且 Host 一致）挡住浏览器里的跨站写入；curl / 脚本不带 Origin 仍可用。
  */
-function sameOrigin(req) {
+function sameOrigin(req: IncomingMessage): boolean {
   return allowLocalRequest(req)
 }
 
-function decodePart(s) {
+function decodePart(s: string): string {
   try {
     return decodeURIComponent(s)
   } catch {
@@ -107,7 +114,11 @@ function decodePart(s) {
  * `/api/store/*` 路由（dev 的 Vite 插件和 static 的 httpApp 共用）。
  * 所有数据都是 JSON；音频等二进制留给下一阶段。
  */
-export async function handleStoreApi(req, res, { root, dbPath } = {}) {
+export async function handleStoreApi(
+  req: IncomingMessage,
+  res: ServerResponse,
+  { root, dbPath }: { root?: string; dbPath?: string } = {},
+): Promise<void> {
   const url = new URL(req.url || '/', 'http://localhost')
   const path = url.pathname.replace(/^\/api\/store/, '') || '/'
   const method = req.method || 'GET'
@@ -147,12 +158,17 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
 
     if (path === '/vocab' && method === 'PUT') {
       // 不带 `X-Vocab-Base` = 强制写（迁移脚本 / curl 手工操作）；带了就必须对得上。
-      const base = req.headers['x-vocab-base']
+      // headers 值可能是 string | string[]：baseUpdatedAt 只认单个字符串，
+      // 数组（理论上重复头）走 String() 与旧代码一致。
+      const baseHeader = req.headers['x-vocab-base']
+      const base = typeof baseHeader === 'string' ? baseHeader : undefined
       try {
         const out = await store.saveVocab(await readJson(req), { baseUpdatedAt: base })
         sendJson(res, 200, { ok: true, ...out })
       } catch (e) {
-        if (e?.code === 'VOCAB_CONFLICT') {
+        // VocabConflictError 是 store 层抛出的具体类型，用 instanceof 收窄（规范 §4.1
+        // 禁止把 unknown 当 any 用，`.code` 直接访问会绕过类型检查）。
+        if (e instanceof VocabConflictError) {
           sendJson(res, 409, { ok: false, error: e.message, updatedAt: e.updatedAt, count: e.count })
           return
         }
@@ -185,7 +201,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
 
     const snap = path.match(/^\/vocab\/snapshots\/(.+)$/)
     if (snap && method === 'GET') {
-      sendJson(res, 200, { ok: true, value: store.loadSnapshot(decodePart(snap[1])) })
+      sendJson(res, 200, { ok: true, value: store.loadSnapshot(decodePart(snap[1] ?? '')) })
       return
     }
 
@@ -196,7 +212,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
 
     const articlePrev = path.match(/^\/articles\/(.+)\/prev$/)
     if (articlePrev && method === 'GET') {
-      const id = decodePart(articlePrev[1])
+      const id = decodePart(articlePrev[1] ?? '')
       const value = id ? store.loadArticlePrev(id) : null
       if (!value) {
         fail(res, 404, '文章没有上一版')
@@ -208,7 +224,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
 
     const articleRestore = path.match(/^\/articles\/(.+)\/restore-prev$/)
     if (articleRestore && method === 'POST') {
-      const id = decodePart(articleRestore[1])
+      const id = decodePart(articleRestore[1] ?? '')
       const value = id ? store.restoreArticlePrev(id) : null
       if (!value) {
         fail(res, 404, '文章没有上一版')
@@ -220,7 +236,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
 
     const article = path.match(/^\/articles\/(.+)$/)
     if (article) {
-      const id = decodePart(article[1])
+      const id = decodePart(article[1] ?? '')
       if (!id) {
         fail(res, 400, '缺少文章 id')
         return
@@ -231,7 +247,7 @@ export async function handleStoreApi(req, res, { root, dbPath } = {}) {
       }
       if (method === 'PUT') {
         const value = await readJson(req)
-        if (!value || typeof value !== 'object' || value.id !== id) {
+        if (!value || typeof value !== 'object' || (value as { id?: unknown }).id !== id) {
           fail(res, 400, '文章 id 不一致')
           return
         }
