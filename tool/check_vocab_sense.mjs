@@ -21,6 +21,7 @@
  * 就是词典只给了 `n. 对手 / a. 竞争的`（连动词义都没有），于是卡上出现「n. 与……匹敌」。
  */
 import { existsSync, readFileSync } from 'node:fs'
+import { gunzipSync } from 'node:zlib'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -47,7 +48,18 @@ if (!row) {
   process.exit(0)
 }
 
-const items = JSON.parse(String(row.payload)).items ?? []
+/**
+ * `vocab.payload` 现在统一存 gzip BLOB（省磁盘），也兼容老库存的明文 TEXT。
+ * 别直接 `String(payload)`：BLOB 会变成一串逗号数字，JSON.parse 当场炸。
+ */
+function decodePayload(payload) {
+  if (typeof payload === 'string') return payload
+  const buf = Buffer.from(payload)
+  if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) return gunzipSync(buf).toString('utf8')
+  return buf.toString('utf8')
+}
+
+const items = JSON.parse(decodePayload(row.payload)).items ?? []
 
 const CLASS = {
   n: 'n', noun: 'n',
