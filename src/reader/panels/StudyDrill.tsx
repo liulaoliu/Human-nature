@@ -234,6 +234,21 @@ export default function DrillBoard({
     }
   }
 
+  /**
+   * 看卡这一步没有输入框，回车没人接：按钮上写着「回车」，就得真能按。
+   * 优先级别跟选词义一致（40），且只在看卡这一步注册——锤炼期间上层
+   * 的背单词快捷键本来就被 `drillOn` 关掉了，不会抢键。
+   */
+  useHotkeys(
+    (e) => {
+      if (e.key !== 'Enter' || e.ctrlKey || e.metaKey || e.altKey) return
+      e.preventDefault()
+      next()
+    },
+    cur?.kind === 'card',
+    40,
+  )
+
   if (!cur) {
     // 没有任何可锤炼步骤：直接放行
     return (
