@@ -32,7 +32,7 @@ import {
   rebuildAllProjections,
   rebuildArticleProjection,
   rememberArticlePrev,
-} from './sqliteProjection.js'
+} from './sqliteProjection.ts'
 
 /**
  * 服务端 SQLite 存储（Node 22.5+ 自带的 `node:sqlite`，不引原生 npm 包）。

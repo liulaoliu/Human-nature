@@ -1,5 +1,6 @@
 import type { DatabaseSync, StatementSync } from 'node:sqlite'
 import { list, nowIso, num, text } from './sqliteUtil.ts'
+import { isRecord, asRecord } from './types/guards.ts'
 
 /**
  * 词库 JSON → words / word_* 派生表。
@@ -21,18 +22,11 @@ const WORD_CHILD_TABLES = [
   'word_confusables',
 ]
 
-// ---- JSON 边界守卫（规范 §4.2）----
+// ---- JSON 边界守卫在 ./types/guards.ts（与 sqliteProjection 等共用）----
 // lib / prevLib 是 vocab.payload 的 JSON.parse 结果，到这里形状不可信。
 // 字段读取统一先收窄成 record：坏形状按「没有该字段」处理（undefined），
 // 与旧代码里 `it.x?.y` 对非对象静默得 undefined 的行为逐位一致。
 // 数据来源：SQLite vocab.payload（TEXT 列）；失败行为 = 字段为空，不抛错。
-function isRecord(v: unknown): v is Record<string, unknown> {
-  return typeof v === 'object' && v !== null
-}
-
-function asRecord(v: unknown): Record<string, unknown> | null {
-  return isRecord(v) ? v : null
-}
 
 /** items 数组里的非对象条目（含 null）照旧过滤掉，不进派生表。 */
 function itemsOf(lib: unknown): Record<string, unknown>[] {
