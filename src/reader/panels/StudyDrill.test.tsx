@@ -147,7 +147,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     const onDone = vi.fn()
     render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} reason="timeout" />)
 
-    // 拼写 → 选义 → 看卡 → 写搭配
+    // 拼写 → 选义 → 写搭配（中间没有「看卡」那一步了）
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(spell, { target: { value: 'abandon' } })
     fireEvent.keyDown(spell, { key: 'Enter' })
@@ -155,9 +155,6 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
     fireEvent.keyDown(window, { key: String(correctIndex + 1) })
     expect(onDone).not.toHaveBeenCalled()
-
-    // 选义后先看单词卡，再进写搭配
-    fireEvent.click(screen.getByRole('button', { name: /继续写搭配/ }))
 
     // 词组也行，不必原样抄用法
     const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
@@ -167,9 +164,8 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     expect(onDone).toHaveBeenCalledTimes(1)
   })
 
-  it('看卡步按回车 → 进写搭配（按钮写着「回车」就得真能按）', () => {
-    const onDone = vi.fn()
-    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} reason="timeout" />)
+  it('选义答对后直接进「写搭配」，不再多一步「继续写搭配」', () => {
+    render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={vi.fn()} onSpellMiss={vi.fn()} reason="timeout" />)
 
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(spell, { target: { value: 'abandon' } })
@@ -177,12 +173,11 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
     fireEvent.keyDown(window, { key: String(correctIndex + 1) })
 
-    // 看卡步：没有输入框，回车由全局快捷键接（用户报「实测回车失效」）
-    expect(screen.getByRole('button', { name: /继续写搭配/ })).toBeTruthy()
-    fireEvent.keyDown(window, { key: 'Enter' })
-
+    // ← 回归点：这一步以前要多按一次「继续写搭配（回车）」，纯空转
+    expect(screen.queryByRole('button', { name: /继续写搭配/ })).toBeNull()
     expect(screen.getByPlaceholderText('写出它的一个搭配 / 用法')).toBeTruthy()
-    expect(onDone).not.toHaveBeenCalled()
+    // 步数也从 4 步变 3 步
+    expect(screen.getByText(/3\/3 · 写搭配/)).toBeTruthy()
   })
 
   it('写错留在本步，给出参考搭配', () => {
@@ -194,7 +189,6 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     fireEvent.keyDown(spell, { key: 'Enter' })
     const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
     fireEvent.keyDown(window, { key: String(correctIndex + 1) })
-    fireEvent.click(screen.getByRole('button', { name: /继续写搭配/ }))
 
     const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
     fireEvent.change(usageInput, { target: { value: 'abandon the car' } })
