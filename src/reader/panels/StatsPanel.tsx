@@ -3,7 +3,6 @@ import {
   ACTIVITY_LABEL,
   activityStreak,
   buildHeatmap,
-  calendarDayKey,
   dayKeyLocal,
   dayTotal,
   sumCats,
@@ -48,7 +47,9 @@ export default function StatsPanel({
     d.setDate(d.getDate() - 6)
     return dayKeyLocal(d)
   })()
-  const monthFrom = calendarDayKey(new Date(today.getFullYear(), today.getMonth(), 1))
+  // 月起点也走**逻辑日**：凌晨 0–4 点还属于前一天，日历月 1 日直接拼会得到
+  // from > to（本月统计空一档）。tk 已经是逻辑日，取它的年月即可。
+  const monthFrom = `${tk.slice(0, 7)}-01`
 
   const todayCats = sumCats(activity, tk, tk)
   const weekCats = sumCats(activity, weekFrom, tk)

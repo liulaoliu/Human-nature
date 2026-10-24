@@ -25,6 +25,22 @@ describe('StatsPanel', () => {
     expect(container.textContent).toContain('还没有练习记录')
   })
 
+  it('每月 1 日凌晨仍按逻辑月统计（不空一档）', () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date(2026, 10, 1, 0, 30)) // 逻辑日仍是 10-31
+    try {
+      const { container } = render(
+        <StatsPanel activity={[{ day: '2026-10-31', counts: { vocab: 7, listen: 0, read: 0 } }]} practice={[]} />,
+      )
+      const monthLine = [...container.querySelectorAll('.stat-line')].find((el) =>
+        el.textContent?.includes('本月'),
+      )
+      expect(monthLine?.textContent).toContain('7')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('练习正确率按本周/本月/累计与分项展示', () => {
     render(<StatsPanel activity={activity} practice={practice} />)
     expect(screen.getByText('3/4（75%）')).toBeTruthy()
