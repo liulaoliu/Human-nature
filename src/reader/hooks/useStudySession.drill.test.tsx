@@ -156,6 +156,41 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
   })
 })
 
+describe('useStudySession：锤炼中退出会话不把押后的评分带进下一轮', () => {
+  const relearnLib = () =>
+    lib([
+      vocabItem({
+        id: 'x1',
+        word: 'run',
+        lemma: 'run',
+        meaning: '跑',
+        reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+      }),
+      vocabItem({
+        id: 'x2',
+        word: 'walk',
+        lemma: 'walk',
+        meaning: '走',
+        reviewState: { ease: 2.3, due: '2026-10-02T00:00:00.000Z', interval: 1, repetitions: 0, relearn: 1 },
+      }),
+    ])
+
+  it('锤炼板开着时直接结束会话，重开新一轮不在新卡上直接锤炼', () => {
+    const { unmount } = render(<Harness library={relearnLib()} />)
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    act(() => api!.answerReview('good')) // 重学卡评分 → 押后 + 锤炼
+    expect(api!.drillOn).toBe(true)
+
+    // 用户在锤炼板前直接「结束」——不想做这道题
+    act(() => api!.close())
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+
+    // ← 回归点：押后的评分属于上一张卡，不能在下一轮的第一张卡上继续拦人
+    expect(api!.drillOn).toBe(false)
+    unmount()
+  })
+})
+
 describe('useStudySession：超时秒数不泄漏到下一张新卡', () => {
   beforeEach(() => {
     vi.useFakeTimers()

@@ -255,6 +255,10 @@ export function useStudySession(params: UseStudySessionParams) {
     setDelArmed(false)
     setDrillCleared(false)
     setMeaningCleared(false)
+    // 押后的评分只属于这一张卡：换卡 / 结束会话 / 重开一轮都必须丢掉，
+    // 否则下一轮第一张卡会被上一轮残留的 pendingScore 直接拦成锤炼，
+    // 过完还会把那个分记到新卡上（2026-10-24 修）。
+    setPendingScore(null)
     spellGateResetRef.current()
     learnResetRef.current()
     reviewResetRef.current()
