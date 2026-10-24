@@ -9,7 +9,7 @@ node server/status.js -q
 if %errorlevel%==0 goto running
 
 echo Service not running. Starting in background ...
-node server/silent-start.js
+node server/silent-start.ts
 for /l %%i in (1,1,15) do (
   node server/status.js -q >nul 2>&1 && goto up
   timeout /t 1 /nobreak >nul

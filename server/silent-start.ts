@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join } from 'node:path'
 
@@ -6,7 +6,7 @@ const here = dirname(fileURLToPath(import.meta.url))
 
 // 后台静默启动 watchdog（崩溃自动重启）。
 // detached + windowsHide + stdio ignore：完全脱离控制台，关掉命令行窗口不影响运行。
-export function spawnDetachedServer(spawnFn = spawn) {
+export function spawnDetachedServer(spawnFn: typeof spawn = spawn): ChildProcess {
   const child = spawnFn(process.execPath, [join(here, 'watchdog-cli.ts')], {
     detached: true,
     stdio: 'ignore',
