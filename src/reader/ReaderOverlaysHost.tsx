@@ -1,7 +1,8 @@
-import { lazy, Suspense, type ComponentProps } from 'react'
+import { lazy, Suspense, type ComponentProps, type ReactNode } from 'react'
 import type { ReviewGrade } from '../core/vocab'
 import type { VocabItem } from '../types/document'
 import type { VocabEditPatch } from './VocabList'
+import PanelBoundary from './panels/PanelBoundary'
 
 /**
  * 面板一律**按需加载**。
@@ -31,8 +32,27 @@ const JournalPanel = lazy(() => import('./panels/JournalPanel'))
 const VocabList = lazy(() => import('./VocabList'))
 
 /** 面板加载中的占位：只在第一次打开某个面板时出现一瞬，不做重活。 */
-function PanelLoading() {
-  return <div className="panel-loading">正在加载面板…</div>
+function PanelLoading({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="panel-loading">
+      正在加载面板…
+      <button onClick={onClose}>取消</button>
+    </div>
+  )
+}
+
+/**
+ * 单个面板的「Suspense + 错误边界」。
+ *
+ * 不能只在外层放一个 Suspense：一个 chunk 失败就会把同一层的其它面板一起换掉，
+ * 而且异常会冒到整棵树。每个面板各包一层，失败只坏这一块。
+ */
+function Guarded({ name, onClose, children }: { name: string; onClose: () => void; children: ReactNode }) {
+  return (
+    <PanelBoundary name={name} onClose={onClose}>
+      <Suspense fallback={<PanelLoading onClose={onClose} />}>{children}</Suspense>
+    </PanelBoundary>
+  )
 }
 
 /**
@@ -89,75 +109,105 @@ export default function ReaderOverlaysHost({
   const { open: journalOpen, ...journalProps } = journal
 
   return (
-    <Suspense fallback={<PanelLoading />}>
-      {speedOpen && <SpeedReadPanel {...speedProps} />}
+    <>
+      {speedOpen && (
+        <Guarded name="速读" onClose={speedProps.onClose}>
+          <SpeedReadPanel {...speedProps} />
+        </Guarded>
+      )}
 
-      {langOpen && <LanguageEditor {...langProps} />}
+      {langOpen && (
+        <Guarded name="语言点" onClose={langProps.onClose}>
+          <LanguageEditor {...langProps} />
+        </Guarded>
+      )}
 
-      {planOpen && <PlanPanel {...planProps} />}
+      {planOpen && (
+        <Guarded name="今日计划" onClose={planProps.onClose}>
+          <PlanPanel {...planProps} />
+        </Guarded>
+      )}
 
-      {intensiveOpen && <IntensivePanel {...intensiveProps} />}
+      {intensiveOpen && (
+        <Guarded name="精读工作流" onClose={intensiveProps.onClose}>
+          <IntensivePanel {...intensiveProps} />
+        </Guarded>
+      )}
 
-      {goalOpen && <GoalPanel {...goalProps} />}
+      {goalOpen && (
+        <Guarded name="目标" onClose={goalProps.onClose}>
+          <GoalPanel {...goalProps} />
+        </Guarded>
+      )}
 
-      {exportOpen && <ExportPanel {...exportProps} />}
+      {exportOpen && (
+        <Guarded name="导出" onClose={exportProps.onClose}>
+          <ExportPanel {...exportProps} />
+        </Guarded>
+      )}
 
-      {journalOpen && <JournalPanel {...journalProps} />}
+      {journalOpen && (
+        <Guarded name="学习日志" onClose={journalProps.onClose}>
+          <JournalPanel {...journalProps} />
+        </Guarded>
+      )}
 
       {allVocab.open && (
-        <div className="all-vocab">
-          <div className="bar">
-            <strong>全部生词（{allVocab.items.length}）</strong>
-            <span className="view-toggle">
-              <button
-                className={allVocab.view === 'card' ? 'primary' : ''}
-                onClick={() => allVocab.onViewChange('card')}
-              >
-                卡片
+        <Guarded name="全部生词" onClose={allVocab.onClose}>
+          <div className="all-vocab">
+            <div className="bar">
+              <strong>全部生词（{allVocab.items.length}）</strong>
+              <span className="view-toggle">
+                <button
+                  className={allVocab.view === 'card' ? 'primary' : ''}
+                  onClick={() => allVocab.onViewChange('card')}
+                >
+                  卡片
+                </button>
+                <button
+                  className={allVocab.view === 'table' ? 'primary' : ''}
+                  onClick={() => allVocab.onViewChange('table')}
+                >
+                  表格
+                </button>
+              </span>
+              <button onClick={() => allVocab.onExportAnki(allVocab.items)} disabled={!allVocab.items.length}>
+                整库 Anki CSV
               </button>
               <button
-                className={allVocab.view === 'table' ? 'primary' : ''}
-                onClick={() => allVocab.onViewChange('table')}
+                onClick={() => allVocab.onPrint(allVocab.items, '全部生词')}
+                disabled={!allVocab.items.length}
               >
-                表格
+                整库 A4 打印
               </button>
-            </span>
-            <button onClick={() => allVocab.onExportAnki(allVocab.items)} disabled={!allVocab.items.length}>
-              整库 Anki CSV
-            </button>
-            <button
-              onClick={() => allVocab.onPrint(allVocab.items, '全部生词')}
-              disabled={!allVocab.items.length}
-            >
-              整库 A4 打印
-            </button>
-            <button
-              onClick={() => allVocab.onExportWrong(allVocab.items)}
-              disabled={!allVocab.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
-            >
-              导出错词
-            </button>
-            <button className="primary" onClick={allVocab.onClose}>
-              关闭
-            </button>
+              <button
+                onClick={() => allVocab.onExportWrong(allVocab.items)}
+                disabled={!allVocab.items.some((w) => (w.reviewState.lapses ?? 0) > 0)}
+              >
+                导出错词
+              </button>
+              <button className="primary" onClick={allVocab.onClose}>
+                关闭
+              </button>
+            </div>
+            {allVocab.list.length ? (
+              <VocabList
+                items={allVocab.list}
+                view={allVocab.view}
+                focusLemma={allVocab.focusLemma}
+                confirmDel={allVocab.confirmDel}
+                onSpeak={allVocab.onSpeak}
+                onDelete={allVocab.onDelete}
+                onReview={allVocab.onReview}
+                onEdit={allVocab.onEdit}
+                showSource
+              />
+            ) : (
+              <div className="muted">生词本是空的</div>
+            )}
           </div>
-          {allVocab.list.length ? (
-            <VocabList
-              items={allVocab.list}
-              view={allVocab.view}
-              focusLemma={allVocab.focusLemma}
-              confirmDel={allVocab.confirmDel}
-              onSpeak={allVocab.onSpeak}
-              onDelete={allVocab.onDelete}
-              onReview={allVocab.onReview}
-              onEdit={allVocab.onEdit}
-              showSource
-            />
-          ) : (
-            <div className="muted">生词本是空的</div>
-          )}
-        </div>
+        </Guarded>
       )}
-    </Suspense>
+    </>
   )
 }

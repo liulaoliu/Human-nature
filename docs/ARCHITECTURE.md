@@ -377,9 +377,14 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 
 `<panel>` 有两类，都在同一张 `PanelName` 表里：
 
-- **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse` / `statsDetail`；
+- **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse`；
 - **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
   `listen`（听力）/ `write`（仿写）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
+
+懒加载面板在 `ReaderOverlaysHost` 里**每个面板各包一层** `PanelBoundary + Suspense`
+（`panels/PanelBoundary.tsx`）：某个 chunk 加载失败或渲染抛错时，只换掉这一块并给「重试 / 关闭」，
+不要把整个 `Suspense` 放在外层——那样一个面板坏掉会连带其它面板，异常还会冒到整棵树把阅读页打白。
+`PanelLoading` 必须带「取消」出口，避免 chunk 一直不回来时用户无路可走。
 
 **为什么整页会话也要进 URL**：它们一打开就占满正文，用户按返回键应该回到「点它之前那一页」
 （文章 / 列表 / 上一个面板），而不是直接退出阅读器。接线在：

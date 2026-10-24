@@ -215,3 +215,36 @@ button.danger {
   color: var(--dim);
   font-size: 13px;
 }
+
+.panel-loading button {
+  margin-left: 8px;
+}
+
+/* 单个懒加载面板失败：只换这一块，给「重试 / 关闭」出口（别把整页打白）。 */
+.panel-error {
+  position: fixed;
+  top: 18%;
+  left: 50%;
+  z-index: 60;
+  width: min(420px, calc(100vw - 32px));
+  transform: translateX(-50%);
+  padding: 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.panel-error .bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+/* 深链接打开文章：索引/正文还没到时不闪「新建文章」。 */
+.article-loading,
+.article-missing {
+  max-width: 720px;
+  margin: 48px auto;
+  padding: 0 16px;
+}
