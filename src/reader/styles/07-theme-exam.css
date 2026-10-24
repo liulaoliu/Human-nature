@@ -69,6 +69,10 @@
 /* 护眼主题下也要保住「重学补考」的冷色区分（否则两种锤炼长得一样） */
 :root[data-theme='green'] .drill.drill-relearn { background: #f1f7ff; }
 :root[data-theme='green'] .drill.drill-relearn .drill-head b { color: #2f6fb3; }
+:root[data-theme='green'] .drill-prep { border-color: #c9b79a; background: rgba(181, 101, 29, 0.07); }
+:root[data-theme='green'] .drill-prep-hint { color: #b5651d; }
+:root[data-theme='green'] .drill.drill-relearn .drill-prep { border-color: #b7cfe8; background: rgba(47, 111, 179, 0.07); }
+:root[data-theme='green'] .drill.drill-relearn .drill-prep-hint { color: #2f6fb3; }
 :root[data-theme='green'] .toast { background: rgba(255, 255, 255, 0.96); border-color: #c9dcc6; color: #243026; }
 
 /* 背单词卡正面：用法 */

@@ -190,6 +190,27 @@
 .drill.drill-relearn .drill-head b { color: #7fb8ff; }
 .drill-body { display: flex; flex-direction: column; align-items: center; gap: 10px; }
 .drill .study-input { width: 100%; max-width: 460px; }
+/* 写搭配前的「先看一眼」：单词 + 释义 + 提示语，不占一次点击 */
+.drill-prep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  width: 100%;
+  max-width: 460px;
+  padding: 10px 12px 12px;
+  border: 1px dashed #7a6a58;
+  border-radius: var(--radius);
+  background: rgba(240, 169, 74, 0.08);
+}
+.drill-prep-hint { font-size: 12px; color: #f0a94a; }
+/* 一敲键盘就把提示语收起来；用 visibility 而不是删节点——
+   留着它的高度，输入框不会在打字瞬间往上跳（光标跟着跳很烦） */
+.drill-prep-hint.is-typing { visibility: hidden; }
+.drill.drill-relearn .drill-prep { border-color: #4a6b8c; background: rgba(90, 169, 255, 0.08); }
+.drill.drill-relearn .drill-prep-hint { color: #7fb8ff; }
+.drill-prep .study-word { font-size: 30px; }
+.drill-prep .study-meaning { margin-bottom: 0; }
 .drill .quiz-options { display: flex; flex-direction: column; gap: 6px; width: 100%; max-width: 460px; }
 .drill .quiz-options button.focused { border-color: var(--accent); box-shadow: var(--ring); }
 .drill .quiz-options button.wrong-choice { border-color: var(--red); box-shadow: 0 0 0 2px rgba(255, 90, 82, 0.25); }

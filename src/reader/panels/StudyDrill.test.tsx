@@ -176,6 +176,15 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     // ← 回归点：这一步以前要多按一次「继续写搭配（回车）」，纯空转
     expect(screen.queryByRole('button', { name: /继续写搭配/ })).toBeNull()
     expect(screen.getByPlaceholderText('写出它的一个搭配 / 用法')).toBeTruthy()
+    // 但「先看一眼释义」不能一起丢掉：提示语 + 词形 + 释义都在写搭配这一步
+    const hint = screen.getByText(/马上要考你搭配了/)
+    expect(hint.className).not.toContain('is-typing')
+    expect(screen.getByText('放弃')).toBeTruthy()
+
+    // 一敲键盘提示语收起来（高度留着，输入框不跳）
+    const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
+    fireEvent.change(usageInput, { target: { value: 'a' } })
+    expect(hint.className).toContain('is-typing')
     // 步数也从 4 步变 3 步
     expect(screen.getByText(/3\/3 · 写搭配/)).toBeTruthy()
   })
