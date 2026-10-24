@@ -33,7 +33,7 @@ describe('kindOf / 标签 / 顺序', () => {
 })
 
 describe('分类判断', () => {
-  const item = (kind?: VocabKind) => vocabItem(kind ? { kind } : {})
+  const item = (kind?: VocabKind) => vocabItem(kind ? { kind, meaning: '义' } : { meaning: '义' })
 
   it('isWordEntry / isLangPoint 互斥', () => {
     for (const k of KIND_ORDER) {
@@ -44,13 +44,19 @@ describe('分类判断', () => {
     }
   })
 
-  it('isStudyable：只有用法笔记不能背/考', () => {
+  it('isStudyable：用法笔记不能背/考；无释义的卡也不能（废卡先去补释义）', () => {
     expect(KIND_ORDER.map((k) => [k, isStudyable(item(k))])).toEqual([
       ['word', true],
       ['phrase', true],
       ['idiom', true],
       ['usage', false],
     ])
+    // 无释义：普通单词 / 词组 / 习语都不该进背词 / 考试池
+    expect(isStudyable(vocabItem({ kind: 'word', meaning: null }))).toBe(false)
+    expect(isStudyable(vocabItem({ kind: 'phrase', meaning: null }))).toBe(false)
+    expect(isStudyable(vocabItem({ kind: 'idiom', meaning: null }))).toBe(false)
+    // 空串等价于无释义（displayMeaning 也会落到「无释义」）
+    expect(isStudyable(vocabItem({ kind: 'word', meaning: '' }))).toBe(false)
   })
 
   it('inStudyDeck：背单词只收单词，背搭配只收词组/习语，用法两边都不进', () => {

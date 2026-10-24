@@ -8,15 +8,25 @@ const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 const stripPunct = (s: string) => s.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '').trim()
 
 interface DrillStep {
-  kind: 'spell' | 'meaning' | 'usage'
+  kind: 'spell' | 'meaning' | 'card' | 'usage'
 }
 
-/** 由当前卡构造「强制锤炼」步骤（有数据的才出）。听写句子那一步已去掉。 */
+/**
+ * 由当前卡构造「强制锤炼」步骤（有数据的才出）。听写句子那一步已去掉。
+ *
+ * 选词义之后、写搭配之前，插一步「看单词卡」：让用户先看清词形 + 释义，
+ * 再写搭配——直接考搭配用户想不起来，看卡这一步给了线索又保住了回忆的门槛。
+ */
 function buildSteps(card: VocabItem, items: VocabItem[]): DrillStep[] {
   const steps: DrillStep[] = []
   if (card.word) steps.push({ kind: 'spell' })
-  if (canQuizMeaning(card, items)) steps.push({ kind: 'meaning' })
-  if (card.usage.length || card.phrases?.length) steps.push({ kind: 'usage' })
+  const hasMeaning = canQuizMeaning(card, items)
+  if (hasMeaning) steps.push({ kind: 'meaning' })
+  const hasUsage = card.usage.length > 0 || (card.phrases?.length ?? 0) > 0
+  if (hasUsage) {
+    if (hasMeaning) steps.push({ kind: 'card' })
+    steps.push({ kind: 'usage' })
+  }
   return steps
 }
 
@@ -164,6 +174,7 @@ export function MeaningQuiz({
 const STEP_LABEL: Record<DrillStep['kind'], string> = {
   spell: '拼写',
   meaning: '选词义',
+  card: '看卡',
   usage: '写搭配',
 }
 
@@ -210,6 +221,9 @@ export default function DrillBoard({
       // 不再把输入框留着让人反复试（那会退化成抄写）。
       if (norm(text) === norm(card.word)) next()
       else onSpellMiss(text)
+    } else if (cur.kind === 'card') {
+      // 看卡这一步不判对错：看清了词形 + 释义就继续写搭配。
+      next()
     } else if (cur.kind === 'usage') {
       const ok = collocationsOf(card).some((u) => {
         const n = norm(stripPunct(u))
@@ -261,6 +275,21 @@ export default function DrillBoard({
 
       {cur.kind === 'meaning' && <MeaningQuiz card={card} items={items} onSpeak={onSpeak} onPass={next} />}
 
+      {cur.kind === 'card' && (
+        <div className="drill-body">
+          <div className="study-word">
+            {card.word}
+            <button className="speak" onClick={() => onSpeak(card.word)} title="朗读" aria-label="朗读">
+              🔊
+            </button>
+          </div>
+          <div className="study-meaning">
+            {normalizePos(card.partOfSpeech) && <span className="cell-pos">{normalizePos(card.partOfSpeech)} </span>}
+            {displayMeaning(card) || '（无释义）'}
+          </div>
+        </div>
+      )}
+
       {cur.kind === 'usage' && (
         <div className="drill-body">
           <div className="study-word">
@@ -286,7 +315,7 @@ export default function DrillBoard({
       {wrong && <div className="study-result bad">✘ 不对，再来一次</div>}
       {cur.kind !== 'meaning' && (
         <button className="primary" onClick={submit}>
-          提交（回车）
+          {cur.kind === 'card' ? '继续写搭配（回车）' : '提交（回车）'}
         </button>
       )}
     </div>

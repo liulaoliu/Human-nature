@@ -30,11 +30,22 @@ export function useStudyTimers({ queue, index, addStudyTime, paused = false }: U
   const addRef = useRef(addStudyTime)
   addRef.current = addStudyTime
 
-  // 单卡计时：换卡归零（暂停不影响这里）
-  useEffect(() => {
-    if (!queue) return
-    setCardSeconds(0)
-  }, [queue, index])
+  /**
+   * 单卡计时的「卡身份」：换卡（index 变）或换队列（queue 引用变）都算换了张卡。
+   * 用 ref 记住「当前 cardSeconds 属于哪张卡」——身份变了就在**这次渲染里同步归零**，
+   * 而不是等 effect（effect 在提交后才跑，晚一拍，上一张卡攒的秒数会泄漏到新卡上，
+   * 导致新词一进来就被误判超时触发强制锤炼）。
+   */
+  const cardKeyRef = useRef<{ queue: VocabItem[] | null; index: number } | null>(null)
+  const currentKey = queue ? { queue, index } : null
+  const keyChanged =
+    cardKeyRef.current === null
+      ? currentKey !== null
+      : currentKey === null || currentKey.queue !== cardKeyRef.current.queue || currentKey.index !== cardKeyRef.current.index
+  if (keyChanged) {
+    cardKeyRef.current = currentKey
+    if (cardSeconds !== 0) setCardSeconds(0)
+  }
 
   // 单卡每秒 +1；暂停时停表，恢复接着走
   useEffect(() => {

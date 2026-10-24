@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
-import { beforeEach, afterEach, describe, expect, it } from 'vitest'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { render, act } from '@testing-library/react'
 import { vocabItem } from '../../core/testFixtures'
 import type { VocabLibrary } from '../../types/document'
@@ -124,6 +124,61 @@ describe('useStudySession：判完停卡时锤炼不抢', () => {
     act(() => api!.clearDrill())
     // ← 回归点：摊开释义的标记还在（`revealed` 仍为 true），但不能因此把面板又拉回来
     expect(api!.revealed).toBe(true)
+    expect(api!.drillOn).toBe(false)
+    unmount()
+  })
+})
+
+describe('useStudySession：超时秒数不泄漏到下一张新卡', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * 回归：上一张卡停留超过阈值（cardSeconds 攒到超时），切到下一张新卡时，
+   * `cardSeconds` 必须**同步归零**——不能把上一张的秒数带过来，否则新词
+   * 还没来得及看一眼就被误判超时、强制锤炼（用户报的「新词刚进来就锤炼」）。
+   */
+  it('复习模式上一张卡超时后，切到新卡不锤炼、秒数归零', () => {
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({
+            id: 'r1',
+            word: 'run',
+            lemma: 'run',
+            meaning: '跑',
+            reviewState: { ease: 2.5, due: '2020-01-01T00:00:00.000Z', interval: 6, repetitions: 2 },
+          }),
+          vocabItem({
+            id: 'r2',
+            word: 'walk',
+            lemma: 'walk',
+            meaning: '走',
+            reviewState: { ease: 2.5, due: '2020-01-02T00:00:00.000Z', interval: 6, repetitions: 2 },
+          }),
+        ])}
+      />,
+    )
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    act(() => api!.setDrillAfter(2))
+
+    // 第一张卡停 3 秒：超过阈值，进入强制锤炼
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    expect(api!.card?.id).toBe('r1')
+    expect(api!.drillOn).toBe(true)
+
+    // 完成锤炼解锁评分，再评「认识」推进到下一张新卡
+    act(() => api!.clearDrill())
+    act(() => api!.answerReview('good'))
+    expect(api!.card?.id).toBe('r2')
+    // ← 回归点：新卡刚进来，秒数必须已归零，不能被上一张的 3 秒误判超时
+    expect(api!.cardSeconds).toBe(0)
     expect(api!.drillOn).toBe(false)
     unmount()
   })

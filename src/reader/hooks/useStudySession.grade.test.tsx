@@ -62,7 +62,7 @@ describe('useStudySession：标过「不认识」的复习门禁', () => {
 
 describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
   it('连续点「忘记了」不封顶，看看能一直出场', () => {
-    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} />)
+    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} />)
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     expect(api!.queue).toHaveLength(1)
 
@@ -85,8 +85,8 @@ describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
     const { unmount } = render(
       <Harness
         library={lib([
-          vocabItem({ id: 'w1', word: 'one', lemma: 'one' }),
-          vocabItem({ id: 'w2', word: 'two', lemma: 'two' }),
+          vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' }),
+          vocabItem({ id: 'w2', word: 'two', lemma: 'two', meaning: '二' }),
         ])}
       />,
     )
@@ -99,7 +99,7 @@ describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
   })
 
   it('「重练忘记的」每轮只发起一次，重练里评忘记仍会继续重排', () => {
-    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} />)
+    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} />)
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => api!.grade('again')) // 本轮第 2 次出场
     act(() => api!.grade('good')) // 本轮结束
@@ -119,7 +119,7 @@ describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
     unmount()
   })
 
-  it('过了释义关后：模糊收尾，忘记（确认后）仍会重排', () => {
+  it('过了释义关后点「忘记」：直接落库并重排，不再二次确认', () => {
     const { unmount } = render(
       <Harness
         library={lib([
@@ -141,8 +141,7 @@ describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
     expect(api!.meaningGate).toBe(true)
     act(() => api!.clearMeaningGate())
     act(() => api!.grade('again'))
-    expect(api!.pendingForgot).toBe(true)
-    act(() => api!.confirmForgot())
+    // 选「忘记了」= 确实忘了，直接 again 落库 + 重排到队尾，不弹二次确认
     expect(api!.queue?.filter((it) => it.id === 'w1')).toHaveLength(2)
     expect(api!.index).toBe(1)
     unmount()
@@ -169,7 +168,6 @@ describe('useStudySession：忘记一直重排，直到认识 / 模糊', () => {
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => api!.clearMeaningGate())
     act(() => api!.grade('hard'))
-    expect(api!.pendingForgot).toBe(false)
     expect(api!.queue?.filter((it) => it.id === 'w1')).toHaveLength(1)
     expect(api!.index).toBe(1)
     unmount()
@@ -262,7 +260,7 @@ describe('useStudySession：拼错即判「不认识」并从头重学', () => {
   })
 })
 
-describe('useStudySession：刚过释义关点「忘记了」先确认', () => {
+describe('useStudySession：刚过释义关点「忘记了」直接落库', () => {
   const gatedLibrary = () =>
     lib([
       vocabItem({
@@ -278,28 +276,16 @@ describe('useStudySession：刚过释义关点「忘记了」先确认', () => {
       vocabItem({ id: 'w4', word: 'see', lemma: 'see', meaning: '看' }),
     ])
 
-  it('确认前什么都不写，快捷键也停用；确认后按 again 落库并进入重学', () => {
+  it('选了「忘记了」就是确实忘了：直接按 again 落库并进入重学', () => {
     const onPersist = vi.fn()
     const { unmount } = render(<Harness library={gatedLibrary()} onPersist={onPersist} />)
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => api!.clearMeaningGate())
     act(() => api!.grade('again'))
 
-    expect(api!.pendingForgot).toBe(true)
-    expect(api!.index).toBe(0)
-    expect(api!.counts.forgot).toBe(0)
-    expect(onPersist).not.toHaveBeenCalled()
-
-    // 确认期间按评分快捷键不应绕过判断
-    fireEvent.keyDown(window, { key: '1' })
-    expect(api!.pendingForgot).toBe(true)
-    expect(api!.index).toBe(0)
-    expect(onPersist).not.toHaveBeenCalled()
-
-    act(() => api!.confirmForgot())
-    expect(api!.pendingForgot).toBe(false)
     expect(api!.index).toBe(1)
     expect(api!.counts.forgot).toBe(1)
+    expect(onPersist).toHaveBeenCalled()
 
     const saved = onPersist.mock.calls.at(-1)![0] as VocabLibrary
     const w1 = saved.items.find((it) => it.id === 'w1')!
@@ -310,51 +296,13 @@ describe('useStudySession：刚过释义关点「忘记了」先确认', () => {
     unmount()
   })
 
-  it('改按「模糊」：进度不清零、不进入重学', () => {
-    const onPersist = vi.fn()
-    const { unmount } = render(<Harness library={gatedLibrary()} onPersist={onPersist} />)
-    act(() => api!.start({ mode: 'learn', scope: 'all' }))
-    act(() => api!.clearMeaningGate())
-    act(() => api!.grade('again'))
-    act(() => api!.softenForgot())
-
-    expect(api!.pendingForgot).toBe(false)
-    expect(api!.counts.fuzzy).toBe(1)
-    expect(api!.counts.forgot).toBe(0)
-    const saved = onPersist.mock.calls.at(-1)![0] as VocabLibrary
-    const w1 = saved.items.find((it) => it.id === 'w1')!
-    expect(w1.reviewState.repetitions).toBe(1)
-    expect(w1.reviewState.interval).toBe(1)
-    expect(w1.reviewState.relearn).toBeUndefined()
-    unmount()
-  })
-
-  it('返回重评：撤销确认，之后正常评分照旧', () => {
-    const onPersist = vi.fn()
-    const { unmount } = render(<Harness library={gatedLibrary()} onPersist={onPersist} />)
-    act(() => api!.start({ mode: 'learn', scope: 'all' }))
-    act(() => api!.clearMeaningGate())
-    act(() => api!.grade('again'))
-    act(() => api!.cancelForgot())
-
-    expect(api!.pendingForgot).toBe(false)
-    expect(api!.index).toBe(0)
-    expect(onPersist).not.toHaveBeenCalled()
-
-    act(() => api!.grade('good'))
-    expect(api!.index).toBe(1)
-    expect(api!.counts.know).toBe(1)
-    unmount()
-  })
-
-  it('没过释义关的普通卡点「忘记了」不拦', () => {
+  it('没过释义关的普通卡点「忘记了」同样直接落库', () => {
     const onPersist = vi.fn()
     const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'run', lemma: 'run', meaning: '跑' })])} onPersist={onPersist} />)
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => api!.setRevealed(true))
     act(() => api!.grade('again'))
 
-    expect(api!.pendingForgot).toBe(false)
     expect(api!.index).toBe(1)
     expect(onPersist).toHaveBeenCalled()
     unmount()

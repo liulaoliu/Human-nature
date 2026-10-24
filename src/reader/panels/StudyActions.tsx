@@ -27,7 +27,6 @@ export interface StudyActionsProps {
   reviewFuzzy: boolean
   reviewGraded: boolean
   showMeaningGate: boolean
-  pendingForgot: boolean
   canGrade: boolean
   spellingFront: boolean
   gradeInfo: string
@@ -38,9 +37,6 @@ export interface StudyActionsProps {
   onLearnContinue: () => void
   onNext: () => void
   onReviewChoice: (choice: 'next' | 'missed') => void
-  onConfirmForgot: () => void
-  onSoftenForgot: () => void
-  onCancelForgot: () => void
   onGrade: (grade: ReviewGrade) => void
   onReviewAnswer: (grade: ReviewGrade) => void
   onCheckSpelling: () => void
@@ -60,7 +56,6 @@ export default function StudyActions(props: StudyActionsProps) {
     reviewFuzzy,
     reviewGraded,
     showMeaningGate,
-    pendingForgot,
     canGrade,
     spellingFront,
     gradeInfo,
@@ -70,9 +65,6 @@ export default function StudyActions(props: StudyActionsProps) {
     onLearnContinue,
     onNext,
     onReviewChoice,
-    onConfirmForgot,
-    onSoftenForgot,
-    onCancelForgot,
     onGrade,
     onReviewAnswer,
     onCheckSpelling,
@@ -136,23 +128,6 @@ export default function StudyActions(props: StudyActionsProps) {
   }
 
   if (showMeaningGate) return null
-
-  if (pendingForgot) {
-    return (
-      <div className="forgot-confirm">
-        <div className="muted">你刚选对了释义，却又点了「忘记了」—— 按哪个排期？</div>
-        <div className="bar study-actions">
-          <button className="danger" onClick={onConfirmForgot}>
-            确实忘了 · 从头重学
-          </button>
-          <button className="primary" onClick={onSoftenForgot}>
-            其实记得 · 按模糊（{fmtInterval(review(card.reviewState, 'hard').interval)}）
-          </button>
-          <button onClick={onCancelForgot}>返回重评</button>
-        </div>
-      </div>
-    )
-  }
 
   if (canGrade) {
     return (

@@ -18,8 +18,8 @@ describe('useStudySession：单词之间切换', () => {
     const { unmount } = render(
       <Harness
         library={lib([
-          vocabItem({ id: 'w1', word: 'one', lemma: 'one' }),
-          vocabItem({ id: 'w2', word: 'two', lemma: 'two' }),
+          vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' }),
+          vocabItem({ id: 'w2', word: 'two', lemma: 'two', meaning: '二' }),
         ])}
       />,
     )
@@ -57,8 +57,8 @@ describe('useStudySession：背单词 / 背搭配分牌组', () => {  it('背单
     const { unmount } = render(
       <Harness
         library={lib([
-          vocabItem({ id: 'w1', word: 'run', lemma: 'run', kind: 'word' }),
-          vocabItem({ id: 'p1', word: 'fall back on', lemma: 'fall back on', kind: 'phrase' }),
+          vocabItem({ id: 'w1', word: 'run', lemma: 'run', kind: 'word', meaning: '跑' }),
+          vocabItem({ id: 'p1', word: 'fall back on', lemma: 'fall back on', kind: 'phrase', meaning: '依赖' }),
         ])}
       />,
     )
@@ -76,7 +76,7 @@ describe('useStudySession：R 朗读当前单词', () => {
   it('R 和卡片右侧按钮走同一个朗读入口', () => {
     const speak = vi.fn()
     const { unmount } = render(
-      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} speak={speak} />,
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} speak={speak} />,
     )
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
 
@@ -88,7 +88,7 @@ describe('useStudySession：R 朗读当前单词', () => {
   it('拼写模式判卷前不朗读（防剧透），判卷后可读', () => {
     const speak = vi.fn()
     const { unmount } = render(
-      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} speak={speak} />,
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} speak={speak} />,
     )
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => api!.setSpelling(true))
@@ -106,7 +106,7 @@ describe('useStudySession：R 朗读当前单词', () => {
 describe('useStudySession：卡内编辑暂停计时', () => {
   it('编辑 10 秒两只表都不动，关闭编辑后继续', () => {
     vi.useFakeTimers()
-    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one' })])} />)
+    const { unmount } = render(<Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} />)
     act(() => api!.start({ mode: 'learn', scope: 'all' }))
     act(() => {
       vi.advanceTimersByTime(3000)

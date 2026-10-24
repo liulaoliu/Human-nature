@@ -2,7 +2,6 @@ import { useCallback, useRef, useState } from 'react'
 import {
   canQuizMeaning,
   isRelearning,
-  needsForgotConfirm,
   needsMeaningCheck,
   planRetryForgot,
   groupEndOf,
@@ -129,8 +128,6 @@ export function useStudySession(params: UseStudySessionParams) {
   const [meaningCleared, setMeaningCleared] = useState(false)
   /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
   const [drillCleared, setDrillCleared] = useState(false)
-  /** 本卡刚过释义关却点了「忘记了」：等用户确认按哪个排期（不偷偷改分）。 */
-  const [pendingForgot, setPendingForgot] = useState(false)
   /**
    * 学习模式「4 条释义」那一关的状态（做题 / 揭示 / 等待下一词）。
    * 定义在 `resetCardUi` 之后也没关系：换卡时通过这个 ref 调它的 `reset`。
@@ -232,7 +229,6 @@ export function useStudySession(params: UseStudySessionParams) {
     setDelArmed(false)
     setDrillCleared(false)
     setMeaningCleared(false)
-    setPendingForgot(false)
     spellGateResetRef.current()
     learnResetRef.current()
     reviewResetRef.current()
@@ -374,7 +370,6 @@ export function useStudySession(params: UseStudySessionParams) {
       setDelArmed(false)
       setDrillCleared(false)
       setMeaningCleared(false)
-      setPendingForgot(false)
       if (opts?.advance !== false) {
         // 复习模式「认识」直接推进：组末拼写挂在这条路上；
         // 学习模式判完不推进（advance:false），组末由「下一词 / E」的 forward 触发。
@@ -408,33 +403,15 @@ export function useStudySession(params: UseStudySessionParams) {
   const drillTimedOut = drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
 
   /**
-   * 评分入口：这张卡刚选对释义（释义关 / 锤炼里的选义题）却点「忘记了」，
-   * 说明两个信号矛盾，先拦成一次显式确认；确认后仍按用户原意写 again，不偷改分。
+   * 评分入口：选了「忘记了」就是确实忘了，直接按 again 落库（repetitions 归零、进入重学）。
+   * 不再弹「确实忘了 / 其实记得」的二次确认——用户点忘记已是明确表态，多一步是冗余。
    */
   const grade = useCallback(
     (g: ReviewGrade) => {
-      if (needsForgotConfirm({ grade: g, meaningProven: meaningCleared })) {
-        setPendingForgot(true)
-        return
-      }
       applyGrade(g)
     },
-    [applyGrade, meaningCleared],
+    [applyGrade],
   )
-
-  /** 确认「确实忘了」：按 again 落库（repetitions 归零、进入重学）。 */
-  const confirmForgot = useCallback(() => {
-    setPendingForgot(false)
-    applyGrade('again')
-  }, [applyGrade])
-
-  /** 改按「模糊」：刚选对释义，多半只是没把握，不必把进度清零。 */
-  const softenForgot = useCallback(() => {
-    setPendingForgot(false)
-    applyGrade('hard')
-  }, [applyGrade])
-
-  const cancelForgot = useCallback(() => setPendingForgot(false), [])
 
   /**
    * 复习模式「只显示单词 + 三键」（Spec 2026-10-22）。
@@ -449,10 +426,6 @@ export function useStudySession(params: UseStudySessionParams) {
     active: !!queue && !!card,
     ready: !relearning && !meaningGate && !drillTimedOut && !learnPhase && !spellMiss && !(spelling && !checked),
     judge: (g, advance) => {
-      if (needsForgotConfirm({ grade: g, meaningProven: meaningCleared })) {
-        setPendingForgot(true)
-        return
-      }
       applyGrade(g, { advance })
     },
     showCard: () => setRevealed(true),
@@ -567,7 +540,6 @@ export function useStudySession(params: UseStudySessionParams) {
       editOpen,
       drillOn,
       spellMiss: !!spellMiss,
-      pendingForgot,
       meaningGate,
       roundTest: !!spellingRound.test,
       learnPhase,
@@ -657,8 +629,6 @@ export function useStudySession(params: UseStudySessionParams) {
     relearning,
     /** 拼写错误的判定提示；非空时禁止切卡 / 退出，必须先确认。 */
     spellMiss,
-    /** 刚过释义关却点「忘记了」，等确认（确认前不落库）。 */
-    pendingForgot,
     /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
     navLocked: !!spellMiss || !!spellingRound.test,
     drillAfter,
@@ -677,9 +647,6 @@ export function useStudySession(params: UseStudySessionParams) {
     startRelearn,
     grade,
     pressGrade,
-    confirmForgot,
-    softenForgot,
-    cancelForgot,
     back,
     forward,
     markUnknown,

@@ -128,7 +128,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     const onDone = vi.fn()
     render(<DrillBoard card={withUsage} items={items} onSpeak={vi.fn()} onDone={onDone} onSpellMiss={vi.fn()} />)
 
-    // 拼写 → 选义 → 写搭配
+    // 拼写 → 选义 → 看卡 → 写搭配
     const spell = screen.getByPlaceholderText('拼出这个英文单词')
     fireEvent.change(spell, { target: { value: 'abandon' } })
     fireEvent.keyDown(spell, { key: 'Enter' })
@@ -136,6 +136,9 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
     fireEvent.keyDown(window, { key: String(correctIndex + 1) })
     expect(onDone).not.toHaveBeenCalled()
+
+    // 选义后先看单词卡，再进写搭配
+    fireEvent.click(screen.getByRole('button', { name: /继续写搭配/ }))
 
     // 词组也行，不必原样抄用法
     const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
@@ -154,6 +157,7 @@ describe('DrillBoard：最后一步「写搭配」答对就收工', () => {
     fireEvent.keyDown(spell, { key: 'Enter' })
     const correctIndex = optionButtons().findIndex((b) => b.textContent?.includes('放弃'))
     fireEvent.keyDown(window, { key: String(correctIndex + 1) })
+    fireEvent.click(screen.getByRole('button', { name: /继续写搭配/ }))
 
     const usageInput = screen.getByPlaceholderText('写出它的一个搭配 / 用法')
     fireEvent.change(usageInput, { target: { value: 'abandon the car' } })

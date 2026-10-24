@@ -25,7 +25,6 @@ export interface StudyKeyContext {
   editOpen: boolean
   drillOn: boolean
   spellMiss: boolean
-  pendingForgot: boolean
   meaningGate: boolean
   /** 组末拼写测试进行中：键盘归输入框（回车检查）。 */
   roundTest: boolean
@@ -61,13 +60,13 @@ export interface StudyKeyActions {
 
 export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions): void {
   const enabled =
-    !!ctx.queueLength && !ctx.editOpen && !ctx.drillOn && !ctx.meaningGate && !ctx.spellMiss && !ctx.pendingForgot
+    !!ctx.queueLength && !ctx.editOpen && !ctx.drillOn && !ctx.meaningGate && !ctx.spellMiss
 
   useHotkeys(
     (e) => {
       // 组末拼写测试：键盘交给输入框（回车检查），不给全局快捷键抢
       if (ctx.roundTest) return
-      if (ctx.editOpen || ctx.drillOn || ctx.spellMiss || ctx.pendingForgot) return
+      if (ctx.editOpen || ctx.drillOn || ctx.spellMiss) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
 
       const key = e.key.toLowerCase()

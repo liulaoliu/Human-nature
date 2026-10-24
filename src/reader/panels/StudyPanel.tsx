@@ -87,8 +87,6 @@ export interface StudyPanelProps {
   reviewFuzzy: boolean
   /** 复习模式：已判过并停卡（忘记 / 记错了），等「下一词」。 */
   reviewGraded: boolean
-  /** 刚过释义关却点了「忘记了」：等用户确认按哪个排期（确认前不落库）。 */
-  pendingForgot: boolean
   drillAfter: number
 
   onClose: () => void
@@ -110,12 +108,6 @@ export interface StudyPanelProps {
   onSaveEdit: () => void
   onCancelEdit: () => void
   onGrade: (grade: ReviewGrade) => void
-  /** 「确实忘了」：确认按 again 落库（进入重学）。 */
-  onConfirmForgot: () => void
-  /** 「其实记得」：改按 hard 排期，不把进度清零。 */
-  onSoftenForgot: () => void
-  /** 返回重评（什么都不写）。 */
-  onCancelForgot: () => void
   onBack: () => void
   onNext: () => void
   onMarkUnknown: () => void
@@ -178,7 +170,6 @@ export default function StudyPanel({
   reviewKeys,
   reviewFuzzy,
   reviewGraded,
-  pendingForgot,
   relearning,
   spellMiss,
   roundTest,
@@ -207,9 +198,6 @@ export default function StudyPanel({
   onSaveEdit,
   onCancelEdit,
   onGrade,
-  onConfirmForgot,
-  onSoftenForgot,
-  onCancelForgot,
   onBack,
   onNext,
   onMarkUnknown,
@@ -491,7 +479,6 @@ export default function StudyPanel({
               reviewFuzzy={reviewFuzzy}
               reviewGraded={reviewGraded}
               showMeaningGate={showMeaningGate}
-              pendingForgot={pendingForgot}
               canGrade={canGrade}
               spellingFront={spellingFront}
               gradeInfo={gradeInfo}
@@ -501,9 +488,6 @@ export default function StudyPanel({
               onLearnContinue={onLearnContinue}
               onNext={onNext}
               onReviewChoice={onReviewChoice}
-              onConfirmForgot={onConfirmForgot}
-              onSoftenForgot={onSoftenForgot}
-              onCancelForgot={onCancelForgot}
               onGrade={onGrade}
               onReviewAnswer={onReviewAnswer}
               onCheckSpelling={onCheckSpelling}

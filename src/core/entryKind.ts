@@ -34,9 +34,14 @@ export function isLangPoint(item: { kind?: VocabKind } | null | undefined): bool
   return kindOf(item) !== 'word'
 }
 
-/** 能不能拿来背 / 考（用法笔记是中文说明，只用来收藏与打印）。 */
-export function isStudyable(item: { kind?: VocabKind } | null | undefined): boolean {
-  return kindOf(item) !== 'usage'
+/** 能不能拿来背 / 考。两条硬门槛：
+ *  - 用法笔记（中文说明）只用来收藏与打印，不进卡片；
+ *  - 没有释义的卡是「废卡」（`aiTodos` 里说的「查过但没给」也在这）——没中文意思，
+ *    选义题出不了、卡片上只能显示「无释义」，不该混进背词 / 考试池，先去补释义。
+ */
+export function isStudyable(item: { kind?: VocabKind; meaning?: string | null } | null | undefined): boolean {
+  if (kindOf(item) === 'usage') return false
+  return !!item?.meaning
 }
 
 /** 背词牌组：普通单词 / 搭配（词组·习语）。 */
@@ -48,7 +53,7 @@ export type StudyDeck = 'word' | 'collocation'
  * - collocation：只背词组 / 习语（用法笔记两边都不进）
  */
 export function inStudyDeck(
-  item: { kind?: VocabKind } | null | undefined,
+  item: { kind?: VocabKind; meaning?: string | null } | null | undefined,
   deck: StudyDeck,
 ): boolean {
   if (!isStudyable(item)) return false

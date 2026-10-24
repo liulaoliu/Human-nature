@@ -10,18 +10,19 @@ import { useStudyPool, type UseStudyPoolOptions } from './useStudyPool'
 /** 背单词设置与候选池：范围/牌组/新学复习过滤，以及到期数、新词数。 */
 const past = new Date(0).toISOString()
 const items: VocabLibrary['items'] = [
-  vocabItem({ id: 'w1', word: 'one', lemma: 'one' }),
+  vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' }),
   vocabItem({
     id: 'w2',
     word: 'two',
     lemma: 'two',
+    meaning: '二',
     status: 'mastered',
     reviewState: { ...vocabItem().reviewState, repetitions: 2, due: past },
   }),
-  vocabItem({ id: 'p1', word: 'run out', lemma: 'run out', kind: 'phrase' }),
-  vocabItem({ id: 'u1', word: 'used to', lemma: 'used to', kind: 'usage' }),
-  vocabItem({ id: 'w3', word: 'three', lemma: 'three', source: { articleId: 'A', fileName: 'A', sentenceId: null, sentenceText: 'Three.' } }),
-  vocabItem({ id: 'w4', word: 'run', lemma: 'run' }),
+  vocabItem({ id: 'p1', word: 'run out', lemma: 'run out', kind: 'phrase', meaning: '耗尽' }),
+  vocabItem({ id: 'u1', word: 'used to', lemma: 'used to', kind: 'usage', meaning: '过去常常' }),
+  vocabItem({ id: 'w3', word: 'three', lemma: 'three', meaning: '三', source: { articleId: 'A', fileName: 'A', sentenceId: null, sentenceText: 'Three.' } }),
+  vocabItem({ id: 'w4', word: 'run', lemma: 'run', meaning: '跑' }),
 ]
 
 const library = (): VocabLibrary => ({ ...createLibrary(), items })

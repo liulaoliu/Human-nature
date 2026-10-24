@@ -132,17 +132,6 @@ export function needsMeaningCheck(
 }
 
 /**
- * 释义关刚过（或锤炼里的选义题刚答对），却要点「忘记了」：先要一次确认。
- *
- * 这张卡刚刚证明「看到词能选出正确释义」，紧接着又判自己忘记，两个信号互相矛盾。
- * 这里**不替用户改分**（不偷偷降成 hard），只把自相矛盾的那一下拦成一次显式选择，
- * 避免迷迷糊糊把 repetitions 打回 0、整轮反复重学；确认后仍按原样写 again。
- */
-export function needsForgotConfirm(opts: { grade: ReviewGrade; meaningProven: boolean }): boolean {
-  return opts.grade === 'again' && opts.meaningProven
-}
-
-/**
  * 词库够不够出「正确释义 + 3 个干扰项」。
  * 与 `needsMeaningCheck` 分开：规则说该考，但词库太小出不了题时退回普通卡片。
  */

@@ -54,7 +54,7 @@ types ← core ← adapters ← reader
 | 你要加的东西 | 放哪 | 注意 |
 |---|---|---|
 | 计算 / 规则 / 解析 / 纯函数 | `src/core/<领域>.ts` | 必须有同名 `.test.ts`（R7）；不许碰 IO |
-| 词条「类型」相关的判断与标签 | `src/core/entryKind.ts` | **SSOT**，视图不许再抄一份字面量（R5） |
+| 词条「类型」相关的判断与标签 | `src/core/entryKind.ts` | **SSOT**，视图不许再抄一份字面量（R5）。`isStudyable` 判定「能不能背/考」：用法笔记（中文说明）不进卡片；**无释义的卡也不进**——没中文意思选义题出不了、卡片只能显示「无释义」，先去补释义（2026-10-24） |
 | 语言点（词组/习语/用法）的收集与键规则 | `src/core/langPoints.ts` | 与 `vocab.ts`（单词规则）分开 |
 | 语言点手动编辑（表单 ↔ 数据、多行拆条、列表摘要、旧数据归一） | `src/core/language.ts` | `getSentenceLanguages` 负责兼容老数据（单条 `language`、列表字段是字符串）；结构 / 语法的换行与缩进原样保留。阅读 / 速读共用 `panels/LanguageEditor`；正文 / 速读 / 日志共用 `panels/LanguageLines`。**点遮罩不关闭**，只有「保存 / 取消」能关；点输入框展开、点框外收回 |
 | 单词的词形 / 合并 / 排期规则 | `src/core/vocab.ts`（对外出口）+ `src/core/vocab/*` | 子模块按职责分：`word` / `merge` / `analysis` / `library` / `review`；新规则放进对应子模块，别把 facade 再撑大 |
@@ -86,7 +86,6 @@ types ← core ← adapters ← reader
 | 背单词计时（单卡 / 本轮总时长） | `src/reader/hooks/useStudyTimers.ts` | 归零只看换卡 / 换轮；`paused`（卡内编辑）只停表不归零，停表前把未落盘秒数补记 |
 | 单词「学过没有 / 要不要复习」 | `src/core/vocab/review.ts` 的 `isFresh` / `hasReviewHistory` / `isRelearning` | 别再看 `repetitions === 0`：答错后它也会归零；新词 = 从未排期（interval 0 + due null + 非重学） |
 | 拼写判错 → 判为「不认识」 | `src/core/vocab/spelling.ts`（`spellingMatches` / `markSpellingMiss`） | 一次判定：SRS again + `relearn + 1` + 「不认识」标签；会话负责重排与锁导航，视图不算规则 |
-| 刚过释义关却点「忘记了」 | `src/core/vocab/review.ts` 的 `needsForgotConfirm` | 先确认再落库；确认前不写 SRS、评分快捷键停用；确认后仍按 again，**不偷偷降成 hard** |
 | 背单词「学习新词」这一步怎么判 | `src/core/vocab/learnStep.ts` | 看答案 / 选错 = 不认识（again），首次选对 = 模糊（hard，防蒙对），第二次起 = 认识（good）；词库不足 4 个释义时 `fallback` 退回普通卡。停留时长 `LEARN_REVEAL_HOLD_MS`（可打断）。选对次数记在 `ReviewState.meaningPasses`（跨轮持久，判不认识归零） |
 | 背单词「选中文释义」的四个选项 | `src/core/vocab/meaningOptions.ts` | 正确 + 3 干扰项，卡 id 做种子的稳定哈希定序；`correctOptionIndex` 供「揭示答案时给正确项上浅绿」用。视图与会话共用这一份，不许各算一套 |
 | 背单词「复习单词」三键 | `src/core/vocab/reviewStep.ts` | 看见单词就能判，不用先翻面：认识 → 直接写 good 并换下一张；模糊 → **先不落库**、摊卡等「下一词」（hard）/「记错了」（again）；忘记 → 立刻 again 并停卡。模糊先不写库是为了「一次决定一次落库」——先 hard 再 again 会在统计里算两次、还把刚加的 repetitions 又清零 |
@@ -132,9 +131,8 @@ types ← core ← adapters ← reader
 - 拼写判错：`core/vocab/spelling.ts`。`spellingMatches` 只忽略大小写/空白，不做词形兜底；
   `markSpellingMiss` 写 again + `relearn` + 「不认识」。会话（背单词 / 考试）判定后必须锁住
   「再输一次 / 下一题 / 退出」，确认后才允许继续；重排由 `useStudySession.applySpellingMiss` 做。
-- 「刚选对释义又点忘记」：`core/vocab/review.ts` 的 `needsForgotConfirm`。释义关 / 锤炼刚考过
-  词义，紧接着评「忘记」是矛盾输入：先停在确认条（确实忘了 → again；其实记得 → hard），
-  确认前不落库。**规则只决定「要不要问」，不替用户改分**；「不认识」按钮是显式标签动作，不走这条。
+- 选「忘记了」= 确实忘了：直接按 again 落库（repetitions 归零、进入重学），**不再弹二次确认**。
+  用户点忘记已是明确表态，多一步「确实忘了 / 其实记得」是冗余（2026-10-24 移除）。
 - 超时「强制锤炼」该不该出现：`core/vocab/drill.ts` 的 `shouldDrill`。锤炼是**评分门禁**
   （先做题才允许评分），所以「已经判完、停在卡上等下一词」（`parked`：学习判完 / 复习已判 /
   模糊待定）、学习模式四选项那一关、拼错判定页，一律不触发。
@@ -143,6 +141,10 @@ types ← core ← adapters ← reader
   单词卡一帧都没露就被锤炼接管；复习模式按「忘记了」同样。**判完的卡不需要再门禁一次**。
   第二个坑（2026-10-22）：重学卡的「摊开过释义」一旦为真就一直为真，过完面板会**原地重开**，
   用户写完搭配也退不出去。所以「本卡本轮已锤炼完」由 `cleared` 统一兜，两条触发各自不用再记。
+- 锤炼的步骤顺序：`panels/StudyDrill.ts` 的 `buildSteps`。拼写 → 选词义 → **看卡** → 写搭配
+  （有哪步数据才出哪步）。选词义之后、写搭配之前必须插一步「看单词卡」：让用户先看清词形 +
+  释义再写搭配，直接考搭配用户想不起来（2026-10-24 加）。锤炼做完回单词卡的那个展示在
+  `useStudySession.clearDrill` 之后，不在这里。
 
 ### 2.4.1) 词形只做屈折还原，派生词是另一个词
 

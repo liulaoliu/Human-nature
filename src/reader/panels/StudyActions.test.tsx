@@ -26,7 +26,6 @@ function props(over: Partial<StudyActionsProps> = {}): StudyActionsProps {
     reviewFuzzy: false,
     reviewGraded: false,
     showMeaningGate: false,
-    pendingForgot: false,
     canGrade: true,
     spellingFront: false,
     gradeInfo: '',
@@ -36,9 +35,6 @@ function props(over: Partial<StudyActionsProps> = {}): StudyActionsProps {
     onLearnContinue: noop,
     onNext: noop,
     onReviewChoice: noop,
-    onConfirmForgot: noop,
-    onSoftenForgot: noop,
-    onCancelForgot: noop,
     onGrade: noop,
     onReviewAnswer: noop,
     onCheckSpelling: noop,
@@ -72,12 +68,6 @@ describe('StudyActions：分支优先级', () => {
 
   it('锤炼中整块换成 DrillBoard，评分按钮消失', () => {
     render(<StudyActions {...props({ drillOn: true, canGrade: true })} />)
-    expect(screen.queryByText(/认识/)).toBeNull()
-  })
-
-  it('忘了但刚选对释义：先问按哪个排期', () => {
-    render(<StudyActions {...props({ pendingForgot: true, canGrade: true })} />)
-    expect(screen.getByText(/确实忘了/)).toBeTruthy()
     expect(screen.queryByText(/认识/)).toBeNull()
   })
 
