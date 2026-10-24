@@ -1,4 +1,5 @@
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
+import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import { contentType, safeJoin, stripLeadingSlashes } from './util.ts'
@@ -19,14 +20,14 @@ const FISH_IMG = /\.(png|jpe?g|webp|avif)$/i
 const FISH_MAX = 600 * 1024
 
 /** 只收轻量图（排除动画 gif / 大文件），避免装饰图吃 CPU。 */
-function listFish(dir) {
-  let names = []
+function listFish(dir: string): string[] {
+  let names: string[] = []
   try {
     names = readdirSync(dir).filter((f) => FISH_IMG.test(f))
   } catch {
     return []
   }
-  const sizeOf = (f) => {
+  const sizeOf = (f: string): number => {
     try {
       return statSync(join(dir, f)).size
     } catch {
@@ -37,7 +38,7 @@ function listFish(dir) {
   return (light.length ? light : names).sort()
 }
 
-function sendJson(res, code, obj) {
+function sendJson(res: ServerResponse, code: number, obj: unknown): void {
   res.statusCode = code
   res.setHeader('Content-Type', 'application/json; charset=utf-8')
   res.end(JSON.stringify(obj))
@@ -59,9 +60,14 @@ const GZIP_MIN = 1024 // 1KB
  * `dist/assets/*` 带 content hash，同一路径的内容永远不变，缓存命中率接近 100%；
  * `articles.json` / `*.tsv` 这类可变文件靠 (mtime, size) 失效。
  */
-const gzipCache = new Map()
+interface GzipCacheEntry {
+  mtimeMs: number
+  size: number
+  buf: Buffer
+}
+const gzipCache = new Map<string, GzipCacheEntry>()
 
-function gzipFor(file, st) {
+function gzipFor(file: string, st: { mtimeMs: number; size: number }): Buffer {
   const hit = gzipCache.get(file)
   if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) return hit.buf
   // 同步压缩：单次 637KB 约 10–20ms，而且只在这个文件第一次被请求时发生。
@@ -71,7 +77,12 @@ function gzipFor(file, st) {
   return buf
 }
 
-function serveFile(req, res, file, { head = false, cache = false } = {}) {
+function serveFile(
+  req: IncomingMessage,
+  res: ServerResponse,
+  file: string,
+  { head = false, cache = false }: { head?: boolean; cache?: boolean } = {},
+): void {
   const st = statSync(file)
   res.statusCode = 200
   res.setHeader('Content-Type', contentType(file))
@@ -98,7 +109,7 @@ function serveFile(req, res, file, { head = false, cache = false } = {}) {
 }
 
 /** 单入口 SPA：所有前端路由都回落到同一份 index.html（/reader/** 与旧 /reader.html 也一样）。 */
-function isSpaFallback(pathname) {
+function isSpaFallback(pathname: string): boolean {
   // 带扩展名的缺失资源仍然 404（否则浏览器把 HTML 当 JS 解析）；
   // 只有旧入口 /reader.html 是个例外：它没有对应文件，但要能打开阅读页。
   return !/\.[a-zA-Z0-9]+$/.test(pathname) || pathname === '/reader.html'
@@ -111,10 +122,20 @@ function isSpaFallback(pathname) {
  *  - articles.json / shadowing-state.json 优先 public（重新生成不必 rebuild）
  *  - 其余静态文件来自 dist/
  */
-export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = Date.now(), dbPath } = {}) {
-  return (req, res) => {
+export interface RequestHandlerOptions {
+  distDir: string
+  publicDir: string
+  fishDir?: string
+  startedAt?: number
+  dbPath?: string
+}
+
+export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = Date.now(), dbPath }: RequestHandlerOptions) {
+  return (req: IncomingMessage, res: ServerResponse): void => {
     const url = req.url || '/'
-    const pathname = url.split('?')[0]
+    // split() 恒返回至少一个元素，`[0]` 运行时不会是 undefined；
+    // `?? ''` 只是给 noUncheckedIndexedAccess 的静态兜底。
+    const pathname = url.split('?')[0] ?? ''
 
     // 有副作用 / 会花钱 / 会写盘的入口统一挡跨站（store 内部还会再校验一次，dev 插件也直接复用）
     const guarded =
@@ -251,11 +272,11 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
 }
 
 /** 读端口：命令行/env > config.json > 5173（5173 是原 dev 端口，保指数库 origin 不变）。 */
-export function loadPort(root, argPort) {
+export function loadPort(root: string, argPort?: string): number {
   if (argPort && /^\d+$/.test(argPort)) return Number(argPort)
   if (process.env.PORT && /^\d+$/.test(process.env.PORT)) return Number(process.env.PORT)
   try {
-    const c = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'))
+    const c = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as { port?: unknown }
     if (c.port) return Number(c.port)
   } catch {
     // ignore

@@ -2,7 +2,7 @@ import { createServer } from 'node:http'
 import { existsSync, writeFileSync, rmSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
-import { createRequestHandler, loadPort } from './httpApp.js'
+import { createRequestHandler, loadPort } from './httpApp.ts'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')

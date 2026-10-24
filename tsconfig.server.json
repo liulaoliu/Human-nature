@@ -17,5 +17,5 @@
     "skipLibCheck": true,
     "types": ["node"]
   },
-  "include": ["server/**/*.ts", "tools/*.d.ts"]
+  "include": ["server/**/*.ts", "tools/*.d.mts"]
 }
