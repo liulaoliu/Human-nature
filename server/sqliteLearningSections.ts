@@ -5,7 +5,9 @@
  * 和 `sqliteLearningWrite.js`（写）都要认这份映射，谁 import 谁都会成环。
  */
 
-export const LEARNING_SECTION_TABLES = {
+// 显式 Record<string, string[]>：读写两侧都用 string 索引这张表
+// （clearLearningSections 遍历外部传入的 sections，键是运行时字符串）。
+export const LEARNING_SECTION_TABLES: Record<string, string[]> = {
   practice: ['practice_records'],
   mistakes: ['mistake_records'],
   readDone: ['reading_progress'],
