@@ -26,38 +26,48 @@ vi.mock('./useRoutedFlows', () => ({
 import { useReaderFlowRouting } from './useReaderFlowRouting'
 
 function setup(ready = true) {
-  const noop = vi.fn()
+  const startStudy = vi.fn()
+  const closeStudy = vi.fn()
+  const setQuizSetupOpen = vi.fn()
+  const quickStart = vi.fn()
+  const quickClose = vi.fn()
+  const dictStart = vi.fn()
+  const dictClose = vi.fn()
   const openListeningMode = vi.fn()
+  const setListenOpen = vi.fn()
+  const openWriting = vi.fn()
+  const writingSetOpen = vi.fn()
   const openLangFor = vi.fn()
+  const setLangOpen = vi.fn()
   const setComposing = vi.fn()
   const cancelWarmup = vi.fn()
   const forceClose = vi.fn()
 
   const services = {
     studyQueue: null,
-    startStudy: noop,
-    closeStudy: noop,
+    startStudy,
+    closeStudy,
     quizApi: { cancelWarmup, forceClose },
     quizSetupOpen: false,
-    setQuizSetupOpen: noop,
+    setQuizSetupOpen,
     quizQueue: null,
     quizWarmup: null,
     quickQueue: null,
-    quickApi: { start: noop, close: noop },
-    dictApi: { queue: null, start: noop, close: noop },
+    quickApi: { start: quickStart, close: quickClose },
+    dictApi: { queue: null, start: dictStart, close: dictClose },
     listenOpen: false,
-    setListenOpen: noop,
+    setListenOpen,
     openListeningMode,
     writingOpen: false,
-    writingApi: { setOpen: noop },
-    openWriting: noop,
+    writingApi: { setOpen: writingSetOpen },
+    openWriting,
   } as unknown as ReturnType<typeof useSessionServices>
 
   const workspace = {
     composing: false,
     setComposing,
     langOpen: false,
-    setLangOpen: noop,
+    setLangOpen,
     openLangFor,
   } as unknown as ReturnType<typeof useArticleWorkspace>
 
@@ -66,7 +76,25 @@ function setup(ready = true) {
     useReaderFlowRouting(route, 'my-article', { services, workspace, sentence: null, ready }),
   )
 
-  return { flows: captured.flows!, openListeningMode, openLangFor, setComposing, cancelWarmup, forceClose }
+  return {
+    flows: captured.flows!,
+    startStudy,
+    closeStudy,
+    setQuizSetupOpen,
+    quickStart,
+    quickClose,
+    dictStart,
+    dictClose,
+    openListeningMode,
+    setListenOpen,
+    openWriting,
+    writingSetOpen,
+    openLangFor,
+    setLangOpen,
+    setComposing,
+    cancelWarmup,
+    forceClose,
+  }
 }
 
 describe('useReaderFlowRouting：字段映射', () => {
@@ -78,6 +106,47 @@ describe('useReaderFlowRouting：字段映射', () => {
     expect(Object.keys(flows).sort()).toEqual(
       ['compose', 'dict', 'listen', 'lang', 'quick', 'quiz', 'study', 'write'].sort(),
     )
+  })
+
+  it('每个 flow 的 open/close 都指向自己的函数', () => {
+    const s = setup()
+    s.flows.study.open()
+    s.flows.study.close()
+    expect(s.startStudy).toHaveBeenCalledOnce()
+    expect(s.closeStudy).toHaveBeenCalledOnce()
+
+    s.flows.quiz.open()
+    expect(s.setQuizSetupOpen).toHaveBeenCalledWith(true)
+
+    s.flows.quick.open()
+    s.flows.quick.close()
+    expect(s.quickStart).toHaveBeenCalledOnce()
+    expect(s.quickClose).toHaveBeenCalledOnce()
+
+    s.flows.dict.open()
+    s.flows.dict.close()
+    expect(s.dictStart).toHaveBeenCalledOnce()
+    expect(s.dictClose).toHaveBeenCalledOnce()
+
+    s.flows.listen.open()
+    s.flows.listen.close()
+    expect(s.openListeningMode).toHaveBeenCalledWith(false)
+    expect(s.setListenOpen).toHaveBeenCalledWith(false)
+
+    s.flows.write.open()
+    s.flows.write.close()
+    expect(s.openWriting).toHaveBeenCalledOnce()
+    expect(s.writingSetOpen).toHaveBeenCalledWith(false)
+
+    s.flows.lang.open()
+    s.flows.lang.close()
+    expect(s.openLangFor).toHaveBeenCalledWith(null)
+    expect(s.setLangOpen).toHaveBeenCalledWith(false)
+
+    s.flows.compose.open()
+    s.flows.compose.close()
+    expect(s.setComposing).toHaveBeenNthCalledWith(1, true)
+    expect(s.setComposing).toHaveBeenNthCalledWith(2, false)
   })
 
   it('听力 / 语言点 / 新建文章各开各的', () => {

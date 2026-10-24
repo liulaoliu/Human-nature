@@ -1,7 +1,7 @@
 import type { Sentence } from '../../types/document'
 import type { ReaderRoute } from '../route'
 import type { useArticleWorkspace } from './useArticleWorkspace'
-import { useRoutedFlows } from './useRoutedFlows'
+import { useRoutedFlows, type FlowControls } from './useRoutedFlows'
 import type { useSessionServices } from './useSessionServices'
 
 export interface ReaderFlowRoutingParams {
@@ -76,5 +76,5 @@ export function useReaderFlowRouting(
       open: () => setComposing(true),
       close: () => setComposing(false),
     },
-  }, ready)
+  } satisfies FlowControls, ready)
 }

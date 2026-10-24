@@ -124,8 +124,6 @@ export function useRoutedFlows(
         // 用户在页面里点了「退出」→ 换掉这一层，别留一个已关掉的面板在历史里
         pendingRef.current = null
         navigate(articlePath(slugRef.current), { replace: true })
-      } else if (active && routeFlow && routeFlow !== active) {
-        navigate(panelPath(slugRef.current, active), { replace: true })
       }
     }
 
