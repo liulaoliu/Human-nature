@@ -1,7 +1,7 @@
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
-import { contentType, safeJoin, stripLeadingSlashes } from './util.js'
+import { contentType, safeJoin, stripLeadingSlashes } from './util.ts'
 import { handleTts, resolveTtsCacheDir } from '../tools/tts-core.mjs'
 import { handleAiApi } from '../tools/ai-core.mjs'
 import { handleStoreApi } from './storeApi.js'

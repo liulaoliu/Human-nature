@@ -5,7 +5,7 @@ import { createRequire } from 'node:module'
 import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { contentType, safeJoin } from './util.js'
+import { contentType, safeJoin, stripLeadingSlashes } from './util.ts'
 import { restartDecision } from './watchdog.js'
 import { getPort } from './status.js'
 import { createRequestHandler } from './httpApp.js'
@@ -29,6 +29,13 @@ describe('util', () => {
     expect(safeJoin(root, '/a/b.txt')).toBe(resolve(root, 'a/b.txt'))
     expect(safeJoin(root, '/../secret')).toBeNull()
     expect(safeJoin(root, '/a/../../secret')).toBeNull()
+  })
+  it('stripLeadingSlashes 去掉开头斜杠（/ 与 \\ 都算）', () => {
+    expect(stripLeadingSlashes('/a/b')).toBe('a/b')
+    expect(stripLeadingSlashes('\\\\server\\\\share')).toBe('server\\\\share')
+    expect(stripLeadingSlashes('//x')).toBe('x')
+    expect(stripLeadingSlashes('a/b')).toBe('a/b')
+    expect(stripLeadingSlashes('')).toBe('')
   })
 })
 
