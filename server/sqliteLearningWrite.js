@@ -1,4 +1,4 @@
-import { list, nowIso, num, text } from './sqliteUtil.js'
+import { list, nowIso, num, text } from './sqliteUtil.ts'
 import { LEARNING_SECTION_TABLES } from './sqliteLearningSections.js'
 
 /**

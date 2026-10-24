@@ -7,7 +7,7 @@
  *
  * 这里只接 `db`、不持有连接、不管事务——事务由调用方（sqliteStore）包。
  */
-import { list, nowIso, num, text } from './sqliteUtil.js'
+import { list, nowIso, num, text } from './sqliteUtil.ts'
 import { rebuildVocabProjection } from './sqliteVocab.js'
 
 const parsePayload = (payload) => JSON.parse(String(payload))

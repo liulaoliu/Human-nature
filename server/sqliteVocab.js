@@ -1,4 +1,4 @@
-import { list, nowIso, num, text } from './sqliteUtil.js'
+import { list, nowIso, num, text } from './sqliteUtil.ts'
 
 /**
  * 词库 JSON → words / word_* 派生表。
