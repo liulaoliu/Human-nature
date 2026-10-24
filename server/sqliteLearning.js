@@ -1,6 +1,6 @@
 import { list, nowIso, num, text } from './sqliteUtil.ts'
 import { writeSections } from './sqliteLearningWrite.js'
-import { LEARNING_SECTIONS, LEARNING_TABLES } from './sqliteLearningSections.js'
+import { LEARNING_SECTIONS, LEARNING_TABLES } from './sqliteLearningSections.ts'
 
 /**
  * 学习记录的 SQLite 读写。
@@ -9,7 +9,7 @@ import { LEARNING_SECTIONS, LEARNING_TABLES } from './sqliteLearningSections.js'
  * 偏好/会话状态不在这里，仍留在 localStorage。
  */
 
-export { LEARNING_SECTIONS, LEARNING_SECTION_TABLES, LEARNING_TABLES } from './sqliteLearningSections.js'
+export { LEARNING_SECTIONS, LEARNING_SECTION_TABLES, LEARNING_TABLES } from './sqliteLearningSections.ts'
 
 export function emptyLearning() {
   return {

@@ -1,5 +1,5 @@
 import { list, nowIso, num, text } from './sqliteUtil.ts'
-import { LEARNING_SECTION_TABLES } from './sqliteLearningSections.js'
+import { LEARNING_SECTION_TABLES } from './sqliteLearningSections.ts'
 
 /**
  * 学习记录的写入侧：每个 section 一套「先清后插」的写库语句。
