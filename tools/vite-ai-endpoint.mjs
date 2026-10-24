@@ -1,5 +1,5 @@
 import { handleAiApi } from './ai-core.mjs'
-import { allowLocalRequest } from '../server/sameOrigin.js'
+import { allowLocalRequest } from '../server/sameOrigin.ts'
 
 /**
  * dev-only：把 `/api/ai/*`（一键跑批）接到 dev server 上，让 `npm run dev` 下

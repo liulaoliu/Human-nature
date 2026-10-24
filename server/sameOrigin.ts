@@ -1,3 +1,5 @@
+import type { IncomingMessage } from 'node:http'
+
 /**
  * 本地服务的同源 / 跨站判断（dev 插件与静态服务共用）。
  *
@@ -19,8 +21,11 @@
  */
 const LOCAL_HOSTNAMES = new Set(['localhost', '127.0.0.1', '[::1]', '::1'])
 
-/** Host / URL.hostname 是不是本机名（端口不参与判断，端口由 Origin 与 Host 相等来保证）。 */
-export function isLocalHost(host) {
+/**
+ * Host / URL.hostname 是不是本机名（端口不参与判断，端口由 Origin 与 Host 相等来保证）。
+ * 参数允许 undefined：调用方常直接传 `req.headers.host`。
+ */
+export function isLocalHost(host: string | undefined): boolean {
   if (!host) return false
   try {
     return LOCAL_HOSTNAMES.has(new URL(`http://${host}`).hostname)
@@ -29,13 +34,17 @@ export function isLocalHost(host) {
   }
 }
 
-export function isSameOrigin(req) {
+export function isSameOrigin(req: IncomingMessage): boolean {
   const origin = req.headers.origin
   if (!origin) return true
   const host = req.headers.host || ''
   if (!isLocalHost(host)) return false
   try {
-    const o = new URL(origin)
+    // headers.origin 的静态类型是 string | string[]（重复 Origin 头理论上会出现，
+    // 浏览器只发一个）。旧实现把数组直接喂给 new URL()（隐式 ToString：
+    // 单元素数组等价于该元素，多元素逗号连接后解析失败落到 catch）。
+    // String() 显式做同一个转换，行为完全一致。
+    const o = new URL(String(origin))
     return o.host === host && isLocalHost(o.host)
   } catch {
     return false
@@ -43,11 +52,11 @@ export function isSameOrigin(req) {
 }
 
 /** 浏览器跨站请求（现代浏览器都会带；老浏览器没有这个头）。 */
-export function isCrossSiteRequest(req) {
+export function isCrossSiteRequest(req: IncomingMessage): boolean {
   return req.headers['sec-fetch-site'] === 'cross-site'
 }
 
 /** 有副作用 / 会花钱 / 会写盘的请求是否允许。 */
-export function allowLocalRequest(req) {
+export function allowLocalRequest(req: IncomingMessage): boolean {
   return isSameOrigin(req) && !isCrossSiteRequest(req)
 }

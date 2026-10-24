@@ -1,5 +1,5 @@
 import { handleTts, resolveTtsCacheDir } from './tts-core.mjs'
-import { allowLocalRequest } from '../server/sameOrigin.js'
+import { allowLocalRequest } from '../server/sameOrigin.ts'
 
 /**
  * dev-only：把 `/api/tts` 接到 Edge TTS（见 tts-core.mjs）。

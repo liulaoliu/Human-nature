@@ -11,7 +11,7 @@ import { getPort } from './status.js'
 import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
-import { allowLocalRequest } from './sameOrigin.js'
+import { allowLocalRequest } from './sameOrigin.ts'
 import { PRIVATE_FS_DENY } from './privatePaths.ts'
 import { localDayKey } from './localDate.ts'
 

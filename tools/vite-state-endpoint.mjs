@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { allowLocalRequest } from '../server/sameOrigin.js'
+import { allowLocalRequest } from '../server/sameOrigin.ts'
 
 /**
  * dev-only：「存入项目」按钮 POST /__state 时，把备份写到
