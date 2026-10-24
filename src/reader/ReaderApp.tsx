@@ -677,7 +677,8 @@ export default function ReaderApp() {
     enrichExamples: enrichExamplesFromTatoeba,
   })
 
-  const allList = sortItems(library.items, vocabSort)
+  // 8709 条词库每次渲染都排序会白烧几十毫秒，而且新数组会让下游 memo 全部失效。
+  const allList = useMemo(() => sortItems(library.items, vocabSort), [library.items, vocabSort])
   /** 精读工作流的两个入口动作（阶段→工具、拷打→题型两张表都在同名 hook） */
   const { openIntensiveStage, startIntensiveDrill } = useIntensiveActions({
     setIntensiveOpen,

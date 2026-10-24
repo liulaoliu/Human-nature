@@ -175,23 +175,30 @@ export function useRoutedPanels<T extends object>(
     }
   }, [route.panel])
 
-  // 状态 → 路由：包装后的 setter 只负责导航，真正的开关由上面那个 effect 完成
-  return useMemo(() => {
-    const out = { ...raw } as Record<string, unknown>
+  // 状态 → 路由：包装后的 setter 只负责导航，真正的开关由上面那个 effect 完成。
+  // 用 ref 读当前 slug / panel，setter 本身只依赖稳定的 navigate：否则每次路由或词库状态
+  // 变化都会新建 8 个函数，下游 memo 全部失效（P2-4）。
+  const slugRef = useRef(slug)
+  slugRef.current = slug
+  const panelRef = useRef(route.panel)
+  panelRef.current = route.panel
+  const setters = useMemo(() => {
+    const out: Record<string, (v: boolean | ((prev: boolean) => boolean)) => void> = {}
     for (const name of Object.keys(PANEL_SETTER) as BooleanPanelName[]) {
       const key = PANEL_SETTER[name]
-      ;(out as Record<string, (v: boolean | ((prev: boolean) => boolean)) => void>)[key] = (v) => {
+      out[key] = (v) => {
         // setStatsOpen((v) => !v) 这类函数式更新也要按「路由里现在开没开」求值，
         // 不能把整个函数当成 truthy 直接当 true（那样点一次就关不掉了）。
-        const wasOpen = panelFlags(route.panel)[name]
+        const wasOpen = panelFlags(panelRef.current)[name]
         const next = typeof v === 'function' ? v(wasOpen) : v
         if (next === wasOpen) return
         // 打开：push 一层，返回键先回文章/列表；
         // 关闭：replace 掉当前面板层，返回键不再经过已经关掉的界面。
-        if (next) navigate(panelPath(slug, name))
-        else navigate(articlePath(slug), { replace: true })
+        if (next) navigate(panelPath(slugRef.current, name))
+        else navigate(articlePath(slugRef.current), { replace: true })
       }
     }
-    return out as T
-  }, [raw, navigate, slug, route.panel])
+    return out
+  }, [navigate])
+  return useMemo(() => ({ ...raw, ...setters }) as T, [raw, setters])
 }

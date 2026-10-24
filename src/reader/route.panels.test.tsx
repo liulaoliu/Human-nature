@@ -29,6 +29,14 @@ function setup(initialPath: string) {
   return renderHook(() => useHarness(), { wrapper })
 }
 
+/** 额外塞一个每次都变的字段，模拟 ReaderApp 里非面板状态的重渲染。 */
+function useHarnessWithExtra(extra: number) {
+  const location = useLocation()
+  const route = parseReaderRoute(location.pathname)
+  const raw = useReaderPanels()
+  return useRoutedPanels({ ...raw, extra }, route, route.slug)
+}
+
 describe('useRoutedPanels：真实导航语义', () => {
   it('打开面板 push 一层，关闭用 replace 回文章', async () => {
     const { result } = setup('/reader/a/my-article')
@@ -61,5 +69,18 @@ describe('useRoutedPanels：真实导航语义', () => {
     act(() => result.current.panels.setPlanOpen(true))
     expect(result.current.pathname).toBe('/reader/a/my-article/p/plan')
     expect(result.current.navigationType).toBe(before)
+  })
+
+  it('非面板状态重渲染不会重建 setter（否则下游 memo 全部失效）', () => {
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <MemoryRouter initialEntries={['/reader/a/my-article']}>{children}</MemoryRouter>
+    )
+    const { result, rerender } = renderHook(({ extra }: { extra: number }) => useHarnessWithExtra(extra), {
+      wrapper,
+      initialProps: { extra: 0 },
+    })
+    const before = result.current.setStatsOpen
+    rerender({ extra: 1 })
+    expect(result.current.setStatsOpen).toBe(before)
   })
 })
