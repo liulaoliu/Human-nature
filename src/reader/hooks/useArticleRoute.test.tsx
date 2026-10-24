@@ -25,10 +25,11 @@ const INDEX = {
 }
 
 function setup(initialPath: string, initial: UseArticleRouteParams) {
-  const seen: { pathname: string } = { pathname: initialPath }
+  const seen: { pathname: string; key: string } = { pathname: initialPath, key: '' }
   function Probe() {
     const loc = useLocation()
     seen.pathname = loc.pathname
+    seen.key = loc.key
     return null
   }
   const wrapper = ({ children }: { children: ReactNode }) => (
@@ -62,6 +63,14 @@ describe('useArticleRoute：首屏恢复补 URL', () => {
     const p = params({ hasDoc: true, currentRef: 'b:005 Leaders' })
     const { seen } = setup('/', p)
     await waitFor(() => expect(seen.pathname).toBe('/reader/a/005-leaders-post-truth-politics'))
+  })
+
+  it('补 URL 时不能顺手把刚恢复的文章清掉', async () => {
+    const onClear = vi.fn()
+    const p = params({ hasDoc: true, currentRef: 'b:005 Leaders', onClear })
+    const { seen } = setup('/', p)
+    await waitFor(() => expect(seen.pathname).toBe('/reader/a/005-leaders-post-truth-politics'))
+    expect(onClear).not.toHaveBeenCalled()
   })
 
   it('用 slug 补地址栏时保留已经打开的面板', async () => {
@@ -167,6 +176,25 @@ describe('useArticleRoute：回到列表', () => {
       params({ routeSlug: '', currentRef: 'b:005 Leaders', hasDoc: true, onClear }),
     )
     await waitFor(() => expect(onClear).toHaveBeenCalled())
+  })
+
+  it('按返回时不再把文章 URL push 回去（否则返回键死循环）', async () => {
+    const onClear = vi.fn()
+    const { rerender, seen } = setup(
+      '/reader/a/005-leaders-post-truth-politics',
+      params({
+        routeSlug: '005-leaders-post-truth-politics',
+        currentRef: 'b:005 Leaders',
+        hasDoc: true,
+        onClear,
+      }),
+    )
+    await Promise.resolve()
+    const keyBefore = seen.key
+    rerender(params({ routeSlug: '', currentRef: 'b:005 Leaders', hasDoc: true, onClear }))
+    await waitFor(() => expect(onClear).toHaveBeenCalled())
+    // 只要有导航（哪怕是同一个 pathname）location.key 就会变。
+    expect(seen.key).toBe(keyBefore)
   })
 
   it('无文章也能开的面板（/reader/p/plan）不会把已打开的文章清掉', async () => {

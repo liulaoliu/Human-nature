@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { articlePath, isFlowName, openPanelName, panelFlags, panelPath, parseReaderRoute } from './route'
+import { articlePath, isFlowName, panelFlags, panelPath, parseReaderRoute } from './route'
 
 /**
  * 路由字符串 ↔ 状态 的往返。
@@ -57,24 +57,7 @@ describe('route：文章路径', () => {
 })
 
 describe('route：面板标志', () => {
-  const base = {
-    intensiveOpen: false,
-    speedReadOpen: false,
-    planOpen: false,
-    journalOpen: false,
-    exportOpen: false,
-    goalOpen: false,
-    statsOpen: false,
-    browseAll: false,
-  }
-
-  it('哪个开着就报哪个', () => {
-    expect(openPanelName({ ...base, planOpen: true })).toBe('plan')
-    expect(openPanelName({ ...base, browseAll: true })).toBe('browse')
-    expect(openPanelName(base)).toBe('')
-  })
-
-  it('flags 一次只开一个（stats 与 statsDetail 都落到统计）', () => {
+  it('flags 一次只开一个', () => {
     const f = panelFlags('stats')
     expect(f.stats).toBe(true)
     expect(f.intensive).toBe(false)

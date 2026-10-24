@@ -1,0 +1,65 @@
+// @vitest-environment jsdom
+import { describe, expect, it } from 'vitest'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { parseReaderRoute, useRoutedPanels } from './route'
+import { useReaderPanels } from './hooks/useReaderPanels'
+
+/**
+ * 布尔面板 ↔ URL 的真实接线（不是假 navigate spy）。
+ *
+ * 这里用 MemoryRouter + 一个从 `useLocation` 反推 route 的 harness，
+ * 等价于 ReaderApp 里「地址栏是事实来源」的用法。断言 pathname 和导航类型：
+ * 打开必须是 PUSH，页面内关闭必须是 REPLACE（否则返回键会经过已经关掉的界面）。
+ */
+function useHarness() {
+  const location = useLocation()
+  const navigationType = useNavigationType()
+  const route = parseReaderRoute(location.pathname)
+  const raw = useReaderPanels()
+  const panels = useRoutedPanels(raw, route, route.slug)
+  return { panels, pathname: location.pathname, navigationType }
+}
+
+function setup(initialPath: string) {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>
+  )
+  return renderHook(() => useHarness(), { wrapper })
+}
+
+describe('useRoutedPanels：真实导航语义', () => {
+  it('打开面板 push 一层，关闭用 replace 回文章', async () => {
+    const { result } = setup('/reader/a/my-article')
+    act(() => result.current.panels.setIntensiveOpen(true))
+    await waitFor(() => expect(result.current.pathname).toBe('/reader/a/my-article/p/intensive'))
+    expect(result.current.panels.intensiveOpen).toBe(true)
+
+    act(() => result.current.panels.setIntensiveOpen(false))
+    await waitFor(() => expect(result.current.pathname).toBe('/reader/a/my-article'))
+    expect(result.current.navigationType).toBe('REPLACE')
+    expect(result.current.panels.intensiveOpen).toBe(false)
+  })
+
+  it('函数式更新按路由当前状态求值：setStatsOpen(v => !v) 能开也能关', async () => {
+    const { result } = setup('/reader')
+    act(() => result.current.panels.setStatsOpen((v) => !v))
+    await waitFor(() => expect(result.current.pathname).toBe('/reader/p/stats'))
+    expect(result.current.panels.statsOpen).toBe(true)
+
+    act(() => result.current.panels.setStatsOpen((v) => !v))
+    await waitFor(() => expect(result.current.pathname).toBe('/reader'))
+    expect(result.current.navigationType).toBe('REPLACE')
+    expect(result.current.panels.statsOpen).toBe(false)
+  })
+
+  it('面板已经开着时重复设 true 不再堆历史', async () => {
+    const { result } = setup('/reader/a/my-article/p/plan')
+    await waitFor(() => expect(result.current.panels.planOpen).toBe(true))
+    const before = result.current.navigationType
+    act(() => result.current.panels.setPlanOpen(true))
+    expect(result.current.pathname).toBe('/reader/a/my-article/p/plan')
+    expect(result.current.navigationType).toBe(before)
+  })
+})

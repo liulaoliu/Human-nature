@@ -500,3 +500,10 @@ npm run gates                 # 收尾门禁（提交前必跑）
     `server/sameOrigin.js` 现在先要求 Host 的 hostname 属于 `localhost` / `127.0.0.1` / `[::1]`，
     再比较 Origin 与 Host；dev 插件和静态 `appServer` 共用这一层。补测试时同时断言
     “Host、Origin 都是 evil.test → 403”和“本机名 → 放行”，只测 Origin 不一致会漏掉重绑定。
+38. **路由同步 effect 别把“返回”当成“首屏恢复”**（2026-10-24）。`/reader/a/<slug>` 按返回后
+    `routeSlug` 变空，旧代码的“有文章但 URL 没它 → 补 URL”会立刻把文章 push 回去，
+    返回键看起来像死循环。`useArticleRoute` 现在用上一次 URL 的 slug 判断
+    `backToList = 有→无`：首屏空 URL 恢复文章仍 push，真正返回只清文章、不再导航。
+    面板侧同一套语义：打开 `push`，页面内关闭 `replace`；包装 setter 必须支持
+    `setStatsOpen(v => !v)`（按 `panelFlags(route.panel)` 求值），不能把函数当 truthy。
+    测试要断言 `location.key` 不变 / `useNavigationType() === 'REPLACE'`，只看 pathname 抓不到重复 push。

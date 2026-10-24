@@ -28,7 +28,6 @@ export type BooleanPanelName =
   | 'goal'
   | 'stats'
   | 'browse'
-  | 'statsDetail'
 
 /**
  * 整页会话 / 工具页：它们由业务 hook 的队列或开关驱动，不是一对 `useState`。
@@ -64,7 +63,6 @@ const BOOLEAN_PANELS: BooleanPanelName[] = [
   'goal',
   'stats',
   'browse',
-  'statsDetail',
 ]
 
 export const FLOW_NAMES: FlowName[] = [
@@ -123,30 +121,6 @@ export function panelPath(slug: string, panel: PanelName): string {
 }
 
 /** 面板名 → `useReaderPanels` 里那一对布尔值 / setter。 */
-export interface PanelBooleans {
-  intensiveOpen: boolean
-  speedReadOpen: boolean
-  planOpen: boolean
-  journalOpen: boolean
-  exportOpen: boolean
-  goalOpen: boolean
-  statsOpen: boolean
-  browseAll: boolean
-}
-
-/** 当前开着哪个布尔面板（一次只算一个：同时开两个时以先命中的为准，路由也只表达一个）。 */
-export function openPanelName(p: PanelBooleans): BooleanPanelName | '' {
-  if (p.intensiveOpen) return 'intensive'
-  if (p.speedReadOpen) return 'speed'
-  if (p.planOpen) return 'plan'
-  if (p.journalOpen) return 'journal'
-  if (p.exportOpen) return 'export'
-  if (p.goalOpen) return 'goal'
-  if (p.statsOpen) return 'stats'
-  if (p.browseAll) return 'browse'
-  return ''
-}
-
 /** 当前路由所在的面板 → 该开哪个、该关哪些。 */
 export function panelFlags(panel: PanelName | ''): Record<BooleanPanelName, boolean> {
   return {
@@ -156,9 +130,8 @@ export function panelFlags(panel: PanelName | ''): Record<BooleanPanelName, bool
     journal: panel === 'journal',
     export: panel === 'export',
     goal: panel === 'goal',
-    stats: panel === 'stats' || panel === 'statsDetail',
+    stats: panel === 'stats',
     browse: panel === 'browse',
-    statsDetail: panel === 'statsDetail',
   }
 }
 
@@ -172,7 +145,6 @@ const PANEL_SETTER: Record<BooleanPanelName, string> = {
   goal: 'setGoalOpen',
   stats: 'setStatsOpen',
   browse: 'setBrowseAll',
-  statsDetail: 'setStatsOpen',
 }
 
 /**
@@ -208,9 +180,16 @@ export function useRoutedPanels<T extends object>(
     const out = { ...raw } as Record<string, unknown>
     for (const name of Object.keys(PANEL_SETTER) as BooleanPanelName[]) {
       const key = PANEL_SETTER[name]
-      ;(out as Record<string, (v: boolean) => void>)[key] = (v: boolean) => {
-        if (v) navigate(panelPath(slug, name))
-        else if (route.panel === name) navigate(articlePath(slug))
+      ;(out as Record<string, (v: boolean | ((prev: boolean) => boolean)) => void>)[key] = (v) => {
+        // setStatsOpen((v) => !v) 这类函数式更新也要按「路由里现在开没开」求值，
+        // 不能把整个函数当成 truthy 直接当 true（那样点一次就关不掉了）。
+        const wasOpen = panelFlags(route.panel)[name]
+        const next = typeof v === 'function' ? v(wasOpen) : v
+        if (next === wasOpen) return
+        // 打开：push 一层，返回键先回文章/列表；
+        // 关闭：replace 掉当前面板层，返回键不再经过已经关掉的界面。
+        if (next) navigate(panelPath(slug, name))
+        else navigate(articlePath(slug), { replace: true })
       }
     }
     return out as T

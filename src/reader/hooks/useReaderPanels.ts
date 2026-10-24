@@ -1,4 +1,4 @@
-import { useState, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import { dayKeyLocal } from '../../core/activity'
 
 /**
@@ -51,24 +51,39 @@ export function useReaderPanels(): ReaderPanels {
   const [exportOpen, setExportOpen] = useState(false)
   const [goalOpen, setGoalOpen] = useState(false)
 
-  return {
-    statsOpen,
-    setStatsOpen,
-    browseAll,
-    setBrowseAll,
-    speedReadOpen,
-    setSpeedReadOpen,
-    planOpen,
-    setPlanOpen,
-    intensiveOpen,
-    setIntensiveOpen,
-    journalOpen,
-    setJournalOpen,
-    journalDay,
-    setJournalDay,
-    exportOpen,
-    setExportOpen,
-    goalOpen,
-    setGoalOpen,
-  }
+  // 对象身份只在面板状态真的变化时更新：ReaderApp 下游有一大串 useMemo / memo，
+  // 每次渲染都新建这个包会让它们全部失效（P2-4）。
+  return useMemo<ReaderPanels>(
+    () => ({
+      statsOpen,
+      setStatsOpen,
+      browseAll,
+      setBrowseAll,
+      speedReadOpen,
+      setSpeedReadOpen,
+      planOpen,
+      setPlanOpen,
+      intensiveOpen,
+      setIntensiveOpen,
+      journalOpen,
+      setJournalOpen,
+      journalDay,
+      setJournalDay,
+      exportOpen,
+      setExportOpen,
+      goalOpen,
+      setGoalOpen,
+    }),
+    [
+      statsOpen,
+      browseAll,
+      speedReadOpen,
+      planOpen,
+      intensiveOpen,
+      journalOpen,
+      journalDay,
+      exportOpen,
+      goalOpen,
+    ],
+  )
 }

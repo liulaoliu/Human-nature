@@ -54,12 +54,15 @@ export function useArticleRoute({
   pickRef.current = onPick
   const clearRef = useRef(onClear)
   clearRef.current = onClear
-  /** 是否曾经打开过文章 —— 没有过就别把「空 URL」当成"用户按了返回"。 */
-  const everHadDoc = useRef(false)
+  /** 上一次渲染时 URL 里的 slug —— 用来区分「首屏补 URL」和「用户按了返回」。 */
+  const prevRouteSlug = useRef(routeSlug)
+  // 同一次 commit 里 URL 从「有文章」变成「没文章」= 用户按了浏览器返回 / 点了回列表。
+  // 这时 ① 绝不能把文章 URL 再 push 回去，否则返回键会被顶成死循环。
+  const backToList = !!prevRouteSlug.current && !routeSlug
 
   useEffect(() => {
-    if (hasDoc) everHadDoc.current = true
-  }, [hasDoc])
+    prevRouteSlug.current = routeSlug
+  }, [routeSlug])
 
   // ① 有文章、URL 里却没有它 → 补上，而且是 **push**（必须新增一层）
   //
@@ -69,15 +72,16 @@ export function useArticleRoute({
   //   [主界面] → /reader → /reader/a/<这篇>
   // 返回键先回文章列表，再按一次才离开。
   //
-  // 用户按返回时（routeSlug 已经变空）不会再走这里；刷新时 URL 里本来就有 slug，
+  // 用户按返回时（routeSlug 变空）不会再走这里；刷新时 URL 里本来就有 slug，
   // ① 也直接 return，所以不会越堆越多。
   useEffect(() => {
     if (!hasDoc || !currentRef) return
     if (routeSlug) return // URL 已经有主：要么就是这篇，要么交给 ② 换文章
+    if (backToList) return // 用户刚按了返回：让 ③ 清文章，别把 URL 顶回去
     const slug = slugOf(currentRef)
     if (!slug) return // 索引里还没有它（目录仍在加载），等下一轮
     navigate(routePanel ? panelPath(slug, routePanel) : articlePath(slug))
-  }, [hasDoc, currentRef, slugOf, routeSlug, routePanel, navigate])
+  }, [hasDoc, currentRef, slugOf, routeSlug, routePanel, navigate, backToList])
 
   // ② URL 指向另一篇 → 加载
   useEffect(() => {
@@ -89,11 +93,13 @@ export function useArticleRoute({
   }, [indexReady, routeSlug, refOf, currentRef])
 
   // ③ URL 里没有文章而当前有 → 关掉，回列表
+  //    只在「URL 从有文章变空」时算返回。首屏 `/reader` 恢复文章时 URL 本来就是空的，
+  //    那不是返回，不能把刚恢复的文章清掉（旧代码靠 everHadDoc 判断，效果正好相反）。
   //    注意：`/reader/p/<panel>` 是「没有文章也能开的面板」，不是回列表，别把文章清掉。
   useEffect(() => {
-    if (routeSlug || routePanel || !hasDoc || !everHadDoc.current) return
+    if (!backToList || routePanel || !hasDoc) return
     clearRef.current()
-  }, [routeSlug, routePanel, hasDoc])
+  }, [backToList, routePanel, hasDoc])
 
   /**
    * 文章选择器：先导航（真实的 URL + 历史层），加载由 ② 完成。
