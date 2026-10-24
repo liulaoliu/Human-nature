@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { gunzipSync, gzip, gzipSync } from 'node:zlib'
 import { promisify } from 'node:util'
+import type { DatabaseSync } from 'node:sqlite'
 import {
   SCHEMA_V1,
   SCHEMA_V2,
@@ -23,6 +24,7 @@ import {
   restoreLearningSnapshot,
   saveDerivedBaseline,
   writeLearning,
+  type LearningOut,
 } from './sqliteLearning.ts'
 import { list, nowIso, text, tx } from './sqliteUtil.ts'
 import { rebuildVocabProjection } from './sqliteVocab.ts'
@@ -33,6 +35,7 @@ import {
   rebuildArticleProjection,
   rememberArticlePrev,
 } from './sqliteProjection.ts'
+import { isRecord } from './types/guards.ts'
 
 /**
  * 服务端 SQLite 存储（Node 22.5+ 自带的 `node:sqlite`，不引原生 npm 包）。
@@ -55,10 +58,13 @@ import {
  */
 
 const require = createRequire(import.meta.url)
-let DatabaseSync = null
+// node:sqlite 是可选依赖（Node 20 没有）：用 require 动态引入，拿不到就是 null，
+// openStore 返回 null、前端自动回退 IndexedDB。局部变量名避开 import type 的
+// DatabaseSync（实例类型），这里存的是构造器。
+let DatabaseSyncCtor: typeof import('node:sqlite').DatabaseSync | null = null
 try {
   // Node 20 没有这个模块：不崩，返回 null，前端会自动回退 IndexedDB。
-  ;({ DatabaseSync } = require('node:sqlite'))
+  ;({ DatabaseSync: DatabaseSyncCtor } = require('node:sqlite'))
 } catch {
   // ignore
 }
@@ -81,7 +87,11 @@ const SNAP_KEEP = 5
  * （2026-10-22 真实事故：修到 8306 条，被 20:12 的旧页面写成 8302）。
  */
 export class VocabConflictError extends Error {
-  constructor(updatedAt, count) {
+  code: string
+  updatedAt: string
+  count: number
+
+  constructor(updatedAt: string, count: number) {
     super(`词库已被其它页面改过（服务器 ${count} 条，${updatedAt}）`)
     this.name = 'VocabConflictError'
     this.code = 'VOCAB_CONFLICT'
@@ -98,7 +108,7 @@ export class VocabConflictError extends Error {
  * 读路径本来就同时兼容「明文 TEXT / gzip BLOB」（`unpackPayload`），所以统一压缩不影响
  * 任何调用方；手工排查用 `unpackPayload` 或 `gunzip` 解一下即可。
  */
-function packPayload(json) {
+function packPayload(json: string): Buffer {
   return gzipSync(Buffer.from(json, 'utf8'), { level: 6 })
 }
 
@@ -106,20 +116,20 @@ function packPayload(json) {
 const gzipAsync = promisify(gzip)
 
 /** 历史表里既可能是老版本的明文 TEXT，也可能是新写入的 gzip BLOB。 */
-function unpackPayload(value) {
+function unpackPayload(value: unknown): string {
   if (typeof value === 'string') return value
   if (value instanceof Uint8Array) return gunzipSync(Buffer.from(value)).toString('utf8')
   return String(value)
 }
 
 /** 默认放在项目 data/（已在 .gitignore 里），可用 XUEBA_DB 覆盖。 */
-export function resolveDbPath(root) {
+export function resolveDbPath(root: string): string {
   const env = process.env.XUEBA_DB?.trim()
   return env || join(root, 'data', 'xueba.db')
 }
 
 /** 同一毫秒内连续保存时，快照主键也要唯一（否则会覆盖上一版）。 */
-function nextSnapshotAt(db) {
+function nextSnapshotAt(db: DatabaseSync): string {
   let at = nowIso()
   for (let i = 0; i < 100; i++) {
     const hit = db.prepare('SELECT 1 FROM vocab_snapshots WHERE at = ?').get(at)
@@ -133,7 +143,7 @@ function nextSnapshotAt(db) {
  * 版本号必须严格递增：乐观锁拿 `updated_at` 当令牌，同一毫秒里连存两次
  * 会得到两个相同的令牌，旧客户端就能蒙混过关。宁可变慢 1ms。
  */
-function nextUpdatedAt(db) {
+function nextUpdatedAt(db: DatabaseSync): string {
   const prev = db.prepare('SELECT updated_at FROM vocab WHERE id = 1').get()
   const prevAt = prev ? String(prev.updated_at) : ''
   const now = nowIso()
@@ -141,8 +151,8 @@ function nextUpdatedAt(db) {
   return now > prevAt ? now : new Date(Date.parse(prevAt) + 1).toISOString()
 }
 
-function parsePayload(payload) {
-  return JSON.parse(payload)
+function parsePayload(payload: unknown): unknown {
+  return JSON.parse(String(payload))
 }
 
 /**
@@ -151,21 +161,22 @@ function parsePayload(payload) {
  * payload 是事实来源，但老版本保存的文章没写 `createdAt`；列里有迁移时回填的时间。
  * 不补的话前端只能拿 `updatedAt` 兜底，用户每改一次「建立日期」都会跟着变。
  */
-function articleWithCreatedAt(article, createdAt) {
-  if (!article || typeof article !== 'object') return article
+function articleWithCreatedAt(article: unknown, createdAt: unknown): unknown {
+  if (!isRecord(article)) return article
   if (text(article.createdAt)) return article
   return { ...article, createdAt: text(createdAt) || text(article.updatedAt) || undefined }
 }
 
-function assertLibrary(lib) {
-  if (!lib || typeof lib !== 'object' || !Array.isArray(lib.items)) {
+// lib 是词库 JSON（vocab.payload 的 parse 结果 / 客户端上传）。形状校验失败抛错。
+function assertLibrary(lib: unknown): asserts lib is { items: unknown[] } {
+  if (!lib || typeof lib !== 'object' || !Array.isArray((lib as { items?: unknown }).items)) {
     throw new Error('词库格式不对：缺少 items 数组')
   }
 }
 
-function addArticleColumns(db) {
+function addArticleColumns(db: DatabaseSync): void {
   const cols = new Set(db.prepare('PRAGMA table_info(articles)').all().map((r) => String(r.name)))
-  const add = (name, ddl) => {
+  const add = (name: string, ddl: string) => {
     if (!cols.has(name)) db.exec(`ALTER TABLE articles ADD COLUMN ${ddl}`)
   }
   add('book', 'book TEXT')
@@ -176,21 +187,21 @@ function addArticleColumns(db) {
 }
 
 /** 从 JSON payload 回填 articles 的查询列；只在迁移时做一次。 */
-function backfillArticleColumns(db) {
+function backfillArticleColumns(db: DatabaseSync): void {
   const rows = db.prepare('SELECT id, payload FROM articles').all()
   const upd = db.prepare(
     'UPDATE articles SET title = ?, book = ?, source_key = ?, created_at = ?, sentence_count = ?, word_count = ? WHERE id = ?',
   )
   for (const row of rows) {
-    const a = parsePayload(String(row.payload))
-    const sentences = list(a?.sentences)
-    const words = new Set()
-    for (const s of sentences) for (const w of list(s?.vocab)) words.add(String(w))
+    const a = isRecord(parsePayload(String(row.payload))) ? (parsePayload(String(row.payload)) as Record<string, unknown>) : {}
+    const sentences = list<unknown>(a.sentences)
+    const words = new Set<string>()
+    for (const s of sentences) for (const w of list<unknown>(isRecord(s) ? s.vocab : undefined)) words.add(String(w))
     upd.run(
-      text(a?.title) ?? '',
-      text(a?.book),
-      text(a?.sourceKey),
-      text(a?.createdAt) ?? text(a?.updatedAt) ?? nowIso(),
+      text(a.title) ?? '',
+      text(a.book),
+      text(a.sourceKey),
+      text(a.createdAt) ?? text(a.updatedAt) ?? nowIso(),
       sentences.length,
       words.size,
       String(row.id),
@@ -205,7 +216,7 @@ function backfillArticleColumns(db) {
  *
  * 只改能唯一对上的标题；同名文章、找不到的标题保持原样，不猜。
  */
-function ensureSchema(db) {
+function ensureSchema(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get()
   let version = Number(row?.user_version ?? 0)
   if (version > SCHEMA_VERSION) {
@@ -253,13 +264,13 @@ function ensureSchema(db) {
   return version
 }
 
-function pruneSnapshots(db) {
+function pruneSnapshots(db: DatabaseSync): void {
   const rows = db.prepare('SELECT at, item_count FROM vocab_snapshots ORDER BY at ASC').all()
   if (rows.length <= SNAP_KEEP + 1) return
-  const keep = new Set(rows.slice(-SNAP_KEEP).map((r) => String(r.at)))
-  let largest = rows[0]
+  const keep = new Set<string>(rows.slice(-SNAP_KEEP).map((r) => String(r.at)))
+  let largest: (typeof rows)[number] | undefined = rows[0]
   for (const r of rows) {
-    if (Number(r.item_count) > Number(largest.item_count)) largest = r
+    if (Number(r.item_count) > Number(largest?.item_count ?? 0)) largest = r
   }
   if (largest) keep.add(String(largest.at))
   const del = db.prepare('DELETE FROM vocab_snapshots WHERE at = ?')
@@ -275,7 +286,7 @@ function pruneSnapshots(db) {
  * 只在空闲页占比明显时才 VACUUM —— 226MB 的库全量重写要几秒，不能每次启动都干。
  */
 const VACUUM_MIN_FREE_PAGES = 2000
-function reclaimSpace(db) {
+function reclaimSpace(db: DatabaseSync): void {
   try {
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   } catch {
@@ -299,7 +310,7 @@ function reclaimSpace(db) {
  * 一次性成本（本库 9 版 × 16MB 明文 → 6 版 × 约 2MB），之后每次启动只做一次 count 查询。
  * 幂等：`typeof payload === 'string'` 才算待转换，转过的读出来是 BLOB。
  */
-function maintainSnapshots(db) {
+function maintainSnapshots(db: DatabaseSync): void {
   try {
     pruneSnapshots(db)
     const legacy = db
@@ -318,7 +329,7 @@ function maintainSnapshots(db) {
   }
 }
 
-function assertDatabaseHealthy(db) {
+function assertDatabaseHealthy(db: DatabaseSync): void {
   const row = db.prepare('PRAGMA quick_check').get()
   const result = row ? Object.values(row)[0] : 'ok'
   if (String(result).toLowerCase() !== 'ok') {
@@ -326,15 +337,48 @@ function assertDatabaseHealthy(db) {
   }
 }
 
-const cache = new Map()
+const cache = new Map<string, Store>()
+
+/** openStore 返回的存储句柄。方法签名对应 store 对象字面量的每个成员。 */
+export interface Store {
+  path: string
+  db: DatabaseSync
+  close(): void
+  loadVocab(): unknown
+  loadVocabJson(): { json: string | null; updatedAt: string | null; count: number }
+  vocabMeta(): { updatedAt: string; count: number } | null
+  loadPrev(): unknown
+  listSnapshots(): { at: string; count: number }[]
+  loadSnapshot(at: string): unknown
+  saveVocab(lib: unknown, opts?: { baseUpdatedAt?: string }): Promise<{ updatedAt: string; count: number }>
+  migrateVocab(lib: unknown): { migrated: boolean; value: unknown }
+  clearVocab(): void
+  loadLearning(): LearningOut
+  listLearningSnapshots(): { id: number; at: string; reason: string; recordCount: number }[]
+  loadLearningSnapshot(id: number | string): unknown
+  restoreLearningSnapshot(id: number | string): unknown
+  rebuildLearningDerived(): unknown
+  saveLearning(data: unknown): void
+  saveLearningPartial(data: unknown): void
+  migrateLearning(data: unknown): { migrated: boolean; value: unknown }
+  listArticles(): unknown[]
+  getArticle(id: string): unknown
+  saveArticle(article: unknown): void
+  loadArticlePrev(id: string): { updatedAt: string; value: unknown } | null
+  restoreArticlePrev(id: string): unknown
+  removeArticle(id: string): void
+  exportAll(): unknown
+  checkpoint(): void
+  backupTo(dest: string): void
+}
 
 /**
  * 打开（并初始化）数据库；不可用时返回 null，由 API 回 503。
  * 同一个路径复用连接，避免每个请求都重新打开。
  */
-export function openStore(dbPath) {
-  if (!DatabaseSync) return null
-  if (cache.has(dbPath)) return cache.get(dbPath)
+export function openStore(dbPath: string): Store | null {
+  if (!DatabaseSyncCtor) return null
+  if (cache.has(dbPath)) return cache.get(dbPath) ?? null
   try {
     const dir = dirname(dbPath)
     mkdirSync(dir, { recursive: true, mode: 0o700 })
@@ -344,7 +388,7 @@ export function openStore(dbPath) {
     } catch {
       // Windows 忽略权限位
     }
-    const db = new DatabaseSync(dbPath)
+    const db = new DatabaseSyncCtor(dbPath)
     db.exec('PRAGMA journal_mode = WAL')
     // 学习记录是用户资产：断电/系统崩溃时宁可慢一点，也别丢最后一笔提交。
     db.exec('PRAGMA synchronous = FULL')
@@ -352,7 +396,7 @@ export function openStore(dbPath) {
     assertDatabaseHealthy(db)
     const currentVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
     try {
-      const backup = backupBeforeMigration(db, dbPath, currentVersion, DatabaseSync)
+      const backup = backupBeforeMigration(db, dbPath, currentVersion, DatabaseSyncCtor)
       if (backup) console.info(`[sqlite] 迁移前备份：${backup}`)
     } catch (e) {
       // 备份失败就不冒险迁移，让前端回退 IndexedDB，人工处理后再启动。
@@ -363,7 +407,7 @@ export function openStore(dbPath) {
     maintainSnapshots(db)
     reclaimSpace(db)
     try {
-      const daily = backupDaily(db, dbPath, currentVersion, DatabaseSync)
+      const daily = backupDaily(db, dbPath, currentVersion, DatabaseSyncCtor)
       if (daily) console.info(`[sqlite] 每日备份：${daily}`)
     } catch (e) {
       // 每日备份失败不挡启动；迁移备份失败才挡（见上面）。
@@ -374,9 +418,9 @@ export function openStore(dbPath) {
     } catch {
       // Windows 忽略权限位
     }
-    const stopDailyBackup = startDailyBackup(db, dbPath, DatabaseSync)
+    const stopDailyBackup = startDailyBackup(db, dbPath, DatabaseSyncCtor)
 
-    const store = {
+    const store: Store = {
       path: dbPath,
       db,
       close() {
@@ -456,7 +500,7 @@ export function openStore(dbPath) {
         if (base && prevRow && String(prevRow.updated_at) !== base) {
           throw new VocabConflictError(String(prevRow.updated_at), Number(prevRow.item_count))
         }
-        let prevRaw = null
+        let prevRaw: string | null = null
         if (prevRow) {
           try {
             prevRaw = unpackPayload(prevRow.payload)
@@ -468,10 +512,11 @@ export function openStore(dbPath) {
         if (prevRow && prevRaw === payload) {
           return { updatedAt: String(prevRow.updated_at), count: Number(prevRow.item_count) }
         }
+        const prevRowForCompare = prevRow
         const prevPacked =
-          prevRow && prevRaw !== null && Number(prevRow.item_count) > 0
-            ? prevRow.payload instanceof Uint8Array
-              ? Promise.resolve(Buffer.from(prevRow.payload)) // 已经是 gzip：直接复制，不再压第二遍
+          prevRowForCompare && prevRaw !== null && Number(prevRowForCompare.item_count) > 0
+            ? prevRowForCompare.payload instanceof Uint8Array
+              ? Promise.resolve(Buffer.from(prevRowForCompare.payload)) // 已经是 gzip：直接复制，不再压第二遍
               : gzipAsync(Buffer.from(prevRaw, 'utf8'), { level: 6 }) // 老库存的是明文
             : Promise.resolve(null)
         const [packed, packedPrev] = await Promise.all([
@@ -504,7 +549,7 @@ export function openStore(dbPath) {
             // packedPrev 是按事务外那次读到的 prev 压的；万一中间被别人改了，
             // 宁可同步补压一次（极罕见），也不能把「上一版」写成错的内容。
             const bytes =
-              packedPrev && String(prev.updated_at) === String(prevRow.updated_at)
+              packedPrev && String(prev.updated_at) === String(prevRowForCompare?.updated_at)
                 ? packedPrev
                 : packPayload(unpackPayload(prev.payload))
             db.prepare(
@@ -627,29 +672,30 @@ export function openStore(dbPath) {
         return row ? articleWithCreatedAt(parsePayload(String(row.payload)), row.created_at) : null
       },
       saveArticle(article) {
-        if (!article || typeof article !== 'object' || typeof article.id !== 'string' || !article.id) {
+        if (!isRecord(article) || typeof article.id !== 'string' || !article.id) {
           throw new Error('文章格式不对：缺少 id')
         }
+        const id = article.id
         const updatedAt = typeof article.updatedAt === 'string' && article.updatedAt ? article.updatedAt : nowIso()
         // 客户端没带 createdAt（老文章 / 自动保存）时，必须沿用库里已有的建立时间；
         // 不能拿 updatedAt 顶替，否则每保存一次都等于「重新建立」。
-        const prev = db.prepare('SELECT created_at FROM articles WHERE id = ?').get(String(article.id))
+        const prev = db.prepare('SELECT created_at FROM articles WHERE id = ?').get(id)
         const createdAt = text(article.createdAt) || text(prev?.created_at) || updatedAt
         const next = { ...article, createdAt, updatedAt }
         const title = typeof article.title === 'string' ? article.title : ''
         const book = typeof article.book === 'string' ? article.book : null
         const sourceKey = typeof article.sourceKey === 'string' ? article.sourceKey : null
-        const sentences = list(article.sentences)
-        const words = new Set()
-        for (const s of sentences) for (const w of list(s?.vocab)) words.add(String(w))
+        const sentences = list<unknown>(article.sentences)
+        const words = new Set<string>()
+        for (const s of sentences) for (const w of list<unknown>(isRecord(s) ? s.vocab : undefined)) words.add(String(w))
         const payload = JSON.stringify(next)
         tx(db, () => {
-          rememberArticlePrev(db, article.id, payload)
+          rememberArticlePrev(db, id, payload)
           db.prepare(`
             INSERT OR REPLACE INTO articles (
               id, payload, title, book, source_key, created_at, updated_at, sentence_count, word_count
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(article.id, payload, title, book, sourceKey, createdAt, updatedAt, sentences.length, words.size)
+          `).run(id, payload, title, book, sourceKey, createdAt, updatedAt, sentences.length, words.size)
           rebuildArticleProjection(db, next)
         })
       },

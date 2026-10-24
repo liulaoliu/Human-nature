@@ -3,7 +3,7 @@ import { createServer } from 'node:http'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { closeAllStores, openStore } from './sqliteStore.js'
+import { closeAllStores, openStore } from './sqliteStore.ts'
 import { handleStoreApi } from './storeApi.js'
 
 /**

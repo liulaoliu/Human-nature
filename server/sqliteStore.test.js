@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, statSync, unlinkSync, writeFileSy
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { closeAllStores, openStore } from './sqliteStore.js'
+import { closeAllStores, openStore } from './sqliteStore.ts'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')
