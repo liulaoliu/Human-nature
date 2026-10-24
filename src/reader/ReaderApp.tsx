@@ -18,7 +18,7 @@ import { useArticleDerived } from './hooks/useArticleDerived'
 import { useArticleWorkspace } from './hooks/useArticleWorkspace'
 import { useReaderViewData } from './hooks/useReaderViewData'
 import { useSessionServices } from './hooks/useSessionServices'
-import ReaderScreen from './ReaderScreen'
+import ReaderScreenFromModel, { type ReaderAppModel } from './ReaderScreenFromModel'
 import { useAiServices } from './hooks/useAiServices'
 import { useArticleDocState, usePasteState, useReaderHighlightState } from './hooks/useReaderLocalState'
 import { useArticleUiActions } from './hooks/useArticleUiActions'
@@ -58,7 +58,7 @@ export default function ReaderApp() {
   const {
     pasted, setPasted,
     askedWordsRef, askedIdsRef,
-    pasteReport, setPasteReport,
+    setPasteReport,
     pasteMissing, setPasteMissing,
     lastTask, setLastTask,
   } = paste
@@ -98,18 +98,17 @@ export default function ReaderApp() {
   const currentSlug = currentRef ? articleIndex.slugOf(currentRef) : ''
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
   const { route, panels } = useReaderPanelRouting(currentSlug)
-  const { statsOpen, setStatsOpen, browseAll, setBrowseAll } = panels
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
   const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
+  const highlight = useReaderHighlightState()
   const {
     peekSid, setPeekSid,
-    focusLemma, setFocusLemma,
     confirmDel, setConfirmDel,
     lastPicked, setLastPicked,
-    bubblePos, setBubblePos,
-  } = useReaderHighlightState()
+    setBubblePos,
+  } = highlight
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
   const speaking = useSpeaking({
     doc,
@@ -240,22 +239,6 @@ export default function ReaderApp() {
   /** 记录今天新引入了一个词（用于每日配额；跨天由 useReaderPrefs 的 serialize 归零）。 */
   const bumpNewToday = useCallback(() => setNewToday((prev) => prev + 1), [setNewToday])
 
-  const {
-    speedReadOpen,
-    setSpeedReadOpen,
-    planOpen,
-    setPlanOpen,
-    intensiveOpen,
-    setIntensiveOpen,
-    journalOpen,
-    setJournalOpen,
-    journalDay,
-    setJournalDay,
-    exportOpen,
-    setExportOpen,
-    goalOpen,
-    setGoalOpen,
-  } = panels
   /** 生词本排序方式：见 useReaderPrefs.vocabSort */
   /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
   const vocabEdits = useVocabEdits({
@@ -290,47 +273,14 @@ export default function ReaderApp() {
     askedIdsRef,
     setSessions,
     mistakes,
-    setIntensiveOpen,
-    setSpeedReadOpen,
+    setIntensiveOpen: panels.setIntensiveOpen,
+    setSpeedReadOpen: panels.setSpeedReadOpen,
     warmTexts,
     warmTimings,
     mergeBatch,
     batchItemsFromWords,
   })
-  const {
-    studyQueue,
-    studyUnflushed,
-    startStudy,
-    quizSetupOpen,
-    quizQueue,
-    quizWarmup,
-    quizIndex,
-    quizArticleKinds,
-    startQuizDrill,
-    startQuizArticleDrill,
-    listenQuiz,
-    setListenQuiz,
-    listenOpen,
-    setListenOpen,
-    listenCount,
-    openSpeedRead,
-    quickQueue,
-    writingOpen,
-    writingModel,
-    writingTask,
-    setWritingTask,
-    writingText,
-    setWritingFeedback,
-    writingHistory,
-    setWritingHistory,
-    openWriting,
-    vocabMode,
-    toggleVocabMode,
-    sessionPickedRef,
-    dictApi,
-  } = services
-
-  const { queue: dictQueue, index: dictIndex } = dictApi
+  const { queue: dictQueue, index: dictIndex } = services.dictApi
 
   // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：
   // 纯派生无副作用，状态仍由各自 hook 持有 —— 逻辑与记忆化都在 useReaderDerived。
@@ -338,9 +288,9 @@ export default function ReaderApp() {
     items: library.items,
     sessions,
     studyDays,
-    studyUnflushed,
+    studyUnflushed: services.studyUnflushed,
     todayKey,
-    writingHistory,
+    writingHistory: services.writingHistory,
     saved,
     confusableBatchSize,
     batch,
@@ -360,8 +310,8 @@ export default function ReaderApp() {
   useHotkeys(
     (e) => {
       // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
-      if (studyQueue || quizQueue || quickQueue || dictQueue) return
-      if (speedReadOpen || listenOpen || langOpen) return
+      if (services.studyQueue || services.quizQueue || services.quickQueue || dictQueue) return
+      if (panels.speedReadOpen || services.listenOpen || langOpen) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -376,10 +326,10 @@ export default function ReaderApp() {
   )
 
   // 考试听力题 / 听写逐句：一换就出声（两条接线在 hooks/useQueueAutoSpeak）
-  useQueueAutoSpeak({ quizQueue, quizIndex, dictQueue, dictIndex, speak })
+  useQueueAutoSpeak({ quizQueue: services.quizQueue, quizIndex: services.quizIndex, dictQueue, dictIndex, speak })
 
   /** 点句子：切换选中；再点同一句 = 停止朗读。 */
-  toggleVocabRef.current = toggleVocabMode
+  toggleVocabRef.current = services.toggleVocabMode
 
   const resetSelection = useCallback(() => {
     setSelectedId(null)
@@ -417,7 +367,6 @@ export default function ReaderApp() {
   })
   const {
     editing,
-    setComposing,
     langOpen,
     setPendingSave,
   } = workspace
@@ -447,7 +396,7 @@ export default function ReaderApp() {
     batch,
     addToBatch,
     sentence,
-    vocabMode,
+    vocabMode: services.vocabMode,
     editing,
     doc,
     library,
@@ -455,12 +404,12 @@ export default function ReaderApp() {
     articleIdentity,
     articleTitle,
     articleKey,
-    setFocusLemma,
+    setFocusLemma: highlight.setFocusLemma,
     articleRef,
     sideRef,
     applyingDom,
     rightDownRef,
-    sessionPickedRef,
+    sessionPickedRef: services.sessionPickedRef,
     navVocabRef,
     stopReadAll,
     fontSize,
@@ -468,13 +417,7 @@ export default function ReaderApp() {
     serif,
     flash,
   })
-  const {
-    selectSentence,
-    focusEntry,
-    onMouseUp,
-    onMouseDown,
-    onContextMenu,
-  } = selection
+  const { selectSentence, focusEntry } = selection
 
   /** 正文小动作：Alt 复制 / 两步删除 / 逐词高亮 / 点句朗读 / 生词定位 / 听写播放 / 离线例句。 */
   const ui = useArticleUiActions({
@@ -507,13 +450,13 @@ export default function ReaderApp() {
     saved,
     learning: learningData,
     setters: learningSetters,
-    writingHistory,
+    writingHistory: services.writingHistory,
     visibleBatch,
     persist,
     persistNow,
     flash,
     setSaved,
-    setWritingHistory,
+    setWritingHistory: services.setWritingHistory,
   })
   const { download } = exporter
 
@@ -526,7 +469,7 @@ export default function ReaderApp() {
     doc,
     practice,
     mistakes,
-    writingHistory,
+    writingHistory: services.writingHistory,
     retells,
     kindStats,
     activity,
@@ -540,14 +483,14 @@ export default function ReaderApp() {
     batchCount: batch.length,
     confusableTodoCount: confusableTodo.length,
     lemmaCandidatesCount: lemmaCandidates.length,
-    writingHistoryCount: writingHistory.length,
-    listenQuiz,
-    quizArticleKinds: quizArticleKinds as ArticleQuizKind[],
+    writingHistoryCount: services.writingHistory.length,
+    listenQuiz: services.listenQuiz,
+    quizArticleKinds: services.quizArticleKinds as ArticleQuizKind[],
     studiedDays,
     saved,
     activity,
     practice,
-    journalDay,
+    journalDay: panels.journalDay,
   })
   const { articleQuizCount } = viewData
 
@@ -612,21 +555,21 @@ export default function ReaderApp() {
     batchItemsFromWords,
     autoVocabDirect,
     commitBatchItems,
-    writingModel,
-    writingText,
-    writingTask,
+    writingModel: services.writingModel,
+    writingText: services.writingText,
+    writingTask: services.writingTask,
     recordActivity,
     setDoc,
     setPendingSave,
-    setListenQuiz,
-    setWritingTask,
-    setWritingFeedback,
-    setWritingHistory,
+    setListenQuiz: services.setListenQuiz,
+    setWritingTask: services.setWritingTask,
+    setWritingFeedback: services.setWritingFeedback,
+    setWritingHistory: services.setWritingHistory,
     download,
     aiPackScope,
     confusableBatchSize,
-    listenQuiz,
-    listenCount,
+    listenQuiz: services.listenQuiz,
+    listenCount: services.listenCount,
     pasted,
     clearPasted: () => setPasted(''),
     lastTask,
@@ -653,13 +596,13 @@ export default function ReaderApp() {
   const allList = useMemo(() => sortItems(library.items, vocabSort), [library.items, vocabSort])
   /** 精读工作流的两个入口动作（阶段→工具、拷打→题型两张表都在同名 hook） */
   const { openIntensiveStage, startIntensiveDrill } = useIntensiveActions({
-    setIntensiveOpen,
-    openSpeedRead,
-    startStudy,
-    openWriting,
+    setIntensiveOpen: panels.setIntensiveOpen,
+    openSpeedRead: services.openSpeedRead,
+    startStudy: services.startStudy,
+    openWriting: services.openWriting,
     runAiLocal,
-    startQuizDrill,
-    startQuizArticleDrill,
+    startQuizDrill: services.startQuizDrill,
+    startQuizArticleDrill: services.startQuizArticleDrill,
   })
 
   /**
@@ -667,106 +610,70 @@ export default function ReaderApp() {
    * 隐藏正文，别把原文当阅读看。
    */
   const examActive =
-    quizSetupOpen || !!quizQueue || !!quizWarmup || !!quickQueue || !!dictQueue || listenOpen || speedReadOpen
+    services.quizSetupOpen ||
+    !!services.quizQueue ||
+    !!services.quizWarmup ||
+    !!services.quickQueue ||
+    !!dictQueue ||
+    services.listenOpen ||
+    panels.speedReadOpen
   /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
-  const readingView = !studyQueue && !examActive && !writingOpen && !browseAll
+  const readingView = !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll
 
   // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
   useReaderFlowRouting(route, currentSlug, { services, workspace, sentence, ready: libraryLoaded })
 
-  return (
-    <ReaderScreen
-      prefs={prefs}
-      examActive={examActive}
-      sideRef={sideRef}
-      onMouseDown={onMouseDown}
-      onMouseUp={onMouseUp}
-      onContextMenu={onContextMenu}
-      toast={toast}
-      readingView={readingView}
-      saved={saved}
-      book={book}
-      library={library}
-      restorePrevLibrary={restorePrevLibrary}
-      articleIdentity={articleIdentity}
-      articleTitle={articleTitle}
-      articleKey={articleKey}
-      doc={doc}
-      articleRouting={articleRouting}
-      bookError={bookError}
-      selectedId={selectedId}
-      exact={exact}
-      useExact={useExact}
-      lastTask={lastTask}
-      target={target}
-      sentence={sentence}
-      batchCount={batch.length}
-      articleVocab={articleVocab}
-      libraryLemmas={libraryLemmas}
-      vocabSidSet={vocabSidSet}
-      allList={allList}
-      studiedTodayIds={studiedTodayIds}
-      pasted={pasted}
-      setPasted={setPasted}
-      pasteReport={pasteReport}
-      setPasteReport={setPasteReport}
-      pasteMissing={pasteMissing}
-      setPasteMissing={setPasteMissing}
-      ttsAccents={ttsAccents}
-      ttsState={ttsState}
-      studyGrandSeconds={studyGrandSeconds}
-      articleQuizCount={articleQuizCount}
-      statsOpen={statsOpen}
-      setStatsOpen={setStatsOpen}
-      focusLemma={focusLemma}
-      setFocusLemma={setFocusLemma}
-      confirmDel={confirmDel}
-      setConfirmDel={setConfirmDel}
-      todayKey={todayKey}
-      setComposing={setComposing}
-      setPlanOpen={setPlanOpen}
-      setBrowseAll={setBrowseAll}
-      setExportOpen={setExportOpen}
-      setJournalOpen={setJournalOpen}
-      setIntensiveOpen={setIntensiveOpen}
-      setGoalOpen={setGoalOpen}
-      setSpeedReadOpen={setSpeedReadOpen}
-      setListenOpen={setListenOpen}
-      speedReadOpen={speedReadOpen}
-      planOpen={planOpen}
-      intensiveOpen={intensiveOpen}
-      journalOpen={journalOpen}
-      journalDay={journalDay}
-      setJournalDay={setJournalDay}
-      exportOpen={exportOpen}
-      goalOpen={goalOpen}
-      browseAll={browseAll}
-      flash={flash}
-      peekSid={peekSid}
-      selSid={selSid}
-      selIndices={selIndices}
-      lastPicked={lastPicked}
-      bubblePos={bubblePos}
-      articleRef={articleRef}
-      startIntensiveDrill={startIntensiveDrill}
-      openIntensiveStage={openIntensiveStage}
-      dictTools={dictTools}
-      dictReady={dictReady}
-      tatoebaReady={tatoebaReady}
-      exporter={exporter}
-      workspace={routedWorkspace}
-      services={services}
-      ai={ai}
-      ui={ui}
-      derived={derived}
-      articleDerived={articleDerived}
-      viewData={viewData}
-      learning={learning}
-      selection={selection}
-      batchQueue={batchQueue}
-      vocabEdits={vocabEdits}
-      speaking={speaking}
-      pregenApi={pregenApi}
-    />
-  )
+  const model: ReaderAppModel = {
+    prefs,
+    docState,
+    paste,
+    highlight,
+    services,
+    panels,
+    articleRouting,
+    saved,
+    book,
+    bookError,
+    library,
+    restorePrevLibrary,
+    articleIdentity,
+    target,
+    sentence,
+    batchCount: batch.length,
+    articleVocab,
+    libraryLemmas,
+    vocabSidSet,
+    allList,
+    studiedTodayIds,
+    ttsAccents,
+    ttsState,
+    studyGrandSeconds,
+    articleQuizCount,
+    todayKey,
+    flash,
+    toast,
+    examActive,
+    readingView,
+    sideRef,
+    articleRef,
+    startIntensiveDrill,
+    openIntensiveStage,
+    dictTools,
+    dictReady,
+    tatoebaReady,
+    exporter,
+    workspace: routedWorkspace,
+    ai,
+    ui,
+    derived,
+    articleDerived,
+    viewData,
+    learning,
+    selection,
+    batchQueue,
+    vocabEdits,
+    speaking,
+    pregenApi,
+  }
+  return <ReaderScreenFromModel app={model} />
 }
