@@ -22,13 +22,13 @@
 import { spawnSync } from 'node:child_process'
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'node:fs'
 import { resolve, dirname, join, relative } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const NEW_DIR = join(ROOT, 'new')
 
 /** new/ 目录下最新的 ai-jobs-*.json（排除 .results.json）。 */
-function latestJobs() {
+export function latestJobs() {
   if (!existsSync(NEW_DIR)) return null
   const files = readdirSync(NEW_DIR)
     .filter((f) => /^ai-jobs-.*\.json$/i.test(f) && !/\.results\.json$/i.test(f))
@@ -37,11 +37,11 @@ function latestJobs() {
   return files.length ? join(NEW_DIR, files[0].f) : null
 }
 
-function resultsPathFor(jobsPath) {
+export function resultsPathFor(jobsPath) {
   return jobsPath.replace(/\.json$/i, '') + '.results.json'
 }
 
-function isJson(text) {
+export function isJson(text) {
   try {
     JSON.parse(text)
     return true
@@ -51,7 +51,7 @@ function isJson(text) {
 }
 
 /** 从可能带杂质的输出里抠出一个结果 JSON（代码围栏 / 前后废话）。 */
-function extractResultJson(text) {
+export function extractResultJson(text) {
   const t = String(text).replace(/\r\n/g, '\n')
   const fenced = t.match(/```(?:json)?\s*\n([\s\S]*?)\n```/)
   if (fenced && isJson(fenced[1])) return fenced[1]
@@ -65,7 +65,7 @@ function extractResultJson(text) {
 }
 
 /** 从 config.local.json 的 ai.agentModel 或环境变量 AI_AGENT_MODEL 取模型（可选）。 */
-function agentModel() {
+export function agentModel() {
   const fromEnv = process.env.AI_AGENT_MODEL
   if (fromEnv) return fromEnv
   try {
@@ -77,7 +77,7 @@ function agentModel() {
 }
 
 /** Windows 上拼 shell 命令行时给含空格/引号的参数加引号。 */
-function winQuote(s) {
+export function winQuote(s) {
   return /[\s"]/.test(s) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s)
 }
 
@@ -152,4 +152,5 @@ function main() {
   process.exit(1)
 }
 
-main()
+// 只有直接跑 CLI 才执行；被测试 import 时不要真的去 spawn opencode。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()

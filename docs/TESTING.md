@@ -283,6 +283,9 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `newToday` 跨天归零 / 页面开着跨 04:00 定时归零）、`useArticleVocabView`（10：本篇生词两条口径 / 编号 / 打印口径 / 空文章不炸）、
   `useIntensiveActions`（6：阶段→工具、拷打→题型两张表，语法走文章级）、`useModifierKeys`（5：Ctrl/Meta/Alt 按下松开 + 失焦清）、
   `useStorageQuotaToast`（4：提示一次 / 5 秒节流 / 卸载不提示）、`useQueueAutoSpeak`（7：听力题与听写逐句，越界不念）。
+- **tools 脚本有同名测试（2026-10-24）**：`ai-core`（跑批 / 取消 / HTTP 起跑）、`spa-route`（dev 回落）、
+  `ai-pack`（工作包解析）、`ai-agent`（结果抠 JSON / 路径 / Windows 引号）、`tts-core`（降级链）。
+  薄包装 `vite-*-endpoint` 与 `build-*.mjs` 数据脚本仍靠手测。
 - **阅读页滚动进度与速读游标（2026-10-20 第三批）**：`core/scrollProgress`（12：比例夹取 / 脏值回顶部 /
   像素↔比例 / 可滚区间为 0 不算 NaN）、`state/scrollPrefs`（10：内存优先于 localStorage / 按文章分开 /
   重开后回落硬存 / 空 docKey 不建键 / 写失败不抛）、`hooks/useReadingScroll`（9：恢复到位 / trailing 节流只写最后一笔 /

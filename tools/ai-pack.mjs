@@ -20,12 +20,12 @@
  */
 import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { resolve, join, basename } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { loadAiConfig, runJobs } from './ai-core.mjs'
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '..', '..')
 
-function latestJobsFile() {
+export function latestJobsFile() {
   for (const dir of [join(ROOT, 'new'), ROOT]) {
     if (!existsSync(dir)) continue
     const files = readdirSync(dir)
@@ -34,6 +34,21 @@ function latestJobsFile() {
     if (files.length) return join(dir, files[files.length - 1])
   }
   return null
+}
+
+/** 解析工作包文本：坏 JSON / 没有 jobs 都返回空数组，由调用方给明确提示。 */
+export function parsePack(text) {
+  try {
+    const pack = JSON.parse(String(text))
+    return Array.isArray(pack?.jobs) ? pack.jobs : []
+  } catch {
+    return []
+  }
+}
+
+/** 没指定输出文件时，默认写 `ai-results-YYYY-MM-DD.json`。 */
+export function defaultOutFile(root, now = new Date()) {
+  return join(root, `ai-results-${now.toISOString().slice(0, 10)}.json`)
 }
 
 async function main() {
@@ -49,8 +64,7 @@ async function main() {
     process.exit(1)
   }
 
-  const pack = JSON.parse(readFileSync(inFile, 'utf8'))
-  const jobs = Array.isArray(pack.jobs) ? pack.jobs : []
+  const jobs = parsePack(readFileSync(inFile, 'utf8'))
   if (!jobs.length) {
     console.error('工作包里没有 jobs。')
     process.exit(1)
@@ -67,13 +81,16 @@ async function main() {
   process.stdout.write('\n')
 
   const ok = results.filter((r) => r.raw && r.raw.trim()).length
-  const outFile = process.argv[3] ? resolve(ROOT, process.argv[3]) : join(ROOT, `ai-results-${new Date().toISOString().slice(0, 10)}.json`)
+  const outFile = process.argv[3] ? resolve(ROOT, process.argv[3]) : defaultOutFile(ROOT)
   writeFileSync(outFile, JSON.stringify({ version: 1, results }, null, 2), 'utf8')
   console.log(`完成：成功 ${ok} / ${jobs.length}，已写入 ${outFile}`)
   console.log('回到应用点「导入 AI 结果」选这个文件即可。')
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+// 只有直接跑 CLI 才执行；被测试 import 时不要真的去调模型。
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  main().catch((e) => {
+    console.error(e)
+    process.exit(1)
+  })
+}
