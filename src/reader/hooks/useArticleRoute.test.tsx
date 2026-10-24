@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useArticleRoute, type UseArticleRouteParams } from './useArticleRoute'
+import { parseReaderRoute } from '../route'
 
 /**
  * URL ↔ 文章 的同步。
@@ -43,6 +44,41 @@ function setup(initialPath: string, initial: UseArticleRouteParams) {
     initialProps: initial,
   })
   return { ...hook, seen }
+}
+
+/** 真浏览器返回：初始历史里放两页，`back()` 等价于点浏览器返回键。 */
+function setupWithHistory(initialEntries: string[], initial: UseArticleRouteParams) {
+  const seen = { pathname: '', key: '', type: '' }
+  let back = () => {}
+  function Probe() {
+    const loc = useLocation()
+    const type = useNavigationType()
+    seen.pathname = loc.pathname
+    seen.key = loc.key
+    seen.type = type
+    return null
+  }
+  function BackButton() {
+    const navigate = useNavigate()
+    back = () => navigate(-1)
+    return null
+  }
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MemoryRouter initialEntries={initialEntries} initialIndex={initialEntries.length - 1}>
+      <Probe />
+      <BackButton />
+      {children}
+    </MemoryRouter>
+  )
+  const hook = renderHook(
+    () => {
+      const loc = useLocation()
+      const route = parseReaderRoute(loc.pathname)
+      return useArticleRoute({ ...initial, routeSlug: route.slug, routePanel: route.panel })
+    },
+    { wrapper },
+  )
+  return { ...hook, seen, back: () => back() }
 }
 
 const params = (over: Partial<UseArticleRouteParams> = {}): UseArticleRouteParams => ({
@@ -195,6 +231,24 @@ describe('useArticleRoute：回到列表', () => {
     await waitFor(() => expect(onClear).toHaveBeenCalled())
     // 只要有导航（哪怕是同一个 pathname）location.key 就会变。
     expect(seen.key).toBe(keyBefore)
+  })
+
+  it('真实浏览器返回（navigate(-1)）→ 清文章，URL 回到上一页', async () => {
+    const onClear = vi.fn()
+    const { seen, back } = setupWithHistory(
+      ['/reader', '/reader/a/005-leaders-post-truth-politics'],
+      params({
+        routeSlug: '005-leaders-post-truth-politics',
+        currentRef: 'b:005 Leaders',
+        hasDoc: true,
+        onClear,
+      }),
+    )
+    await waitFor(() => expect(seen.pathname).toBe('/reader/a/005-leaders-post-truth-politics'))
+    act(() => back())
+    await waitFor(() => expect(seen.pathname).toBe('/reader'))
+    expect(onClear).toHaveBeenCalled()
+    expect(seen.type).toBe('POP')
   })
 
   it('无文章也能开的面板（/reader/p/plan）不会把已打开的文章清掉', async () => {
