@@ -53,6 +53,26 @@
 
 ---
 
+## 1.5 文件删除安全（不要依赖 WorkBuddy 注入）
+
+迁移会大量改文件名，**删除安全必须靠流程，不靠“把 rm 换成回收站”的进程注入**。
+
+- 迁移只允许 `git mv server/foo.js server/foo.ts`；删除只允许 `git rm`。
+  禁止 `rm`、`del`、`Remove-Item`、`git clean`、`git reset --hard`、`robocopy /MIR`。
+- 每个 commit 前必须看：
+  ```bash
+  git status --short
+  git diff --name-status HEAD
+  ```
+  除了预期的 `M` / `R`，出现 `D` 就要停下来解释。
+- WorkBuddy 注入到 Node 进程只能覆盖**该 Node 进程内的 fs 调用**；
+  覆盖不了 Git Bash 的 `rm.exe`、cmd 的 `del`、`git clean`、绝对路径调用、其他进程。
+  如果注入靠当前终端的 `NODE_OPTIONS` / shell hook，关掉终端后新进程不会继承，
+  这正是“terminal 关掉可能失效”的原因；不要把它当成迁移的安全保障。
+- 删除未跟踪文件（构建产物、临时文件）必须用 `node-safe-delete` / 回收站，
+  且按项目约定 ≤40 个一批；或者先移动到 `I:/.cache/temp/opencode/trash-*`。
+- 真正可恢复的是 **Git 历史 + 外部备份**，不是回收站。
+
 ## 2. 运行时方案（必须二选一，不许混用）
 
 ### 方案 A（默认，采用这个）：Node 原生 type stripping
