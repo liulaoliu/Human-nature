@@ -5,13 +5,13 @@ setlocal
 title Shadowing Reader Service
 cd /d "%~dp0"
 
-node server/status.js -q
+node server/status.ts -q
 if %errorlevel%==0 goto running
 
 echo Service not running. Starting in background ...
 node server/silent-start.ts
 for /l %%i in (1,1,15) do (
-  node server/status.js -q >nul 2>&1 && goto up
+  node server/status.ts -q >nul 2>&1 && goto up
   timeout /t 1 /nobreak >nul
 )
 echo.
@@ -22,12 +22,12 @@ pause
 exit /b 1
 
 :up
-node server/status.js
+node server/status.ts
 start "" "http://localhost:5173/"
 exit /b 0
 
 :running
 echo Service already running.
-node server/status.js
+node server/status.ts
 start "" "http://localhost:5173/"
 exit /b 0

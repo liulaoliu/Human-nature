@@ -7,11 +7,11 @@ const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..')
 const DEFAULT_PORT = 5173
 
-export function getPort(argPort) {
+export function getPort(argPort?: string): number {
   if (argPort && /^\d+$/.test(argPort)) return Number(argPort)
   if (process.env.PORT && /^\d+$/.test(process.env.PORT)) return Number(process.env.PORT)
   try {
-    const c = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8'))
+    const c = JSON.parse(readFileSync(join(root, 'config.json'), 'utf8')) as { port?: unknown }
     if (c.port) return Number(c.port)
   } catch {
     // ignore
@@ -21,10 +21,18 @@ export function getPort(argPort) {
 
 const PROBE_HOSTS = ['localhost', '127.0.0.1', '::1']
 
-function fetchFromHost(host, port, timeoutMs = 1500) {
+export interface StatusInfo {
+  ok: boolean
+  pid: number
+  uptime: number
+  time: string
+  dev?: boolean
+}
+
+function fetchFromHost(host: string, port: number, timeoutMs = 1500): Promise<StatusInfo | null> {
   return new Promise((resolve) => {
     let done = false
-    const finish = (v) => {
+    const finish = (v: StatusInfo | null): void => {
       if (!done) {
         done = true
         resolve(v)
@@ -39,7 +47,7 @@ function fetchFromHost(host, port, timeoutMs = 1500) {
         })
         res.on('end', () => {
           try {
-            finish(JSON.parse(data))
+            finish(JSON.parse(data) as StatusInfo)
           } catch {
             finish(null)
           }
@@ -56,10 +64,10 @@ function fetchFromHost(host, port, timeoutMs = 1500) {
 }
 
 /** 探测根路径是否有人应答（dev 模式的 Vite 没有 /api/status，靠这个兜底）。 */
-function probeRoot(host, port, timeoutMs = 1500) {
+function probeRoot(host: string, port: number, timeoutMs = 1500): Promise<boolean> {
   return new Promise((resolve) => {
     let done = false
-    const finish = (v) => {
+    const finish = (v: boolean): void => {
       if (!done) {
         done = true
         resolve(v)
@@ -78,7 +86,7 @@ function probeRoot(host, port, timeoutMs = 1500) {
   })
 }
 
-function readChildPid() {
+function readChildPid(): number {
   try {
     const n = Number(readFileSync(join(root, 'server', '.child.pid'), 'utf8').trim())
     return Number.isFinite(n) ? n : 0
@@ -88,7 +96,7 @@ function readChildPid() {
 }
 
 /** GET /api/status（static 模式）或探根路径（dev 模式的 Vite）。 */
-export async function fetchStatus(port, timeoutMs = 1500) {
+export async function fetchStatus(port: number, timeoutMs = 1500): Promise<StatusInfo | null> {
   const results = await Promise.allSettled(PROBE_HOSTS.map((h) => fetchFromHost(h, port, timeoutMs)))
   for (const r of results) {
     if (r.status === 'fulfilled' && r.value) return r.value
@@ -101,16 +109,16 @@ export async function fetchStatus(port, timeoutMs = 1500) {
   return null
 }
 
-export function formatUptime(seconds) {
+export function formatUptime(seconds: number): string {
   const s = Math.max(0, Math.floor(seconds || 0))
   if (s < 60) return `${s} 秒`
   if (s < 3600) return `${Math.floor(s / 60)} 分钟`
   return `${Math.floor(s / 3600)} 小时`
 }
 
-const pad = (n) => String(n).padStart(2, '0')
+const pad = (n: number): string => String(n).padStart(2, '0')
 
-export function printStatus(port, st) {
+export function printStatus(port: number, st: StatusInfo | null): void {
   console.log('学吧老哥 本地服务')
   if (!st) {
     console.log(`  状态: 未运行（端口 ${port} 无响应）`)
@@ -130,7 +138,7 @@ export function printStatus(port, st) {
   }
 }
 
-async function main() {
+async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const quiet = args.includes('-q')
   const port = getPort(args.find((a) => /^\d+$/.test(a)))
@@ -140,4 +148,4 @@ async function main() {
   process.exit(st ? 0 : 1)
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main()
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) void main()
