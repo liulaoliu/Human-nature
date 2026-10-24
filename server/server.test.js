@@ -12,7 +12,7 @@ import { createRequestHandler } from './httpApp.js'
 import { resolveChild, loadMode } from './mode.js'
 import { closeAllStores } from './sqliteStore.js'
 import { allowLocalRequest } from './sameOrigin.js'
-import { PRIVATE_FS_DENY } from './privatePaths.js'
+import { PRIVATE_FS_DENY } from './privatePaths.ts'
 import { localDayKey } from './localDate.ts'
 
 const require = createRequire(import.meta.url)

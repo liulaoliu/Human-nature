@@ -10,6 +10,8 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noEmit": true,
+    // vite.config.ts 要 import server/*.ts（Node 侧迁移），允许显式 .ts 扩展名
+    "allowImportingTsExtensions": true,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "isolatedModules": true,

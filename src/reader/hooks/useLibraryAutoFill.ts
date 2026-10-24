@@ -78,11 +78,14 @@ export function useLibraryAutoFill({
     }
     const ric = (globalThis as { requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number })
       .requestIdleCallback
-    const idleId = typeof ric === 'function' ? ric(start, { timeout: 4000 }) : setTimeout(start, 500)
+    const idleId = typeof ric === 'function' ? ric(start, { timeout: 4000 }) : window.setTimeout(start, 500)
     return () => {
       alive = false
       if (typeof ric === 'function') (globalThis as { cancelIdleCallback?: (id: number) => void }).cancelIdleCallback?.(idleId)
-      else clearTimeout(idleId)
+      // 用 window.clearTimeout：装了 @types/node 之后裸 `setTimeout` 的返回类型是
+      // `number | NodeJS.Timeout`，和 DOM 的 `clearTimeout(number)` 对不上。
+      // 这段本来就只跑在浏览器里，走 window 版本类型才准确。
+      else window.clearTimeout(idleId)
     }
   }, [])
 

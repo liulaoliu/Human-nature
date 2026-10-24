@@ -11,8 +11,7 @@ import { ttsEndpointPlugin } from './tools/vite-tts-endpoint.mjs'
 import { aiEndpointPlugin } from './tools/vite-ai-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
 import { storeEndpointPlugin } from './tools/vite-store-endpoint.mjs'
-// @ts-expect-error .js 没有类型声明
-import { PRIVATE_FS_DENY } from './server/privatePaths.js'
+import { PRIVATE_FS_DENY } from './server/privatePaths.ts'
 // @ts-expect-error .mjs 没有类型声明
 import { devSpaRewrite } from './tools/spa-route.mjs'
 
@@ -76,7 +75,7 @@ export default defineConfig({
       awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 },
     },
     // 别让 dev server 把 /data/xueba.db、config.local.json（含 API key）当静态文件吐出去。
-    // 注意：这个数组会替换 Vite 默认的 .env / *.pem 拒绝列表，所以策略集中在 privatePaths.js。
+    // 注意：这个数组会替换 Vite 默认的 .env / *.pem 拒绝列表，所以策略集中在 privatePaths.ts。
     fs: { deny: PRIVATE_FS_DENY },
     /**
      * 启动时就把首屏要用的模块先转译好。
