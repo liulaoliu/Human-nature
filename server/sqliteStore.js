@@ -12,7 +12,7 @@ import {
   SCHEMA_V7,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
-import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.js'
+import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
 import {
   hasLearningRows,
   LEARNING_SECTIONS,

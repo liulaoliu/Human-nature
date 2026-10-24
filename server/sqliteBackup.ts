@@ -1,8 +1,15 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
+import type { DatabaseSync } from 'node:sqlite'
 import { SCHEMA_VERSION } from './sqliteSchema.ts'
 import { localDayKey } from './localDate.ts'
+
+/**
+ * node:sqlite 的构造器类型。调用方（sqliteStore）用 `require('node:sqlite')`
+ * 动态引入、延迟注入 —— 保持「可选依赖」的旧设计不变（构造器类型只在编译期用）。
+ */
+type DatabaseSyncCtor = typeof DatabaseSync
 
 /** schema 迁移前的整库备份，留最近 5 份。 */
 const DB_BACKUP_KEEP = 5
@@ -11,14 +18,14 @@ const DAILY_BACKUP_KEEP = 5
 /** 旧备份压缩级别：1 比 6 快 3 倍，压缩率只差 ~14%（185MB → 22.4MB vs 19.3MB）。 */
 const BACKUP_GZIP_LEVEL = 1
 
-function backupsDir(dbPath) {
+function backupsDir(dbPath: string): string {
   const dir = join(dirname(dbPath), 'backups')
   mkdirSync(dir, { recursive: true, mode: 0o700 })
   return dir
 }
 
 /** 导出只为测试（保留策略 / 压缩策略都要能单测）。 */
-export function pruneBackups(dir, pattern, keep) {
+export function pruneBackups(dir: string, pattern: RegExp, keep: number): void {
   const files = readdirSync(dir)
     .filter((name) => pattern.test(name))
     .sort()
@@ -28,9 +35,9 @@ export function pruneBackups(dir, pattern, keep) {
 }
 
 /** 备份写完立刻用只读连接做 quick_check；坏文件不能当成“还有一份”。 */
-function verifyBackup(file, DatabaseSync) {
+function verifyBackup(file: string, DatabaseSync: DatabaseSyncCtor | null): void {
   if (!DatabaseSync) return
-  let db = null
+  let db: DatabaseSync | null = null
   try {
     db = new DatabaseSync(file, { readOnly: true })
     const row = db.prepare('PRAGMA quick_check').get()
@@ -45,7 +52,7 @@ function verifyBackup(file, DatabaseSync) {
   }
 }
 
-function vacuumInto(db, file, DatabaseSync) {
+function vacuumInto(db: DatabaseSync, file: string, DatabaseSync: DatabaseSyncCtor | null): void {
   const target = file.replace(/'/g, "''")
   db.exec(`VACUUM INTO '${target}'`)
   try {
@@ -72,7 +79,7 @@ function vacuumInto(db, file, DatabaseSync) {
  *   - 每次只压一个，摊到 30 分钟的 tick 里，不阻塞启动。
  * 要恢复旧备份：`gunzip xueba-daily-YYYY-MM-DD.db.gz` 后照常拷回去即可。
  */
-export function compressOldBackups(dir, today) {
+export function compressOldBackups(dir: string, today: string): string | null {
   const hourAgo = Date.now() - 60 * 60 * 1000
   const candidates = readdirSync(dir)
     .filter((name) => /^xueba-(daily|v\d+)-.*\.db$/.test(name))
@@ -103,7 +110,12 @@ export function compressOldBackups(dir, today) {
  * schema 升级前把整库 VACUUM 成独立文件，放在 `data/backups/`。
  * 迁移只增不删，但真出事故时至少要能回到升级前；保留最近 5 份。
  */
-export function backupBeforeMigration(db, dbPath, version, DatabaseSync) {
+export function backupBeforeMigration(
+  db: DatabaseSync,
+  dbPath: string,
+  version: number,
+  DatabaseSync: DatabaseSyncCtor | null,
+): string | null {
   if (version <= 0 || version >= SCHEMA_VERSION) return null
   const dir = backupsDir(dbPath)
   const stamp = new Date().toISOString().replace(/[:.]/g, '-')
@@ -119,7 +131,12 @@ export function backupBeforeMigration(db, dbPath, version, DatabaseSync) {
  * 不是替代学习记录快照：快照防误清空，这个防「整个文件被误删/改坏后没有第二份」。
  * 只在本进程当天第一次打开时做；已经存在当天文件就跳过。
  */
-export function backupDaily(db, dbPath, version, DatabaseSync) {
+export function backupDaily(
+  db: DatabaseSync,
+  dbPath: string,
+  version: number,
+  DatabaseSync: DatabaseSyncCtor | null,
+): string | null {
   if (version <= 0) return null
   const dir = backupsDir(dbPath)
   const day = localDayKey()
@@ -143,7 +160,11 @@ export function backupDaily(db, dbPath, version, DatabaseSync) {
  * 长开进程也要每天有备份：启动时做一次，之后每 30 分钟检查日期。
  * 跨过午夜且当天还没备份时自动补一份；`unref` 不阻止进程退出。
  */
-export function startDailyBackup(db, dbPath, DatabaseSync) {
+export function startDailyBackup(
+  db: DatabaseSync,
+  dbPath: string,
+  DatabaseSync: DatabaseSyncCtor | null,
+): () => void {
   const tick = () => {
     try {
       const file = backupDaily(db, dbPath, SCHEMA_VERSION, DatabaseSync)

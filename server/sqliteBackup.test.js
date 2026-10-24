@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, readdirSync, statSync, utimesSync, writeFile
 import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { compressOldBackups, pruneBackups } from './sqliteBackup.js'
+import { compressOldBackups, pruneBackups } from './sqliteBackup.ts'
 
 /**
  * 备份目录的两条策略：
