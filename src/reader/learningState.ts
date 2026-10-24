@@ -1,4 +1,10 @@
-import { hasLearningData, normalizeLearning, type LearningData, type LearningSection } from '../core/learning'
+import {
+  hasLearningData,
+  LEARNING_KEYS,
+  normalizeLearning,
+  type LearningData,
+  type LearningSection,
+} from '../core/learning'
 import type { LearningRepoPort } from '../core/ports'
 import { learningRepo } from '../adapters/learningRepo'
 import { reportStorageFailure } from './storage'
@@ -10,24 +16,9 @@ import { reportStorageFailure } from './storage'
  * 首屏不能等异步。启动时先把 SQLite 里“本地没有”的键补回来，之后每次变更
  * 由 `useLearningSync` 防抖写回 SQLite。
  *
- * 这里**只列学习记录**。主题、字号、面板、上次文章、草稿、会话快照等偏好/会话键
- * 不要加进来——它们继续留在 localStorage。
+ * 键的**唯一清单**在 `core/learning.ts` 的 `LEARNING_KEYS`（和 section 同文件），
+ * 这里不再抄一份；读写点一律用 `LEARNING_KEYS.xxx`。
  */
-export const LEARNING_KEYS = {
-  practice: 'reader:practice',
-  mistakes: 'reader:mistakes',
-  readDone: 'reader:readDone',
-  writingHistory: 'reader:writingHistory',
-  retells: 'reader:retells',
-  activity: 'reader:activity',
-  studyDays: 'reader:studyStats',
-  sessions: 'reader:vocabStats',
-  studiedDays: 'reader:studiedToday',
-  skimmed: 'reader:intensiveSkimmed',
-  kindStats: 'reader:kindStats',
-  answerEvents: 'reader:answerEvents',
-} as const
-
 export const LEARNING_KEY_SET: ReadonlySet<string> = new Set(Object.values(LEARNING_KEYS))
 
 export function isLearningKey(key: string | null | undefined): boolean {

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildImitationTaskPrompt, buildWritingFeedbackPrompt, parseImitationTask, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
 import { getSentenceLanguages } from '../../core/language'
+import { LEARNING_KEYS } from '../../core/learning'
 import { useLocalStorageState } from './useLocalStorageState'
 
 /** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
@@ -52,7 +53,7 @@ export function useWriting({
   const [task, setTask] = useState<ImitationTask | null>(() => loadWritingDraft().task)
   const [text, setText] = useState(() => loadWritingDraft().text)
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null)
-  const [history, setHistory] = useLocalStorageState<WritingRecord[]>('reader:writingHistory', [])
+  const [history, setHistory] = useLocalStorageState<WritingRecord[]>(LEARNING_KEYS.writingHistory, [])
 
   /** 打开仿写训练（范句默认用当前选中句）。 */
   const start = useCallback(() => {

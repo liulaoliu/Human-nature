@@ -507,3 +507,9 @@ npm run gates                 # 收尾门禁（提交前必跑）
     面板侧同一套语义：打开 `push`，页面内关闭 `replace`；包装 setter 必须支持
     `setStatsOpen(v => !v)`（按 `panelFlags(route.panel)` 求值），不能把函数当 truthy。
     测试要断言 `location.key` 不变 / `useNavigationType() === 'REPLACE'`，只看 pathname 抓不到重复 push。
+39. **学习记录必须“先水合、后挂载”**（2026-10-24）。`ReaderRoot` 旧逻辑在本地有缓存时立刻挂
+    `ReaderApp`、后台 `hydrateLearningFromServer()`；React state 已经用旧缓存初始化，服务端较新的
+    记录只写进 localStorage，用户一改就整块盖回旧数据。现在无条件等水合（最多 3s）再挂，
+    测试要覆盖“水合 pending 时不能出现 ReaderApp”“失败/超时仍能画”。学习记录的 localStorage
+    键只在 `core/learning.ts` 的 `LEARNING_KEYS` 里写一次；新加字段时 `LEARNING_KEYS` 与
+    `LearningData` 必须同步，`core/learning.test.ts` 会查两张表是否一一对应。

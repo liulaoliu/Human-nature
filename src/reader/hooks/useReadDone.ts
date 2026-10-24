@@ -1,5 +1,6 @@
 import { useCallback, useMemo } from 'react'
 import { addReadDone, readDayOf, readDoneOn, removeReadDone, type ReadDone } from '../../core/goals'
+import { LEARNING_KEYS } from '../../core/learning'
 import { useLocalStorageState } from './useLocalStorageState'
 
 /**
@@ -43,7 +44,7 @@ export function useReadDone({
   todayKey,
   flash,
 }: UseReadDoneParams): UseReadDoneResult {
-  const [readDone, setReadDone] = useLocalStorageState<ReadDone[]>('reader:readDone', [])
+  const [readDone, setReadDone] = useLocalStorageState<ReadDone[]>(LEARNING_KEYS.readDone, [])
 
   /**
    * 记「读完这篇」。**同一篇只记第一次**：已在某天读过就不再计入

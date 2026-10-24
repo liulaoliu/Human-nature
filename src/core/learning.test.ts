@@ -1,7 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { emptyLearning, hasLearningData, normalizeLearning } from './learning'
+import { emptyLearning, hasLearningData, LEARNING_KEYS, LEARNING_SECTIONS, normalizeLearning } from './learning'
 
 describe('learning 记录', () => {
+  it('LEARNING_KEYS 与 LEARNING_SECTIONS 一一对应，键名不重复', () => {
+    const keys = Object.keys(LEARNING_KEYS).sort()
+    expect([...LEARNING_SECTIONS].sort()).toEqual(keys)
+    const storageKeys = Object.values(LEARNING_KEYS)
+    expect(new Set(storageKeys).size).toBe(storageKeys.length)
+    for (const key of storageKeys) expect(key.startsWith('reader:')).toBe(true)
+  })
+
   it('空值 / 坏值给空记录，不抛', () => {
     expect(normalizeLearning(null)).toEqual(emptyLearning())
     expect(normalizeLearning('nope')).toEqual(emptyLearning())

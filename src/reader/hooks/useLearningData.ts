@@ -1,6 +1,7 @@
 import { useCallback, useMemo } from 'react'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
+import { LEARNING_KEYS } from '../../core/learning'
 import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
 import { addAnswerEvent, createAnswerEvent, normalizeAnswerEvents } from '../../core/answerEvents'
 import type { ReadDone } from '../../core/goals'
@@ -18,7 +19,7 @@ import { useLearningRebuild } from './useLearningRebuild'
  *
  * 它们之前散在 `ReaderApp` 里 20 多个 `useState`/`useLocalStorageState`，导出、
  * 合并、统计各自接线，改一个字段要动好几处。现在：
- *   - 全部落盘键集中在 `LEARNING_KEYS`（learningState.ts）；
+ *   - 全部落盘键集中在 `core/learning.ts` 的 `LEARNING_KEYS`；
  *   - `data` 是导出/备份要的一份快照；`setters` 是合并导入要的一组动作；
  *   - 界面仍拿到同名扁平字段，行为不变。
  */
@@ -67,8 +68,8 @@ export interface LearningSetters {
 }
 
 export function useLearningData(params: UseLearningDataParams) {
-  const [studyDays, setStudyDays] = useLocalStorageState<StudyDay[]>('reader:studyStats', [])
-  const [studiedDays, setStudiedDays] = useLocalStorageState<StudiedDay[]>('reader:studiedToday', [], {
+  const [studyDays, setStudyDays] = useLocalStorageState<StudyDay[]>(LEARNING_KEYS.studyDays, [])
+  const [studiedDays, setStudiedDays] = useLocalStorageState<StudiedDay[]>(LEARNING_KEYS.studiedDays, [], {
     parse: (raw) => {
       try {
         const v: unknown = JSON.parse(raw)
@@ -91,11 +92,11 @@ export function useLearningData(params: UseLearningDataParams) {
       return []
     },
   })
-  const [activity, setActivity] = useLocalStorageState<DayActivity[]>('reader:activity', [])
-  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>('reader:practice', [])
-  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>('reader:mistakes', [])
-  const [kindStats, setKindStats] = useLocalStorageState<KindStats>('reader:kindStats', {})
-  const [answerEvents, setAnswerEvents] = useLocalStorageState<AnswerEvent[]>('reader:answerEvents', [], {
+  const [activity, setActivity] = useLocalStorageState<DayActivity[]>(LEARNING_KEYS.activity, [])
+  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>(LEARNING_KEYS.practice, [])
+  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>(LEARNING_KEYS.mistakes, [])
+  const [kindStats, setKindStats] = useLocalStorageState<KindStats>(LEARNING_KEYS.kindStats, {})
+  const [answerEvents, setAnswerEvents] = useLocalStorageState<AnswerEvent[]>(LEARNING_KEYS.answerEvents, [], {
     parse: (raw) => {
       try {
         return normalizeAnswerEvents(JSON.parse(raw))
@@ -104,9 +105,9 @@ export function useLearningData(params: UseLearningDataParams) {
       }
     },
   })
-  const [retells, setRetells] = useLocalStorageState<RetellRecord[]>('reader:retells', [])
-  const [sessions, setSessions] = useLocalStorageState<PickSession[]>('reader:vocabStats', [])
-  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>('reader:intensiveSkimmed', [])
+  const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [])
+  const [sessions, setSessions] = useLocalStorageState<PickSession[]>(LEARNING_KEYS.sessions, [])
+  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>(LEARNING_KEYS.skimmed, [])
   const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, {
     parse: (raw) => {
       const n = Number(raw)

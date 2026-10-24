@@ -475,7 +475,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 | 做法 | 为什么 |
 |---|---|
 | **HTML 里的骨架屏**（`index.html` 内联，按 `data-entry` 只在 `/reader*` 显示） | JS 下载/解析期间有轮廓，不是白屏。`createRoot().render()` 会清空容器，不用手动移除 |
-| **水合不挡渲染**（`ReaderRoot`） | `hydrateLearningFromServer()` 原来无条件 `await` 在 render 之前 = 一个网络往返的纯白屏。只有本地没有任何学习记录时才等，且最多 600ms |
+| **水合先于挂载**（`ReaderRoot`） | 学习记录以 SQLite 为准：先把服务端记录落进 localStorage，再挂 `ReaderApp`。旧做法「本地有记录就立刻画、后台水合」会让 React state 用旧缓存初始化，随后一改就反过来盖掉服务端更新。本地服务正常时只多几十毫秒；静态部署 health 很快失败；最坏等 3s 也先画 |
 | **面板 `lazy()`**（`ReaderOverlaysHost`） | 8 个浮层首屏不加载。dev 少 17 个模块 / 1.4MB，生产首屏 chunk 637KB → 586KB |
 | **dev `server.warmup.clientFiles`** | 启动时把首屏模块先转译好，避免第一次打开时 200+ 模块、最深 7 层的 transform 瀑布 |
 

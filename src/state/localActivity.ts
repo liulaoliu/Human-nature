@@ -10,9 +10,10 @@
  * 藏在 store 文件的最后容易被当成内部工具函数改坏。
  */
 import { addActivity, dayKeyLocal, normalizeActivity, type DayActivity } from '../core/activity'
+import { LEARNING_KEYS } from '../core/learning'
 
-/** 与精读页 `useLocalStorageState('reader:activity')` 是同一条键，改了那边就丢数据 */
-export const ACTIVITY_KEY = 'reader:activity'
+/** 与精读页 `useLocalStorageState(LEARNING_KEYS.activity)` 是同一条键，别名只给本模块读起来短一点 */
+export const ACTIVITY_KEY = LEARNING_KEYS.activity
 export const LOCAL_STATE_EVENT = 'reader:local-state'
 
 /** 读出本机已有的活动记录：坏数据当空库（**不能因为一条脏数据就把今天这笔记丢**） */

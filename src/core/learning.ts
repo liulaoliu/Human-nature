@@ -60,20 +60,31 @@ export interface LearningData {
 /** 学习记录里可以单独增量同步的部分。 */
 export type LearningSection = keyof LearningData
 
-export const LEARNING_SECTIONS: LearningSection[] = [
-  'practice',
-  'mistakes',
-  'readDone',
-  'writingHistory',
-  'retells',
-  'activity',
-  'studyDays',
-  'sessions',
-  'studiedDays',
-  'skimmed',
-  'kindStats',
-  'answerEvents',
-]
+/**
+ * localStorage 键 ↔ 学习记录 section 的**唯一清单**。
+ *
+ * 读写学习记录时一律从这里取键（`LEARNING_KEYS.practice`），不要再手写
+ * `'reader:practice'`：手写漏掉一处，`learningSectionForKey()` 就返回 null，
+ * 这块记录会默默留在 localStorage、永远不同步到 SQLite。
+ *
+ * `satisfies` 保证每个 section 都有键；`LEARNING_SECTIONS` 由它派生，避免两份清单。
+ */
+export const LEARNING_KEYS = {
+  practice: 'reader:practice',
+  mistakes: 'reader:mistakes',
+  readDone: 'reader:readDone',
+  writingHistory: 'reader:writingHistory',
+  retells: 'reader:retells',
+  activity: 'reader:activity',
+  studyDays: 'reader:studyStats',
+  sessions: 'reader:vocabStats',
+  studiedDays: 'reader:studiedToday',
+  skimmed: 'reader:intensiveSkimmed',
+  kindStats: 'reader:kindStats',
+  answerEvents: 'reader:answerEvents',
+} as const satisfies Record<LearningSection, string>
+
+export const LEARNING_SECTIONS: LearningSection[] = Object.keys(LEARNING_KEYS) as LearningSection[]
 
 /** 空记录。每次都返回新数组/新对象，避免调用方改到共享常量。 */
 export function emptyLearning(): LearningData {

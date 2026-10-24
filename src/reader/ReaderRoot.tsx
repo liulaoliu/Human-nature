@@ -1,9 +1,11 @@
 import { useEffect, useLayoutEffect, useState } from 'react'
 import ReaderApp from './ReaderApp'
 import readerCss from './reader.css?inline'
-import { hydrateLearningFromServer, readLearningFromLocalStorage } from './learningState'
-import { hasLearningData } from '../core/learning'
+import { hydrateLearningFromServer } from './learningState'
 import { useLearningSync } from './hooks/useLearningSync'
+
+/** 最多等这么久；服务端在本机时通常几十毫秒，静态部署 health 404 也很快。 */
+const HYDRATE_TIMEOUT_MS = 3000
 
 /** 同步缓存接 SQLite；放在水合完成之后，避免「空库先整份写回」把服务端记录盖掉。 */
 function ReaderReady() {
@@ -29,12 +31,14 @@ function LearningSkeleton() {
  * 以前这里是 `src/reader/main.tsx`：自己 `createRoot`、自己 `BrowserRouter basename`、
  * 自己一套 HTML。合并成一个入口后，启动只剩一处，这里改成一个普通组件。
  *
- * 水合仍按老策略：本地已有学习记录 → 先画、后台补；本地为空（首次 / 清了缓存）
- * → 最多等 600ms，超时也先画，不能白屏。
+ * 水合策略：**先等 SQLite 的学习记录落进 localStorage，再挂 ReaderApp**。
+ * 旧代码在「本地已有记录」时立刻挂载、后台水合，结果 React state 已经用旧缓存初始化，
+ * 服务端较新的记录只写进了 localStorage，用户随后一改就反过来把服务端盖掉（P1-2）。
+ * 本地服务正常时这一步只多几十毫秒；服务不可用 / 静态部署时 health 很快失败；
+ * 最坏等待 `HYDRATE_TIMEOUT_MS`，超时也先画，不能白屏。
  */
 export default function ReaderRoot() {
-  const [localKnown] = useState(() => hasLearningData(readLearningFromLocalStorage()))
-  const [ready, setReady] = useState(localKnown)
+  const [ready, setReady] = useState(false)
 
   /**
    * 阅读页 CSS 手动注入 / 卸载。
@@ -54,23 +58,23 @@ export default function ReaderRoot() {
 
   useEffect(() => {
     let alive = true
-    if (localKnown) {
-      void hydrateLearningFromServer()
-      return
-    }
     const timer = window.setTimeout(() => {
       if (alive) setReady(true)
-    }, 600)
-    void hydrateLearningFromServer().finally(() => {
-      if (!alive) return
-      window.clearTimeout(timer)
-      setReady(true)
-    })
+    }, HYDRATE_TIMEOUT_MS)
+    void hydrateLearningFromServer()
+      .catch(() => {
+        // hydrateLearningFromServer 内部已兜住服务不可用；这里再兜一层，调用方不需要处理
+      })
+      .finally(() => {
+        if (!alive) return
+        window.clearTimeout(timer)
+        setReady(true)
+      })
     return () => {
       alive = false
       window.clearTimeout(timer)
     }
-  }, [localKnown])
+  }, [])
 
   if (!ready) return <LearningSkeleton />
   return <ReaderReady />
