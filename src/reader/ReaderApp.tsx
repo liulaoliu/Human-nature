@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { sortItems } from '../core/vocab'
-import { type AnalysisTask } from '../core/analyzer'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
@@ -21,7 +20,7 @@ import { useReaderViewData } from './hooks/useReaderViewData'
 import { useSessionServices } from './hooks/useSessionServices'
 import ReaderScreen from './ReaderScreen'
 import { useAiServices } from './hooks/useAiServices'
-import type { ApplyOutcome } from './hooks/useApplyTaskResult'
+import { useArticleDocState, usePasteState, useReaderHighlightState } from './hooks/useReaderLocalState'
 import { useArticleUiActions } from './hooks/useArticleUiActions'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
@@ -40,47 +39,29 @@ import { useArticleVocabView } from './hooks/useArticleVocabView'
 import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
 import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
-import type { Paragraph, Sentence } from '../types/document'
-interface Doc {
-  paragraphs: Paragraph[]
-  sentences: Sentence[]
-}
 
 export default function ReaderApp() {
-  const [articleKey, setArticleKey] = useState<string | null>(null)
-  const [doc, setDoc] = useState<Doc | null>(null)
-  const [selectedId, setSelectedId] = useState<string | null>(null)
-  /** 鼠标精确选中的片段（划选 / 双击选词），可能为空 */
-  const [exact, setExact] = useState('')
-  /** 是否用精确片段：有精确选区时为真，默认用整句 */
-  const [useExact, setUseExact] = useState(false)
-  /** 精确选区：哪个句子 + 哪些词（可离散，支持下划线多选） */
-  const [selSid, setSelSid] = useState<string | null>(null)
-  const [selIndices, setSelIndices] = useState<number[]>([])
-  /** 词库的可变引用：跑批里多条任务挨个应用时用它串起来，避免相互覆盖（见 useApplyTaskResult）。 */
-  const [pasted, setPasted] = useState('')
-  /** 上次「复制提示词」请求的词（用于校验 AI 返回是否齐全） */
-  const askedWordsRef = useRef<string[]>([])
-  /** 上次「全文翻译」请求的句子 id（用于校验是否逐句返回） */
-  const askedIdsRef = useRef<string[]>([])
-  /** 应用结果后的回执（成功 / 缺失 / 无效） */
-  const [pasteReport, setPasteReport] = useState<string[]>([])
-  /** 上次回执里缺失的词（用于「一键复制未返回的」重试）；类型跟着 hook 走，别再抄一份联合 */
-  const [pasteMissing, setPasteMissing] = useState<ApplyOutcome['missing']>(null)
-  const [lastTask, setLastTask] = useState<
-    | AnalysisTask
-    | 'confusable'
-    | 'example'
-    | 'phrase'
-    | 'lemma'
-    | 'pos'
-    | 'grammar_mark'
-    | 'listening'
-    | 'language'
-    | 'imitation'
-    | 'feedback'
-    | null
-  >(null)
+  const docState = useArticleDocState()
+  const {
+    articleKey, setArticleKey,
+    doc, setDoc,
+    selectedId, setSelectedId,
+    exact, setExact,
+    useExact, setUseExact,
+    selSid, setSelSid,
+    selIndices, setSelIndices,
+    articleTitle, setArticleTitle,
+    savedId, setSavedId,
+    confirmDelSave, setConfirmDelSave,
+  } = docState
+  const paste = usePasteState()
+  const {
+    pasted, setPasted,
+    askedWordsRef, askedIdsRef,
+    pasteReport, setPasteReport,
+    pasteMissing, setPasteMissing,
+    lastTask, setLastTask,
+  } = paste
   const { toast, flash } = useToast()
 
   // 本机存储写失败（配额满 / 隐私模式）：提示一次，别让用户以为已经保存
@@ -94,10 +75,6 @@ export default function ReaderApp() {
 
   // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
   const { library, libraryRef, libraryLoaded, persist, persistNow, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
-  const [articleTitle, setArticleTitle] = useState('')
-  const [savedId, setSavedId] = useState<string | null>(null)
-  /** 「删除保存」文章的两步确认 */
-  const [confirmDelSave, setConfirmDelSave] = useState(false)
   /** 是否按住 Ctrl / ⌘ / Alt（决定「整句 / 按词吸附 / 选词组」）：见 hooks/useModifierKeys */
   const { ctrlHeld, altHeld } = useModifierKeys()
   /** 阅读字号 / 字重、主题、译文、音色、词汇标准、面板持久开关… —— 18 个本机偏好全在 hooks/useReaderPrefs */
@@ -126,12 +103,13 @@ export default function ReaderApp() {
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
   const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
-  /** a/d 临时提示的句子（有生词，底色与"选中句"略不同） */
-  const [peekSid, setPeekSid] = useState<string | null>(null)
-  /** 生词本里被高亮/滚到的词条（点正文生词时用） */
-  const [focusLemma, setFocusLemma] = useState<string | null>(null)
-  /** 待确认删除的词条 id（两步防误触） */
-  const [confirmDel, setConfirmDel] = useState<string | null>(null)
+  const {
+    peekSid, setPeekSid,
+    focusLemma, setFocusLemma,
+    confirmDel, setConfirmDel,
+    lastPicked, setLastPicked,
+    bubblePos, setBubblePos,
+  } = useReaderHighlightState()
   /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
   const speaking = useSpeaking({
     doc,
@@ -167,9 +145,6 @@ export default function ReaderApp() {
    * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）由 useLearningData 统一管理。
    * 每日目标 / 是否显示语言点 / 混淆项批量 / 工作包范围 / 直入生词本 / 新词上限：见 useReaderPrefs。
    */
-  /** 选词模式：最近选中的词 + 气泡位置 */
-  const [lastPicked, setLastPicked] = useState<{ word: string; sid: string } | null>(null)
-  const [bubblePos, setBubblePos] = useState<{ top: number; left: number } | null>(null)
   /**
    * 当前文章的稳定标识：内置用 book key；手动/已保存用 savedId。生词据此归属到文章。
    *
