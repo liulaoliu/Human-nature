@@ -4,12 +4,9 @@ import { type AnalysisTask } from '../core/analyzer'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
-import { useReaderPanels } from './hooks/useReaderPanels'
-import { parseReaderRoute, useRoutedPanels } from './route'
 import { buildArticleIndex } from '../core/articleIndex'
-import { useArticleRoute } from './hooks/useArticleRoute'
+import { useReaderArticleRouting, useReaderPanelRouting } from './hooks/useReaderRouting'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
-import { useLocation } from 'react-router-dom'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
 import { buildTtsAccents } from '../core/ttsVoices'
@@ -111,10 +108,6 @@ export default function ReaderApp() {
     confusableBatchSize, aiPackScope, autoVocabDirect, newLimit, newToday,
     setSideTab, setNewToday,
   } = prefs
-  /** 浮层/面板的开关（速读 / 计划 / 精读 / 日志 / 导出 / 备忘 / 统计 / 全部生词）都在 useReaderPanels */
-  const panelsRaw = useReaderPanels()
-  const { pathname } = useLocation()
-  const route = useMemo(() => parseReaderRoute(pathname), [pathname])
   /**
    * 文章标识 ↔ URL slug 的映射表。
    *
@@ -127,7 +120,7 @@ export default function ReaderApp() {
   /** 当前文章在 URL 里的样子（空串 = 索引里还没有它，先别动地址栏）。 */
   const currentSlug = currentRef ? articleIndex.slugOf(currentRef) : ''
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
-  const panels = useRoutedPanels(panelsRaw, route, currentSlug)
+  const { route, panels } = useReaderPanelRouting(currentSlug)
   const { statsOpen, setStatsOpen, browseAll, setBrowseAll } = panels
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
@@ -582,12 +575,12 @@ export default function ReaderApp() {
   })
   const { articleQuizCount } = viewData
 
-  // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useArticleRoute ----
+  // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useReaderArticleRouting ----
   // 目录和已保存列表到齐才敢按 URL 找文章（否则 slug 反查不到，会误判"这篇没了"）。
   // 目录加载失败（bookError）也算就绪：已保存文章仍能按 slug 打开，内置文章会明确显示"不在了"，
   // 而不是永远停在 loading。
   const articleIndexReady = savedLoaded && (!!book || bookError)
-  const routePick = useArticleRoute({
+  const { routePick, articleRouting } = useReaderArticleRouting({
     routeSlug: route.slug,
     routePanel: route.panel,
     currentRef,
@@ -607,20 +600,6 @@ export default function ReaderApp() {
       }
     },
   })
-
-  /**
-   * 正文槽位的路由事实：URL 指向哪篇、索引是否就绪、当前打开的是哪篇。
-   * 具体显示 composer / loading / missing / article 由 `screen/bodyMode.ts` 判定。
-   */
-  const articleRouting = useMemo(
-    () => ({
-      slug: route.slug,
-      indexReady: articleIndexReady,
-      ref: route.slug ? articleIndex.refOf(route.slug) : '',
-      currentRef,
-    }),
-    [route.slug, articleIndexReady, articleIndex, currentRef],
-  )
 
   /** 文章选择器改成「只导航」，真正加载由 useArticleRoute 的第 ② 条负责。 */
   const routedWorkspace = useMemo(
