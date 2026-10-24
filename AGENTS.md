@@ -77,6 +77,26 @@
    日期键 → `core/activity.ts`；语言点键/签名 → `core/langPoints.ts`。
    视图里不许出现这些规则的第二份实现（门禁会拦）。
 
+## 单入口 SPA 与整页路由（硬规则，详见 `docs/ARCHITECTURE.md` §三·八）
+
+- **不得新增 HTML 入口**。全站只有 `index.html` + `src/main.tsx` + 一棵 React 树；
+  新页面是路由，不是新的 `createRoot`。`/` 是跟读，`/reader/**` 是精读。
+- **凡是占满正文、遮住当前页的界面都必须有 URL**（全屏会话 / 工具页 / 向导 / 编辑器）。
+  加之前先问一句：**刷新或把地址发给别人，能不能回到这一页？** 不能就先加路由。
+- 接线只放两个地方：布尔面板 → `src/reader/route.ts` 的 `useRoutedPanels`；
+  整页会话 → `hooks/useRoutedFlows.ts` + `hooks/useReaderFlowRouting.ts`。
+  **别在按钮的 onClick 里各自 `navigate`**，否则历史层数和状态很快对不上。
+- 历史语义固定：**点按钮打开 → push；页面内关闭 → replace；浏览器返回 → 关闭会话、不再 push**。
+  深链接要等词库/文章就绪后再判断失败，失败回落文章页，不允许停在空界面。
+- URL 是事实来源，但不要每次渲染都写：状态 → URL 只在用户动作后写；同步 effect 必须幂等，
+  依赖放字符串/布尔，别放每次新建的对象。补文章 URL 时要保留已开的面板。
+- 路由纯函数（`parse` / 路径构造）、历史 hook、路由树都要有测试；
+  组件里用到 `Link` / `useNavigate` 的，测试必须包 `MemoryRouter`。
+- 阅读页 CSS 必须 `?inline` 注入并在卸载时删除（或完全 scoped）；
+  **不许普通懒加载把 `<link>` 永久留在 head**，否则回到 `/` 后全局样式仍被覆盖。
+- 新路径、旧地址兼容、dev 回落、生产回落是**一处改动四个落点**，按 ARCHITECTURE 的清单一起改；
+  带扩展名的缺失资源必须继续 404，不能回落成 HTML。
+
 ## Code Review（报词即执行，流程见 `docs/CODE-REVIEW.md`）
 
 - **`r`**：审当前未提交变更（`git diff` + `git status`），按 A–G 七维度出问题表；默认只报不改。

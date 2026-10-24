@@ -440,6 +440,27 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 > 曾经用过 HashRouter（`#/a/xxx`）：省掉服务端配置，但 URL 丑、和「返回键回主界面」的
 > 层级语义不符。既然要干净的层级，就按上面把服务端一起做掉。
 
+### 新增整页界面 checklist（照抄，别另发明）
+
+以后再加「一打开就占满正文」的会话 / 工具 / 向导 / 编辑器，按顺序做：
+
+1. **先定名字**：在 `route.ts` 的 `PanelName` 里加一格；整页会话同时加进 `FLOW_NAMES`
+   （布尔面板和会话共用一套 URL，不要再造 `?open=xxx` 之类的第二套参数）。
+2. **写路径构造**：`panelPath(slug, name)` 自动带 `/reader` 前缀；不要把 `/reader` 写死在视图里。
+3. **接状态**：布尔面板进 `useRoutedPanels`；会话进 `useReaderFlowRouting` 的 `FlowControls`
+   （`active` / `open` / `close` 三个字段），**不要在组件里各自 `navigate`**。
+4. **定历史**：按钮打开用 push；页面内关闭用 replace；浏览器返回只负责 `close()`。
+   深链接打开失败先 `bump()` 再判，失败回落 `/reader/a/<slug>` 或 `/reader`。
+5. **等数据**：需要词库 / 文章 / 当前句的会话，把 `ready` 传进 `useRoutedFlows`；
+   没就绪时先不开、也不判失败，避免刷新时被误踢回文章页。
+6. **补测试**：`route.test.ts` 测解析 / 构造 / 未知面板；`useRoutedFlows.test.tsx` 测
+   push / replace / 返回关闭 / 深链接失败；`useReaderFlowRouting.test.tsx` 测字段映射；
+   `AppRoutes.test.tsx` 测两段路由。用 `Link` 的组件测试包 `MemoryRouter`。
+7. **查回落**：dev 的 `spaRoutePlugin`、生产的 `isSpaFallback()`、旧地址 `normalizeLegacyUrl()`、
+   `base: '/'` 四处对齐；`/assets/missing.js` 必须还是 404。
+8. **收样式**：阅读页 CSS 用 `?inline` 在 `ReaderRoot` 注入 / 卸载；静态 `import './reader.css'`
+   会把全局规则带到 `/`，不要改回去。
+
 ### 首屏：慢在哪，怎么量
 
 别凭感觉。两条命令：

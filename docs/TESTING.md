@@ -11,6 +11,7 @@
 | 纯逻辑（计算 / 规则 / 解析 / 键规则） | **单测**（`src/core/*.test.ts`） | 已有 40+ 文件、800 项 |
 | 数据层（IndexedDB / fetch / 备份） | 单测（内存兜底实现 / 假端口） | `adapters/` 的 Memory* 实现 |
 | 有状态编排（effect / 会话状态机 / 写入策略） | **钩子测试 + 把判断抽成纯函数** | `hooks/useLibraryAutoFill.test.tsx`、`hooks/useReadDone.test.tsx`、`core/libraryAutoFill.ts` |
+| 路由 / 历史 / 深链接 | **纯函数单测 + 钩子测试（`MemoryRouter`）** | `reader/route.test.ts`、`hooks/useRoutedFlows.test.tsx`；用 `Link` 的组件测试包 `MemoryRouter` |
 | 单个面板 / 列表 / 对话框 | 组件测试（环境已就绪；29 个面板全部有测试） | `reader/panels/*` |
 | 浏览器能力（打印对话框 / TTS / 剪贴板 / IndexedDB 真库） | **人工用例**（§4） | 登记，不写自动化 |
 
@@ -23,6 +24,8 @@
 □ 先写/改测试，再写实现（TDD；至少：新规则一落地就有用例钉住）
 □ 按 §1 矩阵补齐对应层；领域判断不在组件里
 □ 新增 core 模块 → 同名 .test.ts（否则架构门禁 R7 失败）
+□ 新增/修改整页界面 → 路由四件套齐全：可寻址、返回层级、深链失败回落、URL hook 测试
+  （按 docs/ARCHITECTURE.md §三·八「新增整页界面 checklist」逐条做）
 □ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + 架构门禁
 □ 结构/分层/新增目录变化 → docs/ARCHITECTURE.md 同步
 □ 新增踩坑 → 本文档 §3 补一条（编号 +1）
