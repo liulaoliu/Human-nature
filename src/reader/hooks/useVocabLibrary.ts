@@ -70,6 +70,11 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
   const flushRef = useRef<() => void>(() => {})
   /** 连续失败次数：决定退避时长；成功一次就清零。 */
   const retryCountRef = useRef(0)
+  /**
+   * 显式写入（persistNow）的代号。老版本保存失败回来时如果代号已经变了，
+   * 说明用户/导入已经用更新的整库覆盖，绝不能再把老版本放回待写队列。
+   */
+  const writeGenRef = useRef(0)
   /** 组件是否还挂着：卸载后不再起重试定时器。 */
   const aliveRef = useRef(true)
   /** flash 的最新引用：保存回来时组件可能已经重渲染过。 */
@@ -183,6 +188,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         throw new Error('词库还没准备好')
       }
       // 导入的是合并后的最新版：取消还没落盘的旧版本，别让它随后把新版盖回去。
+      writeGenRef.current += 1
       if (timerRef.current != null) {
         clearTimeout(timerRef.current)
         timerRef.current = null
@@ -215,6 +221,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     pendingRef.current = null
     if (!lib || !repo.current) return
     const repoNow = repo.current
+    const gen = writeGenRef.current
     // 串行化：上一次还没回来就排队，避免并发 save 互相撞版本号
     chainRef.current = chainRef.current.then(async () => {
       try {
@@ -231,6 +238,8 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
           )
           return
         }
+        // 这版已经被更新的一次显式写入（导入备份）取代：别把老版本放回队列。
+        if (writeGenRef.current !== gen) return
         console.warn('[词库] 保存失败', e)
         flashRef.current('词库保存失败：界面已更新，但可能没落盘；正在自动重试，也可先导出备份')
         // 失败的那版放回待写队列；如果保存期间又来了更新的版本，以新版为准。
