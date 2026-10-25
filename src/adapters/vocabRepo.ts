@@ -14,8 +14,6 @@ const DB_NAME = 'shadowing-vocab'
 const DB_VERSION = 3
 const STORE = 'library'
 const KEY = 'library'
-/** 覆盖前把旧值留一份（防「读失败 → 写空库」这类事故；换机器/误删时能救回） */
-const PREV_KEY = 'library:prev'
 /** 历史快照库（同一 IndexedDB 里另开一个 store：记录单条几 MB 也能接受） */
 const SNAP_STORE = 'snapshots'
 /** 元数据：只放“本机有未同步改动”这类小标记，不跟词库正文混在一起 */
@@ -200,33 +198,12 @@ export class IdbVocabRepo implements VocabRepoPort {
 
   async save(library: VocabLibrary): Promise<void> {
     const next = compactSentenceTexts(library)
-    // 先读了旧值放 backup，再写新的：任何一次覆盖之后都还有「上一版」可退
-    try {
-      const prev = await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(KEY))
-      // 上一版 = 刚被覆盖的那一版（和 SQLite 那边同一口径）。旧规则「只留更大的那份」
-      // 会让历史最大值永远占着 prev，之后所有缩水事故都退不回去。空库不算上一版。
-      if (prev && prev.items.length > 0) {
-        await this.run(STORE, 'readwrite', (s) => s.put(compactSentenceTexts(prev), PREV_KEY))
-      }
-    } catch {
-      // 备份失败不挡主流程
-    }
     await this.run(STORE, 'readwrite', (s) => s.put(next, KEY))
     // 再落一版历史快照（多步可退；失败不影响主流程）
     try {
       await this.snapshot(next, new Date().toISOString())
     } catch {
       // 快照失败不挡主流程
-    }
-  }
-
-  /** 取「上一版」快照（没有就 null）。 */
-  async loadPrev(): Promise<VocabLibrary | null> {
-    try {
-      const value = (await this.run<VocabLibrary | undefined>(STORE, 'readonly', (s) => s.get(PREV_KEY))) ?? null
-      return value ? hydrateSentenceTexts(value) : null
-    } catch {
-      return null
     }
   }
 
@@ -239,7 +216,6 @@ export class IdbVocabRepo implements VocabRepoPort {
 /** 隐私模式 / 老浏览器兜底：内存里，刷新就没。 */
 export class MemoryVocabRepo implements VocabRepoPort {
   private library: VocabLibrary = createLibrary()
-  private prev: VocabLibrary | null = null
   private snaps = new Map<string, VocabLibrary>()
   private dirty = false
   async load(): Promise<VocabLibrary> {
@@ -256,13 +232,8 @@ export class MemoryVocabRepo implements VocabRepoPort {
   }
   async save(library: VocabLibrary): Promise<void> {
     const next = compactSentenceTexts(library)
-    // 同 IDB 实现：上一版 = 刚被覆盖的那一版；空库不算上一版
-    if (this.library.items.length > 0) this.prev = this.library
     this.library = next
     this.snaps.set(new Date().toISOString() + ':' + this.snaps.size, next)
-  }
-  async loadPrev(): Promise<VocabLibrary | null> {
-    return this.prev ? hydrateSentenceTexts(this.prev) : null
   }
   async listSnapshots(): Promise<VocabSnapshot[]> {
     return [...this.snaps.entries()]
@@ -274,7 +245,6 @@ export class MemoryVocabRepo implements VocabRepoPort {
     return value ? hydrateSentenceTexts(value) : null
   }
   async clear(): Promise<void> {
-    this.prev = this.library
     this.library = createLibrary()
     this.dirty = false
   }
@@ -495,7 +465,7 @@ export class HybridVocabRepo implements VocabRepoPort {
       } catch (e) {
         if (e instanceof StoreConflictError) {
           // 别的地方先写了一版。**不能**当成"服务挂了"降级到 IndexedDB（那才是真丢数据），
-          // 也不能悄悄重试——先把服务器版本记下来（用户若坚持再存一次会覆盖，另有 prev/快照兜底），
+          // 也不能悄悄重试——先把服务器版本记下来（用户若坚持再存一次会覆盖，另有历史快照兜底），
           // 把冲突抛上去让界面明确告诉他发生了什么。
           this.revision = e.updatedAt
           this.revisionKnown = true
@@ -513,20 +483,6 @@ export class HybridVocabRepo implements VocabRepoPort {
     } catch {
       // 标记失败不影响本地保存；只是下次可能退回服务端版本
     }
-  }
-
-  async loadPrev(): Promise<VocabLibrary | null> {
-    if (await this.useSqlite()) {
-      try {
-        const value = (
-          await storeRequest<{ value: VocabLibrary | null }>('/vocab/prev', {}, undefined, READ_TIMEOUT_MS)
-        ).value
-        return value ? hydrateSentenceTexts(value) : null
-      } catch {
-        this.hybrid.fail()
-      }
-    }
-    return (await this.local.loadPrev?.()) ?? null
   }
 
   async listSnapshots(): Promise<VocabSnapshot[]> {

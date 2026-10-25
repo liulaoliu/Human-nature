@@ -81,8 +81,6 @@ export interface SideVocabProps {
   onToggleStats: () => void
   onExportWrong: (items: VocabItem[]) => void
   onExportAll: () => void
-  /** 从「上一版」快照恢复词库（数据安全：覆盖前那一版） */
-  onRestorePrev?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -157,7 +155,6 @@ export default function SideVocab({
   onToggleStats,
   onExportWrong,
   onExportAll,
-  onRestorePrev,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -362,14 +359,6 @@ export default function SideVocab({
         >
           {articleAllPrinted ? 'A4（本篇）✓' : 'A4（本篇）'}
         </button>
-        {onRestorePrev && (
-          <button
-            onClick={onRestorePrev}
-            title="把词库退回上一次覆盖前的版本（防误清 / 读取出错；取更完整的那一份）"
-          >
-            恢复上一版词库
-          </button>
-        )}
         <button onClick={() => onExportAnki(libraryItems)} disabled={!hasItems} title="导出整库生词为 Anki CSV">
           Anki（整库）
         </button>
@@ -515,8 +504,8 @@ export default function SideVocab({
       {tab === 'word' && !words.length && langs.length > 0 && (
         <div className="side-warn">
           这篇没有普通单词，只有语言点 —— 点上面「语言点」页签看。
-          若你**原来的生词本里本来是有词的**，多半是词库读取出了岔子：先点「恢复上一版词库」，
-          不行再刷新页面。
+          若你原来的生词本里本来是有词的，多半是词库读取出了岔子：先导出备份，
+          刷新页面后再看；仍不对就用「导入备份」恢复（不要在这时继续加词）。
         </div>
       )}
       {tab === 'lang' ? (

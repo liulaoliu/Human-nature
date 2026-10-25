@@ -27,7 +27,6 @@ vi.mock('../adapters/vocabRepo', () => ({
       vocabState.library = l
     },
     clear: async () => {},
-    loadPrev: async () => null,
   }),
 }))
 

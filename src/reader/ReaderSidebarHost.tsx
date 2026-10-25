@@ -81,7 +81,6 @@ export interface ReaderSidebarHostProps {
   dict: ReturnType<typeof useDictation>
   speech: (text: string) => void
   library: VocabLibrary
-  restorePrev: () => void
   /** 理解题：open(read=true) 为纯文本阅读理解，false 为听力模式；start 直接出题。 */
   listening: { open: (read: boolean) => void; start: () => void }
   openSpeedRead: () => void
@@ -177,7 +176,6 @@ export default function ReaderSidebarHost({
   dict,
   speech,
   library,
-  restorePrev,
   listening,
   openSpeedRead,
   openWriting,
@@ -393,7 +391,6 @@ export default function ReaderSidebarHost({
         onToggleStats: vocab.onToggleStats,
         onExportWrong: exporter.doExportWrong,
         onExportAll: exporter.exportAll,
-        onRestorePrev: restorePrev,
         onImportBackup: exporter.onImportBackup,
         onMergeBackup: exporter.onMergeBackup,
         statsOpen: vocab.statsOpen,

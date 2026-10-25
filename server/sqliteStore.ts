@@ -352,7 +352,6 @@ export interface Store {
   loadVocab(): unknown
   loadVocabJson(): { json: string | null; updatedAt: string | null; count: number }
   vocabMeta(): { updatedAt: string; count: number } | null
-  loadPrev(): unknown
   listSnapshots(): { at: string; count: number }[]
   loadSnapshot(at: string): unknown
   saveVocab(lib: unknown, opts?: { baseUpdatedAt?: string }): Promise<{ updatedAt: string; count: number }>
@@ -468,10 +467,6 @@ export function openStore(dbPath: string): Store | null {
         const row = db.prepare('SELECT item_count, updated_at FROM vocab WHERE id = 1').get()
         return row ? { updatedAt: String(row.updated_at), count: Number(row.item_count) } : null
       },
-      loadPrev() {
-        const row = db.prepare('SELECT payload FROM vocab_prev WHERE id = 1').get()
-        return row ? parsePayload(unpackPayload(row.payload)) : null
-      },
       listSnapshots() {
         return db
           .prepare('SELECT at, item_count FROM vocab_snapshots ORDER BY at DESC')
@@ -486,11 +481,11 @@ export function openStore(dbPath: string): Store | null {
        * 保存词库。`baseUpdatedAt` 是客户端**读到的那一版**：传了就必须和服务器当前版本一致，
        * 否则抛 VocabConflictError（不传 = 强制写，留给迁移/工具脚本用）。
        *
-       * 为什么是 async：17MB 的词库压一次 gzip 要 277ms，以前一次保存要压两遍
-       * （上一版 + 新快照）且都是 `gzipSync`，等于把事件循环堵近 1 秒，
+       * 为什么是 async：17MB 的词库压一次 gzip 要 277ms，以前不仅同步压，一次保存还要压两遍
+       * （上一版 + 新快照），等于把事件循环堵近 1 秒，
        * 这期间 `/api/tts`、静态资源、下一次保存全部排队。
        * 现在：
-       *   - 压缩挪到事务**外面**、用异步 gzip（两次并行跑在 libuv 线程池里，不堵主线程）；
+       *   - 压缩挪到事务**外面**、用异步 gzip（跑在 libuv 线程池里，不堵主线程）；
        *   - 「内容没变」的快路径先解压上一版比字符串，压根不压（自动补全 effect 重跑时很常见）。
        */
       async saveVocab(lib, opts = {}) {
@@ -517,17 +512,7 @@ export function openStore(dbPath: string): Store | null {
         if (prevRow && prevRaw === payload) {
           return { updatedAt: String(prevRow.updated_at), count: Number(prevRow.item_count) }
         }
-        const prevRowForCompare = prevRow
-        const prevPacked =
-          prevRowForCompare && prevRaw !== null && Number(prevRowForCompare.item_count) > 0
-            ? prevRowForCompare.payload instanceof Uint8Array
-              ? Promise.resolve(Buffer.from(prevRowForCompare.payload)) // 已经是 gzip：直接复制，不再压第二遍
-              : gzipAsync(Buffer.from(prevRaw, 'utf8'), { level: 6 }) // 老库存的是明文
-            : Promise.resolve(null)
-        const [packed, packedPrev] = await Promise.all([
-          gzipAsync(Buffer.from(payload, 'utf8'), { level: 6 }),
-          prevPacked,
-        ])
+        const packed = await gzipAsync(Buffer.from(payload, 'utf8'), { level: 6 })
 
         const out = tx(db, () => {
           // 事务里重读一次：上面读完之后可能有人写过了
@@ -547,24 +532,10 @@ export function openStore(dbPath: string): Store | null {
           } else {
             prevLib = null
           }
-          // 上一版 = 「刚被覆盖的那一版」。旧规则是「只留条数更大的那份」，后果是
-          // 一旦历史最大值出现（本库 8731 条 / 10-20），之后所有缩水事故都进不了 prev，
-          // 用户点「恢复上一版」拿到的是几天前的库。只有空库不算上一版。
-          if (prev && Number(prev.item_count) > 0) {
-            // packedPrev 是按事务外那次读到的 prev 压的；万一中间被别人改了，
-            // 宁可同步补压一次（极罕见），也不能把「上一版」写成错的内容。
-            const bytes =
-              packedPrev && String(prev.updated_at) === String(prevRowForCompare?.updated_at)
-                ? packedPrev
-                : packPayload(unpackPayload(prev.payload))
-            db.prepare(
-              'INSERT OR REPLACE INTO vocab_prev (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-            ).run(bytes, Number(prev.item_count), String(prev.updated_at))
-          }
           db.prepare(
             'INSERT OR REPLACE INTO vocab (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
           ).run(packed, count, at)
-          // 快照与 prev 复用同一次压缩结果：一次保存只付一次 gzip 的代价
+          // 快照直接复用主表这次压缩结果：一次保存只付一次 gzip 的代价
           db.prepare('INSERT OR REPLACE INTO vocab_snapshots (at, payload, item_count) VALUES (?, ?, ?)').run(
             nextSnapshotAt(db),
             packed,
@@ -609,13 +580,6 @@ export function openStore(dbPath: string): Store | null {
       },
       clearVocab() {
         tx(db, () => {
-          const cur = db.prepare('SELECT payload, item_count, updated_at FROM vocab WHERE id = 1').get()
-          // 清空不是「上一版」的候选，它就是要被恢复的那一版
-          if (cur && Number(cur.item_count) > 0) {
-            db.prepare(
-              'INSERT OR REPLACE INTO vocab_prev (id, payload, item_count, updated_at) VALUES (1, ?, ?, ?)',
-            ).run(packPayload(unpackPayload(cur.payload)), Number(cur.item_count), String(cur.updated_at))
-          }
           db.prepare('DELETE FROM vocab WHERE id = 1').run()
           rebuildVocabProjection(db, null)
         })
@@ -732,7 +696,6 @@ export function openStore(dbPath: string): Store | null {
           version: SCHEMA_VERSION,
           exportedAt: nowIso(),
           vocab: this.loadVocab(),
-          vocabPrev: this.loadPrev(),
           vocabSnapshots: db
             .prepare('SELECT at, item_count, payload FROM vocab_snapshots ORDER BY at ASC')
             .all()

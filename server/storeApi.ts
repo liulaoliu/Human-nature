@@ -189,11 +189,6 @@ export async function handleStoreApi(
       return
     }
 
-    if (path === '/vocab/prev' && method === 'GET') {
-      sendJson(res, 200, { ok: true, value: store.loadPrev() })
-      return
-    }
-
     if (path === '/vocab/snapshots' && method === 'GET') {
       sendJson(res, 200, { ok: true, snapshots: store.listSnapshots() })
       return

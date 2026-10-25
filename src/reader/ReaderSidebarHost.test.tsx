@@ -123,7 +123,6 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
     dict: { start: fn() } as never,
     speech: fn(),
     library: { schemaVersion: 1, items: [] },
-    restorePrev: fn(),
     listening: { open: fn(), start: fn() },
     openSpeedRead: fn(),
     openWriting: fn(),

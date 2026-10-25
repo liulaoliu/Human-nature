@@ -58,7 +58,6 @@ export interface ReaderScreenProps {
   saved: SavedArticle[]
   book: ArticleBook | null
   library: VocabLibrary
-  restorePrevLibrary: () => void | Promise<void>
   articleIdentity: string
   articleTitle: string
   articleKey: string | null

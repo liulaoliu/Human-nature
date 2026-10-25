@@ -8,7 +8,7 @@
 
 | 存什么 | 存哪 | 谁写 | 备注 |
 |---|---|---|---|
-| **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | SQLite `data/xueba.db`；IndexedDB `shadowing-vocab` 兜底 | `adapters/vocabRepo`（Hybrid） | 覆盖前留上一版 + 历史快照；见 `docs/STORAGE.md` |
+| **词库**（词条：单词 / 词组 / 习语 / 用法笔记） | SQLite `data/xueba.db`；IndexedDB `shadowing-vocab` 兜底 | `adapters/vocabRepo`（Hybrid） | 每次保存留历史快照；见 `docs/STORAGE.md` |
 | **文章**（正文、句子、翻译、语言点、每句 `vocab`） | SQLite `data/xueba.db`；IndexedDB `shadowing-reader` 兜底 | `adapters/articleRepo`（Hybrid） | 派生表可 JOIN；坏库可用「导出全部」再导入 |
 | 待选清单（自动标词的结果，按篇） | localStorage `reader:batch` | `ReaderApp` / 各会话 hook | `{ [articleId]: {word, sentence, sentenceId}[] }` —— **找回词库最准的一手数据** |
 | 错题本 | SQLite `mistake_records`；localStorage `reader:mistakes` 缓存 | 各练习 hook + `useLearningSync` | `itemId` 形如 `vocab:run` |

@@ -9,7 +9,6 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
   const {
     studiedTodayIds,
     library,
-    restorePrevLibrary,
     dictTools,
     dictReady,
     tatoebaReady,
@@ -141,7 +140,6 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
       dict={dictApi}
       speech={speak}
       library={library}
-      restorePrev={() => void restorePrevLibrary()}
       listening={{ open: openListeningMode, start: openListening }}
       openSpeedRead={openSpeedRead}
       openWriting={openWriting}

@@ -23,7 +23,6 @@ export interface ReaderAppModel {
   book: ReaderScreenProps['book']
   bookError: ReaderScreenProps['bookError']
   library: ReaderScreenProps['library']
-  restorePrevLibrary: ReaderScreenProps['restorePrevLibrary']
   articleIdentity: string
   target: string
   sentence: Sentence | null
@@ -83,7 +82,6 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     saved: app.saved,
     book: app.book,
     library: app.library,
-    restorePrevLibrary: app.restorePrevLibrary,
     articleIdentity: app.articleIdentity,
     articleTitle: d.articleTitle,
     articleKey: d.articleKey,

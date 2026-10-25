@@ -22,32 +22,6 @@ afterEach(() => {
 })
 
 describe('sqliteStore：词库', () => {
-  it('上一版 = 刚被覆盖的那一版（缩水也记，空库不记）', async () => {
-    const store = openStore(tempDb())
-    expect(store).not.toBeNull()
-
-    expect(store.loadVocab()).toBeNull()
-    await store.saveVocab(lib(10))
-    expect(store.loadVocab().items).toHaveLength(10)
-    expect(store.loadPrev()).toBeNull()
-
-    // 缩水也是「上一版」。旧规则「只留更大的那一份」会让 10-20 那版 8731 条永远占着 prev，
-    // 之后所有缩水事故都进不去，用户点「恢复上一版」拿到的是几天前的库。
-    await store.saveVocab(lib(9))
-    expect(store.loadPrev().items).toHaveLength(10)
-    await store.saveVocab(lib(2))
-    expect(store.loadPrev().items).toHaveLength(9)
-
-    // 空库不是「上一版」：误清空时 prev 必须还停在清空前的 2
-    await store.saveVocab(lib(0))
-    expect(store.loadVocab().items).toHaveLength(0)
-    expect(store.loadPrev().items).toHaveLength(2)
-
-    // 从空库再写回去，prev 仍是 2（清空那一版不值得恢复）
-    await store.saveVocab(lib(4))
-    expect(store.loadPrev().items).toHaveLength(2)
-  })
-
   it('版本号对不上就拒绝写入（旧标签页不能抹掉别处的改动）', async () => {
     const store = openStore(tempDb())
     const v1 = await store.saveVocab(lib(3))
@@ -83,7 +57,7 @@ describe('sqliteStore：词库', () => {
     expect(store.loadSnapshot(snaps[0].at)).not.toBeNull()
   })
 
-  it('快照与上一版是 gzip 存的，读回来还能还原', async () => {
+  it('快照是 gzip 存的，读回来还能还原', async () => {
     const path = tempDb()
     const store = openStore(path)
     await store.saveVocab(lib(3))
@@ -91,12 +65,12 @@ describe('sqliteStore：词库', () => {
 
     const raw = new DatabaseSync(path, { readOnly: true })
     const snap = raw.prepare('SELECT payload FROM vocab_snapshots LIMIT 1').get()
-    const prev = raw.prepare('SELECT payload FROM vocab_prev WHERE id = 1').get()
+    // 「恢复上一版」已下线：新库不再建 vocab_prev 表（老库里留着的旧表也不读）
+    const legacyPrev = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vocab_prev'").get()
     raw.close()
     // 16MB 的整库 JSON 存两份就是 32MB；压完是 BLOB，不是 JSON 文本
     expect(typeof snap.payload).not.toBe('string')
-    expect(typeof prev.payload).not.toBe('string')
-    expect(store.loadPrev().items).toHaveLength(3)
+    expect(legacyPrev).toBeUndefined()
     expect(store.exportAll().vocabSnapshots[0].library.items.length).toBeGreaterThan(0)
   })
 
@@ -112,12 +86,11 @@ describe('sqliteStore：词库', () => {
     expect(store.loadVocab().items).toHaveLength(3)
   })
 
-  it('clear 只清当前词库，上一版/快照还能恢复', async () => {
+  it('clear 只清当前词库，历史快照还在', async () => {
     const store = openStore(tempDb())
     await store.saveVocab(lib(6))
     store.clearVocab()
     expect(store.loadVocab()).toBeNull()
-    expect(store.loadPrev().items).toHaveLength(6)
     expect(store.listSnapshots().length).toBeGreaterThan(0)
   })
 

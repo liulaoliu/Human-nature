@@ -11,7 +11,7 @@ import type { VocabRepoPort } from '../../core/ports'
 /**
  * 词库持久化接线 —— **丢词事故的回归测试**。
  * 事故：IndexedDB 读失败 → 拿到空库 → 加载态被置 true → 自动补全把「空库 + 语言点」写回去 → 生词全丢。
- * 现在：读失败时 persist 硬拒绝写入，且提供「恢复上一版」。
+ * 现在：读失败时 persist 硬拒绝写入，并提示先导备份再刷新。
  */
 const lib = (n: number): VocabLibrary => ({
   ...createLibrary(),
@@ -19,13 +19,12 @@ const lib = (n: number): VocabLibrary => ({
 })
 
 /** 可编排的假仓储：想读成功就读成功，想失败就失败。 */
-function fakeRepo(opts: { load?: () => Promise<VocabLibrary>; prev?: VocabLibrary | null } = {}) {
+function fakeRepo(opts: { load?: () => Promise<VocabLibrary> } = {}) {
   const saved: VocabLibrary[] = []
   const repo: VocabRepoPort = {
     load: opts.load ?? (async () => lib(0)),
     save: async (l) => void saved.push(l),
     clear: async () => {},
-    loadPrev: async () => opts.prev ?? null,
   }
   return { repo, saved }
 }
@@ -131,35 +130,6 @@ describe('useVocabLibrary：读失败（事故现场）', () => {
     expect(result.current.library.items).toHaveLength(0)
     expect(flash).toHaveBeenCalledWith(expect.stringContaining('不写入'))
   })
-
-  it('读失败后可以「恢复上一版」：写回备份、状态转 ok', async () => {
-    const { repo, saved } = fakeRepo({
-      load: async () => { throw new Error('boom') },
-      prev: lib(9),
-    })
-    const { result, flash } = setup(() => repo)
-    await waitFor(() => expect(result.current.libraryLoad).toBe('failed'))
-
-    await act(async () => {
-      await result.current.restorePrev()
-    })
-    expect(result.current.library.items).toHaveLength(9)
-    expect(result.current.libraryLoad).toBe('ok')
-    expect(saved[0].items).toHaveLength(9)
-    expect(flash).toHaveBeenCalledWith(expect.stringContaining('已恢复上一版词库：9 条'))
-  })
-
-  it('没有备份时恢复给个明确提示，不动数据', async () => {
-    const { repo, saved } = fakeRepo({ load: async () => { throw new Error('boom') }, prev: null })
-    const { result, flash } = setup(() => repo)
-    await waitFor(() => expect(result.current.libraryLoad).toBe('failed'))
-    await act(async () => {
-      await result.current.restorePrev()
-    })
-    expect(saved).toHaveLength(0)
-    expect(result.current.library.items).toHaveLength(0)
-    expect(flash).toHaveBeenCalledWith('没有可恢复的上一版')
-  })
 })
 
 describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB）', () => {
@@ -220,7 +190,6 @@ describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB�
         saved.push(l.items.length)
       },
       clear: async () => {},
-      loadPrev: async () => null,
     }
     const { result, flash } = setup(() => repo)
     await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
@@ -247,7 +216,6 @@ describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB�
         inFlight--
       },
       clear: async () => {},
-      loadPrev: async () => null,
     }
     const { result } = setup(() => repo)
     await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
@@ -261,7 +229,7 @@ describe('useVocabLibrary：合并写（别每点一个词就全量重写 16MB�
 })
 
 describe('useVocabLibrary：与真实内存仓储打通', () => {
-  it('存/读/上一版/恢复 一条链', async () => {
+  it('存/读/改 一条链', async () => {
     const repo = new MemoryVocabRepo()
     await repo.save(lib(4))
     const { result } = setup(() => repo)
@@ -269,9 +237,7 @@ describe('useVocabLibrary：与真实内存仓储打通', () => {
     expect(result.current.library.items).toHaveLength(4)
 
     act(() => result.current.persist(lib(6)))
-    await act(async () => {
-      await result.current.restorePrev()
-    })
-    expect(result.current.library.items).toHaveLength(4) // 退回上一版
+    await waitFor(async () => expect((await repo.load()).items).toHaveLength(6))
+    expect(result.current.library.items).toHaveLength(6)
   })
 })

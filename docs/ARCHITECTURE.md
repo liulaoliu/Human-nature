@@ -250,29 +250,26 @@ types ← core ← adapters ← reader
 1. **单写入口**：词库只由 `hooks/useVocabLibrary.persist` 写；增删动作统一走
    `hooks/useVocabEdits`（只经 `persist`，且以 `libraryRef` 为基准避免连续写互相覆盖）；
    自动补全只由 `core/libraryAutoFill` 这一个 effect 写。新需求加「自动补全」→ 往计划函数里加一格。
-2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示恢复。
+2. **读成功才写**：加载态三态（pending/ok/failed）；failed 时 persist 直接拒绝并提示先导备份。
 3. **覆盖前留快照**：仓储每次 save 追加一版历史（最近 5 版 + 历史最大的一版永久保留，
-   SQLite 侧以 gzip 存），`loadPrev()` 取「**刚被覆盖的那一版**」；
-   侧栏有「恢复上一版词库」（误清/误导入一键退回）。
+   SQLite 侧以 gzip 存）。**界面没有一键退版**（「恢复上一版词库」已下线）；
+   误清/误导入靠「导入备份」或按需从 `/api/store/vocab/snapshots` / `data/backups/` 手工救。
 4. **写入要带版本号**：前端持有的是**整份**词库，任何保存都是全量覆盖，所以每次保存都带
    `X-Vocab-Base: <读到的 updatedAt>`；服务端对不上返回 409，前端 `persist` 提示
    「别处改过了，这次没保存」。**不带这个头 = 强制覆盖**，只留给迁移脚本和 `tool/*.mjs`。
    详见下面「整份覆盖的代价」。
 5. **同一份事实存多处**：词条 ← SQLite(`data/xueba.db`) / IndexedDB 镜像 / 文章 `Sentence.vocab` /
    待选清单(localStorage) / 错题本 / 「导出全部」JSON；语言点 ← 文章 `SentenceLanguage` / 词库里的语言点条目。
-   → 坏了就靠「导入备份」＋「恢复上一版词库」；写入侧永远走上面四条。
+   → 坏了就靠「导入备份」＋ 历史快照 / `data/backups/`；写入侧永远走上面四条。
 
 > 新增「用户资产」时先问：**它有第二份吗？** 没有就先补上第二份，再谈别的。
 
 ### 整份覆盖的代价（2026-10-22 两次事故的结构原因）
 
-前端持有整份词库，一次保存 = 全量 PUT。所以有两个必须一起成立的前提：
+前端持有整份词库，一次保存 = 全量 PUT。所以必须有：
 
 - **版本号**：`updatedAt` 严格单调递增（同毫秒连存会自增 1ms，否则旧客户端能蒙混过关），
   写回时当作乐观锁的令牌；409 时客户端把服务端的版本号记下来，用户若坚持再存一次才会覆盖。
-- **「上一版」的语义是「上一版」，不是「历史最大的一版」**：旧规则「只留条数更大的那份」
-  让本库的 8731 条（10-20）永远占着 `vocab_prev`，之后 8306 → 8302 这类缩水根本进不了 prev，
-  「恢复上一版」拿到的是两天前的库。**能用 `updated_at` 判断新旧的地方，就不要用条数猜。**
 
 ### 存储：SQLite 主存，IndexedDB 只做兜底
 
@@ -294,8 +291,7 @@ types ← core ← adapters ← reader
 | 东西 | 策略 | 为什么 |
 | --- | --- | --- |
 | `vocab_snapshots` | 最近 5 版，**gzip 存 BLOB** | 整库 payload 16MB，明文 6 版就是 96MB；压完 ~2MB |
-| `vocab_prev` | 一版，gzip | 同上，只是「上一版」 |
-| `vocab` 主表 | 明文 JSON | 导出、体检脚本、`sqlite3` 手工查都要直接读它 |
+| `vocab` 主表 | gzip BLOB | 一次 INSERT 从 ~478ms 降到几十毫秒；排查用 `unpackPayload` 解一下 |
 | `data/backups/` | 每日一份 `VACUUM INTO`，留 5 天 | 防整库文件被删坏；一天 ~60-90MB |
 | `-wal` | 每次保存后 `wal_checkpoint(PASSIVE)`，启动与 `close()` 时 `TRUNCATE` | 一次保存写 16MB，PASSIVE 只「并」不「缩」，不主动截断会一直占几十 MB |
 | 空闲页 | 启动时 `freelist/total ≥ 15%` 才 `VACUUM` | 删过快照/文章后文件不会自己缩；但别每次启动都全量重写 |

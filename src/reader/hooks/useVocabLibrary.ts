@@ -17,8 +17,8 @@ import { StoreConflictError } from '../../adapters/storeApi'
  *
  * 事故背景（真实）：IndexedDB 读取失败时拿到的是**空库**，而当时的代码把加载态直接置 true，
  * 于是自动补全把「空库 + 语言点」写了回去 —— 生词全丢。现在：
- *   - 加载态三态化（pending / ok / failed），failed 时 persist **硬拒绝写入**并提示恢复；
- *   - 每次覆盖前由仓储留一份「上一版」（只留更大的那份），提供 restorePrev 一键退回。
+ *   - 加载态三态化（pending / ok / failed），failed 时 persist **硬拒绝写入**并提示先导备份；
+ *   - 落盘前由仓储追加历史快照，误清后可从快照 / 备份里手工救回（界面不提供一键退版）。
  */
 export type LibraryLoadState = 'pending' | 'ok' | 'failed'
 
@@ -47,8 +47,6 @@ export interface UseVocabLibraryResult {
   persist: (lib: VocabLibrary) => void
   /** 立刻写入并等结果（导入备份用；失败会抛给调用方） */
   persistNow: (lib: VocabLibrary) => Promise<void>
-  /** 退回「覆盖前那一版」（防误清 / 读失败事故） */
-  restorePrev: () => Promise<void>
 }
 
 export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVocabLibraryParams): UseVocabLibraryResult {
@@ -129,7 +127,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         // 读失败：**不要**把空库写回去，也别让自动补全动它；必须让用户看见（否则像「生词全没了」）
         console.warn('[词库] 读取失败', e)
         setLibraryLoad('failed')
-        flash('词库读取失败：为避免覆盖，本次不会写入；可点「恢复上一版词库」或先导出备份')
+        flash('词库读取失败：为避免覆盖，本次不会写入；请先导出备份再刷新页面')
       })
     // 申请持久存储，降低 IndexedDB 被浏览器回收的概率
     try {
@@ -155,7 +153,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     (lib: VocabLibrary) => {
       /** 硬闸：词库没读成功就绝不写（否则空库会覆盖回 IndexedDB，生词全丢）。 */
       if (libraryLoad === 'failed') {
-        flash('词库读取出错：为避免覆盖，本次不写入（可点「恢复上一版词库」试试）')
+        flash('词库读取出错：为避免覆盖，本次不写入；请先导出备份再刷新页面')
         return
       }
       if (!repo.current) {
@@ -190,7 +188,7 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
   const persistNow = useCallback(
     async (lib: VocabLibrary): Promise<void> => {
       if (libraryLoad === 'failed') {
-        flash('词库读取出错：为避免覆盖，本次不写入（可点「恢复上一版词库」试试）')
+        flash('词库读取出错：为避免覆盖，本次不写入；请先导出备份再刷新页面')
         throw new Error('词库读取出错')
       }
       const repoNow = repo.current
@@ -292,27 +290,5 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
     }
   }, [])
 
-  const restorePrev = useCallback(async () => {
-    // 先把待写的刷出去：否则「刚加的这批」还没落盘，prev 会指向更早的一版，
-    // 用户点「恢复上一版」拿到的就不是他以为的那份。
-    flushRef.current()
-    await chainRef.current
-    const prev = await repo.current?.loadPrev?.()
-    if (!prev?.items.length) {
-      flash('没有可恢复的上一版')
-      return
-    }
-    libraryRef.current = prev
-    setLibrary(prev)
-    try {
-      await repo.current?.save(prev)
-    } catch (e) {
-      console.warn('[词库] 恢复上一版后写回失败', e)
-      flash('已恢复上一版词库，但写回失败；请先导出备份再刷新')
-    }
-    setLibraryLoad('ok')
-    flash(`已恢复上一版词库：${prev.items.length} 条`)
-  }, [flash])
-
-  return { library, libraryRef, libraryLoad, libraryLoaded, persist, persistNow, restorePrev }
+  return { library, libraryRef, libraryLoad, libraryLoaded, persist, persistNow }
 }

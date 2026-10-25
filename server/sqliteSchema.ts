@@ -15,12 +15,6 @@ CREATE TABLE IF NOT EXISTS vocab (
   item_count INTEGER NOT NULL,
   updated_at TEXT NOT NULL
 );
-CREATE TABLE IF NOT EXISTS vocab_prev (
-  id INTEGER PRIMARY KEY CHECK (id = 1),
-  payload TEXT NOT NULL,
-  item_count INTEGER NOT NULL,
-  updated_at TEXT NOT NULL
-);
 CREATE TABLE IF NOT EXISTS vocab_snapshots (
   at TEXT PRIMARY KEY,
   payload TEXT NOT NULL,

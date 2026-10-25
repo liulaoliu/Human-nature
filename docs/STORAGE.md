@@ -21,7 +21,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 
 | 数据 | 主存 | 兜底 | 说明 |
 |---|---|---|---|
-| 词库（生词 / 语言点 / 复习状态） | `data/xueba.db` 的 `vocab` + `vocab_prev` + `vocab_snapshots` | IndexedDB `shadowing-vocab` | 唯一资产，优先迁 |
+| 词库（生词 / 语言点 / 复习状态） | `data/xueba.db` 的 `vocab` + `vocab_snapshots` | IndexedDB `shadowing-vocab` | 唯一资产，优先迁 |
 | 已保存文章（正文 / 句子 / 翻译） | `data/xueba.db` 的 `articles` | IndexedDB `shadowing-reader` | 文本，第二优先 |
 | 跟读录音 | IndexedDB `shadowing` | 无 | 音频 blob，体积大；下一阶段改成 `data/takes/` 文件 + SQLite 元数据 |
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
@@ -102,7 +102,6 @@ schema 版本：`PRAGMA user_version = 8`（v3 建学习记录表，v4 修旧词
 
 ```sql
 vocab(id=1, payload BLOB, item_count, updated_at)          -- 当前词库（gzip；读一律走 unpackPayload）
-vocab_prev(id=1, payload BLOB, item_count, updated_at)      -- 刚被覆盖的那一版（gzip）
 vocab_snapshots(at, payload BLOB, item_count)               -- 最近 5 版 + 历史最大一版（gzip）
 articles(id, payload JSON, title, book, source_key,
          created_at, updated_at, sentence_count, word_count)
@@ -114,10 +113,10 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 - 词库 payload 里有两层：`items`（全库 `VocabItem`，一个 lemma 一条，复习用）和
   `articleEntries`（每篇收录的 `ArticleVocabEntry`：序号 / 自动手动 / 语境释义 / 按篇打印时间）。
   派生表 `words` 只展开 `items`；按篇收录目前只存在 JSON 里（不做单独的派生表，避免两份编号口径）。
-- 词库备份语义与 IndexedDB 实现一致：覆盖前留「**刚被覆盖的那一版**」，空库不算上一版。
-  旧规则「只留更大的那一份」会让历史最大值永远占位（本库 8731 条 / 10-20 卡住之后，
-  8306 → 8302 这类缩水根本进不了 prev，「恢复上一版」拿到的是两天前的库），已按 `updated_at` 改掉。
-- 三张词库表（`vocab` / `vocab_prev` / `vocab_snapshots`）的 payload 都是 **gzip BLOB**；
+- 词库只留历史快照（最近 5 版 + 历史最大的一版）。「恢复上一版词库」已下线：
+  界面不再提供一键退版，也没有 `vocab_prev` 槽位；新库不建这张表，**老库里遗留的
+  `vocab_prev` 不再读写**，可忽略（或自行 `DROP TABLE vocab_prev`）。
+- 两张词库表（`vocab` / `vocab_snapshots`）的 payload 都是 **gzip BLOB**；
   `unpackPayload` 两种都认，老明文库能直接读，**下次保存自动转成压缩态**。
   为什么主表也压：16MB 明文一次 INSERT 要 ~478ms，压缩后 1.5MB 只要几十毫秒，
   WAL / 备份 / 文件体积跟着一起降。代价是 `sqlite3` 里不能直接看 JSON，要 gunzip 一下。
@@ -266,13 +265,13 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 | 方式 | 怎么做 | 内容 |
 |---|---|---|
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
-| 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 上一版 + 快照 + 文章 + 学习记录（完整 section） |
+| 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
 
 **合并导入的落盘顺序不能反**：文章 → 词库（`persistNow` 等真正成功）→ 学习记录 → 最后才写
 `reader:importedBackups` 指纹。词库 409 / 断网时不能记指纹，否则同一份文件再导入会被去重直接跳过，
 而数据其实没进来。覆盖导入同理：词库落盘失败时不改学习记录，保持原样可重试。
-| 历史词库 | 侧栏「恢复上一版词库」/ `GET /api/store/vocab/snapshots` | 最近 5 版 + 历史最大一版；「上一版」= 刚被覆盖的那一版 |
+| 历史词库 | `GET /api/store/vocab/snapshots` / `GET /api/store/vocab/snapshots/:at` | 最近 5 版 + 历史最大一版；只留接口，界面无退版入口 |
 | 文章上一版 | `GET /api/store/articles/:id/prev` / `POST /api/store/articles/:id/restore-prev` | 覆盖/删除前那一版；恢复后可反悔 |
 
 ## 六、安全
@@ -304,7 +303,7 @@ server/sqliteUtil.js（事务与字段转换）
 
 - **UI / hooks 不直接碰 SQL、不直接 fetch `/api/store`**；换 DB 不动视图。
 - 换到 Postgres / MySQL 时，主要写一个新的 `server/pgStore.js`，保持
-  `loadVocab / saveVocab / loadPrev / listSnapshots / listArticles / saveArticle / removeArticle /
+  `loadVocab / saveVocab / listSnapshots / listArticles / saveArticle / removeArticle /
   exportAll / checkpoint` 这组方法签名，然后让 `storeApi.js` 改用它。
 - 前端 `HybridRepo` 不需要改：它只认 HTTP 契约和 `/api/store/health`。
 - **不是“零成本”**：`sqliteStore.js` 里的 `PRAGMA user_version`、`INSERT OR REPLACE`、

@@ -73,8 +73,8 @@ export default function ReaderApp() {
   // 启动加载：已保存文章列表 + 内置文章目录（IO 收口在 useArticleBootstrap）
   const { book, bookError, saved, setSaved, savedLoaded, articles } = useArticleBootstrap(flash)
 
-  // 词库：读回 / 迁移清洗 / 唯一写入口 / 上一版恢复 —— 全在 hooks/useVocabLibrary
-  const { library, libraryRef, libraryLoaded, persist, persistNow, restorePrev: restorePrevLibrary } = useVocabLibrary({ flash })
+  // 词库：读回 / 迁移清洗 / 唯一写入口 —— 全在 hooks/useVocabLibrary
+  const { library, libraryRef, libraryLoaded, persist, persistNow } = useVocabLibrary({ flash })
   /** 是否按住 Ctrl / ⌘ / Alt（决定「整句 / 按词吸附 / 选词组」）：见 hooks/useModifierKeys */
   const { ctrlHeld, altHeld } = useModifierKeys()
   /** 阅读字号 / 字重、主题、译文、音色、词汇标准、面板持久开关… —— 18 个本机偏好全在 hooks/useReaderPrefs */
@@ -642,7 +642,6 @@ export default function ReaderApp() {
     book,
     bookError,
     library,
-    restorePrevLibrary,
     articleIdentity,
     target,
     sentence,
