@@ -220,14 +220,6 @@ describe('httpApp 请求处理', () => {
         body: JSON.stringify({ ...article, title: 'A2', updatedAt: '2026-01-02T00:00:00.000Z' }),
       })
       expect(putArticle2.status).toBe(200)
-      const articlePrev = await fetch(`${base}/api/store/articles/a1/prev`).then((r) => r.json())
-      expect(articlePrev.value.value.title).toBe('A')
-      const restoreArticle = await fetch(`${base}/api/store/articles/a1/restore-prev`, {
-        method: 'POST',
-        headers: json(),
-      }).then((r) => r.json())
-      expect(restoreArticle.value.title).toBe('A')
-      expect((await fetch(`${base}/api/store/articles/a1`).then((r) => r.json())).value.title).toBe('A')
 
       const learning = {
         practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8 }],
@@ -294,19 +286,6 @@ describe('httpApp 请求处理', () => {
       expect(dump.vocab.items).toHaveLength(1)
       expect(dump.articles[0].id).toBe('a1')
       expect(dump.learning.practice).toEqual([])
-
-      const snapshots = await fetch(`${base}/api/store/learning/snapshots`).then((r) => r.json())
-      expect(snapshots.snapshots.length).toBeGreaterThan(0)
-      const snapId = snapshots.snapshots[0].id
-      const snapDetail = await fetch(`${base}/api/store/learning/snapshots/${snapId}`).then((r) => r.json())
-      expect(snapDetail.value.value.practice).toHaveLength(1)
-      const restore = await fetch(`${base}/api/store/learning/snapshots/${snapId}/restore`, {
-        method: 'POST',
-        headers: json(),
-      }).then((r) => r.json())
-      expect(restore.ok).toBe(true)
-      expect(restore.value.value.practice).toHaveLength(1)
-      expect((await fetch(`${base}/api/store/learning`).then((r) => r.json())).value.practice).toHaveLength(1)
 
       const dbFile = await fetch(`${base}/api/store/db`)
       expect(dbFile.status).toBe(200)

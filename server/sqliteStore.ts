@@ -8,20 +8,16 @@ import {
   SCHEMA_V1,
   SCHEMA_V2,
   SCHEMA_V3,
-  SCHEMA_V5,
-  SCHEMA_V6,
-  SCHEMA_V7, SCHEMA_V8,
+  SCHEMA_V7,
+  SCHEMA_V8,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
 import {
   hasLearningRows,
   LEARNING_SECTIONS,
-  listLearningSnapshots,
   loadLearning,
-  loadLearningSnapshot,
   rebuildLearningDerived,
-  restoreLearningSnapshot,
   saveDerivedBaseline,
   writeLearning,
   type LearningOut,
@@ -33,7 +29,6 @@ import {
   normalizeLegacySourceIds,
   rebuildAllProjections,
   rebuildArticleProjection,
-  rememberArticlePrev,
 } from './sqliteProjection.ts'
 import { isRecord } from './types/guards.ts'
 
@@ -244,11 +239,13 @@ function ensureSchema(db: DatabaseSync): number {
     version = 4
   }
   if (version < 5) {
-    tx(db, () => { db.exec(SCHEMA_V5); db.exec('PRAGMA user_version = 5') })
+    // v5（原学习记录快照）已退役：不建表，只把版本号推过去。
+    tx(db, () => { db.exec('PRAGMA user_version = 5') })
     version = 5
   }
   if (version < 6) {
-    tx(db, () => { db.exec(SCHEMA_V6); db.exec('PRAGMA user_version = 6') })
+    // v6（原文章上一版）已退役：不建表，只把版本号推过去。
+    tx(db, () => { db.exec('PRAGMA user_version = 6') })
     version = 6
   }
   if (version < 7) {
@@ -358,9 +355,6 @@ export interface Store {
   migrateVocab(lib: unknown): { migrated: boolean; value: unknown }
   clearVocab(): void
   loadLearning(): LearningOut
-  listLearningSnapshots(): { id: number; at: string; reason: string; recordCount: number }[]
-  loadLearningSnapshot(id: number | string): unknown
-  restoreLearningSnapshot(id: number | string): unknown
   rebuildLearningDerived(): unknown
   saveLearning(data: unknown): void
   saveLearningPartial(data: unknown): void
@@ -368,8 +362,6 @@ export interface Store {
   listArticles(): unknown[]
   getArticle(id: string): unknown
   saveArticle(article: unknown): void
-  loadArticlePrev(id: string): { updatedAt: string; value: unknown } | null
-  restoreArticlePrev(id: string): unknown
   removeArticle(id: string): void
   exportAll(): unknown
   checkpoint(): void
@@ -587,15 +579,6 @@ export function openStore(dbPath: string): Store | null {
       loadLearning() {
         return loadLearning(db)
       },
-      listLearningSnapshots() {
-        return listLearningSnapshots(db)
-      },
-      loadLearningSnapshot(id) {
-        return loadLearningSnapshot(db, id)
-      },
-      restoreLearningSnapshot(id) {
-        return tx(db, () => restoreLearningSnapshot(db, id))
-      },
       /** 用 baseline + 答题事件重建题型聚合；活动聚合保留（不碰其它学习记录）。 */
       rebuildLearningDerived() {
         return tx(db, () => rebuildLearningDerived(db))
@@ -659,7 +642,6 @@ export function openStore(dbPath: string): Store | null {
         for (const s of sentences) for (const w of list<unknown>(isRecord(s) ? s.vocab : undefined)) words.add(String(w))
         const payload = JSON.stringify(next)
         tx(db, () => {
-          rememberArticlePrev(db, id, payload)
           db.prepare(`
             INSERT OR REPLACE INTO articles (
               id, payload, title, book, source_key, created_at, updated_at, sentence_count, word_count
@@ -668,24 +650,8 @@ export function openStore(dbPath: string): Store | null {
           rebuildArticleProjection(db, next)
         })
       },
-      loadArticlePrev(id) {
-        const row = db.prepare('SELECT payload, updated_at FROM article_prev WHERE article_id = ?').get(String(id))
-        return row
-          ? { updatedAt: String(row.updated_at), value: parsePayload(String(row.payload)) }
-          : null
-      },
-      restoreArticlePrev(id) {
-        const row = db.prepare('SELECT payload FROM article_prev WHERE article_id = ?').get(String(id))
-        if (!row) return null
-        const value = parsePayload(String(row.payload))
-        if (!value) return null
-        // saveArticle 会先把当前版本存进 article_prev，恢复错了还能再切回来。
-        this.saveArticle(value)
-        return this.getArticle(String(id))
-      },
       removeArticle(id) {
         tx(db, () => {
-          rememberArticlePrev(db, String(id))
           deleteArticleProjection(db, String(id))
           db.prepare('DELETE FROM articles WHERE id = ?').run(String(id))
         })
@@ -701,25 +667,7 @@ export function openStore(dbPath: string): Store | null {
             .all()
             .map((r) => ({ at: String(r.at), count: Number(r.item_count), library: parsePayload(unpackPayload(r.payload)) })),
           articles: this.listArticles(),
-          articlePrev: db
-            .prepare('SELECT article_id, updated_at, payload FROM article_prev ORDER BY article_id ASC')
-            .all()
-            .map((r) => ({
-              articleId: String(r.article_id),
-              updatedAt: String(r.updated_at),
-              value: parsePayload(String(r.payload)),
-            })),
           learning: this.loadLearning(),
-          learningSnapshots: db
-            .prepare('SELECT id, at, reason, record_count, payload FROM learning_snapshots ORDER BY id ASC')
-            .all()
-            .map((r) => ({
-              id: Number(r.id),
-              at: String(r.at),
-              reason: String(r.reason ?? ''),
-              recordCount: Number(r.record_count),
-              value: parsePayload(String(r.payload)),
-            })),
         }
       },
       checkpoint() {

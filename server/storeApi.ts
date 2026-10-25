@@ -205,30 +205,6 @@ export async function handleStoreApi(
       return
     }
 
-    const articlePrev = path.match(/^\/articles\/(.+)\/prev$/)
-    if (articlePrev && method === 'GET') {
-      const id = decodePart(articlePrev[1] ?? '')
-      const value = id ? store.loadArticlePrev(id) : null
-      if (!value) {
-        fail(res, 404, '文章没有上一版')
-        return
-      }
-      sendJson(res, 200, { ok: true, value })
-      return
-    }
-
-    const articleRestore = path.match(/^\/articles\/(.+)\/restore-prev$/)
-    if (articleRestore && method === 'POST') {
-      const id = decodePart(articleRestore[1] ?? '')
-      const value = id ? store.restoreArticlePrev(id) : null
-      if (!value) {
-        fail(res, 404, '文章没有上一版')
-        return
-      }
-      sendJson(res, 200, { ok: true, value })
-      return
-    }
-
     const article = path.match(/^\/articles\/(.+)$/)
     if (article) {
       const id = decodePart(article[1] ?? '')
@@ -255,33 +231,6 @@ export async function handleStoreApi(
         sendJson(res, 200, { ok: true })
         return
       }
-    }
-
-    if (path === '/learning/snapshots' && method === 'GET') {
-      sendJson(res, 200, { ok: true, snapshots: store.listLearningSnapshots() })
-      return
-    }
-
-    const learningSnap = path.match(/^\/learning\/snapshots\/(\d+)$/)
-    if (learningSnap && method === 'GET') {
-      const value = store.loadLearningSnapshot(Number(learningSnap[1]))
-      if (!value) {
-        fail(res, 404, '学习记录快照不存在')
-        return
-      }
-      sendJson(res, 200, { ok: true, value })
-      return
-    }
-
-    const learningRestore = path.match(/^\/learning\/snapshots\/(\d+)\/restore$/)
-    if (learningRestore && method === 'POST') {
-      const value = store.restoreLearningSnapshot(Number(learningRestore[1]))
-      if (!value) {
-        fail(res, 404, '学习记录快照不存在')
-        return
-      }
-      sendJson(res, 200, { ok: true, value })
-      return
     }
 
     if (path === '/learning/rebuild-derived' && method === 'POST') {

@@ -213,7 +213,7 @@
 | TTS 自动兜底 | 让 Edge 不可用（断网 / 代理坏）→ 读本句 | 仍出声（先 Piper，再浏览器语音）；约 20 秒后自动回头重试 Edge |
 | Chromium 浏览器语音兜底 | 装 `speech-dispatcher` 后重启 Chromium → 停服务 → 读本句 | 浏览器语音有声；控制台无 `speechSynthesis` 报错 |
 | SQLite 主存 / 迁移 | 先在有旧 IndexedDB 数据的浏览器打开新版 → 刷新 → 查 `data/xueba.db` | 词库/文章迁到 SQLite；刷新后仍是同一份；停服务后页面仍能读 IndexedDB 兜底 |
-| SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points`、`learning_snapshots` |
+| SQLite 导出 | 浏览器打开 `http://localhost:5173/api/store/db` 或 `/api/store/export?download=1` | 下载 `.db` / JSON；`sqlite3 data/xueba.db '.tables'` 能看到 `vocab`、`articles`、`words`、`article_sentences`、`lang_points` |
 | 完整 JSON 备份 | 侧栏「导出全部（备份）」→ 清空 localStorage 或换浏览器 → 「导入备份」 | 复述、每天背过的词、略读标记、按篇/题型统计也恢复；同一份备份「合并导入」两次：第二次按文件指纹直接跳过并提示（不同备份仍按天累加学习时长/活动） |
 | 每篇生词独立 | 词库里先有几篇生词 → 新建/打开一篇没标过词的文章 | 侧栏「生词本 · 本篇」为空、正文没有编号/高亮；总词库里有的 the / is / are 不自动进来 |
 | 按篇编号 / 删除 | 同一篇依次加 3 个词→删中间一个→重新打开 | 编号按加入顺序 1..n，删除后紧凑重排；删词只从本篇消失，全库/别的篇仍保留 |
@@ -221,9 +221,7 @@
 | 录音配额满 | 用 DevTools 把站点存储配额限制到很小 → 录一条 | 出现「录音保存失败…旧录音已保留」；上一块旧 take 仍能回放；控制台无 unhandled rejection |
 | 开麦瞬间中止 | 连续跟读点空格后，在麦克风授权/开麦返回前再按一次空格 | 最终不录音、不生成 take，麦克风指示关闭；再按空格能正常开新一轮 |
 | 新词配额跨结算点 | 把系统时间调到 03:59，打开阅读页并加入新词 → 等到 04:00（或调时间触发） | `newToday` 当场归零；刷新后仍是新学习日的 0 |
-| 学习记录快照 / 恢复 | 先做几次答题/背词 → `GET /api/store/learning/snapshots` 取一个 id → 执行若干改动 → `POST /api/store/learning/snapshots/<id>/restore` | 恢复后练习/错题/背词记录回到快照时点；恢复前当前状态也进了快照，列表多一条 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
-| 文章上一版 / 恢复 | 改一篇文章正文并保存 → 再改一次 → `GET /api/store/articles/<id>/prev` → `POST /api/store/articles/<id>/restore-prev` | 恢复后回到上一版；再调一次 restore 能切回恢复前那一版（prev 会保留当前版） |
 | schema 迁移备份 | 用旧版本创建的 `data/xueba.db` 启动新版 | 启动日志有「迁移前备份」；`data/backups/xueba-v<旧版本>-*.db` 存在，保留最近 5 份；同次启动还会生成当天 `xueba-daily-*.db`（保留 7 天） |
 | 备份损坏自愈 | 停服务 → 把当天 `data/backups/xueba-daily-*.db` 覆盖成任意文本 → 重启 | 日志出现「当天备份校验失败，重新生成」；备份文件恢复为可 `quick_check` 的正常库 |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |

@@ -192,144 +192,14 @@ function assertLearning(data: unknown): asserts data is Record<string, unknown> 
   }
 }
 
-export const LEARNING_SNAPSHOT_KEEP = 30
-
-function countLearningRecords(value: LearningOut): number {
-  let n = 0
-  for (const section of LEARNING_SECTIONS) {
-    if (section === 'kindStats') n += Object.keys(value.kindStats).length
-    else if (section === 'practice') n += value.practice.length
-    else if (section === 'mistakes') n += value.mistakes.length
-    else if (section === 'readDone') n += value.readDone.length
-    else if (section === 'writingHistory') n += value.writingHistory.length
-    else if (section === 'backTranslations') n += value.backTranslations.length
-    else if (section === 'retells') n += value.retells.length
-    else if (section === 'activity') n += value.activity.length
-    else if (section === 'studyDays') n += value.studyDays.length
-    else if (section === 'sessions') n += value.sessions.length
-    else if (section === 'studiedDays') n += value.studiedDays.length
-    else if (section === 'skimmed') n += value.skimmed.length
-    else if (section === 'answerEvents') n += value.answerEvents.length
-  }
-  return n
-}
-
-function pruneLearningSnapshots(db: DatabaseSync): void {
-  const rows = db
-    .prepare('SELECT id, record_count FROM learning_snapshots ORDER BY id ASC')
-    .all()
-  if (rows.length <= LEARNING_SNAPSHOT_KEEP + 1) return
-  const keep = new Set<number>(rows.slice(-LEARNING_SNAPSHOT_KEEP).map((r) => Number(r.id)))
-  // 再保住“记录最多”的那一份：连续删改后，最大快照往往是最完整的历史。
-  let largest: (typeof rows)[number] | undefined = rows[0]
-  for (const r of rows) {
-    if (Number(r.record_count) > Number(largest?.record_count ?? 0)) largest = r
-  }
-  if (largest) keep.add(Number(largest.id))
-  const del = db.prepare('DELETE FROM learning_snapshots WHERE id = ?')
-  for (const r of rows) {
-    if (!keep.has(Number(r.id))) del.run(Number(r.id))
-  }
-}
-
-/**
- * 在覆盖学习记录之前留一份完整快照。
- *
- * 空库不写快照；和上一份内容完全相同也不重复写，避免防抖保存把快照表刷满。
- * 必须在调用方的事务里执行，失败时和写入一起回滚。
- */
-export function snapshotLearning(db: DatabaseSync, reason = 'before-write'): number {
-  if (!hasLearningRows(db)) return 0
-  const value = loadLearning(db)
-  const payload = JSON.stringify(value)
-  const last = db.prepare('SELECT payload FROM learning_snapshots ORDER BY id DESC LIMIT 1').get()
-  if (last && String(last.payload) === payload) return 0
-  const info = db
-    .prepare(
-      'INSERT INTO learning_snapshots (at, reason, record_count, payload) VALUES (?, ?, ?, ?)',
-    )
-    .run(nowIso(), String(reason), countLearningRecords(value), payload)
-  pruneLearningSnapshots(db)
-  return Number(info.lastInsertRowid ?? 0)
-}
-
-export interface LearningSnapshotMeta {
-  id: number
-  at: string
-  reason: string
-  recordCount: number
-}
-
-export function listLearningSnapshots(db: DatabaseSync): LearningSnapshotMeta[] {
-  return db
-    .prepare(
-      'SELECT id, at, reason, record_count FROM learning_snapshots ORDER BY id DESC',
-    )
-    .all()
-    .map((r) => ({
-      id: Number(r.id),
-      at: String(r.at),
-      reason: String(r.reason ?? ''),
-      recordCount: Number(r.record_count),
-    }))
-}
-
-export interface LearningSnapshot extends LearningSnapshotMeta {
-  value: LearningOut
-}
-
-export function loadLearningSnapshot(db: DatabaseSync, id: number | string): LearningSnapshot | null {
-  const row = db
-    .prepare('SELECT id, at, reason, record_count, payload FROM learning_snapshots WHERE id = ?')
-    .get(Number(id))
-  if (!row) return null
-  const value = parseJson(row.payload)
-  if (value === undefined) return null
-  return {
-    id: Number(row.id),
-    at: String(row.at),
-    reason: String(row.reason ?? ''),
-    recordCount: Number(row.record_count),
-    value: value as LearningOut,
-  }
-}
-
-const PARTIAL_SNAPSHOT_MS = 5 * 60_000
-
-/** 增量写是否该留快照：没有上一份或已超过 5 分钟。 */
-function shouldSnapshotPartial(db: DatabaseSync): boolean {
-  const last = db.prepare('SELECT at FROM learning_snapshots ORDER BY id DESC LIMIT 1').get()
-  if (!last) return true
-  const at = Date.parse(String(last.at))
-  return !Number.isFinite(at) || Date.now() - at >= PARTIAL_SNAPSHOT_MS
-}
-
-/** 恢复前会先把“当前状态”再存一份快照，恢复错了还能回来。 */
-export function restoreLearningSnapshot(db: DatabaseSync, id: number | string): LearningSnapshot | null {
-  const snap = loadLearningSnapshot(db, id)
-  if (!snap) return null
-  // 答题事件是 append-only 审计：旧快照没这个字段时保留当前事件，别用恢复动作删掉。
-  const current = loadLearning(db)
-  const value: LearningOut = {
-    ...snap.value,
-    answerEvents: snap.value.answerEvents ?? current.answerEvents,
-    backTranslations: snap.value.backTranslations ?? current.backTranslations,
-  }
-  writeLearning(db, value)
-  return { ...snap, value: loadLearning(db) }
-}
-
 /**
  * 学习记录 → 独立表。
  * 默认整份替换；传 `only` 时只替换指定 section，避免改一条练习就重写整份记录。
- * 每次写之前自动快照当前状态（在同一事务里）。
+ * 直接写规范化表；回滚粒度是 `data/backups/` 的每日整库备份。
  */
 export function writeLearning(db: DatabaseSync, data: unknown, only?: string[]): void {
   assertLearning(data)
   const sections = only ? [...new Set(only)] : [...LEARNING_SECTIONS]
-  // 增量写（答题后防抖同步）非常频繁；每次都整份快照会放大 IO。
-  // 整份替换必留快照；增量最多每 5 分钟留一份，足够回退又不拖慢输入。
-  if (!only || shouldSnapshotPartial(db)) snapshotLearning(db, only ? 'before-partial' : 'before-write')
   writeSections(db, data, sections)
 }
 

@@ -65,12 +65,16 @@ describe('sqliteStore：词库', () => {
 
     const raw = new DatabaseSync(path, { readOnly: true })
     const snap = raw.prepare('SELECT payload FROM vocab_snapshots LIMIT 1').get()
-    // 「恢复上一版」已下线：新库不再建 vocab_prev 表（老库里留着的旧表也不读）
-    const legacyPrev = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'vocab_prev'").get()
+    // 已删除的功能不再建表（老库里留着的旧表也不读）：词库上一版 / 文章上一版 / 学习记录快照
+    const dropped = raw
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('vocab_prev', 'article_prev', 'learning_snapshots')",
+      )
+      .all()
     raw.close()
     // 16MB 的整库 JSON 存两份就是 32MB；压完是 BLOB，不是 JSON 文本
     expect(typeof snap.payload).not.toBe('string')
-    expect(legacyPrev).toBeUndefined()
+    expect(dropped).toEqual([])
     expect(store.exportAll().vocabSnapshots[0].library.items.length).toBeGreaterThan(0)
   })
 
@@ -250,24 +254,6 @@ describe('sqliteStore：文章', () => {
     expect(store.getArticle('a').title).toBe('a')
     store.removeArticle('a')
     expect(store.getArticle('a')).toBeNull()
-  })
-
-  it('覆盖/删除前留上一版，恢复后还能反悔', async () => {
-    const store = openStore(tempDb())
-    store.saveArticle(article('a', '2026-01-01T00:00:00.000Z', 'v1'))
-    expect(store.loadArticlePrev('a')).toBeNull()
-
-    store.saveArticle(article('a', '2026-02-01T00:00:00.000Z', 'v2'))
-    expect(store.loadArticlePrev('a').value.title).toBe('v1')
-    expect(store.restoreArticlePrev('a').title).toBe('v1')
-    expect(store.getArticle('a').title).toBe('v1')
-    // 恢复前那一版（v2）进了 prev，恢复错了还能切回去。
-    expect(store.loadArticlePrev('a').value.title).toBe('v2')
-
-    store.removeArticle('a')
-    expect(store.getArticle('a')).toBeNull()
-    expect(store.loadArticlePrev('a').value.title).toBe('v1')
-    expect(store.restoreArticlePrev('a').title).toBe('v1')
   })
 
   it('覆盖保存时保留首次建立时间；客户端没带 createdAt 也不会重置', async () => {
@@ -557,55 +543,6 @@ describe('sqliteStore：学习记录', () => {
     expect(got.kindStats).toEqual({ a1: { cloze: { total: 4, correct: 3 } } })
     // 其它学习记录不受影响
     expect(got.practice).toHaveLength(2)
-  })
-
-  it('恢复旧快照不会删掉 append-only 的答题事件', async () => {
-    const store = openStore(tempDb())
-    store.saveLearning(learning)
-    const current = store.loadLearning()
-    // 模拟 v7 之前的旧快照：没有 answerEvents 字段
-    const { answerEvents: _drop, ...old } = current
-    const info = store.db
-      .prepare(
-        'INSERT INTO learning_snapshots (at, reason, record_count, payload) VALUES (?, ?, ?, ?)',
-      )
-      .run('2026-01-06T00:00:00.000Z', 'legacy', 1, JSON.stringify(old))
-    expect(store.loadLearning().answerEvents).toHaveLength(2)
-
-    store.saveLearning({ ...learning, practice: [] })
-    const restored = store.restoreLearningSnapshot(Number(info.lastInsertRowid))
-    expect(restored.value.practice).toHaveLength(2)
-    expect(restored.value.answerEvents).toHaveLength(2)
-  })
-
-  it('覆盖前自动留快照，误清空后可以恢复', async () => {
-    const store = openStore(tempDb())
-    store.saveLearning(learning)
-    // 第一次写入空库不留快照；这次覆盖前会把完整记录存下来。
-    store.saveLearning({ ...learning, practice: [] })
-
-    const snaps = store.listLearningSnapshots()
-    expect(snaps.length).toBeGreaterThan(0)
-    const before = store.loadLearningSnapshot(snaps[0].id)
-    expect(before.value.practice).toHaveLength(2)
-    expect(before.recordCount).toBeGreaterThan(0)
-    expect(store.loadLearningSnapshot(999999)).toBeNull()
-
-    const restored = store.restoreLearningSnapshot(snaps[0].id)
-    expect(restored.value.practice).toHaveLength(2)
-    expect(store.loadLearning().practice).toHaveLength(2)
-    // 恢复动作本身也先留了“恢复前”的快照，恢复错了还能回去。
-    expect(store.listLearningSnapshots().length).toBeGreaterThan(snaps.length)
-  })
-
-  it('快照只留最近 30 份 + 记录最多的一份', async () => {
-    const store = openStore(tempDb())
-    store.saveLearning(learning)
-    for (let i = 0; i < 35; i++) {
-      store.saveLearning({ ...learning, practice: [{ at: `2026-03-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`, kind: 'quiz', total: i, correct: i }] })
-    }
-    expect(store.listLearningSnapshots().length).toBeLessThanOrEqual(31)
-    expect(store.listLearningSnapshots().some((s) => s.recordCount >= 8)).toBe(true)
   })
 
   it('if-empty 只在服务端没有任何学习记录时迁移', async () => {

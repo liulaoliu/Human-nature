@@ -196,14 +196,3 @@ export function normalizeLegacySourceIds(db: DatabaseSync): void {
   )
   rebuildVocabProjection(db, lib)
 }
-
-/** 覆盖/删除文章前，把当前版本留到 article_prev（一篇文章只留一版）。 */
-export function rememberArticlePrev(db: DatabaseSync, id: string, nextPayload?: string): boolean {
-  const row = db.prepare('SELECT payload, title, updated_at FROM articles WHERE id = ?').get(String(id))
-  if (!row) return false
-  if (nextPayload !== undefined && String(row.payload) === String(nextPayload)) return false
-  db.prepare(
-    'INSERT OR REPLACE INTO article_prev (article_id, payload, title, updated_at) VALUES (?, ?, ?, ?)',
-  ).run(String(id), String(row.payload), String(row.title ?? ''), String(row.updated_at))
-  return true
-}

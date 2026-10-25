@@ -1,7 +1,7 @@
 /**
  * JSON / SQLite 边界的共用守卫（规范 §4.2：外部输入先 unknown，再具名 guard 收窄）。
  *
- * 数据来源：vocab / articles / learning_snapshots 的 payload 列 —— TEXT 存的
+ * 数据来源：vocab / articles 的 payload 列 —— TEXT 存的
  * JSON，`JSON.parse` 出来的形状不可信。守卫规则：对象（含数组）放行，
  * 其余按「没有该字段」处理（undefined），不抛错、不把坏数据静默成空库。
  *

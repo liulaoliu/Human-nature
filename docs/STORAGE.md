@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 8`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版，v7 加答题事件与聚合基线，v8 加回译存档）。
+schema 版本：`PRAGMA user_version = 8`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -105,7 +105,6 @@ vocab(id=1, payload BLOB, item_count, updated_at)          -- 当前词库（gzi
 vocab_snapshots(at, payload BLOB, item_count)               -- 最近 5 版 + 历史最大一版（gzip）
 articles(id, payload JSON, title, book, source_key,
          created_at, updated_at, sentence_count, word_count)
-article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前那一版
 ```
 
 - `payload` 保存完整的 `VocabLibrary` / `SavedArticle`，**事实来源**是它；
@@ -116,13 +115,12 @@ article_prev(article_id PK, payload JSON, title, updated_at) -- 覆盖/删除前
 - 词库只留历史快照（最近 5 版 + 历史最大的一版）。「恢复上一版词库」已下线：
   界面不再提供一键退版，也没有 `vocab_prev` 槽位；新库不建这张表，**老库里遗留的
   `vocab_prev` 不再读写**，可忽略（或自行 `DROP TABLE vocab_prev`）。
+- 文章覆盖/删除不再留上一版（v6 的 `article_prev` 已退役）：写坏了靠 `data/backups/`
+  的每日整库备份；老库里遗留的 `article_prev` 不再读写，可自行 `DROP`。
 - 两张词库表（`vocab` / `vocab_snapshots`）的 payload 都是 **gzip BLOB**；
   `unpackPayload` 两种都认，老明文库能直接读，**下次保存自动转成压缩态**。
   为什么主表也压：16MB 明文一次 INSERT 要 ~478ms，压缩后 1.5MB 只要几十毫秒，
   WAL / 备份 / 文件体积跟着一起降。代价是 `sqlite3` 里不能直接看 JSON，要 gunzip 一下。
-- 文章每次覆盖/删除前把当前版本留到 `article_prev`；`GET /api/store/articles/:id/prev`
-  查看，`POST /api/store/articles/:id/restore-prev` 恢复。恢复会把“当前版”再写进 prev，
-  所以恢复错了还能切回来。
 
 ### 4.2 派生表（给 SQL / 统计 / 以后 FTS 用）
 
@@ -203,7 +201,6 @@ kind_stats(article_id, kind, total, correct)                              -- 按
 answer_events(id, at, day, article_id, source, kind, cat, correct,
               question_id)                                                -- 每题对错（v7，append-only）
 learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
-learning_snapshots(id, at, reason, record_count, payload JSON)             -- 覆盖前快照（最近 30 份 + 记录最多一份）
 ```
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
@@ -217,9 +214,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   **不进这些表**。
 - `reader:activity` / `reader:kindStats` 仍照常写聚合值（兼容现有 UI）；同时每题追加一条
   `answer_events`，字段含 `at / day / articleId / source / kind / cat / correct / questionId`。
-  `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存/旧快照恢复也不会删除已有事件。
+  `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存也不会删除已有事件。
   `back_translation_records` 同样是 append-only 的长期学习资产：按 `id` 去重、`INSERT OR REPLACE`，
-  整份保存/旧快照恢复不会清空历史；记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看。
+  整份保存不会清空历史；记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看。
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
   历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
   （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」只重建
@@ -228,10 +225,9 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
   活动日一律用 `core/activity.dayKeyLocal`（事件写入时已落 `day`，服务端不另算日期）。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
   `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。
-- v5 防御：每次整份/增量写入前，在同一事务里把当前学习记录存进 `learning_snapshots`
-  （最多保留最近 30 份 + 记录最多的一份）；误清空、缩水后可通过
-  `GET /api/store/learning/snapshots` 查看、`POST /api/store/learning/snapshots/:id/restore` 恢复。
-  恢复动作本身也先快照当前状态，恢复错了还能回去。
+- 学习记录没有 JSON 快照表（v5 的 `learning_snapshots` 已退役）：写坏了靠
+  `data/backups/` 的每日整库备份回滚，粒度是「一天」；`answer_events` 是 append-only，
+  已记录的答题事件不会因为整份保存被删。
 - 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
   `data/backups/`（迁移备份保留 5 份）；每天第一次打开已有库再留一份 `xueba-daily-YYYY-MM-DD.db`
   （保留 7 天）。服务长开时每 30 分钟检查一次日期，跨过午夜会自动补当天备份，不用重启。
@@ -272,7 +268,6 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 `reader:importedBackups` 指纹。词库 409 / 断网时不能记指纹，否则同一份文件再导入会被去重直接跳过，
 而数据其实没进来。覆盖导入同理：词库落盘失败时不改学习记录，保持原样可重试。
 | 历史词库 | `GET /api/store/vocab/snapshots` / `GET /api/store/vocab/snapshots/:at` | 最近 5 版 + 历史最大一版；只留接口，界面无退版入口 |
-| 文章上一版 | `GET /api/store/articles/:id/prev` / `POST /api/store/articles/:id/restore-prev` | 覆盖/删除前那一版；恢复后可反悔 |
 
 ## 六、安全
 

@@ -92,8 +92,6 @@
 ```bash
 curl http://127.0.0.1:5173/api/store/health
 curl http://127.0.0.1:5173/api/store/learning
-curl http://127.0.0.1:5173/api/store/learning/snapshots
-curl http://127.0.0.1:5173/api/store/articles/<id>/prev
 ```
 
 ## 别再踩的约束
