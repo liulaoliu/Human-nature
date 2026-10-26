@@ -3,7 +3,8 @@
  * 词库体检：找出「词性 / 释义张冠李戴」的词条（默认只读，不改任何东西）。
  *
  *   node tool/audit-vocab.mjs              # 只报告
- *   node tool/audit-vocab.mjs --fix        # 修 A 类（先关掉应用再跑）
+ *   node tool/audit-vocab.mjs --fix        # 修 A/B/C 类（先关掉应用再跑）
+ *   node tool/audit-vocab.mjs --fix --only=wholesale,trump  # 只修指定词条
  *   node tool/audit-vocab.mjs --db <path>  # 指定数据库
  *
  * 为什么要这个工具：2026-10-22 用户报「dwarf / consort / challenge / articulate 词性
@@ -23,6 +24,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { gunzipSync } from 'node:zlib'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -30,6 +32,25 @@ const args = process.argv.slice(2)
 const fix = args.includes('--fix')
 const dbArg = args.indexOf('--db') >= 0 ? args[args.indexOf('--db') + 1] : null
 const DB = dbArg ? resolve(dbArg) : join(ROOT, 'data', 'xueba.db')
+/** `--only=wholesale,trump`：只修这几条（先做小范围验证，别一次动整个库）。 */
+const onlyArg = args.find((a) => a.startsWith('--only='))
+const only = onlyArg
+  ? new Set(
+      onlyArg
+        .slice('--only='.length)
+        .split(',')
+        .map((s) => s.trim().toLowerCase())
+        .filter(Boolean),
+    )
+  : null
+
+/** `vocab.payload` 现在统一存 gzip BLOB，也兼容老库的明文 TEXT。 */
+function decodePayload(payload) {
+  if (typeof payload === 'string') return payload
+  const buf = Buffer.from(payload)
+  if (buf.length >= 2 && buf[0] === 0x1f && buf[1] === 0x8b) return gunzipSync(buf).toString('utf8')
+  return buf.toString('utf8')
+}
 
 const norm = (s) =>
   String(s ?? '')
@@ -293,7 +314,7 @@ async function main() {
     console.error('vocab 表里没有 payload（id=1）')
     process.exit(1)
   }
-  const lib = JSON.parse(String(row.payload))
+  const lib = JSON.parse(decodePayload(row.payload))
   const items = Array.isArray(lib.items) ? lib.items : []
 
   const renameWrong = [] // A
@@ -374,6 +395,10 @@ async function main() {
     let filledCount = 0
     const out = []
     for (const it of cur.items) {
+      if (only && !only.has(norm(it.word))) {
+        out.push(it)
+        continue
+      }
       const surface = surfaceFromNote(it.note)
       // 只动「单个单词」的词条，和上面体检的口径一致：
       // 词组 / 习语 / 用法笔记（word 里带空格或带 kind）的词形是它的身份，不能按 participle 改
