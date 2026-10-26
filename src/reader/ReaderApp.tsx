@@ -5,6 +5,7 @@ import { useSpeaking } from './hooks/useSpeaking'
 import { buildArticleIndex } from '../core/articleIndex'
 import { useReaderArticleRouting, useReaderPanelRouting } from './hooks/useReaderRouting'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
+import { useBrowseFilters } from './hooks/useBrowseFilters'
 import { useTtsEngines } from './hooks/useTtsEngines'
 import { useToast } from './hooks/useToast'
 import { buildTtsAccents } from '../core/ttsVoices'
@@ -97,6 +98,8 @@ export default function ReaderApp() {
   const currentSlug = currentRef ? articleIndex.slugOf(currentRef) : ''
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
   const { route, panels } = useReaderPanelRouting(currentSlug)
+  /** 生词浏览页的筛选也走 URL query：刷新 / 分享回到同一组筛选（只 replace，不堆历史）。 */
+  const browseFilters = useBrowseFilters(route.panel === 'browse-article' ? 'article' : 'all')
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
   // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
   const ttsEngines = useTtsEngines()
@@ -634,6 +637,7 @@ export default function ReaderApp() {
     highlight,
     services,
     panels,
+    browseFilters,
     articleRouting,
     saved,
     book,

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { dayKeyLocal } from '../../core/activity'
 import { vocabItem } from '../../core/testFixtures'
 import { defaultReviewState } from '../../types/document'
 import type { ArticleVocabEntry } from '../../types/document'
+import { defaultBrowseFilters, type BrowseFilterState } from '../browseQuery'
 import VocabBrowsePanel, { type VocabBrowsePanelProps } from './VocabBrowsePanel'
 
 vi.mock('../VocabList', () => ({
@@ -56,15 +58,23 @@ const articles = [
   { id: 'B', title: 'B 篇' },
 ]
 
-function setup(over: Partial<VocabBrowsePanelProps> = {}) {
+type PanelProps = Omit<VocabBrowsePanelProps, 'filters' | 'onFiltersChange'>
+
+/** 受控面板：筛选状态放测试 harness，等价于真实 URL query 的往返。 */
+function Harness({ initial, ...props }: PanelProps & { initial: BrowseFilterState }) {
+  const [filters, setFilters] = useState(initial)
+  return <VocabBrowsePanel {...props} filters={filters} onFiltersChange={setFilters} />
+}
+
+function setup(over: Partial<PanelProps> = {}, initial: BrowseFilterState = defaultBrowseFilters('all')) {
   const onClose = vi.fn()
   const onExportAnki = vi.fn()
   const onPrint = vi.fn()
   const onPrintRows = vi.fn()
   const onExportWrong = vi.fn()
   render(
-    <VocabBrowsePanel
-      initialScope="all"
+    <Harness
+      initial={initial}
       onClose={onClose}
       libraryItems={items}
       articleEntries={entries}
@@ -115,20 +125,20 @@ describe('VocabBrowsePanel：范围', () => {
   })
 
   it('本篇：只显示按篇收录、默认不含已掌握；编号用篇内编号', () => {
-    setup({ initialScope: 'article' })
+    setup({}, defaultBrowseFilters('article'))
     expect(screen.getByText('本篇生词')).toBeTruthy()
     expect(listed()).toEqual(['alpha', 'take off'])
     expect(screen.getByTestId('lemma-alpha').textContent).toBe('alpha#1')
   })
 
   it('本篇勾「含已掌握」：mastered 也出来', () => {
-    setup({ initialScope: 'article' })
+    setup({}, defaultBrowseFilters('article'))
     fireEvent.click(screen.getByLabelText(/含已掌握/))
     expect(listed()).toContain('done')
   })
 
   it('按文章：只并勾选的篇（默认全选），计数跟着筛选', () => {
-    setup({ initialScope: 'article' })
+    setup({}, defaultBrowseFilters('article'))
     select(/范围/, 'picked')
     // 切到选篇后默认不含已掌握
     expect(listed()).toEqual(['alpha', 'beta', 'take off'])
@@ -145,9 +155,9 @@ describe('VocabBrowsePanel：范围', () => {
   })
 
   it('深链接本篇但文章没加载：退回全部，不停在空界面', () => {
-    setup({ initialScope: 'article', articleId: '' })
+    setup({ articleId: '' }, defaultBrowseFilters('article'))
     expect(screen.getByText('全部生词')).toBeTruthy()
-    expect(listed()).toHaveLength(4)
+    expect(listed()).toHaveLength(3)
   })
 })
 
@@ -206,7 +216,7 @@ describe('VocabBrowsePanel：批量动作跟着筛选走', () => {
   })
 
   it('本篇 A4：走按篇行（编号 + 语境释义），不拿整库', () => {
-    const { onPrint, onPrintRows } = setup({ initialScope: 'article' })
+    const { onPrint, onPrintRows } = setup({}, defaultBrowseFilters('article'))
     fireEvent.click(screen.getByText(/A4 打印/))
     expect(onPrint).not.toHaveBeenCalled()
     expect(onPrintRows).toHaveBeenCalledWith(
@@ -219,7 +229,7 @@ describe('VocabBrowsePanel：批量动作跟着筛选走', () => {
   })
 
   it('选篇 A4：按篇出行（各篇编号），走 onPrintRows 而不是整库打印', () => {
-    const { onPrintRows, onPrint } = setup({ initialScope: 'article' })
+    const { onPrintRows, onPrint } = setup({}, defaultBrowseFilters('article'))
     select(/范围/, 'picked')
     fireEvent.click(screen.getByText(/A4 打印/))
     expect(onPrint).not.toHaveBeenCalled()
@@ -237,7 +247,7 @@ describe('VocabBrowsePanel：批量动作跟着筛选走', () => {
   })
 
   it('本篇导出用这篇的语境释义（和侧栏 / A4 一致）', () => {
-    const { onExportAnki } = setup({ initialScope: 'article' })
+    const { onExportAnki } = setup({}, defaultBrowseFilters('article'))
     fireEvent.click(screen.getByText(/Anki CSV/))
     const [items] = onExportAnki.mock.calls[0]
     expect(items.find((it: { lemma: string }) => it.lemma === 'take off').meaning).toBe('阿尔法')

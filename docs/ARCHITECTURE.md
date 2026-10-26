@@ -60,6 +60,7 @@ types ← core ← adapters ← reader
 | 单词的词形 / 合并 / 排期规则 | `src/core/vocab.ts`（对外出口）+ `src/core/vocab/*` | 子模块按职责分：`word` / `merge` / `analysis` / `library` / `review`；新规则放进对应子模块，别把 facade 再撑大 |
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 日期热力图选择器（导出 / 生词浏览共用） | `src/reader/panels/DayHeatmap.tsx` | 日历分档仍走 `core/activity.buildHeatmap`；点格子只回调日期 |
+| 生词浏览页筛选 ↔ URL query | `src/reader/browseQuery.ts` | 默认值不写；坏值回落；日期 / 选篇排序去重；`picked=all` / 空串语义分明 |
 | 生词浏览页的范围 / 类型 / 搜索 / 日期 / 状态筛选 | `src/core/vocabBrowse.ts` | 本篇 / 选篇归属走 `articleEntryViewsFrom`；日期 = 入库日 + `dayKeyLocal`（可多选）；状态复用 `isDue` / `isFresh`；选篇 A4 走 `browseA4Rows`（按篇出行 + 篇内编号）；面板只收选择 + 渲染 |
 | 文章包（单篇 / 多篇导出） | `src/core/articlePackage.ts` | 只带选中篇的正文 / 词条 / 语言点 / 能归属到这篇的记录；全局统计（活动、学习时长、选词会话）不随单篇走。导入侧仍走「合并导入」，覆盖导入会被拒绝 |
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
@@ -395,6 +396,11 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 /reader/a/<slug>/p/<panel>/<浮层>  读某一篇 + 面板 + 盖在它上面的浮层（`/p/speed/lang`）
 /reader/p/<panel>                  没有文章时也能开的（计划/日志/统计/生词本/背单词…）
 ```
+
+生词浏览页的**筛选**写在 query 上（页面本身仍在 `<panel>` 里，不另开路径）：
+`/reader/a/<slug>/p/browse?kind=word&q=run&days=2026-10-01,2026-10-02&status=due&mastered=0&picked=saved:A`。
+默认值不写；`scope` 只在和入口（`browse` / `browse-article`）不同时写；筛选改动只 **replace**、不 push
+（返回键不会一步步经过每次输入）。解析 / 构造在 `reader/browseQuery.ts`，接线在 `hooks/useBrowseFilters.ts`。
 
 `<panel>` 有两类，都在同一张 `PanelName` 表里：
 

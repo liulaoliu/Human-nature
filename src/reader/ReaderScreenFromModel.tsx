@@ -17,6 +17,7 @@ export interface ReaderAppModel {
   highlight: ReturnType<typeof useReaderHighlightState>
   services: ReaderScreenProps['services']
   panels: ReturnType<typeof useReaderPanelRouting>['panels']
+  browseFilters: ReaderScreenProps['browseFilters']
   articleRouting: ReaderScreenProps['articleRouting']
 
   saved: ReaderScreenProps['saved']
@@ -67,7 +68,7 @@ export interface ReaderAppModel {
 
 /** 把分组模型平铺成 `ReaderScreen` 的 props（视图接口的唯一翻译层）。 */
 export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
-  const { docState: d, paste: p, highlight: h, panels, services, selection } = app
+  const { docState: d, paste: p, highlight: h, panels, services, selection, browseFilters } = app
   return {
     prefs: app.prefs,
     examActive: app.examActive,
@@ -138,6 +139,7 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     browseAll: panels.browseAll,
     browseArticle: panels.browseArticle,
     setBrowseArticle: panels.setBrowseArticle,
+    browseFilters,
     flash: app.flash,
     peekSid: h.peekSid,
     selSid: d.selSid,

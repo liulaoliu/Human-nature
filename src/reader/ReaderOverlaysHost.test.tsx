@@ -2,6 +2,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import ReaderOverlaysHost, { type ReaderOverlaysHostProps } from './ReaderOverlaysHost'
+import { defaultBrowseFilters } from './browseQuery'
 import { vocabItem } from '../core/testFixtures'
 
 const captures = vi.hoisted(() => ({
@@ -56,7 +57,8 @@ function props(over: Partial<ReaderOverlaysHostProps> = {}): ReaderOverlaysHostP
     journal: { open: false } as ReaderOverlaysHostProps['journal'],
     allVocab: {
       open: false,
-      initialScope: 'all',
+      filters: defaultBrowseFilters('all'),
+      onFiltersChange: noop,
       libraryItems: [],
       articleEntries: [],
       articleId: '',
@@ -186,7 +188,7 @@ describe('ReaderOverlaysHost：生词浏览', () => {
           allVocab: {
             ...props().allVocab,
             open: true,
-            initialScope: 'article',
+            filters: defaultBrowseFilters('article'),
             articleId: 'A',
             articleTitle: 'A 篇',
             libraryItems: articleItems,

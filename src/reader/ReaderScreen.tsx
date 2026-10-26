@@ -22,6 +22,7 @@ import type { useArticleUiActions } from './hooks/useArticleUiActions'
 import type { useReaderDerived } from './hooks/useReaderDerived'
 import type { useArticleDerived } from './hooks/useArticleDerived'
 import type { useReaderViewData } from './hooks/useReaderViewData'
+import type { BrowseFiltersHandle } from './hooks/useBrowseFilters'
 import type { useLearningData } from './hooks/useLearningData'
 import type { useSelection } from './hooks/useSelection'
 import type { useBatchQueue } from './hooks/useBatchQueue'
@@ -128,6 +129,8 @@ export interface ReaderScreenProps {
   browseAll: boolean
   browseArticle: boolean
   setBrowseArticle: (v: boolean) => void
+  /** 生词浏览页的筛选（URL query 是事实来源） */
+  browseFilters: BrowseFiltersHandle
   flash: (message: string) => void
   peekSid: string | null
   selSid: string | null

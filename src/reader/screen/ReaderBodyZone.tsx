@@ -46,6 +46,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     setBrowseAll,
     browseArticle,
     setBrowseArticle,
+    browseFilters,
     setComposing,
     setPlanOpen,
     setExportOpen,
@@ -305,7 +306,8 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
         }}
         allVocab={{
           open: browseAll || browseArticle,
-          initialScope: browseArticle ? 'article' : 'all',
+          filters: browseFilters.filters,
+          onFiltersChange: browseFilters.setFilters,
           libraryItems: library.items,
           articleEntries: library.articleEntries ?? [],
           articleId: doc ? articleIdentity : '',
