@@ -593,3 +593,10 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `unacceptable` 的英文原文就是这么“溢出屏幕且看不见”的。规矩：可滚容器用
     `justify-content: safe center` / `align-items: safe center`（前面留一行裸 `center` 做旧浏览器兜底），
     或者改成「外层滚动 + 内层 `margin:auto`」；别让居中把溢出藏到负方向。
+
+49. **外部脚本改词库前先让页面重新加载**（2026-10-26）。`data/xueba.db` 是页面内存的
+    持久化副本：页面打开时加载整份词库，之后任何一次保存都会把**整份内存**写回。
+    用 `tool/audit-vocab.mjs --fix --only=…` 修好 4 张词性/释义打架的卡，页面在
+    18:13 的一次保存又把旧值覆盖回来，`gates:static` 复红。规矩：改库前先让用户
+    F5 / 关标签页；脚本修完立刻 `node tool/check_vocab_sense.mjs` 验证，并提醒
+    「刷新后再操作」，别在页面还开着旧数据时跟它抢写。
