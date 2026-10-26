@@ -3,6 +3,7 @@ import {
   addArticleEntry,
   articleEntriesOf,
   articleEntryViews,
+  articleEntryViewsFrom,
   articleItemsOf,
   markArticlePrinted,
   mergeArticleEntries,
@@ -134,6 +135,51 @@ describe('articleEntryViews / mergeArticleEntries', () => {
     expect(out).toHaveLength(2)
     expect(out[0].origin).toBe('manual')
     expect(out[1].articleId).toBe('B')
+  })
+})
+
+describe('articleEntryViewsFrom：多篇 / 多归属键', () => {
+  const items = [
+    vocabItem({ id: 'v-alpha', word: 'alpha', lemma: 'alpha' }),
+    vocabItem({ id: 'v-done', word: 'done', lemma: 'done', status: 'mastered' }),
+    vocabItem({ id: 'v-take', word: 'take off', lemma: 'take off', kind: 'phrase' }),
+    vocabItem({ id: 'v-use', word: 'alpha 的用法', lemma: 'alpha 的用法', kind: 'usage' }),
+  ]
+  const at = NOW.toISOString()
+  const entries = [
+    { articleId: 'saved:A', lemma: 'alpha', origin: 'auto' as const, addedAt: at },
+    { articleId: 'a-key', lemma: 'take off', origin: 'auto' as const, addedAt: at },
+    { articleId: 'A', lemma: 'alpha', origin: 'manual' as const, addedAt: at },
+    { articleId: 'a-key', lemma: 'done', origin: 'manual' as const, addedAt: at },
+    { articleId: 'a-key', lemma: 'alpha 的用法', origin: 'auto' as const, addedAt: at },
+    { articleId: 'B', lemma: 'alpha', origin: 'auto' as const, addedAt: at },
+  ]
+
+  it('同一篇的多个归属键合并；同 lemma 只留第一条；不混进别的篇', () => {
+    const views = articleEntryViewsFrom(items, entries, ['saved:A', 'a-key', 'A'], { includeLang: true })
+    expect(views.map((v) => v.item.lemma)).toEqual(['alpha', 'take off', 'alpha 的用法'])
+    expect(views[0].entry.articleId).toBe('saved:A')
+  })
+
+  it('默认只要单词、跳过已掌握；两个选项各自放开', () => {
+    expect(articleEntryViewsFrom(items, entries, ['a-key']).map((v) => v.item.lemma)).toEqual([])
+    expect(
+      articleEntryViewsFrom(items, entries, ['a-key'], { includeMastered: true }).map((v) => v.item.lemma),
+    ).toEqual(['done'])
+    expect(
+      articleEntryViewsFrom(items, entries, ['a-key'], { includeLang: true }).map((v) => v.item.lemma),
+    ).toEqual(['take off', 'alpha 的用法'])
+    expect(
+      articleEntryViewsFrom(items, entries, ['a-key'], { includeLang: true, includeMastered: true }).map((v) => v.item.lemma),
+    ).toEqual(['take off', 'done', 'alpha 的用法'])
+  })
+
+  it('找不到的词条 / 空篇：跳过，不报错', () => {
+    const views = articleEntryViewsFrom(items, [{ articleId: 'A', lemma: 'missing', origin: 'auto', addedAt: at }], ['A'], {
+      includeLang: true,
+    })
+    expect(views).toEqual([])
+    expect(articleEntryViewsFrom(items, entries, [])).toEqual([])
   })
 })
 

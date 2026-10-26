@@ -25,6 +25,14 @@ export interface ArticleEntryView {
   item: VocabItem
 }
 
+/** 按篇取词条的选项。默认和侧栏/编号一致：只取普通单词、跳过已掌握。 */
+export interface ArticleEntryViewOptions {
+  /** 也包含词组 / 习语 / 用法（侧栏「语言点」页签用）。 */
+  includeLang?: boolean
+  /** 也包含已掌握（浏览页「含已掌握」用；正文编号 / 复习永远不要）。 */
+  includeMastered?: boolean
+}
+
 /** 词库里所有按篇条目（老数据没有该字段时为空）。 */
 export function articleEntries(library: VocabLibrary): ArticleVocabEntry[] {
   return library.articleEntries ?? []
@@ -52,14 +60,31 @@ export function articleEntryViews(
   articleId: string,
   includeLang = false,
 ): ArticleEntryView[] {
-  const byLemma = new Map(library.items.map((it) => [it.lemma, it]))
+  return articleEntryViewsFrom(library.items, articleEntries(library), [articleId], { includeLang })
+}
+
+/**
+ * 多篇 / 多归属键的按篇词条：同 lemma 只留第一条，保持 `entries` 的加入顺序。
+ *
+ * `planPrint`（打印 / 导出）和浏览页共用这一份口径——**别再各写一遍**
+ * （别名、去重、跳过已掌握、语言点过滤这四条最容易分叉）。
+ */
+export function articleEntryViewsFrom(
+  items: VocabItem[],
+  entries: ArticleVocabEntry[],
+  articleIds: Iterable<string>,
+  opts: ArticleEntryViewOptions = {},
+): ArticleEntryView[] {
+  const wanted = new Set(articleIds)
+  const byLemma = new Map(items.map((it) => [it.lemma, it]))
   const seen = new Set<string>()
   const out: ArticleEntryView[] = []
-  for (const entry of articleEntriesOf(library, articleId)) {
-    if (seen.has(entry.lemma)) continue
+  for (const entry of entries) {
+    if (!wanted.has(entry.articleId) || seen.has(entry.lemma)) continue
     const item = byLemma.get(entry.lemma)
-    if (!item || item.status === 'mastered') continue
-    if (!includeLang && kindOf(item) !== 'word') continue
+    if (!item) continue
+    if (!opts.includeMastered && item.status === 'mastered') continue
+    if (!opts.includeLang && kindOf(item) !== 'word') continue
     seen.add(entry.lemma)
     out.push({ entry, item })
   }

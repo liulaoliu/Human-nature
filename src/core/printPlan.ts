@@ -11,6 +11,7 @@
 import type { ArticleVocabEntry, VocabItem } from '../types/document'
 import { filterByKind, kindOf } from './entryKind'
 import { dayKeyLocal } from './activity'
+import { articleEntryViewsFrom } from './articleVocab'
 import { resolveArticleMeaning } from './articleMeaning'
 import type { VocabKind } from '../types/document'
 
@@ -132,7 +133,6 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
   const datesSorted: [string, number][] = [...dates.entries()].sort((a, b) => b[0].localeCompare(a[0]))
 
   const unprinted = pool.filter((it) => !it.lastPrintedAt)
-  const byLemma = new Map(input.libraryItems.map((it) => [it.lemma, it]))
   const articleTitleById = new Map<string, string>()
   for (const a of input.articles) {
     articleTitleById.set(a.id, a.title)
@@ -143,21 +143,20 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
   const rowsForArticle = (a: PrintArticleRef): PrintRow[] => {
     const ids = new Set([a.id, ...(a.aliases ?? [])])
     const rows: PrintRow[] = []
-    const seen = new Set<string>()
-    let wordNo = 0
     if (input.articleEntries !== undefined) {
-      for (const e of input.articleEntries) {
-        if (!ids.has(e.articleId) || seen.has(e.lemma)) continue
-        const item = byLemma.get(e.lemma)
-        if (!item || item.status === 'mastered') continue
+      const views = articleEntryViewsFrom(input.libraryItems, input.articleEntries, ids, {
+        includeLang: true,
+        includeMastered: false,
+      })
+      let wordNo = 0
+      for (const { entry, item } of views) {
         if (kinds && !kinds.includes(kindOf(item))) continue
-        seen.add(e.lemma)
-        const resolved = resolveArticleMeaning(item, e, e.articleId, e.sentenceId)
+        const resolved = resolveArticleMeaning(item, entry, entry.articleId, entry.sentenceId)
         const isWord = kindOf(item) === 'word'
         if (isWord) wordNo += 1
         rows.push({
           item,
-          articleId: e.articleId,
+          articleId: entry.articleId,
           articleTitle: a.title,
           number: isWord ? wordNo : null,
           meaning: resolved?.text ?? null,
@@ -166,6 +165,8 @@ export function planPrint(input: PrintPlanInput): PrintPlan {
       return rows
     }
     // 老测试 / 老调用方：没有按篇表时退回 source + 正文 lemma
+    const seen = new Set<string>()
+    let wordNo = 0
     for (const item of pool) {
       if (seen.has(item.lemma)) continue
       if (item.source?.fileName === a.id || a.lemmas?.has(item.lemma)) {
