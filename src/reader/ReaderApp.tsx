@@ -507,6 +507,7 @@ export default function ReaderApp() {
   const { routePick, articleRouting } = useReaderArticleRouting({
     routeSlug: route.slug,
     routePanel: route.panel,
+    routeOverlay: route.overlay,
     currentRef,
     slugOf: articleIndex.slugOf,
     refOf: articleIndex.refOf,

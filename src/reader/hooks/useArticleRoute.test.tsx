@@ -74,7 +74,12 @@ function setupWithHistory(initialEntries: string[], initial: UseArticleRoutePara
     () => {
       const loc = useLocation()
       const route = parseReaderRoute(loc.pathname)
-      return useArticleRoute({ ...initial, routeSlug: route.slug, routePanel: route.panel })
+      return useArticleRoute({
+        ...initial,
+        routeSlug: route.slug,
+        routePanel: route.panel,
+        routeOverlay: route.overlay,
+      })
     },
     { wrapper },
   )
@@ -114,6 +119,19 @@ describe('useArticleRoute：首屏恢复补 URL', () => {
     const { seen } = setup('/', p)
     await waitFor(() =>
       expect(seen.pathname).toBe('/reader/a/005-leaders-post-truth-politics/p/intensive'),
+    )
+  })
+
+  it('补 URL 时连面板上的浮层一起带上（速读里的语言点）', async () => {
+    const p = params({
+      hasDoc: true,
+      currentRef: 'b:005 Leaders',
+      routePanel: 'speed',
+      routeOverlay: 'lang',
+    })
+    const { seen } = setup('/', p)
+    await waitFor(() =>
+      expect(seen.pathname).toBe('/reader/a/005-leaders-post-truth-politics/p/speed/lang'),
     )
   })
 

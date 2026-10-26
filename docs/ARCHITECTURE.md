@@ -386,10 +386,11 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 阅读页的路径（`route.ts` 构造，**都带 `/reader` 前缀**）：
 
 ```
-/reader                         文章列表（没打开文章）
-/reader/a/<slug>                读某一篇
-/reader/a/<slug>/p/<panel>      读某一篇 + 开面板 / 整页会话
-/reader/p/<panel>               没有文章时也能开的（计划/日志/统计/生词本/背单词…）
+/reader                            文章列表（没打开文章）
+/reader/a/<slug>                   读某一篇
+/reader/a/<slug>/p/<panel>         读某一篇 + 开面板 / 整页会话
+/reader/a/<slug>/p/<panel>/<浮层>  读某一篇 + 面板 + 盖在它上面的浮层（`/p/speed/lang`）
+/reader/p/<panel>                  没有文章时也能开的（计划/日志/统计/生词本/背单词…）
 ```
 
 `<panel>` 有两类，都在同一张 `PanelName` 表里：
@@ -397,6 +398,12 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 - **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse`；
 - **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
   `listen`（听力）/ `write`（仿写）/ `back`（回译）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
+
+**浮层（`OVERLAY_FLOWS`）只能叠在布尔面板上**，目前只有 `lang`：语言点编辑器是居中弹层
+（`.lang-editor-overlay`），从速读里点「语言点」时它盖在速读上面、底下的速读不能停 ——
+地址写 `/p/speed/lang`，关掉弹层 replace 回 `/p/speed`。只用一个 `panel` 会把速读从地址里挤掉，
+`useRoutedPanels` 随即关掉速读，表现就是「一开语言点就掉回阅读主界面」（2026-10-26 用户反馈）。
+整页会话（背单词 / 考试…）自己就占满正文，**不往上叠**，`panelPath` 会忽略这种浮层。
 
 懒加载面板在 `ReaderOverlaysHost` 里**每个面板各包一层** `PanelBoundary + Suspense`
 （`panels/PanelBoundary.tsx`）：某个 chunk 加载失败或渲染抛错时，只换掉这一块并给「重试 / 关闭」，
@@ -486,6 +493,9 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
    `base: '/'` 四处对齐；`/assets/missing.js` 必须还是 404。
 8. **收样式**：阅读页 CSS 用 `?inline` 在 `ReaderRoot` 注入 / 卸载；静态 `import './reader.css'`
    会把全局规则带到 `/`，不要改回去。
+9. **浮层**（居中弹层，如语言点编辑器）：它不是整页会话，但同样要有 URL。加进
+   `route.ts` 的 `OVERLAY_FLOWS`，地址写成 `/p/<布尔面板>/<浮层>`：打开时**保留底下那一层**，
+   关闭用 replace 回到它。别当成普通 flow —— 那会把底下的速读/计划从地址里挤掉、随即被关掉。
 
 ### 首屏：慢在哪，怎么量
 

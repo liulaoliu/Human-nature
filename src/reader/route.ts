@@ -4,10 +4,11 @@ import { useNavigate } from 'react-router-dom'
 /**
  * 阅读页的路由模型（**全站单入口**：BrowserRouter 在 `src/main.tsx`，这里只管 `/reader` 这一段）。
  *
- *   /reader                    阅读器（没有打开文章时显示文章列表）
- *   /reader/a/<slug>           读某一篇
- *   /reader/a/<slug>/p/<panel> 读某一篇 + 打开某个面板
- *   /reader/p/<panel>          没有文章时也能开的面板
+ *   /reader                          阅读器（没有打开文章时显示文章列表）
+ *   /reader/a/<slug>                 读某一篇
+ *   /reader/a/<slug>/p/<panel>       读某一篇 + 打开某个面板
+ *   /reader/a/<slug>/p/<panel>/<浮层> 读某一篇 + 面板 + 盖在它上面的浮层（如速读里的语言点）
+ *   /reader/p/<panel>                没有文章时也能开的面板
  *
  * **`slug` 不是内部标识**：`b:005 Leaders` 那种东西不会出现在地址栏里。
  * slug 由标题算（`005-leaders-post-truth-politics`），映射表在 `core/articleIndex`。
@@ -53,6 +54,14 @@ export interface ReaderRoute {
   slug: string
   /** 打开的面板 / 整页会话，空串 = 没有 */
   panel: PanelName | ''
+  /**
+   * 盖在 `panel` 之上的浮层会话（`/p/speed/lang` 里的 `lang`），空串 = 没有。
+   *
+   * 为什么要有这一格：语言点编辑器是居中弹层（`.lang-editor-overlay`），速读里点「语言点」
+   * 时它盖在速读上面、底下的速读会话不能停。只用一个 `panel` 会把速读从 URL 里挤掉，
+   * 结果一开语言点就掉回阅读主界面（2026-10-26 用户反馈）。
+   */
+  overlay: FlowName | ''
 }
 
 const BOOLEAN_PANELS: BooleanPanelName[] = [
@@ -84,6 +93,19 @@ export function isFlowName(name: PanelName | ''): name is FlowName {
   return !!name && (FLOW_NAMES as string[]).includes(name)
 }
 
+/**
+ * 能**叠在别的面板之上**的会话：目前只有语言点编辑。
+ *
+ * 判据是「它是不是居中的弹层」而不是「它是不是整页」：整页会话（背单词 / 考试 / 听力…）
+ * 打开时会独占正文，底下的面板该关掉；语言点是 `.lang-editor-overlay` 弹层，
+ * 底下的速读/计划要留着，关掉弹层就回到原来那一页。
+ */
+export const OVERLAY_FLOWS: FlowName[] = ['lang']
+
+export function isOverlayFlow(name: PanelName | ''): name is FlowName {
+  return !!name && (OVERLAY_FLOWS as string[]).includes(name)
+}
+
 /** 去掉 `/reader` 前缀（`/reader` 本身与 `/reader/` 都归成 `/`）。 */
 function stripReaderBase(pathname: string): string {
   if (pathname === READER_BASE || pathname === READER_BASE + '/') return '/'
@@ -104,22 +126,39 @@ export function parseReaderRoute(pathname: string): ReaderRoute {
     })
   // /p/<panel>：没有文章时也能开的面板
   if (parts[0] === 'p') {
-    const only = parts[1] && (PANELS as string[]).includes(parts[1]) ? (parts[1] as PanelName) : ''
-    return { slug: '', panel: only }
+    return { slug: '', ...parsePanels(parts.slice(1)) }
   }
-  if (parts[0] !== 'a') return { slug: '', panel: '' }
+  if (parts[0] !== 'a') return { slug: '', panel: '', overlay: '' }
   const slug = parts[1] ?? ''
-  const panel = parts[2] === 'p' && parts[3] && (PANELS as string[]).includes(parts[3]) ? (parts[3] as PanelName) : ''
-  return { slug, panel }
+  const panels = parts[2] === 'p' ? parsePanels(parts.slice(3)) : { panel: '' as const, overlay: '' as const }
+  return { slug, ...panels }
+}
+
+/** `p/` 后面的段：`<panel>` 或 `<布尔面板>/<浮层>`。认不出的一律当没有，别把页面搞崩。 */
+function parsePanels(parts: string[]): Pick<ReaderRoute, 'panel' | 'overlay'> {
+  const base = parts[0] && (PANELS as string[]).includes(parts[0]) ? (parts[0] as PanelName) : ''
+  if (!base) return { panel: '', overlay: '' }
+  // 整页会话自己就占满正文，不往它上面再叠一层（地址里也不认这种写法）
+  if (isFlowName(base)) return { panel: base, overlay: '' }
+  const overlay = parts[1] && isOverlayFlow(parts[1] as PanelName) ? (parts[1] as FlowName) : ''
+  return { panel: base, overlay }
 }
 
 export function articlePath(slug: string): string {
   return slug ? `${READER_BASE}/a/${slug}` : READER_BASE
 }
 
-export function panelPath(slug: string, panel: PanelName): string {
+/**
+ * 面板路径。传了 `overlay` 就是「布尔面板 + 盖在它上面的浮层」：
+ *   `panelPath('slug', 'speed', 'lang')` → `/reader/a/slug/p/speed/lang`
+ *
+ * 浮层只叠在布尔面板上：整页会话再叠会变成两个全屏界面抢同一个地址，
+ * 所以 `panel` 本身是会话、或 `overlay` 不是浮层时，`overlay` 直接忽略。
+ */
+export function panelPath(slug: string, panel: PanelName, overlay: PanelName | '' = ''): string {
   // 没打开文章时面板也能开（计划 / 日志 / 统计 / 生词本 / 背单词）→ /reader/p/<panel>
-  return slug ? `${READER_BASE}/a/${slug}/p/${panel}` : `${READER_BASE}/p/${panel}`
+  const base = slug ? `${READER_BASE}/a/${slug}/p/${panel}` : `${READER_BASE}/p/${panel}`
+  return overlay && isOverlayFlow(overlay) && !isFlowName(panel) ? `${base}/${overlay}` : base
 }
 
 /** 面板名 → `useReaderPanels` 里那一对布尔值 / setter。 */

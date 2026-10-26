@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { articlePath, isFlowName, panelFlags, panelPath, parseReaderRoute } from './route'
+import {
+  articlePath,
+  isFlowName,
+  isOverlayFlow,
+  panelFlags,
+  panelPath,
+  parseReaderRoute,
+} from './route'
 
 /**
  * 路由字符串 ↔ 状态 的往返。
@@ -16,13 +23,14 @@ describe('route：文章路径', () => {
     expect(parseReaderRoute('/reader/a/005-leaders-post-truth-politics')).toEqual({
       slug: '005-leaders-post-truth-politics',
       panel: '',
+      overlay: '',
     })
   })
 
   it('不带前缀的老路径也能解析（单测 / 旧调用兼容）', () => {
-    expect(parseReaderRoute('/a/005-leaders')).toEqual({ slug: '005-leaders', panel: '' })
-    expect(parseReaderRoute('/reader')).toEqual({ slug: '', panel: '' })
-    expect(parseReaderRoute('/reader/')).toEqual({ slug: '', panel: '' })
+    expect(parseReaderRoute('/a/005-leaders')).toEqual({ slug: '005-leaders', panel: '', overlay: '' })
+    expect(parseReaderRoute('/reader')).toEqual({ slug: '', panel: '', overlay: '' })
+    expect(parseReaderRoute('/reader/')).toEqual({ slug: '', panel: '', overlay: '' })
   })
 
   it('手敲的 URL 里若有转义字符也能解回来，坏转义不崩', () => {
@@ -36,23 +44,63 @@ describe('route：文章路径', () => {
     expect(parseReaderRoute('/reader/a/005-leaders/p/intensive')).toEqual({
       slug: '005-leaders',
       panel: 'intensive',
+      overlay: '',
     })
-    expect(parseReaderRoute('/p/plan')).toEqual({ slug: '', panel: 'plan' })
+    expect(parseReaderRoute('/p/plan')).toEqual({ slug: '', panel: 'plan', overlay: '' })
   })
 
   it('整页会话也算面板（背单词 / 考试 / 速读 / 听写 / 听力 / 仿写 / 回译 / 语言点 / 新建）', () => {
     for (const name of ['study', 'quiz', 'quick', 'dict', 'listen', 'write', 'back', 'lang', 'compose'] as const) {
       expect(panelPath('005-leaders', name)).toBe(`/reader/a/005-leaders/p/${name}`)
-      expect(parseReaderRoute(`/reader/p/${name}`)).toEqual({ slug: '', panel: name })
+      expect(parseReaderRoute(`/reader/p/${name}`)).toEqual({ slug: '', panel: name, overlay: '' })
       expect(isFlowName(name)).toBe(true)
     }
     expect(isFlowName('plan')).toBe(false)
   })
 
   it('不认识的面板名当没有，不会把页面搞崩', () => {
-    expect(parseReaderRoute('/reader/a/005-leaders/p/nope')).toEqual({ slug: '005-leaders', panel: '' })
-    expect(parseReaderRoute('/wat')).toEqual({ slug: '', panel: '' })
-    expect(parseReaderRoute('/')).toEqual({ slug: '', panel: '' })
+    expect(parseReaderRoute('/reader/a/005-leaders/p/nope')).toEqual({
+      slug: '005-leaders',
+      panel: '',
+      overlay: '',
+    })
+    expect(parseReaderRoute('/wat')).toEqual({ slug: '', panel: '', overlay: '' })
+    expect(parseReaderRoute('/')).toEqual({ slug: '', panel: '', overlay: '' })
+  })
+})
+
+describe('route：浮层叠在面板上（速读里的语言点）', () => {
+  it('布尔面板 + 浮层 → /p/<面板>/<浮层>，两段都解析得回来', () => {
+    expect(panelPath('005-leaders', 'speed', 'lang')).toBe('/reader/a/005-leaders/p/speed/lang')
+    expect(parseReaderRoute('/reader/a/005-leaders/p/speed/lang')).toEqual({
+      slug: '005-leaders',
+      panel: 'speed',
+      overlay: 'lang',
+    })
+    expect(parseReaderRoute('/p/speed/lang')).toEqual({ slug: '', panel: 'speed', overlay: 'lang' })
+  })
+
+  it('只有语言点是浮层；整页会话不往上叠', () => {
+    expect(isOverlayFlow('lang')).toBe(true)
+    expect(isOverlayFlow('study')).toBe(false)
+    expect(isOverlayFlow('speed')).toBe(false)
+    expect(isOverlayFlow('')).toBe(false)
+    // 会话已经是整页，再叠浮层会变成两个全屏界面抢一个地址 → 忽略
+    expect(panelPath('005-leaders', 'study', 'lang')).toBe('/reader/a/005-leaders/p/study')
+    expect(parseReaderRoute('/reader/a/005-leaders/p/study/lang')).toEqual({
+      slug: '005-leaders',
+      panel: 'study',
+      overlay: '',
+    })
+  })
+
+  it('第二段不是浮层就当没有，不会把速读一起关掉', () => {
+    expect(parseReaderRoute('/reader/a/005-leaders/p/speed/plan')).toEqual({
+      slug: '005-leaders',
+      panel: 'speed',
+      overlay: '',
+    })
+    expect(panelPath('005-leaders', 'speed', 'plan')).toBe('/reader/a/005-leaders/p/speed')
   })
 })
 

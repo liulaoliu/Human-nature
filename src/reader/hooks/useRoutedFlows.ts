@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import {
   articlePath,
   isFlowName,
+  isOverlayFlow,
   panelPath,
   type FlowName,
   type PanelName,
@@ -32,6 +33,23 @@ function activeFlow(flows: FlowControls): FlowName | '' {
 }
 
 /**
+ * 打开一个会话时该写哪个地址。
+ *
+ * 浮层会话（语言点）如果正盖在一个布尔面板上（速读 / 计划…），地址里要把底下那层留着
+ * （`/p/speed/lang`），否则 `useRoutedPanels` 看到 `panel` 变成会话就会把速读关掉 ——
+ * 用户反馈的「速读里点语言点，直接跳回阅读主界面」就是这个。
+ */
+function openPath(slug: string, panel: PanelName | '', flow: FlowName): string {
+  if (isOverlayFlow(flow) && panel && !isFlowName(panel)) return panelPath(slug, panel, flow)
+  return panelPath(slug, flow)
+}
+
+/** 关掉会话后回到哪：底下还压着布尔面板就回它，否则回文章 / 列表。 */
+function underFlowPath(slug: string, panel: PanelName | ''): string {
+  return panel && !isFlowName(panel) ? panelPath(slug, panel) : articlePath(slug)
+}
+
+/**
  * 整页会话/工具页 ↔ URL 的双向同步。
  *
  * 为什么需要它：背单词、考试、速读、听写、听力、仿写、全部生词、语言点编辑、
@@ -45,6 +63,8 @@ function activeFlow(flows: FlowControls): FlowName | '' {
  *   3. **深链接**：直接粘 `/reader/p/study` 也必须真的开；开不了（没词可背 / 没文章）
  *      就退回文章页，别让地址栏停在一个空界面上；
  *   4. 页面内点「退出」→ `replace` 掉当前层（返回键别再回到已经关掉的会话）。
+ *   5. **浮层**（`OVERLAY_FLOWS`，目前只有语言点）叠在布尔面板上时，地址是
+ *      `/p/<面板>/<浮层>`：打开保留底下那层，关闭 replace 回它；返回键只关浮层。
  *
  * effect 不写依赖数组：它同时看路由与状态两条线，靠 ref 记录上一帧。
  * 这是「一次渲染里把两个方向都判完」的写法，拆成两个 effect 会互相打架。
@@ -63,7 +83,7 @@ export function useRoutedFlows(
   slugRef.current = slug
 
   /** null = 还没跑过第一帧（首屏）；首帧不走「URL 没写就关掉」的逻辑。 */
-  const prevRouteRef = useRef<PanelName | '' | null>(null)
+  const prevRouteRef = useRef<string | null>(null)
   const prevActiveRef = useRef<FlowName | ''>('')
   const pendingRef = useRef<{ panel: FlowName; tried: boolean } | null>(null)
   /** 打开调用没有产生状态变化时，靠它再渲染一次来判「深链接失败」。 */
@@ -74,12 +94,14 @@ export function useRoutedFlows(
     const latest = flowsRef.current
     const active = activeFlow(latest)
     const routePanel = route.panel
-    const routeFlow: FlowName | '' = isFlowName(routePanel) ? routePanel : ''
+    // 地址里可能还写着「布尔面板 + 浮层」（`/p/speed/lang`）：浮层才是此刻打开的会话。
+    const routeFlow: FlowName | '' = route.overlay || (isFlowName(routePanel) ? routePanel : '')
+    const routeKey = route.overlay ? `${routePanel}/${route.overlay}` : routePanel
     const first = prevRouteRef.current === null
-    const routeChanged = first || prevRouteRef.current !== routePanel
+    const routeChanged = first || prevRouteRef.current !== routeKey
     const activeChanged = prevActiveRef.current !== active
 
-    prevRouteRef.current = routePanel
+    prevRouteRef.current = routeKey
 
     if (first) {
       prevActiveRef.current = active
@@ -94,7 +116,7 @@ export function useRoutedFlows(
         }
       } else if (active) {
         // 刷新时从本机恢复出来的会话（考试队列之类）：把它写进 URL，别让它没有地址
-        navigate(panelPath(slugRef.current, active))
+        navigate(openPath(slugRef.current, routePanel, active))
       }
       return
     }
@@ -119,17 +141,18 @@ export function useRoutedFlows(
       if (active && routeFlow !== active) {
         // 用户点了按钮 → 新增一层历史（返回键才能回到点之前那一页）
         pendingRef.current = null
-        navigate(panelPath(slugRef.current, active))
+        navigate(openPath(slugRef.current, routePanel, active))
       } else if (!active && routeFlow) {
-        // 用户在页面里点了「退出」→ 换掉这一层，别留一个已关掉的面板在历史里
+        // 用户在页面里点了「退出」→ 换掉这一层，别留一个已关掉的面板在历史里。
+        // 浮层下面还压着面板（速读里的语言点）就回到那一层，不是直接回文章。
         pendingRef.current = null
-        navigate(articlePath(slugRef.current), { replace: true })
+        navigate(underFlowPath(slugRef.current, routePanel), { replace: true })
       }
     }
 
     prevActiveRef.current = active
 
-    // 深链接打开了但没有状态（没词可背 / 没文章 / 没有可编辑的句子）→ 退回文章页
+    // 深链接打开了但没有状态（没词可背 / 没文章 / 没有可编辑的句子）→ 退回底下那一层 / 文章页
     const pending = pendingRef.current
     if (pending) {
       if (active === pending.panel) {
@@ -139,7 +162,7 @@ export function useRoutedFlows(
         bump()
       } else {
         pendingRef.current = null
-        navigate(articlePath(slugRef.current), { replace: true })
+        navigate(underFlowPath(slugRef.current, routePanel), { replace: true })
       }
     }
   })

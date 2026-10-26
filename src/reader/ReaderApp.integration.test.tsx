@@ -61,7 +61,7 @@ vi.mock('../adapters/tatoeba', () => ({
   tatoebaExamples: () => [],
 }))
 
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import ReaderApp from './ReaderApp'
 
 const withLang = (id: string, text: string, phrases: string[]): Sentence => ({
@@ -173,4 +173,40 @@ describe('ReaderApp 集成', () => {
     expect(vocabState.saved).toHaveLength(2)
     expect(vocabState.saved[1].items.filter((it) => it.word === 'take its toll')).toHaveLength(1)
   })
+
+  it('速读里打开语言点：地址叠成 /p/speed/lang，关掉回速读（不掉回阅读主界面）', async () => {
+    let path = ''
+    function Probe() {
+      path = useLocation().pathname
+      return null
+    }
+    render(
+      <MemoryRouter initialEntries={['/reader']}>
+        <Probe />
+        <ReaderApp />
+      </MemoryRouter>,
+    )
+    await waitFor(() => expect(vocabState.saved).toHaveLength(1))
+
+    // 打开速读：地址多一层 /p/speed
+    fireEvent.click(await screen.findByRole('button', { name: '⚡ 速读' }))
+    await waitFor(() => expect(path).toMatch(/\/p\/speed$/), { timeout: 5000 })
+
+    // 点「语言点」：语言点盖在速读上，底下的速读不能被关掉
+    fireEvent.click(
+      await screen.findByTitle(
+        '编辑这一句的语言点（结构 / 语法 / 习语 / 词组 / 用法）：已有的会带出来，没有就是新增',
+      ),
+    )
+    await waitFor(() => expect(path).toMatch(/\/p\/speed\/lang$/), { timeout: 5000 })
+    // 语言点编辑器真的盖在速读上（侧栏也有一个「语言点（N）」页签，所以限定在弹层里找）
+    await waitFor(() => expect(document.querySelector('.lang-editor')).toBeTruthy(), { timeout: 5000 })
+    expect(document.querySelector('.lang-editor')?.textContent).toContain('语言点（1）')
+    expect(screen.getByText('第 1 / 1 句')).toBeTruthy()
+
+    // 取消：replace 回 /p/speed，速读还在原来那一句
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    await waitFor(() => expect(path).toMatch(/\/p\/speed$/), { timeout: 5000 })
+    expect(screen.getByText('第 1 / 1 句')).toBeTruthy()
+  }, 15000)
 })

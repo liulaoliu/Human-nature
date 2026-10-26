@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { articlePath, panelPath, type PanelName } from '../route'
+import { articlePath, panelPath, type FlowName, type PanelName } from '../route'
 
 export interface UseArticleRouteParams {
   /** URL 里的文章 slug（空串 = 没打开文章） */
   routeSlug: string
   /** URL 里打开的面板 / 整页会话（空串 = 没有）；补 URL 时要一起带上 */
   routePanel: PanelName | ''
+  /** URL 里盖在面板上的浮层（`/p/speed/lang` 的 `lang`，空串 = 没有）；补 URL 时同样要带上 */
+  routeOverlay?: FlowName | ''
   /** 当前已经打开的那篇的内部标识（`b:xxx` / `s:yyy`） */
   currentRef: string
   /** 标识 → slug（把当前文章写进 URL 用） */
@@ -41,6 +43,7 @@ export interface UseArticleRouteParams {
 export function useArticleRoute({
   routeSlug,
   routePanel,
+  routeOverlay = '',
   currentRef,
   slugOf,
   refOf,
@@ -80,8 +83,8 @@ export function useArticleRoute({
     if (backToList) return // 用户刚按了返回：让 ③ 清文章，别把 URL 顶回去
     const slug = slugOf(currentRef)
     if (!slug) return // 索引里还没有它（目录仍在加载），等下一轮
-    navigate(routePanel ? panelPath(slug, routePanel) : articlePath(slug))
-  }, [hasDoc, currentRef, slugOf, routeSlug, routePanel, navigate, backToList])
+    navigate(routePanel ? panelPath(slug, routePanel, routeOverlay) : articlePath(slug))
+  }, [hasDoc, currentRef, slugOf, routeSlug, routePanel, routeOverlay, navigate, backToList])
 
   // ② URL 指向另一篇 → 加载
   useEffect(() => {

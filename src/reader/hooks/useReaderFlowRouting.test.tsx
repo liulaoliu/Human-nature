@@ -76,7 +76,7 @@ function setup(ready = true) {
     openLangFor,
   } as unknown as ReturnType<typeof useArticleWorkspace>
 
-  const route: ReaderRoute = { slug: 'my-article', panel: '' }
+  const route: ReaderRoute = { slug: 'my-article', panel: '', overlay: '' }
   renderHook(() =>
     useReaderFlowRouting(route, 'my-article', { services, workspace, sentence: null, ready }),
   )
@@ -107,7 +107,7 @@ function setup(ready = true) {
 describe('useReaderFlowRouting：字段映射', () => {
   it('把 route / slug / ready 和九个整页面板都交给 useRoutedFlows', () => {
     const { flows } = setup(false)
-    expect(captured.route).toEqual({ slug: 'my-article', panel: '' })
+    expect(captured.route).toEqual({ slug: 'my-article', panel: '', overlay: '' })
     expect(captured.slug).toBe('my-article')
     expect(captured.ready).toBe(false)
     expect(Object.keys(flows).sort()).toEqual(

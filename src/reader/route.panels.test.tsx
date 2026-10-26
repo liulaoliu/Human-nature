@@ -71,6 +71,11 @@ describe('useRoutedPanels：真实导航语义', () => {
     expect(result.current.navigationType).toBe(before)
   })
 
+  it('语言点盖在速读上时（/p/speed/lang），底下的速读不被关掉', async () => {
+    const { result } = setup('/reader/a/my-article/p/speed/lang')
+    await waitFor(() => expect(result.current.panels.speedReadOpen).toBe(true))
+  })
+
   it('非面板状态重渲染不会重建 setter（否则下游 memo 全部失效）', () => {
     const wrapper = ({ children }: { children: ReactNode }) => (
       <MemoryRouter initialEntries={['/reader/a/my-article']}>{children}</MemoryRouter>

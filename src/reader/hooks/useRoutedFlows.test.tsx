@@ -116,6 +116,57 @@ describe('useRoutedFlows：URL → 状态（返回键）', () => {
   })
 })
 
+describe('useRoutedFlows：浮层会话（速读里的语言点）', () => {
+  it('速读里打开语言点 → push 一层 /p/speed/lang，底下的速读留在地址里', async () => {
+    const flows = idle()
+    const h = setup('/reader/a/my-article/p/speed', flows)
+
+    flows.lang.active = true
+    h.update(flows)
+
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/speed/lang'))
+  })
+
+  it('页面内关掉语言点 → replace 回速读，不掉回阅读主界面', async () => {
+    const flows = idle()
+    flows.lang.active = true
+    const h = setup('/reader/a/my-article/p/speed/lang', flows)
+
+    flows.lang.active = false
+    h.update(flows)
+
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/speed'))
+  })
+
+  it('浏览器返回到速读那一层 → 只关语言点，不额外导航', async () => {
+    const flows = idle()
+    flows.lang.active = true
+    const h = setup('/reader/a/my-article/p/speed/lang', flows)
+
+    h.go('/reader/a/my-article/p/speed')
+    await waitFor(() => expect(flows.lang.close).toHaveBeenCalledTimes(1))
+    expect(h.path()).toBe('/reader/a/my-article/p/speed')
+  })
+
+  it('深链接打不开语言点 → 退回速读（不是退回文章）', async () => {
+    const flows = idle() // open 是空 spy，状态不会变
+    const h = setup('/reader/a/my-article/p/speed/lang', flows)
+
+    await waitFor(() => expect(flows.lang.open).toHaveBeenCalled())
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/speed'))
+  })
+
+  it('整页会话不往面板上叠：速读里开背单词仍然是整页 /p/study', async () => {
+    const flows = idle()
+    const h = setup('/reader/a/my-article/p/speed', flows)
+
+    flows.study.active = true
+    h.update(flows)
+
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/study'))
+  })
+})
+
 describe('useRoutedFlows：深链接', () => {
   it('会话已经开着时保持 URL（不重复 open、不回落）', async () => {
     const flows = idle()
