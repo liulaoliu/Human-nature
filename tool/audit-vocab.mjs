@@ -356,7 +356,7 @@ async function main() {
   const dict = loadEcdict()
 
   // 走和线上一样的读写路径：loadVocab → 改 → saveVocab（派生表同事务重建）
-  const { openStore } = await import('../server/sqliteStore.js')
+  const { openStore } = await import('../server/sqliteStore.ts')
   const store = openStore(DB)
   if (!store) {
     console.error('打不开 store（需要 Node 22.5+ 的 node:sqlite）')
