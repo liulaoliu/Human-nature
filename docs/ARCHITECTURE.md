@@ -15,7 +15,7 @@ src/reader/      React 视图层
   panels/        展示组件（尽量薄：收 props、渲染）
   ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
   ReaderArticle.tsx 正文区（标题 + 编辑态 + ReaderBody）
-  SessionHost.tsx   会话面板路由（背词/考试/快刷/听写/听力/仿写 → 对应 panel）
+  SessionHost.tsx   会话面板路由（背词/考试/快刷/听写/听力/仿写/回译 → 对应 panel）
   panels/ReaderSidebar.tsx 右侧栏（页签 + 五个面板的接线）
   ReaderSidebarHost.tsx 右侧栏宿主（hook 整包 + 派生值 → 五组面板 props）
   ReaderToolbarHost.tsx 顶栏宿主（文章管理 / 朗读 / 预生成 / 统计 / 显示设置 → ReaderToolbar）
@@ -61,6 +61,7 @@ types ← core ← adapters ← reader
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |
+| 回译（中译英）提示词 / 批改解析 / 原句对照 | `src/core/backTranslate.ts` | 原句只是参考，不是唯一答案；专名拼写差异 `deduct:false`。存档自包含，别在视图里另写一套解析 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
 | 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |
@@ -114,6 +115,7 @@ types ← core ← adapters ← reader
 - 打印范围/内容/分组：`core/printPlan.ts`（同时是文案来源 `PRINT_*_LABEL`）。
 - 日期：`core/activity.ts`。
 - 语言点的键与签名：`core/langPoints.ts`。
+- 回译的提示词 / 批改解析 / 原句接近度：`core/backTranslate.ts`（原句是参考，不是唯一答案）。
 - 易混项来源：`core/vocabConfusables.ts`（`ai` / `dict`；旧数据没有来源就不标，不按内容猜）。
 - 词条核心字段来源/锁定：`core/vocabFields.ts`（音标 / 词性 / 中文释义 / 英英释义；
   `ai` / `dict` / `manual`；手动改过的字段才锁，旧数据仍按 `edited` / `mastered` 整条锁）。
@@ -392,7 +394,7 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 
 - **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse`；
 - **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
-  `listen`（听力）/ `write`（仿写）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
+  `listen`（听力）/ `write`（仿写）/ `back`（回译）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
 
 懒加载面板在 `ReaderOverlaysHost` 里**每个面板各包一层** `PanelBoundary + Suspense`
 （`panels/PanelBoundary.tsx`）：某个 chunk 加载失败或渲染抛错时，只换掉这一块并给「重试 / 关闭」，

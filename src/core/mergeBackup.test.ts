@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   mergeActivity,
   mergeAnswerEvents,
+  mergeBackTranslations,
   mergeKindStats,
   mergeLibraries,
   mergeMistakes,
@@ -15,6 +16,7 @@ import {
 } from './mergeBackup'
 import type { VocabItem } from '../types/document'
 import type { DayActivity } from './activity'
+import type { BackTranslationRecord } from './backTranslate'
 
 function libItem(over: Partial<VocabItem> = {}): VocabItem {
   return {
@@ -212,6 +214,35 @@ describe('mergeAnswerEvents', () => {
   it('保留最近 cap 条', () => {
     const out = mergeAnswerEvents([e('2026-01-01T00:00:00.000Z', 'q1')], [e('2026-01-02T00:00:00.000Z', 'q2')], 1)
     expect(out.map((x) => x.questionId)).toEqual(['q2'])
+  })
+})
+
+describe('mergeBackTranslations', () => {
+  const rec = (id: string, at: string): BackTranslationRecord => ({
+    id,
+    at,
+    articleId: 'a1',
+    sentenceId: 's1',
+    sourceZh: '他去了学校。',
+    answer: 'He went to school.',
+    reference: 'He went to school.',
+    feedback: { scores: [], total: 0, max: 0, issues: [], alternatives: [] },
+    closeness: { exact: true, ratio: 1 },
+  })
+
+  it('按 id 去重、时间倒序；重复导入不翻倍', () => {
+    const current = [rec('r1', '2026-10-01T00:00:00.000Z')]
+    const incoming = [rec('r1', '2026-10-01T00:00:00.000Z'), rec('r2', '2026-10-02T00:00:00.000Z')]
+    const out = mergeBackTranslations(current, incoming)
+    expect(out.map((r) => r.id)).toEqual(['r2', 'r1'])
+  })
+
+  it('不按条数截断：长期存档全部保留', () => {
+    const current = [rec('r1', '2026-10-01T00:00:00.000Z')]
+    const incoming = Array.from({ length: 300 }, (_, i) =>
+      rec(`r${i + 2}`, `2026-11-${String((i % 28) + 1).padStart(2, '0')}T00:00:00.000Z`),
+    )
+    expect(mergeBackTranslations(current, incoming)).toHaveLength(301)
   })
 })
 

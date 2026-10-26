@@ -40,8 +40,8 @@ describe('route：文章路径', () => {
     expect(parseReaderRoute('/p/plan')).toEqual({ slug: '', panel: 'plan' })
   })
 
-  it('整页会话也算面板（背单词 / 考试 / 速读 / 听写 / 听力 / 仿写 / 语言点 / 新建）', () => {
-    for (const name of ['study', 'quiz', 'quick', 'dict', 'listen', 'write', 'lang', 'compose'] as const) {
+  it('整页会话也算面板（背单词 / 考试 / 速读 / 听写 / 听力 / 仿写 / 回译 / 语言点 / 新建）', () => {
+    for (const name of ['study', 'quiz', 'quick', 'dict', 'listen', 'write', 'back', 'lang', 'compose'] as const) {
       expect(panelPath('005-leaders', name)).toBe(`/reader/a/005-leaders/p/${name}`)
       expect(parseReaderRoute(`/reader/p/${name}`)).toEqual({ slug: '', panel: name })
       expect(isFlowName(name)).toBe(true)

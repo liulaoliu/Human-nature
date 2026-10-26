@@ -129,7 +129,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(7)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(8)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -414,6 +414,29 @@ describe('sqliteStore：学习记录', () => {
       },
     ],
     retells: [{ at: '2026-01-04T00:00:00.000Z', articleId: 'a1', text: '复述', words: 12 }],
+    backTranslations: [
+      {
+        id: 'bt1',
+        at: '2026-01-06T00:00:00.000Z',
+        articleId: 'a1',
+        articleTitle: 'A',
+        sentenceId: 's1',
+        sourceZh: '我每天跑步。',
+        contextZh: '早上空气很好。',
+        answer: 'I run every day.',
+        reference: 'I run every day.',
+        feedback: {
+          scores: [{ dimension: '意思还原', score: 36, max: 40 }],
+          total: 86,
+          max: 100,
+          issues: [],
+          alternatives: ['I go running every day.'],
+          summary: '不错。',
+        },
+        closeness: { exact: true, ratio: 1 },
+        gradedBy: 'local',
+      },
+    ],
     activity: [
       { day: '2026-01-01', counts: { read: 2, vocab: 5 } },
       { day: '2026-01-02', counts: { listen: 3 } },
@@ -464,9 +487,18 @@ describe('sqliteStore：学习记录', () => {
     expect(got.kindStats).toEqual({ a1: { quiz: { total: 10, correct: 8 } } })
     expect(got.answerEvents).toHaveLength(2)
     expect(got.answerEvents[1]).toMatchObject({ day: '2026-01-05', kind: 'cloze', correct: false })
+    expect(got.backTranslations).toHaveLength(1)
+    expect(got.backTranslations[0]).toMatchObject({
+      id: 'bt1',
+      sourceZh: '我每天跑步。',
+      answer: 'I run every day.',
+      gradedBy: 'local',
+    })
+    expect(got.backTranslations[0].feedback).toMatchObject({ total: 86, max: 100 })
 
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM practice_records').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM answer_events').get().n).toBe(2)
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM back_translation_records').get().n).toBe(1)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM study_word_days').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM reading_progress').get().n).toBe(1)
 
@@ -504,6 +536,16 @@ describe('sqliteStore：学习记录', () => {
     // 整份保存时旧客户端没带 events（undefined / []）也不能清掉审计日志
     store.saveLearning({ ...learning, answerEvents: [] })
     expect(store.loadLearning().answerEvents).toHaveLength(2)
+  })
+
+  it('回译存档增量同步幂等：重复同步不翻倍，整份空数组也不清历史', async () => {
+    const store = openStore(tempDb())
+    store.saveLearningPartial({ backTranslations: learning.backTranslations })
+    store.saveLearningPartial({ backTranslations: learning.backTranslations })
+    expect(store.loadLearning().backTranslations).toHaveLength(1)
+
+    store.saveLearning({ ...learning, backTranslations: [] })
+    expect(store.loadLearning().backTranslations).toHaveLength(1)
   })
 
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', async () => {
@@ -704,7 +746,7 @@ describe('sqliteStore：v1 → v7 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(7)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(8)
     // 迁移前整库备份，出事能回到 v1。
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))

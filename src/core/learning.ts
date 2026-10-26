@@ -13,6 +13,8 @@
 import { normalizeActivity, type DayActivity } from './activity'
 import type { AnswerEvent } from './answerEvents'
 import { ANSWER_EVENT_CAP, normalizeAnswerEvents } from './answerEvents'
+import type { BackTranslationRecord } from './backTranslate'
+import { normalizeBackTranslationRecords } from './backTranslate'
 import type { ReadDone } from './goals'
 import type { MistakeEntry } from './mistakes'
 import type { PracticeRecord } from './practice'
@@ -46,6 +48,8 @@ export interface LearningData {
   mistakes: MistakeEntry[]
   readDone: ReadDone[]
   writingHistory: WritingRecord[]
+  /** 回译训练：中文题干、用户英文、原句、AI 批改完整存档（长期保留） */
+  backTranslations: BackTranslationRecord[]
   retells: RetellRecord[]
   activity: DayActivity[]
   studyDays: StudyDay[]
@@ -74,6 +78,7 @@ export const LEARNING_KEYS = {
   mistakes: 'reader:mistakes',
   readDone: 'reader:readDone',
   writingHistory: 'reader:writingHistory',
+  backTranslations: 'reader:backTranslations',
   retells: 'reader:retells',
   activity: 'reader:activity',
   studyDays: 'reader:studyStats',
@@ -93,6 +98,7 @@ export function emptyLearning(): LearningData {
     mistakes: [],
     readDone: [],
     writingHistory: [],
+    backTranslations: [],
     retells: [],
     activity: [],
     studyDays: [],
@@ -139,6 +145,7 @@ export function normalizeLearning(raw: unknown): LearningData {
   out.writingHistory = asArray<WritingRecord>(raw.writingHistory).filter(
     (r) => isObject(r) && typeof r.at === 'string' && typeof r.text === 'string',
   )
+  out.backTranslations = normalizeBackTranslationRecords(raw.backTranslations)
   out.retells = asArray<RetellRecord>(raw.retells).filter(
     (r) =>
       isObject(r) &&
@@ -192,6 +199,7 @@ export function hasLearningData(data: LearningData): boolean {
     data.mistakes.length > 0 ||
     data.readDone.length > 0 ||
     data.writingHistory.length > 0 ||
+    data.backTranslations.length > 0 ||
     data.retells.length > 0 ||
     data.activity.length > 0 ||
     data.studyDays.length > 0 ||

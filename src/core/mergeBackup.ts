@@ -17,6 +17,7 @@ import { applyTombstones, mergeTombstones } from './vocab/tombstones'
 import type { PickSession, StudyDay } from './vocabStats'
 import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
 import type { WritingRecord } from './writing'
+import type { BackTranslationRecord } from './backTranslate'
 import type { PracticeRecord } from './practice'
 import type { MistakeEntry } from './mistakes'
 import type { KindStats, RetellRecord, StudiedDay } from './learning'
@@ -99,6 +100,19 @@ export function mergeWritingHistory(
   }
   out.sort((a, b) => b.at.localeCompare(a.at))
   return out.slice(0, Math.max(0, cap))
+}
+
+/**
+ * 合并回译存档：按 id 去重后拼接，按时间倒序。
+ * 这是长期资产，不设「只留最近 N 条」的上限；同一份备份重复导入也不会重复。
+ */
+export function mergeBackTranslations(
+  current: BackTranslationRecord[],
+  incoming: BackTranslationRecord[],
+): BackTranslationRecord[] {
+  const byId = new Map<string, BackTranslationRecord>()
+  for (const r of [...current, ...incoming]) byId.set(r.id, r)
+  return [...byId.values()].sort((a, b) => b.at.localeCompare(a.at))
 }
 
 const PRACTICE_CAP = 500

@@ -175,6 +175,8 @@ export default function ReaderApp() {
     kindStats,
     recordAnswer,
     retells,
+    backTranslations,
+    saveBackTranslation,
     sessions,
     setSessions,
     skimmedArticles,
@@ -253,6 +255,7 @@ export default function ReaderApp() {
   const services = useSessionServices({
     library,
     articleIdentity,
+    articleTitle,
     docLemmas,
     doc,
     selectedId,
@@ -279,6 +282,8 @@ export default function ReaderApp() {
     warmTimings,
     mergeBatch,
     batchItemsFromWords,
+    backTranslations,
+    saveBackTranslation,
   })
   const { queue: dictQueue, index: dictIndex } = services.dictApi
 
@@ -311,7 +316,7 @@ export default function ReaderApp() {
     (e) => {
       // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
       if (services.studyQueue || services.quizQueue || services.quickQueue || dictQueue) return
-      if (panels.speedReadOpen || services.listenOpen || langOpen) return
+      if (panels.speedReadOpen || services.listenOpen || services.backOpen || langOpen) return
       if (e.ctrlKey || e.metaKey || e.altKey) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
@@ -616,9 +621,11 @@ export default function ReaderApp() {
     !!services.quickQueue ||
     !!dictQueue ||
     services.listenOpen ||
+    services.backOpen ||
     panels.speedReadOpen
-  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/全部生词）隐藏精读工具栏 */
-  const readingView = !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll
+  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/回译/全部生词）隐藏精读工具栏 */
+  const readingView =
+    !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll
 
   // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
   useReaderFlowRouting(route, currentSlug, { services, workspace, sentence, ready: libraryLoaded })

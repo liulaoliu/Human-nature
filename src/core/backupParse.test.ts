@@ -62,6 +62,19 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
           correct: true,
         },
       ],
+      backTranslations: [
+        {
+          id: 'bt1',
+          at,
+          articleId: 'a1',
+          sentenceId: 's1',
+          sourceZh: '你好。',
+          answer: 'Hello.',
+          reference: 'Hello.',
+          feedback: { scores: [{ dimension: '意思还原', score: 40, max: 40 }], issues: [], alternatives: [] },
+          closeness: { exact: true, ratio: 1 },
+        },
+      ],
       readGoal: 12,
       goalMemo: '每天一篇',
     })
@@ -76,6 +89,7 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.skimmed).toEqual(['a1'])
     expect(parsed.kindStats?.a1.quiz).toEqual({ total: 5, correct: 4 })
     expect(parsed.answerEvents).toHaveLength(1)
+    expect(parsed.backTranslations).toHaveLength(1)
     expect(parsed.readGoal).toBe(12)
     expect(parsed.goalMemo).toBe('每天一篇')
     expect(parsed.dropped).toBe(0)

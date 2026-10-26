@@ -217,6 +217,7 @@
 | 备份损坏自愈 | 停服务 → 把当天 `data/backups/xueba-daily-*.db` 覆盖成任意文本 → 重启 | 日志出现「当天备份校验失败，重新生成」；备份文件恢复为可 `quick_check` 的正常库 |
 | 速读 · 语言点输入框 | 非护眼深色主题 → 速读 → `＋ 语言点` → 在「结构 / 语法」里输入 | 输入文字与光标清晰可读（深底浅字）；切护眼主题后为白底深字 |
 | 学习记录「重建并核对」 | 侧栏「统计」→ 底部「重建并核对」 | 服务在跑：提示「核对一致」或列出差异项（只读，不改本地）；服务没起：提示重建失败，页面数据不变 |
+| 回译训练 / 存档 | 顶栏「🔁 回译」→ 选一句写英文 → AI 批改（没 key 时复制提示词、粘回 JSON）→ 退出重进/刷新 → 历史 | 提交前不显示原句；批改后有分数、原文对照、专名不计分提示；记录（中文/答案/原句/批改）重启后仍在，文章删了也能在「全部」历史回看 |
 | 旧地址兼容 | 浏览器打开 `/reader.html#/a/<slug>`（收藏夹里的老链接） | 地址栏 `replaceState` 成 `/reader/a/<slug>`，文章正常打开；普通路径不被改写 |
 | dev SPA 回落 | dev server 跑着时：`curl -s -o /dev/null -w '%{http_code} %{content_type}' http://localhost:5173/reader`；再试 `/reader/a/x`、`/assets/nope.js`、`/reader/missing.js` | `/reader` 与 `/reader/a/x` 返回 `200 text/html`；两个带扩展名的缺失资源返回 `404`（不能回落成 HTML） |
 
@@ -562,3 +563,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     与墓碑时间比较：比墓碑旧的删除，比墓碑新的保留（删完又加回来）。
     测试要覆盖「本机删 / 服务端有」「服务端删 / 本机有更新版本」「篇条目墓碑」
     「删全库连带清篇收录」；只测 `removeItem` 不测合并等于没测。
+46. **新增学习记录 section 时，旧迁移会先读新表**（2026-10-26）。v7 的 `saveDerivedBaseline()`
+    调 `loadLearning()`，而 `loadLearning()` 现在会读 v8 的 `back_translation_records`；
+    如果只在 `version < 8` 里建表，从 v1–v6 升级时会在迁移中途报
+    `no such table: back_translation_records`，`openStore()` 直接返回 null（整站回退 IndexedDB）。
+    规矩：**任何“迁移中会读整份学习记录”的逻辑，必须先把新表建出来**（v7 块里先 `db.exec(SCHEMA_V8)`），
+    并用「从 v1 空库升级到最新版」的测试兜住，而不是只测新库 `user_version`。

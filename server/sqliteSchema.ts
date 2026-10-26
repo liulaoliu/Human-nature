@@ -3,10 +3,10 @@
  *
  * 事实来源仍然是 JSON payload；这里只放表结构，避免 store 的读写逻辑被 DDL 淹没。
  * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
- * v4 旧词条文章 id，v5 学习记录快照，v6 文章上一版。
+ * v4 旧词条文章 id，v5 学习记录快照，v6 文章上一版，v7 答题事件，v8 回译存档。
  */
 
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 8
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -378,4 +378,30 @@ CREATE TABLE IF NOT EXISTS learning_derived_baseline (
   payload TEXT NOT NULL,
   at TEXT NOT NULL
 );
+`
+
+/**
+ * v8：回译训练存档。
+ *
+ * 记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看；
+ * 按 id 去重，长期保留，不做「只留最近 N 条」的截断。
+ */
+export const SCHEMA_V8 = `
+CREATE TABLE IF NOT EXISTS back_translation_records (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  article_id TEXT NOT NULL DEFAULT '',
+  article_title TEXT,
+  sentence_id TEXT NOT NULL DEFAULT '',
+  source_zh TEXT NOT NULL DEFAULT '',
+  context_zh TEXT,
+  answer TEXT NOT NULL DEFAULT '',
+  reference TEXT NOT NULL DEFAULT '',
+  feedback_json TEXT NOT NULL DEFAULT '{}',
+  exact INTEGER NOT NULL DEFAULT 0,
+  ratio REAL NOT NULL DEFAULT 0,
+  graded_by TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_back_translation_records_at ON back_translation_records(at DESC);
+CREATE INDEX IF NOT EXISTS idx_back_translation_records_article ON back_translation_records(article_id, at DESC);
 `

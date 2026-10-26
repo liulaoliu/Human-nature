@@ -52,6 +52,7 @@ export interface ReaderToolbarProps {
   readingAll: boolean
   onToggleReadAll: () => void
   onSpeedRead: () => void
+  onOpenBack: () => void
   onOpenIntensive: () => void
   onOpenJournal: () => void
   onOpenGoals: () => void
@@ -138,6 +139,7 @@ export default function ReaderToolbar({
   readingAll,
   onToggleReadAll,
   onSpeedRead,
+  onOpenBack,
   onOpenIntensive,
   onOpenJournal,
   onOpenGoals,
@@ -368,6 +370,15 @@ export default function ReaderToolbar({
         {hasDoc && !editing && (
           <button className="tb-speed" onClick={onSpeedRead} title="逐句速读：一次一句，先自己读→空格看释义/语言点；超时算不太理解，来个填空拷打">
             ⚡ 速读
+          </button>
+        )}
+        {!editing && (
+          <button
+            className="tb-back"
+            onClick={onOpenBack}
+            title="回译训练：看中文写英文，AI 批改后和原句对照；没有打开文章时也能回看历史存档"
+          >
+            🔁 回译
           </button>
         )}
         {hasDoc && !editing && (

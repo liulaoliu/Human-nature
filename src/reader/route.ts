@@ -42,6 +42,7 @@ export type FlowName =
   | 'dict'
   | 'listen'
   | 'write'
+  | 'back'
   | 'lang'
   | 'compose'
 
@@ -72,6 +73,7 @@ export const FLOW_NAMES: FlowName[] = [
   'dict',
   'listen',
   'write',
+  'back',
   'lang',
   'compose',
 ]

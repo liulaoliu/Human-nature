@@ -6,8 +6,8 @@ import { isRecord, asRecord } from './types/guards.ts'
 /**
  * 学习记录的写入侧：每个 section 一套「先清后插」的写库语句。
  *
- * 从 `sqliteLearning.js` 抽出来的原因：写入（12 张表的 prepare/run）和读取
- * （12 段 row → 对象映射）是两套对称但独立的长代码，加起来把文件撑到 600 多行。
+ * 从 `sqliteLearning.js` 抽出来的原因：写入（13 张表的 prepare/run）和读取
+ * （13 段 row → 对象映射）是两套对称但独立的长代码，加起来把文件撑到 600 多行。
  * 这里只负责把一份 JSON 摊进表里；快照、校验、读回仍在 `sqliteLearning.js`。
  */
 
@@ -90,6 +90,34 @@ function writeWriting(db: DatabaseSync, data: LearningData): void {
       text(r.text) ?? '',
       jsonText(r.feedback) ?? '{}',
       jsonText(r.task),
+    )
+  }
+}
+
+function writeBackTranslations(db: DatabaseSync, data: LearningData): void {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO back_translation_records
+      (id, at, article_id, article_title, sentence_id, source_zh, context_zh, answer, reference, feedback_json, exact, ratio, graded_by)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list<unknown>(data.backTranslations)) {
+    if (!isRecord(r) || typeof r.id !== 'string' || !r.id) continue
+    if (typeof r.at !== 'string' || typeof r.sentenceId !== 'string') continue
+    const closeness = isRecord(r.closeness) ? r.closeness : {}
+    insert.run(
+      r.id,
+      r.at,
+      text(r.articleId) ?? '',
+      text(r.articleTitle),
+      r.sentenceId,
+      text(r.sourceZh) ?? '',
+      text(r.contextZh),
+      text(r.answer) ?? '',
+      text(r.reference) ?? '',
+      jsonText(r.feedback) ?? '{}',
+      closeness.exact === true ? 1 : 0,
+      num(closeness.ratio),
+      text(r.gradedBy),
     )
   }
 }
@@ -197,6 +225,7 @@ const WRITERS: Record<string, (db: DatabaseSync, data: LearningData) => void> = 
   mistakes: writeMistakes,
   readDone: writeReadDone,
   writingHistory: writeWriting,
+  backTranslations: writeBackTranslations,
   retells: writeRetells,
   activity: writeActivity,
   studyDays: writeStudyDays,
@@ -213,6 +242,8 @@ export function clearLearningSections(db: DatabaseSync, sections: string[]): voi
   for (const section of sections) {
     // 答题事件是 append-only 审计：同步只追加/去重，不因整份保存或旧快照恢复而删除。
     if (section === 'answerEvents') continue
+    // 回译存档同理：长期资产，绝不清表；写入用 INSERT OR REPLACE 按 id 去重。
+    if (section === 'backTranslations') continue
     for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
   }
   for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()

@@ -10,6 +10,7 @@ vi.mock('./panels/QuickPanel', () => ({ default: () => <div>quick-panel</div> })
 vi.mock('./panels/DictPanel', () => ({ default: () => <div>dict-panel</div> }))
 vi.mock('./panels/ListeningPanel', () => ({ default: () => <div>listening-panel</div> }))
 vi.mock('./panels/WritingPanel', () => ({ default: () => <div>writing-panel</div> }))
+vi.mock('./panels/BackTranslatePanel', () => ({ default: () => <div>back-panel</div> }))
 
 function props(over: Partial<SessionHostProps> = {}): SessionHostProps {
   return {
@@ -38,6 +39,7 @@ function props(over: Partial<SessionHostProps> = {}): SessionHostProps {
       onClose: vi.fn(),
     },
     writing: { open: false } as never,
+    back: { open: false } as never,
     ...over,
   }
 }

@@ -25,7 +25,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 已保存文章（正文 / 句子 / 翻译） | `data/xueba.db` 的 `articles` | IndexedDB `shadowing-reader` | 文本，第二优先 |
 | 跟读录音 | IndexedDB `shadowing` | 无 | 音频 blob，体积大；下一阶段改成 `data/takes/` 文件 + SQLite 元数据 |
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
-| **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
+| **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 回译 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
 | 目标 / 备忘等偏好 | localStorage | 无 | `readGoal` / `goalMemo` 是设置，不是学习记录 |
 | TTS 音频缓存 | `data/tts/` | 浏览器语音 | 可再生，不算用户资产 |
 
@@ -37,7 +37,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 |---|---|---|---|
 | 偏好 / 会话状态 | `reader:theme`、字号、语速、题型、面板开关、`reader:last`、`reader:quizSession`、`reader:writingDraft` | localStorage（大对象可放 IndexedDB） | 高频改、只影响本机 UI，丢了重设即可 |
 | 可重建的缓存 / 派生统计 | `reader:kindStats`、`reader:newToday`、`reader:langCollected`、`reader:batch` | localStorage / IndexedDB | 能从词库、文章、事件重算；不要当事实来源 |
-| **用户学习记录** | 背词事件、练习成绩、读完 / 精读进度、错题、写作历史、复述记录 | **SQLite 规范化表** | 换浏览器/清缓存不能丢；要按天、按篇、按词查询 |
+| **用户学习记录** | 背词事件、练习成绩、读完 / 精读进度、错题、写作历史、回译存档、复述记录 | **SQLite 规范化表** | 换浏览器/清缓存不能丢；要按天、按篇、按词查询 |
 | 结构化资产 | 词库、文章、翻译、语言点、词在文章里的位置 | **SQLite**（已落地） | 同上，且需要 JOIN / 统计 |
 | 大二进制 | 跟读录音、音频缓存 | 文件 / IndexedDB + SQLite 元数据 | 不适合塞进词库 JSON 或 localStorage |
 
@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 7`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版，v7 加答题事件与聚合基线）。
+schema 版本：`PRAGMA user_version = 8`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v5 加学习记录快照，v6 加文章上一版，v7 加答题事件与聚合基线，v8 加回译存档）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -180,7 +180,7 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 手动/AI 语言点 | `lang_points` + `lang_point_terms`（词组/习语/用法） |
 | 历史版本 | `vocab_snapshots`（整库 JSON） |
 
-### 4.3 学习记录（v3）
+### 4.3 学习记录（v3–v8）
 
 学习记录不是偏好，不能只靠 localStorage。表是规范化的事件/记录表，不做“万能 KV”：
 
@@ -191,6 +191,9 @@ mistake_records(id, kind, at, count, label, item_id, question_json,
 reading_progress(article_id PK, day, title, at)                           -- 读完记录
 writing_records(at, article_id, article_title, model, text,
                 feedback_json, task_json)                                 -- 仿写历史
+back_translation_records(id PK, at, article_id, article_title, sentence_id,
+                source_zh, context_zh, answer, reference, feedback_json,
+                exact, ratio, graded_by)                                  -- 回译存档（v8）
 retell_records(at, article_id, text, words)                               -- 复述
 activity_days(day, cat, count)                                            -- 每日活动量
 study_days(day, seconds, cards)                                           -- 背单词时长/卡数
@@ -216,6 +219,8 @@ learning_snapshots(id, at, reason, record_count, payload JSON)             -- �
 - `reader:activity` / `reader:kindStats` 仍照常写聚合值（兼容现有 UI）；同时每题追加一条
   `answer_events`，字段含 `at / day / articleId / source / kind / cat / correct / questionId`。
   `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存/旧快照恢复也不会删除已有事件。
+  `back_translation_records` 同样是 append-only 的长期学习资产：按 `id` 去重、`INSERT OR REPLACE`，
+  整份保存/旧快照恢复不会清空历史；记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看。
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
   历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
   （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」只重建

@@ -44,6 +44,9 @@ export function useReaderFlowRouting(
     writingOpen,
     writingApi,
     openWriting,
+    backOpen,
+    backApi,
+    openBack,
   } = services
   const { composing, setComposing, langOpen, setLangOpen, openLangFor } = workspace
 
@@ -66,6 +69,7 @@ export function useReaderFlowRouting(
       close: () => setListenOpen(false),
     },
     write: { active: writingOpen, open: openWriting, close: () => writingApi.setOpen(false) },
+    back: { active: backOpen, open: openBack, close: backApi.close },
     lang: {
       active: langOpen,
       open: () => openLangFor(sentence),

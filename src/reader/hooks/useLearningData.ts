@@ -2,6 +2,8 @@ import { useCallback, useMemo } from 'react'
 import { addActivity, dayKeyLocal, type ActivityCat, type DayActivity } from '../../core/activity'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
 import { LEARNING_KEYS } from '../../core/learning'
+import type { BackTranslationRecord } from '../../core/backTranslate'
+import { addBackTranslationRecord, normalizeBackTranslationRecords } from '../../core/backTranslate'
 import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
 import { addAnswerEvent, createAnswerEvent, normalizeAnswerEvents } from '../../core/answerEvents'
 import type { ReadDone } from '../../core/goals'
@@ -44,6 +46,7 @@ export interface LearningCollections {
   skimmed: string[]
   kindStats: KindStats
   answerEvents: AnswerEvent[]
+  backTranslations: BackTranslationRecord[]
   retells: RetellRecord[]
   readDone: ReadDone[]
   readGoal: number
@@ -61,6 +64,7 @@ export interface LearningSetters {
   setSkimmed: (v: string[]) => void
   setKindStats: (v: KindStats) => void
   setAnswerEvents: (v: AnswerEvent[]) => void
+  setBackTranslations: (updater: BackTranslationRecord[] | ((prev: BackTranslationRecord[]) => BackTranslationRecord[])) => void
   setRetells: (v: RetellRecord[]) => void
   setReadDone: (v: ReadDone[]) => void
   setReadGoal: (v: number) => void
@@ -106,6 +110,19 @@ export function useLearningData(params: UseLearningDataParams) {
     },
   })
   const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [])
+  const [backTranslations, setBackTranslations] = useLocalStorageState<BackTranslationRecord[]>(
+    LEARNING_KEYS.backTranslations,
+    [],
+    {
+      parse: (raw) => {
+        try {
+          return normalizeBackTranslationRecords(JSON.parse(raw))
+        } catch {
+          return []
+        }
+      },
+    },
+  )
   const [sessions, setSessions] = useLocalStorageState<PickSession[]>(LEARNING_KEYS.sessions, [])
   const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>(LEARNING_KEYS.skimmed, [])
   const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, {
@@ -179,6 +196,7 @@ export function useLearningData(params: UseLearningDataParams) {
       skimmed: skimmedArticles,
       kindStats,
       answerEvents,
+      backTranslations,
       retells,
       readDone,
       readGoal,
@@ -194,6 +212,7 @@ export function useLearningData(params: UseLearningDataParams) {
       skimmedArticles,
       kindStats,
       answerEvents,
+      backTranslations,
       retells,
       readDone,
       readGoal,
@@ -212,6 +231,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setSkimmed: setSkimmedArticles,
       setKindStats,
       setAnswerEvents,
+      setBackTranslations,
       setRetells,
       setReadDone,
       setReadGoal,
@@ -227,6 +247,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setSkimmedArticles,
       setKindStats,
       setAnswerEvents,
+      setBackTranslations,
       setRetells,
       setReadDone,
       setReadGoal,
@@ -322,6 +343,11 @@ export function useLearningData(params: UseLearningDataParams) {
     setMistakes((prev) => removeMistake(prev, id))
   }, [])
 
+  /** 回译批改存档：只追加、不截断（长期学习资产）。 */
+  const saveBackTranslation = useCallback((rec: BackTranslationRecord) => {
+    setBackTranslations((prev) => addBackTranslationRecord(prev, rec))
+  }, [])
+
   return {
     // 扁平字段：界面沿用旧名字，减少一次性改动面
     studyDays,
@@ -341,6 +367,8 @@ export function useLearningData(params: UseLearningDataParams) {
     recordAnswer,
     retells,
     setRetells,
+    backTranslations,
+    setBackTranslations,
     sessions,
     setSessions,
     skimmedArticles,
@@ -373,5 +401,6 @@ export function useLearningData(params: UseLearningDataParams) {
     mergeKindStats,
     addMistake,
     dropMistake,
+    saveBackTranslation,
   }
 }

@@ -14,6 +14,7 @@ import type { LearningCollections, LearningSetters } from './useLearningData'
 import {
   mergeActivity,
   mergeAnswerEvents,
+  mergeBackTranslations,
   mergeKindStats,
   mergeLibraries,
   mergeMistakes,
@@ -62,7 +63,7 @@ export function useExport({
   setWritingHistory,
 }: UseExportParams) {
   // 展开成旧名字：函数体不动，参数从 30 个降到 11 个
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, readDone, readGoal, goalMemo } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, backTranslations, readDone, readGoal, goalMemo } =
     learning
   const {
     setSessions,
@@ -75,6 +76,7 @@ export function useExport({
     setSkimmed,
     setKindStats,
     setAnswerEvents,
+    setBackTranslations,
     setReadDone,
     setReadGoal,
     setGoalMemo,
@@ -122,6 +124,7 @@ export function useExport({
       studyStats: studyDays,
       activity,
       writingHistory,
+      backTranslations,
       practice,
       mistakes,
       retells,
@@ -159,6 +162,7 @@ export function useExport({
       if (parsed.studyDays) setStudyDays(parsed.studyDays)
       if (parsed.activity) setActivity(parsed.activity)
       if (parsed.writingHistory) setWritingHistory(parsed.writingHistory)
+      if (parsed.backTranslations) setBackTranslations(parsed.backTranslations)
       if (parsed.practice) setPractice(parsed.practice)
       if (parsed.mistakes) setMistakes(parsed.mistakes)
       if (parsed.retells) setRetells(parsed.retells)
@@ -213,6 +217,7 @@ export function useExport({
       if (parsed.studyDays) setStudyDays(mergeStudyDays(studyDays, parsed.studyDays))
       if (parsed.activity) setActivity(mergeActivity(activity, parsed.activity))
       if (parsed.writingHistory) setWritingHistory(mergeWritingHistory(writingHistory, parsed.writingHistory))
+      if (parsed.backTranslations) setBackTranslations(mergeBackTranslations(backTranslations, parsed.backTranslations))
       if (parsed.practice) setPractice(mergePractice(practice, parsed.practice))
       if (parsed.mistakes) setMistakes(mergeMistakes(mistakes, parsed.mistakes))
       if (parsed.retells) setRetells(mergeRetells(retells, parsed.retells))

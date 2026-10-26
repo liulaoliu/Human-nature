@@ -62,6 +62,7 @@ function setup(over: Record<string, unknown> = {}) {
   const params = {
     library: { items: [vocabItem({ id: 'v1', word: 'run', lemma: 'run' })] },
     articleIdentity: 'a1',
+    articleTitle: 'A',
     docLemmas: new Set<string>(),
     doc: { paragraphs: [], sentences: [sentenceFixture('s1', 'Hello.')] },
     selectedId: null,
@@ -89,6 +90,8 @@ function setup(over: Record<string, unknown> = {}) {
     warmTimings: vi.fn(),
     mergeBatch: vi.fn(),
     batchItemsFromWords: vi.fn(() => []),
+    backTranslations: [],
+    saveBackTranslation: vi.fn(),
     ...over,
   }
   const hook = renderHook(() => useSessionServices(params as never))

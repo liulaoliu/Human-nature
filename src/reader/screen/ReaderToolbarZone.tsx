@@ -47,7 +47,7 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
   const { docApi, edition, setEdition, currentValue, editing, draft, savedId, copyCleanupPrompt, confirmDelSave } =
     props.workspace
   const { speak, startReadAll, stopReadAll, readingAll } = props.speaking
-  const { vocabMode, toggleVocabMode, vocabSeconds, sessionPickedRef, openSpeedRead } = props.services
+  const { vocabMode, toggleVocabMode, vocabSeconds, sessionPickedRef, openSpeedRead, openBack } = props.services
   const { savedGroups, dayStats, totals } = props.derived
   const { readDays } = props.learning
   const { aiTasksApi } = props.ai
@@ -87,6 +87,7 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
         all: readingAll,
         onToggleAll: readingAll ? stopReadAll : startReadAll,
         onSpeedRead: openSpeedRead,
+        onOpenBack: openBack,
         onOpenIntensive: () => setIntensiveOpen(true),
         onOpenJournal: () => setJournalOpen(true),
         onOpenGoals: () => setGoalOpen(true),

@@ -5,6 +5,7 @@ import type { useQuickSession } from './hooks/useQuickSession'
 import type { useDictation } from './hooks/useDictation'
 import type { useListening } from './hooks/useListening'
 import type { useWriting } from './hooks/useWriting'
+import type { useBackTranslate } from './hooks/useBackTranslate'
 import StudyPanel from './panels/StudyPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
@@ -13,6 +14,7 @@ import QuickPanel from './panels/QuickPanel'
 import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import WritingPanel from './panels/WritingPanel'
+import BackTranslatePanel from './panels/BackTranslatePanel'
 
 type TtsState = 'idle' | 'loading' | 'playing'
 
@@ -45,6 +47,7 @@ export interface SessionHostProps {
     onClose: () => void
   }
   writing: ReturnType<typeof useWriting>
+  back: ReturnType<typeof useBackTranslate>
 }
 
 /**
@@ -66,6 +69,7 @@ export default function SessionHost({
   dict,
   listening,
   writing,
+  back,
 }: SessionHostProps) {
   const quickCurrent =
     quick.queue && quick.index < quick.queue.length
@@ -327,6 +331,8 @@ export default function SessionHost({
           onLoadRecord={writing.loadRecord}
         />
       )}
+
+      {back.open && <BackTranslatePanel api={back} />}
     </>
   )
 }

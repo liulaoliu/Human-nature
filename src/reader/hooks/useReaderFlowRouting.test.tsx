@@ -37,6 +37,8 @@ function setup(ready = true) {
   const setListenOpen = vi.fn()
   const openWriting = vi.fn()
   const writingSetOpen = vi.fn()
+  const openBack = vi.fn()
+  const backClose = vi.fn()
   const openLangFor = vi.fn()
   const setLangOpen = vi.fn()
   const setComposing = vi.fn()
@@ -61,6 +63,9 @@ function setup(ready = true) {
     writingOpen: false,
     writingApi: { setOpen: writingSetOpen },
     openWriting,
+    backOpen: false,
+    backApi: { close: backClose },
+    openBack,
   } as unknown as ReturnType<typeof useSessionServices>
 
   const workspace = {
@@ -89,6 +94,8 @@ function setup(ready = true) {
     setListenOpen,
     openWriting,
     writingSetOpen,
+    openBack,
+    backClose,
     openLangFor,
     setLangOpen,
     setComposing,
@@ -98,13 +105,13 @@ function setup(ready = true) {
 }
 
 describe('useReaderFlowRouting：字段映射', () => {
-  it('把 route / slug / ready 和八个整页面板都交给 useRoutedFlows', () => {
+  it('把 route / slug / ready 和九个整页面板都交给 useRoutedFlows', () => {
     const { flows } = setup(false)
     expect(captured.route).toEqual({ slug: 'my-article', panel: '' })
     expect(captured.slug).toBe('my-article')
     expect(captured.ready).toBe(false)
     expect(Object.keys(flows).sort()).toEqual(
-      ['compose', 'dict', 'listen', 'lang', 'quick', 'quiz', 'study', 'write'].sort(),
+      ['compose', 'dict', 'listen', 'lang', 'quick', 'quiz', 'study', 'write', 'back'].sort(),
     )
   })
 
@@ -137,6 +144,11 @@ describe('useReaderFlowRouting：字段映射', () => {
     s.flows.write.close()
     expect(s.openWriting).toHaveBeenCalledOnce()
     expect(s.writingSetOpen).toHaveBeenCalledWith(false)
+
+    s.flows.back.open()
+    s.flows.back.close()
+    expect(s.openBack).toHaveBeenCalledOnce()
+    expect(s.backClose).toHaveBeenCalledOnce()
 
     s.flows.lang.open()
     s.flows.lang.close()

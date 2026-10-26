@@ -66,6 +66,26 @@ describe('learning 记录', () => {
     expect(hasLearningData(data)).toBe(true)
   })
 
+  it('回译存档也按学习记录校验：坏条目丢掉，好记录保留', () => {
+    const good = {
+      id: 'bt1',
+      at: '2026-10-01T00:00:00.000Z',
+      articleId: 'a1',
+      sentenceId: 's1',
+      sourceZh: '他去了学校。',
+      answer: 'He went to school.',
+      reference: 'He went to school.',
+      feedback: { scores: [{ dimension: '意思还原', score: 36, max: 40 }], issues: [], alternatives: [] },
+      closeness: { exact: true, ratio: 1 },
+    }
+    const data = normalizeLearning({
+      backTranslations: [good, { ...good, id: 'bad', sourceZh: '' }],
+    })
+    expect(data.backTranslations).toHaveLength(1)
+    expect(data.backTranslations[0].id).toBe('bt1')
+    expect(hasLearningData({ ...emptyLearning(), backTranslations: data.backTranslations })).toBe(true)
+  })
+
   it('只有事件也算有学习数据', () => {
     const data = normalizeLearning({
       answerEvents: [

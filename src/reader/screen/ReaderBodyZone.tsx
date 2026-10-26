@@ -185,6 +185,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           },
         }}
         writing={writingApi}
+        back={props.services.backApi}
       />
 
       <ReaderOverlaysHost

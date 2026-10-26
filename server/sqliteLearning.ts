@@ -27,6 +27,7 @@ export interface LearningOut {
   mistakes: LearningMistake[]
   readDone: LearningReadDone[]
   writingHistory: LearningWriting[]
+  backTranslations: LearningBackTranslation[]
   retells: LearningRetell[]
   activity: LearningDayActivity[]
   studyDays: LearningStudyDay[]
@@ -82,7 +83,20 @@ export interface LearningRetell {
   words: number
 }
 
-export interface LearningDayActivity {
+export interface LearningBackTranslation {
+  id: string
+  at: string
+  articleId: string
+  articleTitle?: string
+  sentenceId: string
+  sourceZh: string
+  contextZh?: string
+  answer: string
+  reference: string
+  feedback: unknown
+  closeness: { exact: boolean; ratio: number }
+  gradedBy?: string
+}export interface LearningDayActivity {
   day: string
   counts: Record<string, number>
 }
@@ -121,6 +135,7 @@ export function emptyLearning(): LearningOut {
     mistakes: [],
     readDone: [],
     writingHistory: [],
+    backTranslations: [],
     retells: [],
     activity: [],
     studyDays: [],
@@ -156,6 +171,7 @@ function assertLearning(data: unknown): asserts data is Record<string, unknown> 
     'mistakes',
     'readDone',
     'writingHistory',
+    'backTranslations',
     'retells',
     'activity',
     'studyDays',
@@ -186,6 +202,7 @@ function countLearningRecords(value: LearningOut): number {
     else if (section === 'mistakes') n += value.mistakes.length
     else if (section === 'readDone') n += value.readDone.length
     else if (section === 'writingHistory') n += value.writingHistory.length
+    else if (section === 'backTranslations') n += value.backTranslations.length
     else if (section === 'retells') n += value.retells.length
     else if (section === 'activity') n += value.activity.length
     else if (section === 'studyDays') n += value.studyDays.length
@@ -296,6 +313,7 @@ export function restoreLearningSnapshot(db: DatabaseSync, id: number | string): 
   const value: LearningOut = {
     ...snap.value,
     answerEvents: snap.value.answerEvents ?? current.answerEvents,
+    backTranslations: snap.value.backTranslations ?? current.backTranslations,
   }
   writeLearning(db, value)
   return { ...snap, value: loadLearning(db) }
@@ -464,6 +482,29 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       if (r.article_title !== null) rec.articleTitle = String(r.article_title)
       const task = parseJson(r.task_json)
       if (task !== undefined) rec.task = task
+      return rec
+    })
+
+  out.backTranslations = db
+    .prepare(
+      'SELECT id, at, article_id, article_title, sentence_id, source_zh, context_zh, answer, reference, feedback_json, exact, ratio, graded_by FROM back_translation_records ORDER BY at DESC, id DESC',
+    )
+    .all()
+    .map((r): LearningBackTranslation => {
+      const rec: LearningBackTranslation = {
+        id: String(r.id),
+        at: String(r.at),
+        articleId: String(r.article_id ?? ''),
+        sentenceId: String(r.sentence_id ?? ''),
+        sourceZh: String(r.source_zh ?? ''),
+        answer: String(r.answer ?? ''),
+        reference: String(r.reference ?? ''),
+        feedback: parseJson(r.feedback_json) ?? {},
+        closeness: { exact: Number(r.exact) === 1, ratio: Number(r.ratio) || 0 },
+      }
+      if (r.article_title !== null) rec.articleTitle = String(r.article_title)
+      if (r.context_zh !== null) rec.contextZh = String(r.context_zh)
+      if (r.graded_by !== null) rec.gradedBy = String(r.graded_by)
       return rec
     })
 

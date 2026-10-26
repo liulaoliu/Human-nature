@@ -229,3 +229,80 @@
 .write-hist-row .ellipsis { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .write-hist-row b { font-variant-numeric: tabular-nums; }
 
+/* 回译训练 */
+.back-translate { max-width: 820px; }
+.bt-empty { margin-top: 18px; line-height: 1.8; }
+.bt-prompt {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin: 8px 0;
+  background: var(--panel);
+}
+.bt-context { color: var(--dim); font-size: 13px; line-height: 1.7; margin-bottom: 6px; }
+.bt-source {
+  font-size: 20px;
+  line-height: 1.8;
+  margin: 8px 0 12px;
+  padding-left: 10px;
+  border-left: 3px solid var(--accent, var(--line));
+}
+.bt-answer { width: 100%; text-align: left; font-size: 15px; }
+.bt-actions { margin-top: 8px; }
+.bt-hint { margin-top: 6px; font-size: 13px; }
+.bt-error { margin-top: 8px; color: var(--red); line-height: 1.7; }
+.bt-manual { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.bt-manual .study-input { width: 100%; text-align: left; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; }
+.bt-feedback {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-top: 10px;
+  background: var(--panel);
+  line-height: 1.8;
+}
+.bt-score { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; margin-bottom: 8px; }
+.bt-score b { font-size: 18px; font-variant-numeric: tabular-nums; }
+.bt-score span { color: var(--dim); font-size: 13px; }
+.bt-closeness { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 8px; }
+.bt-diff {
+  border: 1px dashed var(--line);
+  border-radius: 8px;
+  padding: 8px 10px;
+  margin: 6px 0 10px;
+  font-size: 14px;
+  line-height: 1.9;
+}
+.bt-diff-add { color: var(--green); text-decoration: underline; }
+.bt-diff-del { color: var(--red); text-decoration: line-through; }
+.bt-compare { display: grid; gap: 8px; margin: 8px 0; }
+.bt-compare > div { border-top: 1px solid var(--line); padding-top: 6px; }
+.bt-line { font-size: 15px; line-height: 1.7; }
+.bt-issues,
+.bt-notes { margin-top: 10px; }
+.bt-issues ul,
+.bt-notes ul { margin: 6px 0 0 18px; }
+.bt-issues .bad { color: var(--red); text-decoration: line-through; }
+.bt-issues .ok { color: var(--green); }
+.bt-notes { border-top: 1px dashed var(--line); padding-top: 8px; }
+.bt-notes .bad { color: var(--dim); text-decoration: line-through; }
+.bt-notes .ok { color: var(--dim); }
+.bt-polished { margin-top: 10px; }
+.bt-alts { margin-top: 6px; color: var(--dim); }
+.bt-history { margin-top: 14px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.bt-history-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.bt-history-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+}
+.bt-history-row .ellipsis { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.bt-history-row b { font-variant-numeric: tabular-nums; }
+.bt-viewing { margin-top: 12px; border-top: 1px solid var(--line); padding-top: 10px; }
+

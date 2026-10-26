@@ -12,6 +12,7 @@ export const LEARNING_SECTION_TABLES: Record<string, string[]> = {
   mistakes: ['mistake_records'],
   readDone: ['reading_progress'],
   writingHistory: ['writing_records'],
+  backTranslations: ['back_translation_records'],
   retells: ['retell_records'],
   activity: ['activity_days'],
   studyDays: ['study_days'],

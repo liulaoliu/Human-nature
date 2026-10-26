@@ -13,6 +13,8 @@ import { useListening } from './useListening'
 import { useQuickSession } from './useQuickSession'
 import { useDictation } from './useDictation'
 import { useWriting } from './useWriting'
+import { useBackTranslate } from './useBackTranslate'
+import type { BackTranslationRecord } from '../../core/backTranslate'
 import { useVocabMode } from './useVocabMode'
 import { useMistakeActions } from './useMistakeActions'
 import { useHotkeys } from '../useHotkeys'
@@ -23,6 +25,7 @@ type BatchItemLike = { word: string; sentence: string; sentenceId: string | null
 export interface UseSessionServicesParams {
   library: VocabLibrary
   articleIdentity: string
+  articleTitle: string
   docLemmas: Set<string>
   doc: ReaderDoc | null
   selectedId: string | null
@@ -51,6 +54,9 @@ export interface UseSessionServicesParams {
   warmTimings: (texts: string[]) => void
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
+  /** 回译存档（useLearningData）与追加动作 */
+  backTranslations: BackTranslationRecord[]
+  saveBackTranslation: (rec: BackTranslationRecord) => void
 }
 
 /**
@@ -62,6 +68,7 @@ export interface UseSessionServicesParams {
 export function useSessionServices({
   library,
   articleIdentity,
+  articleTitle,
   docLemmas,
   doc,
   selectedId,
@@ -90,6 +97,8 @@ export function useSessionServices({
   warmTimings,
   mergeBatch,
   batchItemsFromWords,
+  backTranslations,
+  saveBackTranslation,
 }: UseSessionServicesParams) {
   const quizApiRef = useRef<ReturnType<typeof useQuizSession> | null>(null)
   const quickApiRef = useRef<ReturnType<typeof useQuickSession> | null>(null)
@@ -258,15 +267,37 @@ export function useSessionServices({
     start: openWriting,
   } = writingApi
 
-  // 听力理解题 / 仿写：Esc 退出
+  const backApi = useBackTranslate({
+    doc,
+    selectedId,
+    articleIdentity,
+    articleTitle,
+    history: backTranslations,
+    saveRecord: saveBackTranslation,
+    recordActivity,
+    flash,
+    closeOthers: () => {
+      closeStudy()
+      setQuizSetupOpen(false)
+      setQuizQueue(null)
+      quickApiRef.current?.close()
+      dictApiRef.current?.close()
+      setListenOpen(false)
+      setWritingOpen(false)
+    },
+  })
+  const { open: backOpen, start: openBack } = backApi
+
+  // 听力理解题 / 仿写 / 回译：Esc 退出
   useHotkeys(
     (e) => {
       if (e.key === 'Escape') {
         setListenOpen(false)
         setWritingOpen(false)
+        backApi.close()
       }
     },
-    listenOpen || writingOpen,
+    listenOpen || writingOpen || backOpen,
     20,
   )
 
@@ -358,6 +389,9 @@ export function useSessionServices({
     writingHistory,
     setWritingHistory,
     openWriting,
+    backApi,
+    backOpen,
+    openBack,
     vocabMode,
     vocabSeconds,
     toggleVocabMode,
