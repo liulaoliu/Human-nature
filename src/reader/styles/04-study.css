@@ -90,8 +90,13 @@
   display: flex;
   flex-direction: column;
   align-items: center;
+  align-items: safe center;
   justify-content: center;
+  /* 可滚动卡片必须用 safe center：内容比卡片高（长英英释义 / 多个例句）时，
+     裸 center 会把溢出的上半截排到滚动起点之外，滚不回来（conglomerate 卡踩过）。 */
+  justify-content: safe center;
   text-align: center;
+  overflow-wrap: break-word;
   cursor: pointer;
   margin: 10px 0;
 }

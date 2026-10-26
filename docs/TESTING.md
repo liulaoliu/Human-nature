@@ -586,3 +586,10 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     **词形是单个英文单词时，类型必须按单词算**（`kindOf` 兜底 + `repairLanguageKinds`
     清掉旧 `kind` / `langPointId`）；`markWord` / `applyWordAnalysis` 命中同名单词时也要升级类型。
     测试要覆盖「带 `langPointId` 的脏数据也能修」和「查词结果应用后本篇可见」。
+
+48. **可滚的 flex 卡片别用裸 `center`**（2026-10-26）。`.study-card` 同时有
+    `display:flex` + `overflow:auto` + `justify-content:center`：内容（长英英释义 / 多条例句）
+    比卡片高时，溢出的**上半截会被排到滚动起点之外**，滚不回来——`conglomerate` /
+    `unacceptable` 的英文原文就是这么“溢出屏幕且看不见”的。规矩：可滚容器用
+    `justify-content: safe center` / `align-items: safe center`（前面留一行裸 `center` 做旧浏览器兜底），
+    或者改成「外层滚动 + 内层 `margin:auto`」；别让居中把溢出藏到负方向。
