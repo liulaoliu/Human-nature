@@ -13,6 +13,7 @@ import {
   type BrowseStatus,
 } from '../../core/vocabBrowse'
 import VocabList, { type VocabEditPatch } from '../VocabList'
+import DayHeatmap from './DayHeatmap'
 
 export interface VocabBrowsePanelProps {
   /** 入口决定首屏范围；页面内切换范围属于筛选，不写 URL。 */
@@ -184,6 +185,15 @@ export default function VocabBrowsePanel({
     })
   }
 
+  const toggleDay = (day: string) => {
+    setPickedDays((prev) => {
+      const next = new Set(prev)
+      if (next.has(day)) next.delete(day)
+      else next.add(day)
+      return next
+    })
+  }
+
   const resetFilters = () => {
     setKind('all')
     setQuery('')
@@ -287,20 +297,14 @@ export default function VocabBrowsePanel({
                     全选
                   </button>
                 </div>
+                <DayHeatmap dates={result.days} picked={pickedDays} onToggle={toggleDay} />
                 <div className="exlist">
                   {result.days.map(([d, n]) => (
                     <label className="check-inline" key={d}>
                       <input
                         type="checkbox"
                         checked={pickedDays.has(d)}
-                        onChange={() =>
-                          setPickedDays((prev) => {
-                            const next = new Set(prev)
-                            if (next.has(d)) next.delete(d)
-                            else next.add(d)
-                            return next
-                          })
-                        }
+                        onChange={() => toggleDay(d)}
                       />
                       <span>{d}</span>
                       <span className="muted">{n}</span>

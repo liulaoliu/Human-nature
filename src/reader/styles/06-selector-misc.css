@@ -188,7 +188,9 @@
   top: calc(100% + 4px);
   left: 0;
   z-index: 20;
-  min-width: 230px;
+  min-width: 300px;
+  max-height: 70vh;
+  overflow: auto;
   padding: 8px;
   background: var(--panel);
   border: 1px solid var(--line);

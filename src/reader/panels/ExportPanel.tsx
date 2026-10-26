@@ -1,6 +1,5 @@
 import { useMemo, useState } from 'react'
 import type { ArticleVocabEntry, VocabItem } from '../../types/document'
-import { buildHeatmap } from '../../core/activity'
 import {
   PRINT_CONTENT_LABEL,
   PRINT_GROUP_LABEL,
@@ -11,6 +10,7 @@ import {
   type PrintRow,
   type PrintScope,
 } from '../../core/printPlan'
+import DayHeatmap from './DayHeatmap'
 
 export type { PrintContent, PrintGroupBy }
 
@@ -128,11 +128,6 @@ export default function ExportPanel({
 
   /** 新增生词的热力图（近 13 周；只用于按日期选范围） */
   const dateCount = useMemo(() => new Map(dates), [dates])
-  const dateHeat = useMemo(() => {
-    const counts: Record<string, number> = {}
-    for (const [d, n] of dates) counts[d] = n
-    return buildHeatmap(counts, 13)
-  }, [dates])
   const dateKinds = contentKinds(content)
 
   const toggleIn = (set: Set<string>, v: string) => {
@@ -226,49 +221,11 @@ export default function ExportPanel({
               </div>
 
               {/* 热力图选日：点格子加/减；只允许点「有内容」的天 */}
-              <div className="exheat">
-                <div className="heat">
-                  <div className="heat-months">
-                    {dateHeat.monthLabels.map((m) => (
-                      <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
-                        {m.label}月
-                      </span>
-                    ))}
-                  </div>
-                  <div className="heat-grid">
-                    {dateHeat.cells.map((col, ci) =>
-                      col.map((cell, ri) => {
-                        const on = pickedDates.has(cell.key)
-                        const usable = !cell.future && (dateCount.get(cell.key) ?? 0) > 0
-                        return (
-                          <span
-                            key={`${ci}-${ri}`}
-                            className={
-                              'heat-cell' +
-                              (cell.future ? ' future' : ' lv' + cell.level) +
-                              (on ? ' on' : '') +
-                              (usable ? ' act' : '')
-                            }
-                            title={
-                              cell.future
-                                ? ''
-                                : usable
-                                  ? `${cell.key}：${cell.count} 条（点击${on ? '移出' : '加入'}）`
-                                  : `${cell.key}：没有内容`
-                            }
-                            onClick={usable ? () => setPickedDates((s) => toggleIn(s, cell.key)) : undefined}
-                          />
-                        )
-                      }),
-                    )}
-                  </div>
-                </div>
-                <div className="muted heat-legend">
-                  少 <span className="heat-cell lv0" /> <span className="heat-cell lv1" />{' '}
-                  <span className="heat-cell lv2" /> <span className="heat-cell lv3" /> <span className="heat-cell lv4" />{' '}
-                  多（点格子选日期）
-                </div>
-              </div>
+              <DayHeatmap
+                dates={dates}
+                picked={pickedDates}
+                onToggle={(d) => setPickedDates((s) => toggleIn(s, d))}
+              />
 
               {/* 选了哪些天 —— 热力图日期不明显，这里明确列出来（可单条移除） */}
               {pickedDates.size > 0 && (
