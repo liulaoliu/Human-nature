@@ -333,7 +333,10 @@ export function useExport({
         if (list) list.push(row)
         else byArticle.set(key, [row])
       }
-      for (const list of byArticle.values()) rowGroups.push({ key: list[0]?.articleTitle ?? '', rows: list })
+      for (const list of byArticle.values()) {
+        const name = list[0]?.articleTitle || list[0]?.articleId || '未分类'
+        rowGroups.push({ key: `${name}（${list.length}）`, rows: list })
+      }
     }
 
     const day = dayKeyLocal()

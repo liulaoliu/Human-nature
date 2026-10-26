@@ -230,6 +230,25 @@ describe('useExport：打印', () => {
     expect(open).not.toHaveBeenCalled()
   })
 
+  it('按行打印多篇：分组标题带每篇条数', () => {
+    const write = vi.fn()
+    vi.spyOn(window, 'open').mockReturnValue({
+      document: { write, close: vi.fn() },
+    } as unknown as Window)
+    const { result } = setup()
+    result.current.doPrintRows(
+      [
+        { item: vocabItem({ id: 'a1', word: 'alpha', lemma: 'alpha' }), articleId: 'A', articleTitle: 'A 篇', number: 1 },
+        { item: vocabItem({ id: 'b1', word: 'beta', lemma: 'beta' }), articleId: 'B', articleTitle: 'B 篇', number: 1 },
+        { item: vocabItem({ id: 'b2', word: 'gamma', lemma: 'gamma' }), articleId: 'B', articleTitle: 'B 篇', number: 2 },
+      ],
+      '词表',
+    )
+    const html = write.mock.calls[0][0] as string
+    expect(html).toContain('<h2>A 篇（1）</h2>')
+    expect(html).toContain('<h2>B 篇（2）</h2>')
+  })
+
   it('弹窗被拦截时提示，不写打印时间', () => {
     vi.spyOn(window, 'open').mockReturnValue(null)
     const { result, persist, flash } = setup()
