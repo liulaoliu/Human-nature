@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { ArticleVocabEntry, VocabItem } from '../../types/document'
 import type { ReviewGrade, VocabSortBy } from '../../core/vocab'
 import { sortItems } from '../../core/vocab'
@@ -99,7 +99,6 @@ export default function VocabBrowsePanel({
   /** 深链接「本篇」但文章还没加载（或没有文章）时先按全部渲染，别停在空界面。 */
   const scope: BrowseScope = filters.scope === 'article' && !articleId ? 'all' : filters.scope
   const kind = filters.kind
-  const query = filters.query
   const status = filters.status
   const includeMastered = filters.includeMastered
   const pickedDays = useMemo(() => new Set(filters.days), [filters.days])
@@ -108,6 +107,34 @@ export default function VocabBrowsePanel({
     () => (filters.picked === undefined ? new Set(articles.map((a) => a.id)) : new Set(filters.picked)),
     [filters.picked, articles],
   )
+
+  /**
+   * 搜索框先写本地 draft，列表立即过滤；**250ms 后才把 query 写进 URL**。
+   * 这样打字不会每敲一个字符就导航一次（ReaderApp 整棵树不跟着重渲染），
+   * 刷新 / 前进后退改了 query 时再把 draft 同步回来。
+   */
+  const [queryDraft, setQueryDraft] = useState(filters.query)
+  const filtersRef = useRef(filters)
+  filtersRef.current = filters
+  useEffect(() => {
+    setQueryDraft(filters.query)
+  }, [filters.query])
+  useEffect(() => {
+    if (queryDraft === filters.query) return
+    const timer = window.setTimeout(() => {
+      onFiltersChange({ ...filtersRef.current, query: queryDraft })
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [queryDraft, filters.query, onFiltersChange])
+  const query = queryDraft
+
+  /** 「待复习」跨过到期点时自己跳一下；一分钟一刷，别的状态不用定时器。 */
+  const [now, setNow] = useState(() => new Date())
+  useEffect(() => {
+    if (status !== 'due') return
+    const timer = window.setInterval(() => setNow(new Date()), 60_000)
+    return () => window.clearInterval(timer)
+  }, [status])
 
   /** 浏览页和「选篇 A4」共用同一份筛选输入，避免两套口径。 */
   const browseInput = useMemo(
@@ -123,8 +150,9 @@ export default function VocabBrowsePanel({
       days: pickedDays,
       status,
       includeMastered,
+      now,
     }),
-    [libraryItems, scope, articleId, articleEntries, articles, picked, kind, query, pickedDays, status, includeMastered],
+    [libraryItems, scope, articleId, articleEntries, articles, picked, kind, query, pickedDays, status, includeMastered, now],
   )
 
   const result = useMemo(() => browseVocab(browseInput), [browseInput])
@@ -158,14 +186,14 @@ export default function VocabBrowsePanel({
     if (!filters.days.length) return
     const avail = new Set(result.days.map(([d]) => d))
     const next = filters.days.filter((d) => avail.has(d))
-    if (next.length !== filters.days.length) onFiltersChange({ ...filters, days: next })
+    if (next.length !== filters.days.length) onFiltersChange({ ...filters, query: queryDraft, days: next })
   }, [filters, result.days, onFiltersChange])
 
   const title =
     scope === 'all' ? '全部生词' : scope === 'article' ? '本篇生词' : `所选 ${picked.size} 篇生词`
 
   const changeScope = (next: BrowseScope) => {
-    onFiltersChange({ ...filters, scope: next, includeMastered: next === 'all' })
+    onFiltersChange({ ...filters, query: queryDraft, scope: next, includeMastered: next === 'all' })
   }
 
   const togglePicked = (id: string) => {
@@ -174,6 +202,7 @@ export default function VocabBrowsePanel({
     else next.add(id)
     onFiltersChange({
       ...filters,
+      query: queryDraft,
       picked: articles.length > 0 && next.size === articles.length ? undefined : [...next],
     })
   }
@@ -182,14 +211,15 @@ export default function VocabBrowsePanel({
     const next = new Set(filters.days)
     if (next.has(day)) next.delete(day)
     else next.add(day)
-    onFiltersChange({ ...filters, days: [...next] })
+    onFiltersChange({ ...filters, query: queryDraft, days: [...next] })
   }
 
   const resetFilters = () => {
+    setQueryDraft('')
     onFiltersChange({
       ...filters,
-      kind: 'all',
       query: '',
+      kind: 'all',
       days: [],
       status: 'all',
       includeMastered: scope === 'all',
@@ -258,7 +288,7 @@ export default function VocabBrowsePanel({
 
           <label className="check-inline" title="生词 = 普通单词；语言点 = 词组 / 习语 / 用法">
             类型
-            <select value={kind} onChange={(e) => onFiltersChange({ ...filters, kind: e.target.value as BrowseKind })}>
+            <select value={kind} onChange={(e) => onFiltersChange({ ...filters, query: queryDraft, kind: e.target.value as BrowseKind })}>
               {(Object.keys(BROWSE_KIND_LABEL) as BrowseKind[]).map((k) => (
                 <option key={k} value={k}>
                   {BROWSE_KIND_LABEL[k]}
@@ -270,8 +300,8 @@ export default function VocabBrowsePanel({
           <input
             type="search"
             aria-label="搜索生词"
-            value={query}
-            onChange={(e) => onFiltersChange({ ...filters, query: e.target.value })}
+            value={queryDraft}
+            onChange={(e) => setQueryDraft(e.target.value)}
             placeholder="搜词 / 释义 / 笔记"
           />
 
@@ -281,12 +311,12 @@ export default function VocabBrowsePanel({
               <summary>{pickedDays.size ? `${pickedDays.size} 天` : '全部'}</summary>
               <div className="vb-day-list">
                 <div className="exrow">
-                  <button type="button" onClick={() => onFiltersChange({ ...filters, days: [] })}>
+                  <button type="button" onClick={() => onFiltersChange({ ...filters, query: queryDraft, days: [] })}>
                     全部日期
                   </button>
                   <button
                     type="button"
-                    onClick={() => onFiltersChange({ ...filters, days: result.days.map(([d]) => d) })}
+                    onClick={() => onFiltersChange({ ...filters, query: queryDraft, days: result.days.map(([d]) => d) })}
                   >
                     全选
                   </button>
@@ -311,7 +341,7 @@ export default function VocabBrowsePanel({
 
           <label className="check-inline" title="待复习 = 已到期；新词 = 没排期、没重学；错过 = 评过「忘记了」">
             状态
-            <select value={status} onChange={(e) => onFiltersChange({ ...filters, status: e.target.value as BrowseStatus })}>
+            <select value={status} onChange={(e) => onFiltersChange({ ...filters, query: queryDraft, status: e.target.value as BrowseStatus })}>
               {(Object.keys(BROWSE_STATUS_LABEL) as BrowseStatus[]).map((s) => (
                 <option key={s} value={s}>
                   {BROWSE_STATUS_LABEL[s]}
@@ -325,7 +355,7 @@ export default function VocabBrowsePanel({
               type="checkbox"
               checked={includeMastered}
               disabled={status === 'mastered'}
-              onChange={(e) => onFiltersChange({ ...filters, includeMastered: e.target.checked })}
+              onChange={(e) => onFiltersChange({ ...filters, query: queryDraft, includeMastered: e.target.checked })}
             />
             含已掌握
           </label>

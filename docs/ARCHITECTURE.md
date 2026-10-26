@@ -61,7 +61,7 @@ types ← core ← adapters ← reader
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 日期热力图选择器（导出 / 生词浏览共用） | `src/reader/panels/DayHeatmap.tsx` | 日历分档仍走 `core/activity.buildHeatmap`；点格子只回调日期 |
 | 生词浏览页筛选 ↔ URL query | `src/reader/browseQuery.ts` | 默认值不写；坏值回落；日期 / 选篇排序去重；`picked=all` / 空串语义分明 |
-| 生词浏览页的范围 / 类型 / 搜索 / 日期 / 状态筛选 | `src/core/vocabBrowse.ts` | 本篇 / 选篇归属走 `articleEntryViewsFrom`；日期 = 入库日 + `dayKeyLocal`（可多选）；状态复用 `isDue` / `isFresh`；选篇 A4 走 `browseA4Rows`（按篇出行 + 篇内编号）；面板只收选择 + 渲染 |
+| 生词浏览页的范围 / 类型 / 搜索 / 日期 / 状态筛选 | `src/core/vocabBrowse.ts` | 本篇 / 选篇归属走 `articleEntryViewsFrom`；日期 = 入库日 + `dayKeyLocal`（可多选）；状态复用 `isDue` / `isFresh`（待复习每分钟刷新）；搜索防抖 250ms 只影响 URL 同步；选篇 A4 走 `browseA4Rows`（按篇出行 + 篇内编号）；面板只收选择 + 渲染 |
 | 文章包（单篇 / 多篇导出） | `src/core/articlePackage.ts` | 只带选中篇的正文 / 词条 / 语言点 / 能归属到这篇的记录；全局统计（活动、学习时长、选词会话）不随单篇走。导入侧仍走「合并导入」，覆盖导入会被拒绝 |
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |

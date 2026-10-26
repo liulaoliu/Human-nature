@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { dayKeyLocal } from '../../core/activity'
 import { vocabItem } from '../../core/testFixtures'
 import { defaultReviewState } from '../../types/document'
@@ -61,12 +61,29 @@ const articles = [
 type PanelProps = Omit<VocabBrowsePanelProps, 'filters' | 'onFiltersChange'>
 
 /** 受控面板：筛选状态放测试 harness，等价于真实 URL query 的往返。 */
-function Harness({ initial, ...props }: PanelProps & { initial: BrowseFilterState }) {
+function Harness({
+  initial,
+  onChange,
+  ...props
+}: PanelProps & { initial: BrowseFilterState; onChange?: (f: BrowseFilterState) => void }) {
   const [filters, setFilters] = useState(initial)
-  return <VocabBrowsePanel {...props} filters={filters} onFiltersChange={setFilters} />
+  return (
+    <VocabBrowsePanel
+      {...props}
+      filters={filters}
+      onFiltersChange={(next) => {
+        onChange?.(next)
+        setFilters(next)
+      }}
+    />
+  )
 }
 
-function setup(over: Partial<PanelProps> = {}, initial: BrowseFilterState = defaultBrowseFilters('all')) {
+function setup(
+  over: Partial<PanelProps> = {},
+  initial: BrowseFilterState = defaultBrowseFilters('all'),
+  onChange?: (f: BrowseFilterState) => void,
+) {
   const onClose = vi.fn()
   const onExportAnki = vi.fn()
   const onPrint = vi.fn()
@@ -75,6 +92,7 @@ function setup(over: Partial<PanelProps> = {}, initial: BrowseFilterState = defa
   render(
     <Harness
       initial={initial}
+      onChange={onChange}
       onClose={onClose}
       libraryItems={items}
       articleEntries={entries}
@@ -176,6 +194,31 @@ describe('VocabBrowsePanel：筛选', () => {
     expect(listed()).toEqual(['alpha'])
   })
 
+  it('搜索防抖：列表即时，250ms 后才写 URL', () => {
+    vi.useFakeTimers()
+    try {
+      const onChange = vi.fn()
+      setup({}, defaultBrowseFilters('all'), onChange)
+      fireEvent.change(screen.getByLabelText('搜索生词'), { target: { value: 'alpha' } })
+      expect(listed()).toEqual(['alpha'])
+      expect(onChange).not.toHaveBeenCalled()
+      act(() => vi.advanceTimersByTime(249))
+      expect(onChange).not.toHaveBeenCalled()
+      act(() => vi.advanceTimersByTime(1))
+      expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ query: 'alpha' }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('搜索还没同步就切类型：URL 带上刚输入的关键词', () => {
+    const onChange = vi.fn()
+    setup({}, defaultBrowseFilters('all'), onChange)
+    fireEvent.change(screen.getByLabelText('搜索生词'), { target: { value: 'alpha' } })
+    select(/类型/, 'lang')
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ query: 'alpha', kind: 'lang' }))
+  })
+
   it('日期：按入库日筛，可多选（04:00 结算由 core 测）', () => {
     setup()
     const d1 = dayKeyLocal(new Date(alpha.createdAt))
@@ -194,6 +237,26 @@ describe('VocabBrowsePanel：筛选', () => {
     expect(listed()).toEqual(['take off'])
     select(/状态/, 'mastered')
     expect(listed()).toEqual(['done'])
+  })
+
+  it('待复习跨过到期点：一分钟一刷，新到期的词自己出现', () => {
+    vi.useFakeTimers()
+    try {
+      const base = new Date(2026, 9, 26, 12, 0, 0)
+      vi.setSystemTime(base)
+      const dueSoon = vocabItem({
+        id: 'v-due',
+        word: 'due',
+        lemma: 'due',
+        reviewState: { ...defaultReviewState(), due: new Date(base.getTime() + 30_000).toISOString() },
+      })
+      setup({ libraryItems: [...items, dueSoon] }, { ...defaultBrowseFilters('all'), status: 'due' })
+      expect(listed()).toEqual([])
+      act(() => vi.advanceTimersByTime(60_000))
+      expect(listed()).toEqual(['due'])
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('没有结果时给空态，清空筛选恢复', () => {
