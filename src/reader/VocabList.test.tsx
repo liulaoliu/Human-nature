@@ -151,6 +151,38 @@ describe('VocabList：易混项来源', () => {
   })
 })
 
+describe('VocabList：全部生词分页', () => {
+  const many = Array.from({ length: 5 }, (_, i) =>
+    vocabItem({ id: `p${i}`, word: `w${i}`, lemma: `w${i}`, meaning: '义' }),
+  )
+
+  it('pageSize：先渲染一页，点「再显示」后继续追加', () => {
+    setup({ items: many, pageSize: 2 })
+    expect(screen.getByRole('button', { name: '删除 w0' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '删除 w1' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除 w2' })).toBeNull()
+    expect(screen.getByText('已显示 2 / 5')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /再显示 2 条/ }))
+    expect(screen.getByRole('button', { name: '删除 w2' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除 w4' })).toBeNull()
+  })
+
+  it('定位到某条时至少渲染到它，不把高亮词藏到第二页', () => {
+    setup({ items: many, pageSize: 2, focusLemma: 'w4' })
+    expect(screen.getByRole('button', { name: '删除 w4' })).toBeTruthy()
+    expect(screen.queryByText(/已显示/)).toBeNull()
+  })
+
+  it('表格视图也分页', () => {
+    setup({ items: many, pageSize: 2, view: 'table' })
+    expect(screen.getByRole('button', { name: '删除词条 w1' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '删除词条 w2' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /再显示 2 条/ }))
+    expect(screen.getByRole('button', { name: '删除词条 w2' })).toBeTruthy()
+  })
+})
+
 describe('VocabList：表格视图的图标按钮带上词条', () => {
   it('编辑/删除都念得出 lemma', () => {
     setup({ view: 'table' })

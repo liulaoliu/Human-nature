@@ -48,6 +48,11 @@ interface Props {
   viaOf?: (item: VocabItem) => VocabVia | undefined
   /** 本篇语境释义来源；有就优先于词条字段来源显示 */
   meaningSourceOf?: (item: VocabItem) => VocabMeaningSource | undefined
+  /**
+   * 一次只渲染多少条（「全部生词」用）；不传 = 全渲染。
+   * 全库几千条时一次性建 DOM 会卡好几秒，分页后第一屏只建一页。
+   */
+  pageSize?: number
 }
 
 /**
@@ -106,9 +111,30 @@ export default function VocabList({
   originOf,
   viaOf,
   meaningSourceOf,
+  pageSize,
 }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [draft, setDraft] = useState<Draft | null>(null)
+  /** 分页上限；不传 pageSize 时是 Infinity（老调用完全不变）。 */
+  const [limit, setLimit] = useState(pageSize && pageSize > 0 ? pageSize : Number.POSITIVE_INFINITY)
+  // 定位到某条（从文章跳过来）时，至少渲染到它，别让「高亮词」藏在第二页后面。
+  const focusAt = focusLemma ? items.findIndex((it) => it.lemma === focusLemma) : -1
+  const shown = items.slice(0, Math.max(limit, focusAt + 1))
+  const more =
+    shown.length < items.length ? (
+      <div className="bar vocab-more">
+        <span className="muted">
+          已显示 {shown.length} / {items.length}
+        </span>
+        <button
+          onClick={() =>
+            setLimit(Math.max(limit, focusAt + 1) + (pageSize && pageSize > 0 ? pageSize : items.length))
+          }
+        >
+          再显示 {Math.min(pageSize ?? items.length, items.length - shown.length)} 条
+        </button>
+      </div>
+    ) : null
 
   /** 本篇语境释义来源优先；没有才退回词条字段来源（两者不是一回事）。 */
   const meaningTitle = (it: VocabItem) => {
@@ -236,7 +262,8 @@ export default function VocabList({
 
   if (view === 'table') {
     return (
-      <table className={'vtable' + (showSource ? ' has-source' : '')}>
+      <>
+        <table className={'vtable' + (showSource ? ' has-source' : '')}>
         <thead>
           <tr>
             <th>单词</th>
@@ -247,7 +274,7 @@ export default function VocabList({
           </tr>
         </thead>
         <tbody>
-          {items.map((it) => (
+          {shown.map((it) => (
             <Fragment key={it.id}>
               <tr
                 data-lemma={it.lemma}
@@ -341,13 +368,15 @@ export default function VocabList({
             </Fragment>
           ))}
         </tbody>
-      </table>
+        </table>
+        {more}
+      </>
     )
   }
 
   return (
     <>
-      {items.map((it) => (
+      {shown.map((it) => (
         <div
           className={'entry' + (it.lemma === focusLemma ? ' focus' : '')}
           key={it.id}
@@ -431,6 +460,7 @@ export default function VocabList({
           )}
         </div>
       ))}
+      {more}
     </>
   )
 }

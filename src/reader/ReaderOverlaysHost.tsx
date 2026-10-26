@@ -201,6 +201,7 @@ export default function ReaderOverlaysHost({
                 onReview={allVocab.onReview}
                 onEdit={allVocab.onEdit}
                 showSource
+                pageSize={200}
               />
             ) : (
               <div className="muted">生词本是空的</div>
