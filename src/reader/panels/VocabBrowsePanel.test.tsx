@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { dayKeyLocal } from '../../core/activity'
 import { vocabItem } from '../../core/testFixtures'
 import { defaultReviewState } from '../../types/document'
@@ -99,6 +99,13 @@ const listed = () =>
 const select = (label: RegExp, value: string) =>
   fireEvent.change(screen.getByLabelText(label), { target: { value } })
 
+/** 打开日期下拉，勾一天（多选由调用方连点）。 */
+const pickDay = (day: string) => {
+  const box = screen.getByTestId('vb-days') as HTMLDetailsElement
+  if (!box.open) fireEvent.click(box.querySelector('summary')!)
+  fireEvent.click(within(box).getByRole('checkbox', { name: new RegExp(day) }))
+}
+
 describe('VocabBrowsePanel：范围', () => {
   it('全部：默认含已掌握，标题和计数对', () => {
     setup()
@@ -159,11 +166,24 @@ describe('VocabBrowsePanel：筛选', () => {
     expect(listed()).toEqual(['alpha'])
   })
 
-  it('日期：按入库日筛（04:00 结算由 core 测）', () => {
+  it('日期：按入库日筛，可多选（04:00 结算由 core 测）', () => {
     setup()
-    const day = dayKeyLocal(new Date(alpha.createdAt))
-    select(/日期/, day)
+    const d1 = dayKeyLocal(new Date(alpha.createdAt))
+    const d2 = dayKeyLocal(new Date(beta.createdAt))
+    pickDay(d1)
     expect(listed()).toEqual(['alpha'])
+    pickDay(d2)
+    expect(listed()).toEqual(['alpha', 'beta', 'done'])
+  })
+
+  it('状态：新词 / 错过 / 已掌握', () => {
+    setup()
+    select(/状态/, 'fresh')
+    expect(listed()).toEqual(['alpha', 'beta', 'take off'])
+    select(/状态/, 'lapsed')
+    expect(listed()).toEqual(['take off'])
+    select(/状态/, 'mastered')
+    expect(listed()).toEqual(['done'])
   })
 
   it('没有结果时给空态，清空筛选恢复', () => {
@@ -196,6 +216,24 @@ describe('VocabBrowsePanel：批量动作跟着筛选走', () => {
       ],
       '本篇生词',
     )
+  })
+
+  it('选篇 A4：按篇出行（各篇编号），走 onPrintRows 而不是整库打印', () => {
+    const { onPrintRows, onPrint } = setup({ initialScope: 'article' })
+    select(/范围/, 'picked')
+    fireEvent.click(screen.getByText(/A4 打印/))
+    expect(onPrint).not.toHaveBeenCalled()
+    const [rows, title] = onPrintRows.mock.calls[0]
+    expect(title).toBe('所选 2 篇生词')
+    expect(rows.map((r: { articleTitle: string; item: { lemma: string }; number: number | null }) => [
+      r.articleTitle,
+      r.item.lemma,
+      r.number,
+    ])).toEqual([
+      ['A 篇', 'alpha', 1],
+      ['A 篇', 'take off', null],
+      ['B 篇', 'beta', 1],
+    ])
   })
 
   it('本篇导出用这篇的语境释义（和侧栏 / A4 一致）', () => {

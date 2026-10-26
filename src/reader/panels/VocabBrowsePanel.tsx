@@ -5,11 +5,12 @@ import { sortItems } from '../../core/vocab'
 import { articleEntryViewsFrom } from '../../core/articleVocab'
 import type { PrintRow } from '../../core/printPlan'
 import {
+  browseA4Rows,
   browseVocab,
   type BrowseArticleRef,
-  type BrowseDay,
   type BrowseKind,
   type BrowseScope,
+  type BrowseStatus,
 } from '../../core/vocabBrowse'
 import VocabList, { type VocabEditPatch } from '../VocabList'
 
@@ -50,9 +51,16 @@ export interface VocabBrowsePanelProps {
 }
 
 const BROWSE_KIND_LABEL: Record<BrowseKind, string> = { all: '全部', word: '生词', lang: '语言点' }
+const BROWSE_STATUS_LABEL: Record<BrowseStatus, string> = {
+  all: '全部状态',
+  due: '待复习',
+  fresh: '新词',
+  lapsed: '错过',
+  mastered: '已掌握',
+}
 
 /**
- * 生词浏览页：全部 / 本篇 / 选篇 + 类型 / 搜索 / 日期 / 含已掌握。
+ * 生词浏览页：全部 / 本篇 / 选篇 + 类型 / 搜索 / 日期（可多选）/ 状态 / 含已掌握。
  *
  * 只负责「收选择 + 渲染」；所有筛选口径在 `core/vocabBrowse.ts`（纯函数、有单测），
  * 本篇的归属仍走 `core/articleVocab.ts` 的 `articleEntryViewsFrom`（和侧栏、打印同一份）。
@@ -87,7 +95,9 @@ export default function VocabBrowsePanel({
   const [scope, setScope] = useState<BrowseScope>(initialScope)
   const [kind, setKind] = useState<BrowseKind>('all')
   const [query, setQuery] = useState('')
-  const [day, setDay] = useState<BrowseDay>('all')
+  /** 选中的入库日；空集合 = 全部日期（默认） */
+  const [pickedDays, setPickedDays] = useState<Set<string>>(new Set())
+  const [status, setStatus] = useState<BrowseStatus>('all')
   /** 全部默认含已掌握；本篇 / 选篇默认不含（和侧栏、打印一致）。 */
   const [includeMastered, setIncludeMastered] = useState(initialScope === 'all')
   const [picked, setPicked] = useState<Set<string>>(() => new Set(articles.map((a) => a.id)))
@@ -105,22 +115,25 @@ export default function VocabBrowsePanel({
     setPicked((prev) => (prev.size || !articles.length ? prev : new Set(articles.map((a) => a.id))))
   }, [articles])
 
-  const result = useMemo(
-    () =>
-      browseVocab({
-        items: libraryItems,
-        scope,
-        articleId,
-        articleEntries,
-        articles,
-        pickedArticleIds: picked,
-        kind,
-        query,
-        day,
-        includeMastered,
-      }),
-    [libraryItems, scope, articleId, articleEntries, articles, picked, kind, query, day, includeMastered],
+  /** 浏览页和「选篇 A4」共用同一份筛选输入，避免两套口径。 */
+  const browseInput = useMemo(
+    () => ({
+      items: libraryItems,
+      scope,
+      articleId,
+      articleEntries,
+      articles,
+      pickedArticleIds: picked,
+      kind,
+      query,
+      days: pickedDays,
+      status,
+      includeMastered,
+    }),
+    [libraryItems, scope, articleId, articleEntries, articles, picked, kind, query, pickedDays, status, includeMastered],
   )
+
+  const result = useMemo(() => browseVocab(browseInput), [browseInput])
 
   /** 排序放组件（`sortItems` 是 core 的纯函数）；筛选结果本身不排序。 */
   const sorted = useMemo(() => sortItems(result.items, sortBy), [result.items, sortBy])
@@ -146,10 +159,13 @@ export default function VocabBrowsePanel({
     [libraryItems, articleEntries, articleId],
   )
 
-  // 换了范围后，原先选中的日期可能已经没内容了 → 回到「全部日期」，别卡在空列表。
+  // 换了范围后，原先选中的日期可能已经没内容了 → 只留还有内容的；全没了就回到「全部日期」。
   useEffect(() => {
-    if (day !== 'all' && !result.days.some(([d]) => d === day)) setDay('all')
-  }, [day, result.days])
+    if (!pickedDays.size) return
+    const avail = new Set(result.days.map(([d]) => d))
+    const next = new Set([...pickedDays].filter((d) => avail.has(d)))
+    if (next.size !== pickedDays.size) setPickedDays(next)
+  }, [pickedDays, result.days])
 
   const title =
     scope === 'all' ? '全部生词' : scope === 'article' ? '本篇生词' : `所选 ${picked.size} 篇生词`
@@ -171,14 +187,27 @@ export default function VocabBrowsePanel({
   const resetFilters = () => {
     setKind('all')
     setQuery('')
-    setDay('all')
+    setPickedDays(new Set())
+    setStatus('all')
     setIncludeMastered(scope === 'all')
     if (scope === 'picked') setPicked(new Set(articles.map((a) => a.id)))
   }
 
-  /** 本篇 A4 保留篇内编号 / 语境释义，并让 `doPrintRows` 记按篇打印时间。 */
+  /**
+   * A4：
+   *   - 本篇：用正文编号 + 本篇语境释义；
+   *   - 选篇：按篇出行（同一词可跨篇重复），各篇编号，并让 `doPrintRows` 记按篇打印时间；
+   *   - 全部：普通词表。
+   */
   const doA4 = () => {
     if (!sorted.length) return
+    if (scope === 'picked' && onPrintRows) {
+      const rows = browseA4Rows(browseInput)
+      if (rows.length) {
+        onPrintRows(rows, title)
+        return
+      }
+    }
     if (scope === 'article' && onPrintRows) {
       const rows: PrintRow[] = viewItems.map((item) => ({
         item,
@@ -195,7 +224,11 @@ export default function VocabBrowsePanel({
 
   const masteredFiltered = scope === 'all' ? !includeMastered : includeMastered
   const hasFilter =
-    kind !== 'all' || query.trim() !== '' || day !== 'all' || (masteredFiltered && result.scopeCount > 0)
+    kind !== 'all' ||
+    query.trim() !== '' ||
+    pickedDays.size > 0 ||
+    status !== 'all' ||
+    (masteredFiltered && result.scopeCount > 0)
 
   return (
     <div className="all-vocab vocab-browse">
@@ -238,13 +271,52 @@ export default function VocabBrowsePanel({
             placeholder="搜词 / 释义 / 笔记"
           />
 
-          <label className="check-inline" title="按入库日（04:00 结算）">
-            日期
-            <select value={day} onChange={(e) => setDay(e.target.value)}>
-              <option value="all">全部日期</option>
-              {result.days.map(([d, n]) => (
-                <option key={d} value={d}>
-                  {d}（{n}）
+          <div className="check-inline vb-day-filter" title="按入库日（04:00 结算），可多选">
+            <span>日期</span>
+            <details className="vb-days" data-testid="vb-days">
+              <summary>{pickedDays.size ? `${pickedDays.size} 天` : '全部'}</summary>
+              <div className="vb-day-list">
+                <div className="exrow">
+                  <button type="button" onClick={() => setPickedDays(new Set())}>
+                    全部日期
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPickedDays(new Set(result.days.map(([d]) => d)))}
+                  >
+                    全选
+                  </button>
+                </div>
+                <div className="exlist">
+                  {result.days.map(([d, n]) => (
+                    <label className="check-inline" key={d}>
+                      <input
+                        type="checkbox"
+                        checked={pickedDays.has(d)}
+                        onChange={() =>
+                          setPickedDays((prev) => {
+                            const next = new Set(prev)
+                            if (next.has(d)) next.delete(d)
+                            else next.add(d)
+                            return next
+                          })
+                        }
+                      />
+                      <span>{d}</span>
+                      <span className="muted">{n}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <label className="check-inline" title="待复习 = 已到期；新词 = 没排期、没重学；错过 = 评过「忘记了」">
+            状态
+            <select value={status} onChange={(e) => setStatus(e.target.value as BrowseStatus)}>
+              {(Object.keys(BROWSE_STATUS_LABEL) as BrowseStatus[]).map((s) => (
+                <option key={s} value={s}>
+                  {BROWSE_STATUS_LABEL[s]}
                 </option>
               ))}
             </select>
@@ -254,6 +326,7 @@ export default function VocabBrowsePanel({
             <input
               type="checkbox"
               checked={includeMastered}
+              disabled={status === 'mastered'}
               onChange={(e) => setIncludeMastered(e.target.checked)}
             />
             含已掌握

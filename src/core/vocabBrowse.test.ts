@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { dayKeyLocal } from './activity'
 import { vocabItem } from './testFixtures'
+import { defaultReviewState } from '../types/document'
 import type { ArticleVocabEntry } from '../types/document'
-import { browseVocab } from './vocabBrowse'
+import { browseVocab, browseA4Rows } from './vocabBrowse'
 
 /**
  * 生词浏览页的筛选口径（纯函数）。
@@ -79,7 +80,6 @@ const base = {
   articleId: 'a-key',
   kind: 'all' as const,
   query: '',
-  day: 'all' as const,
   includeMastered: false,
 }
 
@@ -144,19 +144,127 @@ describe('browseVocab：类型 / 搜索 / 日期', () => {
     expect(out.days[0]).toEqual([d3, 2]) // take off + gamma
     expect(out.days).toContainEqual([d2, 1]) // beta（done 已掌握被排除）
     expect(out.days).toContainEqual([d1, 2]) // alpha + early（凌晨 3 点算前一天）
-    expect(browseVocab({ ...base, items: [...items, early], scope: 'all', day: d1 }).items.map((it) => it.lemma)).toEqual([
+    expect(browseVocab({ ...base, items: [...items, early], scope: 'all', days: new Set([d1]) }).items.map((it) => it.lemma)).toEqual([
       'alpha',
       'early',
     ])
-    expect(browseVocab({ ...base, items: [...items, early], scope: 'all', day: d2 }).items.map((it) => it.lemma)).toEqual([
+    expect(browseVocab({ ...base, items: [...items, early], scope: 'all', days: new Set([d2]) }).items.map((it) => it.lemma)).toEqual([
       'beta',
     ])
+    // 多选：两天并起来
+    expect(
+      browseVocab({ ...base, items: [...items, early], scope: 'all', days: new Set([d1, d2]) }).items.map((it) => it.lemma),
+    ).toEqual(['alpha', 'beta', 'early'])
     expect(out.items).toHaveLength(5)
   })
 
   it('scopeCount 是范围 + 含已掌握后的总数，不受类型/搜索/日期影响', () => {
-    const out = browseVocab({ ...base, scope: 'all', query: 'zzz', kind: 'word', day: '2020-01-01' })
+    const out = browseVocab({ ...base, scope: 'all', query: 'zzz', kind: 'word', days: new Set(['2020-01-01']) })
     expect(out.items).toEqual([])
     expect(out.scopeCount).toBe(4)
+  })
+})
+
+describe('browseVocab：复习状态', () => {
+  const now = new Date(at(2026, 10, 5))
+  const dueItem = vocabItem({
+    id: 'v-due',
+    word: 'dueword',
+    lemma: 'dueword',
+    createdAt: at(2026, 10, 1),
+    reviewState: { ...defaultReviewState(), due: at(2026, 10, 4) },
+  })
+  const lapsedItem = vocabItem({
+    id: 'v-lapse',
+    word: 'lapsed',
+    lemma: 'lapsed',
+    createdAt: at(2026, 10, 1),
+    reviewState: { ...defaultReviewState(), lapses: 2 },
+  })
+  const all = [...items, dueItem, lapsedItem]
+
+  it('待复习：只留 due 已到（受 now 控制）', () => {
+    expect(
+      browseVocab({ ...base, items: all, scope: 'all', status: 'due', includeMastered: true, now }).items.map(
+        (it) => it.lemma,
+      ),
+    ).toEqual(['dueword'])
+    expect(
+      browseVocab({ ...base, items: all, scope: 'all', status: 'due', includeMastered: true, now: new Date(at(2026, 10, 3)) })
+        .items,
+    ).toEqual([])
+  })
+
+  it('新词：用 isFresh（没排期、没重学），不是只看 repetitions', () => {
+    expect(
+      browseVocab({ ...base, items: all, scope: 'all', status: 'fresh', includeMastered: true, now }).items.map(
+        (it) => it.lemma,
+      ),
+    ).toEqual(['alpha', 'beta', 'take off', 'gamma', 'lapsed'])
+  })
+
+  it('错过：lapses > 0；已掌握：只看 mastered（不受 includeMastered 影响）', () => {
+    expect(
+      browseVocab({ ...base, items: all, scope: 'all', status: 'lapsed', includeMastered: true, now }).items.map(
+        (it) => it.lemma,
+      ),
+    ).toEqual(['lapsed'])
+    expect(
+      browseVocab({ ...base, items: all, scope: 'all', status: 'mastered', now }).items.map((it) => it.lemma),
+    ).toEqual(['done'])
+  })
+
+  it('状态筛选和选篇计数同口径', () => {
+    const out = browseVocab({
+      ...base,
+      items: all,
+      articleEntries: [...entries, entry('a-key', 'lapsed')],
+      scope: 'picked',
+      pickedArticleIds: new Set(['saved:A']),
+      status: 'lapsed',
+      includeMastered: true,
+      now,
+    })
+    expect(out.articleCounts.get('saved:A')).toBe(1)
+  })
+})
+
+describe('browseA4Rows：选篇打印', () => {
+  const picked = new Set(['saved:A', 'saved:B'])
+
+  it('按篇出行（同一词可跨篇重复），编号按篇内顺序，释义用该篇语境', () => {
+    const rows = browseA4Rows({ ...base, scope: 'picked', pickedArticleIds: picked })
+    expect(rows.map((r) => [r.articleTitle, r.item.lemma, r.number])).toEqual([
+      ['A 篇', 'alpha', 1],
+      ['A 篇', 'take off', null],
+      ['A 篇', 'gamma', 2],
+      ['B 篇', 'beta', 1],
+    ])
+    expect(rows[0].articleId).toBe('a-key')
+  })
+
+  it('跟浏览页的类型 / 搜索筛选一致', () => {
+    const lang = browseA4Rows({ ...base, scope: 'picked', pickedArticleIds: picked, kind: 'lang' })
+    expect(lang.map((r) => r.item.lemma)).toEqual(['take off'])
+    const found = browseA4Rows({ ...base, scope: 'picked', pickedArticleIds: picked, query: '贝塔' })
+    expect(found.map((r) => r.item.lemma)).toEqual(['beta'])
+  })
+
+  it('同一词在两篇各一行，各算各的编号', () => {
+    const rows = browseA4Rows({
+      ...base,
+      scope: 'picked',
+      pickedArticleIds: new Set(['saved:A', 'saved:C']),
+    })
+    expect(rows.filter((r) => r.item.lemma === 'gamma').map((r) => [r.articleTitle, r.number])).toEqual([
+      ['A 篇', 2],
+      ['C 篇', 1],
+    ])
+  })
+
+  it('本篇 / 全部范围不出行；没选篇也不出', () => {
+    expect(browseA4Rows({ ...base, scope: 'all' })).toEqual([])
+    expect(browseA4Rows({ ...base, scope: 'article' })).toEqual([])
+    expect(browseA4Rows({ ...base, scope: 'picked', pickedArticleIds: new Set() })).toEqual([])
   })
 })
