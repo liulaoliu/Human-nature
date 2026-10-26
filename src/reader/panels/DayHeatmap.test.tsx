@@ -60,4 +60,11 @@ describe('DayHeatmap', () => {
     fireEvent.click(empty)
     expect(onToggle).not.toHaveBeenCalled()
   })
+
+  it('周数可调：列数跟着 weeks 走', () => {
+    const { container } = render(
+      <DayHeatmap dates={[['2026-10-01', 1]]} picked={new Set()} onToggle={() => {}} weeks={26} today={today} />,
+    )
+    expect((container.querySelector('.heat-grid') as HTMLElement).style.gridTemplateColumns).toBe('repeat(26, 1fr)')
+  })
 })

@@ -157,7 +157,7 @@ describe('VocabBrowsePanel：范围', () => {
 
   it('按文章：只并勾选的篇（默认全选），计数跟着筛选', () => {
     setup({}, defaultBrowseFilters('article'))
-    select(/范围/, 'picked')
+    select(/^范围/, 'picked')
     // 切到选篇后默认不含已掌握
     expect(listed()).toEqual(['alpha', 'beta', 'take off'])
     fireEvent.click(screen.getByLabelText(/A 篇/))
@@ -167,7 +167,7 @@ describe('VocabBrowsePanel：范围', () => {
 
   it('范围切回本篇：只留当前文章的条目', () => {
     setup()
-    select(/范围/, 'article')
+    select(/^范围/, 'article')
     expect(screen.getByText('本篇生词')).toBeTruthy()
     expect(listed()).toEqual(['alpha', 'take off'])
   })
@@ -239,6 +239,18 @@ describe('VocabBrowsePanel：筛选', () => {
     expect(listed()).toEqual(['done'])
   })
 
+  it('日期快捷：近 7 天选中最近有记录的日子；热力图周数可调', () => {
+    setup()
+    const box = screen.getByTestId('vb-days') as HTMLDetailsElement
+    fireEvent.click(box.querySelector('summary')!)
+    fireEvent.click(within(box).getByText('近 7 天'))
+    expect(within(box).getByText('3 天')).toBeTruthy()
+    expect(listed()).toHaveLength(4)
+
+    fireEvent.change(screen.getByLabelText('热力图范围'), { target: { value: '26' } })
+    expect((document.querySelector('.heat-grid') as HTMLElement).style.gridTemplateColumns).toBe('repeat(26, 1fr)')
+  })
+
   it('待复习跨过到期点：一分钟一刷，新到期的词自己出现', () => {
     vi.useFakeTimers()
     try {
@@ -293,7 +305,7 @@ describe('VocabBrowsePanel：批量动作跟着筛选走', () => {
 
   it('选篇 A4：按篇出行（各篇编号），走 onPrintRows 而不是整库打印', () => {
     const { onPrintRows, onPrint } = setup({}, defaultBrowseFilters('article'))
-    select(/范围/, 'picked')
+    select(/^范围/, 'picked')
     fireEvent.click(screen.getByText(/A4 打印/))
     expect(onPrint).not.toHaveBeenCalled()
     const [rows, title] = onPrintRows.mock.calls[0]

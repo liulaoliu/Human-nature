@@ -135,6 +135,8 @@ export default function VocabBrowsePanel({
     const timer = window.setInterval(() => setNow(new Date()), 60_000)
     return () => window.clearInterval(timer)
   }, [status])
+  /** 热力图窗口（纯展示偏好，不进 URL）。 */
+  const [heatWeeks, setHeatWeeks] = useState(13)
 
   /** 浏览页和「选篇 A4」共用同一份筛选输入，避免两套口径。 */
   const browseInput = useMemo(
@@ -213,6 +215,13 @@ export default function VocabBrowsePanel({
     else next.add(day)
     onFiltersChange({ ...filters, query: queryDraft, days: [...next] })
   }
+
+  const pickRecent = (n: number) =>
+    onFiltersChange({
+      ...filters,
+      query: queryDraft,
+      days: result.days.slice(0, n).map(([d]) => d),
+    })
 
   const resetFilters = () => {
     setQueryDraft('')
@@ -311,6 +320,12 @@ export default function VocabBrowsePanel({
               <summary>{pickedDays.size ? `${pickedDays.size} 天` : '全部'}</summary>
               <div className="vb-day-list">
                 <div className="exrow">
+                  <button type="button" onClick={() => pickRecent(7)} disabled={!result.days.length} title="最近 7 个有记录的日子">
+                    近 7 天
+                  </button>
+                  <button type="button" onClick={() => pickRecent(30)} disabled={!result.days.length} title="最近 30 个有记录的日子">
+                    近 30 天
+                  </button>
                   <button type="button" onClick={() => onFiltersChange({ ...filters, query: queryDraft, days: [] })}>
                     全部日期
                   </button>
@@ -321,7 +336,19 @@ export default function VocabBrowsePanel({
                     全选
                   </button>
                 </div>
-                <DayHeatmap dates={result.days} picked={pickedDays} onToggle={toggleDay} />
+                <div className="exrow">
+                  <span className="muted">热力图</span>
+                  <select
+                    aria-label="热力图范围"
+                    value={heatWeeks}
+                    onChange={(e) => setHeatWeeks(Number(e.target.value))}
+                  >
+                    <option value={13}>近 13 周</option>
+                    <option value={26}>近 26 周</option>
+                    <option value={52}>近 52 周</option>
+                  </select>
+                </div>
+                <DayHeatmap dates={result.days} picked={pickedDays} onToggle={toggleDay} weeks={heatWeeks} />
                 <div className="exlist">
                   {result.days.map(([d, n]) => (
                     <label className="check-inline" key={d}>

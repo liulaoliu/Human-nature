@@ -22,18 +22,20 @@ export interface DayHeatmapProps {
 export default function DayHeatmap({ dates, picked, onToggle, weeks = 13, today }: DayHeatmapProps) {
   const counts = useMemo(() => Object.fromEntries(dates), [dates])
   const heat = useMemo(() => buildHeatmap(counts, weeks, today), [counts, weeks, today])
+  /** 周数可调（13 / 26 / 52）；固定 CSS 的 13 列要被覆盖，否则多出来的周会挤成隐式列。 */
+  const columns = { gridTemplateColumns: `repeat(${weeks}, 1fr)` }
 
   return (
     <div className="exheat">
-      <div className="heat">
-        <div className="heat-months">
+      <div className="heat" style={{ minWidth: Math.max(180, weeks * 15) }}>
+        <div className="heat-months" style={columns}>
           {heat.monthLabels.map((m) => (
             <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
               {m.label}月
             </span>
           ))}
         </div>
-        <div className="heat-grid">
+        <div className="heat-grid" style={columns}>
           {heat.cells.map((col, ci) =>
             col.map((cell, ri) => {
               const on = picked.has(cell.key)
