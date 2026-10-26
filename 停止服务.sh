@@ -10,7 +10,7 @@ if command -v systemctl >/dev/null 2>&1 && [ -f "$UNIT" ]; then
   systemctl --user stop shadowing-reader.service 2>/dev/null || true
 fi
 # systemctl 没接管的进程（例如手动 npm run dev）再按 PID 兜底
-if node server/status.js -q >/dev/null 2>&1; then
-  node server/stop.js
+if node server/status.ts -q >/dev/null 2>&1; then
+  node server/stop.ts
 fi
-node server/status.js
+node server/status.ts

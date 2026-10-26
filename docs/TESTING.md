@@ -186,6 +186,17 @@
     规矩：**兜底候选等主目标真的失败之后再解析**，且解析失败只丢兜底（`console.warn` 出来），
     不许影响主路径。`tools/tts-core.test.mjs` 已钉住 `localFallbackTargets` 不抛异常 + 候选形状合法。
     排查口径：TTS 502 先看响应正文里的 `tts failed: ...`，那是真实异常消息，别只看状态码。
+32. **改后端入口文件名要连「已安装的服务单元」一起改**（2026-10-26）。服务突然起不来，
+   `node server/status.ts` 只说「端口 5173 无响应」，看不出原因；`systemctl --user status` 才是真相：
+   `ExecStart=.../server/watchdog-cli.js`，日志每 2 秒一条 `Cannot find module`（restart counter 一路涨）。
+   根因是后端 `.js → .ts` 迁移只改了 Windows 的 `.cmd` / VBS 和 systemd 模板，
+   **Linux 的 `启动服务.sh` / `停止服务.sh` 还写着 `server/status.js`、`server/stop.js`、`server/silent-start.js`**；
+   而 `~/.config/systemd/user/shadowing-reader.service` 是迁移前生成的，模板改了它不会自己更新。
+   规矩：入口文件改名（迁移 / 重命名）时，两套启动脚本 + 模板 + **已安装单元**四个落点一起改，
+   装过自启的机器要重跑 `./安装开机自启.sh`。现在 `启动服务.sh` 会先读单元里的 `ExecStart`，
+   目标文件不存在就按当前模板自动重装，避免再出现「无休止重启但没人知道为什么」。
+   排查口径：服务「没启动」先看 `systemctl --user status`（ExecStart / 退出码）和
+   `journalctl --user -u shadowing-reader.service -n 50`，别只信 `status.ts` 的端口探测。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

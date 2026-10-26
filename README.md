@@ -112,7 +112,7 @@ static 模式也优先读 `public\`，重新抽取正文后刷新即可。）
 ### Linux（systemd 用户服务）
 
 Windows 那套 `.cmd` / VBS / 注册表在这里不适用；**同一套后台服务与自启逻辑**用 `.sh` + systemd 用户服务实现，
-watchdog、PID 文件、`status.js` / `stop.js` 全部复用，不重复造轮子：
+watchdog、PID 文件、`status.ts` / `stop.ts` 全部复用，不重复造轮子：
 
 ```
 ./安装开机自启.sh     # 注册 systemd 用户服务并立即启动（对应 安装开机自启.cmd）
