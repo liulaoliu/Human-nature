@@ -9,9 +9,32 @@
  */
 import type { VocabItem, VocabKind } from '../types/document'
 
-/** 词条类型（老数据没有 `kind` → 普通单词）。 */
-export function kindOf(item: { kind?: VocabKind } | null | undefined): VocabKind {
-  return item?.kind ?? 'word'
+/** 含中日韩文字（用法笔记基本都是中文说明）。 */
+const CJK = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/
+
+/**
+ * 词条正文本身就是一个英文单词（可带连字符 / 撇号，不含空格与中文）。
+ *
+ * 为什么单独拎出来：AI 有时把单词写进「词组 / 用法」栏，历史上也留下过
+ * 「单词词条被标成 usage」的脏数据。词形是单个英文单词时，类型只能是单词。
+ */
+export function isSingleEnglishWord(text: string | null | undefined): boolean {
+  const w = (text ?? '').trim()
+  if (!w || CJK.test(w)) return false
+  return /^[A-Za-z][A-Za-z'’\-]*$/.test(w)
+}
+
+/**
+ * 词条类型（老数据没有 `kind` → 普通单词）。
+ *
+ * 同时兜住「类型与词形矛盾」的存量数据：`word` 是单个英文单词却标成
+ * `phrase / idiom / usage` 时按单词算。否则这些词会从「本篇生词」里消失、
+ * 一键处理反复把它们塞回待选（Profits overboard 的 conglomerate / reckon / scrap）。
+ */
+export function kindOf(item: { kind?: VocabKind; word?: string } | null | undefined): VocabKind {
+  const kind = item?.kind ?? 'word'
+  if (kind === 'word') return 'word'
+  return isSingleEnglishWord(item?.word) ? 'word' : kind
 }
 
 /** 类型的中文名（列表标签、打印、Anki 标签用）。 */

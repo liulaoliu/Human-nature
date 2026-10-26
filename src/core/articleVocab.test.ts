@@ -59,8 +59,8 @@ describe('addArticleEntry：按篇收录', () => {
   it('已掌握词 / 不存在的词不收', () => {
     let l = lib({
       items: [
-        vocabItem({ id: 'v1', lemma: 'done', status: 'mastered' }),
-        vocabItem({ id: 'v2', lemma: 'take off', kind: 'phrase' }),
+        vocabItem({ id: 'v1', word: 'done', lemma: 'done', status: 'mastered' }),
+        vocabItem({ id: 'v2', word: 'take off', lemma: 'take off', kind: 'phrase' }),
       ],
     })
     l = addArticleEntry(l, { articleId: 'A', lemma: 'done', origin: 'manual' }, NOW)
@@ -69,7 +69,7 @@ describe('addArticleEntry：按篇收录', () => {
   })
 
   it('语言点（词组 / 习语 / 用法）也能收进本篇，但不进单词编号', () => {
-    let l = lib({ items: [vocabItem({ id: 'v1', lemma: 'take off', kind: 'phrase' })] })
+    let l = lib({ items: [vocabItem({ id: 'v1', word: 'take off', lemma: 'take off', kind: 'phrase' })] })
     l = addArticleEntry(l, { articleId: 'A', lemma: 'take off', origin: 'auto' }, NOW)
     expect(articleEntriesOf(l, 'A')).toHaveLength(1)
     expect(articleItemsOf(l, 'A')).toEqual([])
@@ -109,9 +109,9 @@ describe('articleEntryViews / mergeArticleEntries', () => {
   it('按加入顺序过滤已掌握 / 非单词 / 缺失词，重复 lemma 只留第一条', () => {
     const l = lib({
       items: [
-        vocabItem({ id: 'v1', lemma: 'alpha' }),
-        vocabItem({ id: 'v2', lemma: 'done', status: 'mastered' }),
-        vocabItem({ id: 'v3', lemma: 'take off', kind: 'phrase' }),
+        vocabItem({ id: 'v1', word: 'alpha', lemma: 'alpha' }),
+        vocabItem({ id: 'v2', word: 'done', lemma: 'done', status: 'mastered' }),
+        vocabItem({ id: 'v3', word: 'take off', lemma: 'take off', kind: 'phrase' }),
       ],
       articleEntries: [
         { articleId: 'A', lemma: 'alpha', origin: 'manual', addedAt: NOW.toISOString() },

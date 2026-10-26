@@ -50,9 +50,69 @@ describe('markWord', () => {
   it('空词抛错', () => {
     expect(() => markWord(createLibrary(), { word: '  ', articleId: 'a1' }, NOW)).toThrow()
   })
+
+  it('命中被误标成 usage 的同名单词：改回单词、清掉旧语言点标记，并收进本篇', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [
+        item({
+          id: 'vocab:conglomerate',
+          word: 'conglomerate',
+          lemma: 'conglomerate',
+          kind: 'usage',
+          langPointId: 'usage|A|s1|conglomerate 企业集团',
+          status: 'queried',
+          meaning: '企业集团',
+        }),
+      ],
+    }
+    const r = markWord(
+      lib,
+      {
+        word: 'conglomerate',
+        articleId: 'A',
+        fileName: 'A',
+        sentenceId: 's015',
+        sentenceText: 'A family-controlled Danish conglomerate.',
+      },
+      NOW,
+    )
+    expect(r.created).toBe(false)
+    expect(r.item.kind).toBeUndefined()
+    expect(r.item.langPointId).toBeUndefined()
+    expect(r.library.articleEntries?.some((e) => e.articleId === 'A' && e.lemma === 'conglomerate')).toBe(true)
+  })
 })
 
 describe('applyWordAnalysis', () => {
+  it('查词结果命中被误标成 usage 的单词：改回单词（本篇才看得到）', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [
+        item({
+          id: 'vocab:reckon',
+          word: 'reckon',
+          lemma: 'reckon',
+          kind: 'usage',
+          langPointId: 'usage|A|s016|reckon 认为',
+          status: 'queried',
+          meaning: '认为；估算',
+        }),
+      ],
+    }
+    const out = applyWordAnalysis(lib, [{ word: 'reckon', meaning: '认为' }], NOW)
+    const p = out.items.find((it) => it.lemma === 'reckon')!
+    expect(p.kind).toBeUndefined()
+    expect(p.langPointId).toBeUndefined()
+    // 中文用法笔记 / 真词组不受影响
+    const note = applyWordAnalysis(
+      { ...createLibrary(), items: [item({ id: 'vocab:n', word: '注意 purges 是名词', lemma: '注意 purges 是名词', kind: 'usage' })] },
+      [{ word: 'purge', meaning: '清洗' }],
+      NOW,
+    )
+    expect(note.items.find((it) => it.lemma === '注意 purges 是名词')!.kind).toBe('usage')
+  })
+
   it('把查词结果填进已有词条', () => {
     let lib = markWord(createLibrary(), { word: 'run', articleId: 'a1', sentenceId: 's1', sentenceText: 'Run!' }, NOW).library
     lib = applyWordAnalysis(lib, [

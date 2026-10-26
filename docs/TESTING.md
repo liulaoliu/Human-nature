@@ -578,3 +578,11 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `no such table: back_translation_records`，`openStore()` 直接返回 null（整站回退 IndexedDB）。
     规矩：**任何“迁移中会读整份学习记录”的逻辑，必须先把新表建出来**（v7 块里先 `db.exec(SCHEMA_V8)`），
     并用「从 v1 空库升级到最新版」的测试兜住，而不是只测新库 `user_version`。
+
+47. **单词被标成「用法」会从本篇消失，一键处理还会反复推它**（2026-10-26）。
+    AI 语言点有时把单词写进 usage 栏；`langPointKeyAndKind` 曾把它标成 usage，而 `kindOf`
+    只看 `kind`，导致 `conglomerate / reckon / scrap` 明明有 `articleEntries` 也不在
+    「本篇生词」里；待选按「本篇单词集合」去重，又会把它们一遍遍推回来。规矩：
+    **词形是单个英文单词时，类型必须按单词算**（`kindOf` 兜底 + `repairLanguageKinds`
+    清掉旧 `kind` / `langPointId`）；`markWord` / `applyWordAnalysis` 命中同名单词时也要升级类型。
+    测试要覆盖「带 `langPointId` 的脏数据也能修」和「查词结果应用后本篇可见」。

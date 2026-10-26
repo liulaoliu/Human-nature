@@ -16,6 +16,7 @@ import type {
 import { defaultReviewState } from '../../types/document'
 import type { PosRow } from '../analyzer'
 import { addArticleEntry } from '../articleVocab'
+import { isSingleEnglishWord } from '../entryKind'
 import { VOCAB_FIELDS, isFieldLocked } from '../vocabFields'
 import { reconcileSense } from './sense'
 import { canRewriteTo, lemmaOf, normalizePos, normalizeWord, cleanGloss } from './word'
@@ -141,9 +142,15 @@ export function markWord(
       !existing.meaning && given
         ? { ...existing.fieldSources, meaning: 'manual' as const }
         : existing.fieldSources
+    /**
+     * 单词被早期语言点逻辑误标成 usage / phrase：这次是**按单词**加进来的，
+     * 就顺手改回单词并清掉旧的语言点标记（否则收语言点时又会被改回去）。
+     */
+    const upgradeToWord = !kind && isSingleEnglishWord(existing.word)
     const merged: VocabItem = {
       ...existing,
-      kind: existing.kind ?? kind,
+      kind: upgradeToWord ? undefined : existing.kind ?? kind,
+      langPointId: upgradeToWord ? undefined : existing.langPointId,
       examples: mergeExamples(existing.examples, [example]),
       source: betterSource(existing.source, source),
       contexts: upsertContext(existing.contexts, contextFromSource(source, iso, given ?? undefined)),
@@ -292,11 +299,18 @@ export function applyWordAnalysis(
     }
 
     const ctxMeaning = incoming.meaning ?? undefined
+    /**
+     * 查词结果按「单词」回来时，顺手把误标成 usage / phrase 的同词条目改回单词。
+     * 否则 user 查完词、结果也应用了，本篇仍然看不到这个词（kind 还是 usage）。
+     */
+    const upgradeToWord = isSingleEnglishWord(wa.word) && isSingleEnglishWord(cur.word)
     const merged: VocabItem = reconcileSense({
       ...cur,
       id: identityLocked ? cur.id : `vocab:${newLemma}`,
       word: newWord,
       lemma: newLemma,
+      kind: upgradeToWord ? undefined : cur.kind,
+      langPointId: upgradeToWord ? undefined : cur.langPointId,
       phonetic,
       partOfSpeech,
       meaning,

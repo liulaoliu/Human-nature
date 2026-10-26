@@ -137,7 +137,7 @@ describe('useReaderDerived AI 候选', () => {
       mkItem({ word: 'b', meaning: '乙' }),
       mkItem({ word: 'c', meaning: '丙', confusables: [{ word: 'x', meaning: '叉' }] }),
       mkItem({ word: 'd', meaning: null }),
-      mkItem({ word: 'phrase', meaning: '词组', kind: 'phrase' }),
+      mkItem({ word: 'take off', lemma: 'take off', meaning: '词组', kind: 'phrase' }),
     ]
     const { result, rerender } = renderHook((p: ReaderDerivedInput) => useReaderDerived(p), {
       initialProps: input({ items, confusableBatchSize: 1 }),
@@ -154,7 +154,7 @@ describe('useReaderDerived AI 候选', () => {
       mkItem({ word: 'run', lemma: 'run' }),
       mkItem({ word: 'running', lemma: 'run' }),
       mkItem({ word: 'walked', lemma: 'walked' }),
-      mkItem({ word: 'phrased', lemma: 'phrased', kind: 'phrase' }),
+      mkItem({ word: 'phrased up', lemma: 'phrased up', kind: 'phrase' }),
     ]
     const { result } = renderHook(() => useReaderDerived(input({ items })))
     expect(result.current.lemmaCandidates.map((i) => i.word)).toEqual(['running'])

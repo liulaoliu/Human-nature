@@ -12,7 +12,7 @@
  */
 import type { Sentence, VocabContext, VocabExample, VocabItem, VocabKind, VocabLibrary, VocabSource } from '../types/document'
 import { defaultReviewState } from '../types/document'
-import { kindOf } from './entryKind'
+import { kindOf, isSingleEnglishWord } from './entryKind'
 import { addArticleEntry } from './articleVocab'
 import { betterSource, contextFromSource, lemmaOf, normalizeWord, upsertContext } from './vocab'
 import { getSentenceLanguages } from './language'
@@ -95,9 +95,11 @@ export function splitGlossText(raw: string): { word: string; gloss?: string } {
  */
 export function langPointKeyAndKind(p: LanguagePoint): { key: string; kind?: VocabKind } {
   const english = normalizeWord(p.word)
+  // 单个英文单词写进「用法」栏时也是单词（AI 常这么干）：不能标 usage，
+  // 否则会占住同名单词的 lemma，让那个词永远进不了「本篇生词」。
+  if (isSingleEnglishWord(p.word)) return { key: lemmaOf(p.word) || textKey(p.word) }
   const isNote = p.kind === 'usage' || !english
   if (isNote) return { key: textKey(p.word), kind: 'usage' }
-  if (!english.includes(' ')) return { key: lemmaOf(p.word) || textKey(p.word) }
   return { key: lemmaOf(p.word) || textKey(p.word), kind: p.kind }
 }
 
@@ -280,7 +282,10 @@ export function upsertLanguagePoints(
  * 一次性修正（加载时跑，幂等）：早期版本把「用法笔记」的键取成了笔记里那个英文单词，
  * 于是把**真正的单词词条**误标成了「用法」（不进背单词/考试），也可能把单词标成「词组」。
  *
- * 判据：有 `kind` 却没有 `langPointId`（新代码收进来的条目一定带标记）。
+ * 判据分两种：
+ *   - 词形本身就是单个英文单词 → 一定是单词（连旧的 `langPointId` 一起清掉，
+ *     否则下次收语言点又会把它改回 usage）；
+ *   - 有 `kind` 却没有 `langPointId` → 旧数据；含中文的旧笔记改用整条文本做键。
  */
 export function repairLanguageKinds(library: VocabLibrary): VocabLibrary {
   const hasCJK = /[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af]/
@@ -288,14 +293,35 @@ export function repairLanguageKinds(library: VocabLibrary): VocabLibrary {
   /** 旧用法笔记的坏键（`mantra`）→ 修好的整条笔记键；按篇条目也要跟着改名。 */
   const renames = new Map<string, { key: string; sentenceId: string | null }[]>()
   const items = library.items.map((it) => {
-    const k = kindOf(it)
-    if (k === 'word' || it.langPointId) return it
+    const rawKind = it.kind ?? 'word'
+    if (rawKind === 'word') return it
     const english = normalizeWord(it.word)
 
-    if (k === 'usage') {
+    // 单词形态 → 不管有没有 langPointId，都改回普通单词。
+    // 历史数据里「单词被标成 usage 且带着旧标记」正是 Profits overboard 里
+    // conglomerate / reckon / scrap 永远加不进本篇的原因。
+    if (isSingleEnglishWord(it.word)) {
+      changed = true
+      const next = { ...it }
+      delete next.kind
+      delete next.langPointId
+      const key = lemmaOf(it.word) || textKey(it.word)
+      if (key && it.lemma !== key) {
+        const list = renames.get(it.lemma) ?? []
+        list.push({ key, sentenceId: it.source?.sentenceId ?? null })
+        renames.set(it.lemma, list)
+        return { ...next, id: `vocab:${key}`, lemma: key }
+      }
+      return next
+    }
+
+    // 新代码收进来的真笔记 / 词组一定带标记，别把它们改成单词。
+    if (it.langPointId) return it
+
+    if (rawKind === 'usage') {
       // 旧版把「用法笔记」的键取成笔记里的英文单词（如 `mantra`），
       // 导致同名单词被这条 usage 占住、手动加词永远被合并成「用法」。
-      // 真笔记（含中文）改用整条文本做键；纯英文的伪 usage 才退回单词。
+      // 真笔记（含中文）改用整条文本做键。
       if (!hasCJK.test(it.word)) {
         changed = true
         const next = { ...it }

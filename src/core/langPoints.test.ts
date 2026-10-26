@@ -118,6 +118,25 @@ describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () =>
     expect(lib.items.find((it) => it.lemma === 'fall back on')!.kind).toBe('phrase')
   })
 
+  it('单个英文单词写进「用法」栏也当单词：不标 usage、键用原形', () => {
+    expect(langPointKeyAndKind({ kind: 'usage', word: 'conglomerate', source: src('A', 's1') })).toEqual({
+      key: 'conglomerate',
+    })
+    const note = 'conglomerate 企业集团'
+    expect(langPointKeyAndKind({ kind: 'usage', word: note, source: src('A', 's1') })).toEqual({
+      key: textKey(note),
+      kind: 'usage',
+    })
+    const lib = upsertLanguagePoints(
+      createLibrary(),
+      [{ kind: 'usage', word: 'reckon', source: src('A', 's2') }],
+      NOW,
+    )
+    const it = lib.items.find((x) => x.lemma === 'reckon')!
+    expect(kindOf(it)).toBe('word')
+    expect(it.kind).toBeUndefined()
+  })
+
   it('语言点标记（langPointId）：词形被改写后也不会重复收同一条', () => {
     const src = { articleId: 'A', fileName: 'A', sentenceId: 's1', sentenceText: 'We fall back on it.' }
     const points = [{ kind: 'phrase' as const, word: 'fall back on', gloss: '转而依靠', source: src }]
@@ -148,6 +167,39 @@ describe('语言点收进词库（自动收藏：upsertLanguagePoints）', () =>
     expect(byId.get('c')!.kind).toBe('usage')
     expect(byId.get('d')!.kind).toBe('phrase')
     expect(byId.get('e')!.kind).toBe('usage')
+    expect(repairLanguageKinds(out)).toBe(out) // 幂等
+  })
+
+  it('repairLanguageKinds：带旧 langPointId 的单单词 usage 也改回单词（本篇不再丢词）', () => {
+    const lib = {
+      ...createLibrary(),
+      items: [
+        vocabItem({
+          id: 'vocab:conglomerate',
+          word: 'conglomerate',
+          lemma: 'conglomerate',
+          kind: 'usage',
+          langPointId: 'usage|A|s1|conglomerate 企业集团',
+          status: 'queried',
+          meaning: '企业集团',
+        }),
+      ],
+      articleEntries: [
+        {
+          articleId: 'A',
+          lemma: 'conglomerate',
+          origin: 'auto' as const,
+          addedAt: NOW.toISOString(),
+          sentenceId: 's1',
+          sentenceText: 'A family-controlled Danish conglomerate.',
+        },
+      ],
+    }
+    const out = repairLanguageKinds(lib)
+    expect(out.items[0].kind).toBeUndefined()
+    expect(out.items[0].langPointId).toBeUndefined()
+    expect(kindOf(out.items[0])).toBe('word')
+    expect(out.articleEntries?.[0].lemma).toBe('conglomerate')
     expect(repairLanguageKinds(out)).toBe(out) // 幂等
   })
 
