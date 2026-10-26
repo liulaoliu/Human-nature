@@ -18,6 +18,9 @@ export interface ReaderPanels {
   /** 「全部生词」独立视图（侧栏只显示本篇）。 */
   browseAll: boolean
   setBrowseAll: Dispatch<SetStateAction<boolean>>
+  /** 「本篇生词」整页视图：同一个浏览页，首屏范围 = 本篇。 */
+  browseArticle: boolean
+  setBrowseArticle: Dispatch<SetStateAction<boolean>>
   /** 逐句速读。 */
   speedReadOpen: boolean
   setSpeedReadOpen: Dispatch<SetStateAction<boolean>>
@@ -43,6 +46,7 @@ export interface ReaderPanels {
 export function useReaderPanels(): ReaderPanels {
   const [statsOpen, setStatsOpen] = useState(false)
   const [browseAll, setBrowseAll] = useState(false)
+  const [browseArticle, setBrowseArticle] = useState(false)
   const [speedReadOpen, setSpeedReadOpen] = useState(false)
   const [planOpen, setPlanOpen] = useState(false)
   const [intensiveOpen, setIntensiveOpen] = useState(false)
@@ -59,6 +63,8 @@ export function useReaderPanels(): ReaderPanels {
       setStatsOpen,
       browseAll,
       setBrowseAll,
+      browseArticle,
+      setBrowseArticle,
       speedReadOpen,
       setSpeedReadOpen,
       planOpen,
@@ -77,6 +83,7 @@ export function useReaderPanels(): ReaderPanels {
     [
       statsOpen,
       browseAll,
+      browseArticle,
       speedReadOpen,
       planOpen,
       intensiveOpen,

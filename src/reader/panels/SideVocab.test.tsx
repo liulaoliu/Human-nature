@@ -48,6 +48,7 @@ function setup(over: Partial<SideVocabProps> = {}) {
     onOpenWriting: vi.fn(),
     onWrongPractice: vi.fn(),
     onBrowseAll: vi.fn(),
+    onBrowseArticle: vi.fn(),
     onExportAnki,
     onPrint,
     onOpenExport: vi.fn(),

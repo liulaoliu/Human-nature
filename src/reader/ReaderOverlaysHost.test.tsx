@@ -56,10 +56,18 @@ function props(over: Partial<ReaderOverlaysHostProps> = {}): ReaderOverlaysHostP
     journal: { open: false } as ReaderOverlaysHostProps['journal'],
     allVocab: {
       open: false,
-      items: [],
-      list: [],
+      initialScope: 'all',
+      libraryItems: [],
+      articleEntries: [],
+      articleId: '',
+      articleTitle: '',
+      articles: [],
+      articleNums: new Map(),
+      meaningOf: () => null,
       view: 'card',
       onViewChange: noop,
+      sortBy: 'updatedAt',
+      onSortChange: noop,
       focusLemma: null,
       confirmDel: null,
       onSpeak: noop,
@@ -69,6 +77,7 @@ function props(over: Partial<ReaderOverlaysHostProps> = {}): ReaderOverlaysHostP
       onClose: noop,
       onExportAnki: noop,
       onPrint: noop,
+      onPrintRows: noop,
       onExportWrong: noop,
     },
     ...over,
@@ -123,42 +132,77 @@ describe('ReaderOverlaysHost：面板路由', () => {
   })
 })
 
-describe('ReaderOverlaysHost：全部生词', () => {
-  it('显示数量；卡片 / 表格切换调 onViewChange', () => {
+describe('ReaderOverlaysHost：生词浏览', () => {
+  it('显示数量；卡片 / 表格切换调 onViewChange', async () => {
     const onViewChange = vi.fn()
     render(
       <ReaderOverlaysHost
-        {...props({ allVocab: { ...props().allVocab, open: true, items: [item(), item({ id: 'v2' })], onViewChange } })}
+        {...props({
+          allVocab: { ...props().allVocab, open: true, libraryItems: [item(), item({ id: 'v2' })], onViewChange },
+        })}
       />,
     )
-    expect(screen.getByText('全部生词（2）')).toBeTruthy()
+    expect(await screen.findByText('全部生词')).toBeTruthy()
+    expect(screen.getByText('2 / 2 条')).toBeTruthy()
     fireEvent.click(screen.getByText('表格'))
     expect(onViewChange).toHaveBeenCalledWith('table')
     fireEvent.click(screen.getByText('卡片'))
     expect(onViewChange).toHaveBeenCalledWith('card')
   })
 
-  it('有词时可导出 / 打印；没有错词时「导出错词」禁用', () => {
+  it('有词时可导出 / 打印；没有错词时「导出错词」禁用', async () => {
     const onExportAnki = vi.fn()
     const onPrint = vi.fn()
     render(
       <ReaderOverlaysHost
-        {...props({ allVocab: { ...props().allVocab, open: true, items: [item()], onExportAnki, onPrint } })}
+        {...props({
+          allVocab: { ...props().allVocab, open: true, libraryItems: [item()], onExportAnki, onPrint },
+        })}
       />,
     )
-    fireEvent.click(screen.getByText('整库 Anki CSV'))
+    expect(await screen.findByText(/Anki CSV/)).toBeTruthy()
+    fireEvent.click(screen.getByText(/Anki CSV/))
     expect(onExportAnki).toHaveBeenCalledOnce()
-    fireEvent.click(screen.getByText('整库 A4 打印'))
+    fireEvent.click(screen.getByText(/A4 打印/))
     expect(onPrint).toHaveBeenCalledWith(expect.any(Array), '全部生词')
     expect((screen.getByText('导出错词') as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it('空库时列表位置给空态，关闭按钮可用', () => {
+  it('空库时给空态，关闭按钮可用', async () => {
     const onClose = vi.fn()
     render(<ReaderOverlaysHost {...props({ allVocab: { ...props().allVocab, open: true, onClose } })} />)
-    expect(screen.getByText('生词本是空的')).toBeTruthy()
+    expect(await screen.findByText(/没有符合条件的生词/)).toBeTruthy()
     expect(screen.queryByTestId('vocab-list')).toBeNull()
     fireEvent.click(screen.getByText('关闭'))
     expect(onClose).toHaveBeenCalledOnce()
+  })
+
+  it('本篇入口：首屏范围是本篇，A4 走按篇行（带编号）', async () => {
+    const onPrintRows = vi.fn()
+    const articleItems = [item({ id: 'v-run', word: 'run', lemma: 'run' })]
+    render(
+      <ReaderOverlaysHost
+        {...props({
+          allVocab: {
+            ...props().allVocab,
+            open: true,
+            initialScope: 'article',
+            articleId: 'A',
+            articleTitle: 'A 篇',
+            libraryItems: articleItems,
+            articleEntries: [{ articleId: 'A', lemma: 'run', origin: 'manual', addedAt: '2026-10-01T00:00:00.000Z' }],
+            articleNums: new Map([['run', 1]]),
+            meaningOf: () => '跑',
+            onPrintRows,
+          },
+        })}
+      />,
+    )
+    expect(await screen.findByText('本篇生词')).toBeTruthy()
+    fireEvent.click(screen.getByText(/A4 打印/))
+    expect(onPrintRows).toHaveBeenCalledWith(
+      [expect.objectContaining({ articleId: 'A', articleTitle: 'A 篇', number: 1, meaning: '跑' })],
+      '本篇生词',
+    )
   })
 })

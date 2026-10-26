@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { sortItems } from '../core/vocab'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 import { useSpeaking } from './hooks/useSpeaking'
@@ -81,7 +80,7 @@ export default function ReaderApp() {
   const prefs = useReaderPrefs()
   // 整包也直接交给 ReaderScreen（各 zone 自己取）；这里只解出本文件要用的几个
   const {
-    fontSize, bold, serif, eye, autoSpeak, ttsVoice, vocabLevel, vocabSort,
+    fontSize, bold, serif, eye, autoSpeak, ttsVoice, vocabLevel,
     confusableBatchSize, aiPackScope, autoVocabDirect, newLimit, newToday,
     setSideTab, setNewToday,
   } = prefs
@@ -241,7 +240,6 @@ export default function ReaderApp() {
   /** 记录今天新引入了一个词（用于每日配额；跨天由 useReaderPrefs 的 serialize 归零）。 */
   const bumpNewToday = useCallback(() => setNewToday((prev) => prev + 1), [setNewToday])
 
-  /** 生词本排序方式：见 useReaderPrefs.vocabSort */
   /** 词库增删动作（自动标词直入 / 速读加词 / 词组入库 / 移出）；写入仍只走 persist。 */
   const vocabEdits = useVocabEdits({
     libraryRef,
@@ -598,8 +596,6 @@ export default function ReaderApp() {
     enrichExamples: enrichExamplesFromTatoeba,
   })
 
-  // 8709 条词库每次渲染都排序会白烧几十毫秒，而且新数组会让下游 memo 全部失效。
-  const allList = useMemo(() => sortItems(library.items, vocabSort), [library.items, vocabSort])
   /** 精读工作流的两个入口动作（阶段→工具、拷打→题型两张表都在同名 hook） */
   const { openIntensiveStage, startIntensiveDrill } = useIntensiveActions({
     setIntensiveOpen: panels.setIntensiveOpen,
@@ -624,9 +620,9 @@ export default function ReaderApp() {
     services.listenOpen ||
     services.backOpen ||
     panels.speedReadOpen
-  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/回译/全部生词）隐藏精读工具栏 */
+  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/回译/生词浏览）隐藏精读工具栏 */
   const readingView =
-    !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll
+    !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll && !panels.browseArticle
 
   // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
   useReaderFlowRouting(route, currentSlug, { services, workspace, sentence, ready: libraryLoaded })
@@ -650,7 +646,6 @@ export default function ReaderApp() {
     articleVocab,
     libraryLemmas,
     vocabSidSet,
-    allList,
     studiedTodayIds,
     ttsAccents,
     ttsState,

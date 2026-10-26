@@ -44,6 +44,8 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     goalOpen,
     browseAll,
     setBrowseAll,
+    browseArticle,
+    setBrowseArticle,
     setComposing,
     setPlanOpen,
     setExportOpen,
@@ -55,11 +57,10 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     todayKey,
     startIntensiveDrill,
     openIntensiveStage,
-    allList,
     focusLemma,
     confirmDel,
   } = props
-  const { newLimit, setNewLimit, newToday, translateView, showLanguage, vocabView, setVocabView } =
+  const { newLimit, setNewLimit, newToday, translateView, showLanguage, vocabView, setVocabView, vocabSort, setVocabSort } =
     props.prefs
   const {
     knownLemmas,
@@ -155,7 +156,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     currentRef: articleRouting.currentRef,
     hasDoc: !!doc,
   })
-  const bodyVisible = !studyQueue && !browseAll && !examActive && !writingOpen
+  const bodyVisible = !studyQueue && !browseAll && !browseArticle && !examActive && !writingOpen
 
   return (
     <>
@@ -303,20 +304,29 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onSpeak: speak,
         }}
         allVocab={{
-          open: browseAll,
-          items: library.items,
-          list: allList,
+          open: browseAll || browseArticle,
+          initialScope: browseArticle ? 'article' : 'all',
+          libraryItems: library.items,
+          articleEntries: library.articleEntries ?? [],
+          articleId: doc ? articleIdentity : '',
+          articleTitle,
+          articles: exportArticles,
+          articleNums,
+          meaningOf,
           view: vocabView,
           onViewChange: setVocabView,
+          sortBy: vocabSort,
+          onSortChange: setVocabSort,
           focusLemma,
           confirmDel,
           onSpeak: speak,
           onDelete: askDelete,
           onReview: handleReview,
           onEdit: handleEdit,
-          onClose: () => setBrowseAll(false),
+          onClose: () => (browseArticle ? setBrowseArticle(false) : setBrowseAll(false)),
           onExportAnki: doExportAnki,
           onPrint: doPrint,
+          onPrintRows: doPrintRows,
           onExportWrong: doExportWrong,
         }}
       />

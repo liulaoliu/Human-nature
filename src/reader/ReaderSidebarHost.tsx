@@ -138,6 +138,7 @@ export interface ReaderSidebarHostProps {
     onShowLanguageChange: (on: boolean) => void
     onOpenPlan: () => void
     onBrowseAll: () => void
+    onBrowseArticle: () => void
     printTitle: string
     articleIdentity?: string
     meaningOf?: SideVocabProps['meaningOf']
@@ -378,6 +379,7 @@ export default function ReaderSidebarHost({
           quiz.setSetupOpen(true)
         },
         onBrowseAll: vocab.onBrowseAll,
+        onBrowseArticle: vocab.onBrowseArticle,
         onExportAnki: exporter.doExportAnki,
         onPrint: exporter.doPrint,
         onPrintRows: exporter.doPrintRows,

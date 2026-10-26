@@ -29,6 +29,7 @@ export type BooleanPanelName =
   | 'goal'
   | 'stats'
   | 'browse'
+  | 'browse-article'
 
 /**
  * 整页会话 / 工具页：它们由业务 hook 的队列或开关驱动，不是一对 `useState`。
@@ -73,6 +74,7 @@ const BOOLEAN_PANELS: BooleanPanelName[] = [
   'goal',
   'stats',
   'browse',
+  'browse-article',
 ]
 
 export const FLOW_NAMES: FlowName[] = [
@@ -173,6 +175,7 @@ export function panelFlags(panel: PanelName | ''): Record<BooleanPanelName, bool
     goal: panel === 'goal',
     stats: panel === 'stats',
     browse: panel === 'browse',
+    'browse-article': panel === 'browse-article',
   }
 }
 
@@ -186,6 +189,7 @@ const PANEL_SETTER: Record<BooleanPanelName, string> = {
   goal: 'setGoalOpen',
   stats: 'setStatsOpen',
   browse: 'setBrowseAll',
+  'browse-article': 'setBrowseArticle',
 }
 
 /**

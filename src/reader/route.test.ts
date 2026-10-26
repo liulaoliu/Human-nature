@@ -111,4 +111,16 @@ describe('route：面板标志', () => {
     expect(f.intensive).toBe(false)
     expect(panelFlags('').stats).toBe(false)
   })
+
+  it('本篇生词有独立地址：/p/browse-article，只开 browseArticle', () => {
+    expect(panelPath('005-leaders', 'browse-article')).toBe('/reader/a/005-leaders/p/browse-article')
+    expect(parseReaderRoute('/reader/p/browse-article')).toEqual({
+      slug: '',
+      panel: 'browse-article',
+      overlay: '',
+    })
+    const f = panelFlags('browse-article')
+    expect(f['browse-article']).toBe(true)
+    expect(f.browse).toBe(false)
+  })
 })

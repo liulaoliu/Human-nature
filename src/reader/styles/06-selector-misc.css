@@ -157,6 +157,24 @@
 .all-vocab { max-width: 1100px; margin: 0 auto; }
 .empty-hint { margin-top: 6px; line-height: 1.7; display: block; }
 
+/* 生词浏览页：筛选条在整页滚动里吸顶（负 margin 撑满 .reader-main 的 padding） */
+.vocab-browse .vb-bar {
+  position: sticky;
+  top: 0;
+  z-index: 12;
+  margin: -24px -34px 12px;
+  padding: 12px 34px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.vocab-browse .vb-bar .bar { margin-bottom: 0; }
+.vocab-browse .vb-picked { max-height: 150px; }
+.vocab-browse input[type='search'] { min-width: 180px; }
+.vocab-browse .vb-empty { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 18px 0; }
+
 /* 精读页「新建文章」欢迎立绘 */
 .composer-mascot {
   display: block;

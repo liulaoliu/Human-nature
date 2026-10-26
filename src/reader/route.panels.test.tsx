@@ -50,6 +50,21 @@ describe('useRoutedPanels：真实导航语义', () => {
     expect(result.current.panels.intensiveOpen).toBe(false)
   })
 
+  it('本篇生词：打开 push、关闭 replace，和别的面板同一套语义', async () => {
+    const { result } = setup('/reader/a/my-article')
+    act(() => result.current.panels.setBrowseArticle(true))
+    await waitFor(() =>
+      expect(result.current.pathname).toBe('/reader/a/my-article/p/browse-article'),
+    )
+    expect(result.current.panels.browseArticle).toBe(true)
+    expect(result.current.panels.browseAll).toBe(false)
+
+    act(() => result.current.panels.setBrowseArticle(false))
+    await waitFor(() => expect(result.current.pathname).toBe('/reader/a/my-article'))
+    expect(result.current.navigationType).toBe('REPLACE')
+    expect(result.current.panels.browseArticle).toBe(false)
+  })
+
   it('函数式更新按路由当前状态求值：setStatsOpen(v => !v) 能开也能关', async () => {
     const { result } = setup('/reader')
     act(() => result.current.panels.setStatsOpen((v) => !v))

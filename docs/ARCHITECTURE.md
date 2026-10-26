@@ -59,6 +59,7 @@ types ← core ← adapters ← reader
 | 语言点手动编辑（表单 ↔ 数据、多行拆条、列表摘要、旧数据归一） | `src/core/language.ts` | `getSentenceLanguages` 负责兼容老数据（单条 `language`、列表字段是字符串）；结构 / 语法的换行与缩进原样保留。阅读 / 速读共用 `panels/LanguageEditor`；正文 / 速读 / 日志共用 `panels/LanguageLines`。**点遮罩不关闭**，只有「保存 / 取消」能关；点输入框展开、点框外收回 |
 | 单词的词形 / 合并 / 排期规则 | `src/core/vocab.ts`（对外出口）+ `src/core/vocab/*` | 子模块按职责分：`word` / `merge` / `analysis` / `library` / `review`；新规则放进对应子模块，别把 facade 再撑大 |
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
+| 生词浏览页的范围 / 类型 / 搜索 / 日期筛选 | `src/core/vocabBrowse.ts` | 本篇 / 选篇归属走 `articleEntryViewsFrom`；日期 = 入库日 + `dayKeyLocal`；面板只收选择 + 渲染 |
 | 文章包（单篇 / 多篇导出） | `src/core/articlePackage.ts` | 只带选中篇的正文 / 词条 / 语言点 / 能归属到这篇的记录；全局统计（活动、学习时长、选词会话）不随单篇走。导入侧仍走「合并导入」，覆盖导入会被拒绝 |
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |
@@ -396,7 +397,9 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 
 `<panel>` 有两类，都在同一张 `PanelName` 表里：
 
-- **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse`；
+- **布尔面板**：`intensive` / `speed` / `plan` / `journal` / `export` / `goal` / `stats` / `browse` / `browse-article`；
+  `browse` 与 `browse-article` 是同一个 `VocabBrowsePanel`，URL 只决定首屏范围（全部 / 本篇）；
+  类型 / 搜索 / 日期 / 含已掌握是页面内筛选，不写 URL。
 - **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
   `listen`（听力）/ `write`（仿写）/ `back`（回译）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
 

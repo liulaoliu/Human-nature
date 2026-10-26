@@ -18,6 +18,7 @@ describe('useReaderPanels', () => {
     expect(result.current.goalOpen).toBe(false)
     expect(result.current.statsOpen).toBe(false)
     expect(result.current.browseAll).toBe(false)
+    expect(result.current.browseArticle).toBe(false)
     expect(result.current.journalDay).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
@@ -32,6 +33,15 @@ describe('useReaderPanels', () => {
     // 关一个也不连带关别的（这一步就是「状态散落」时最容易写错的地方）
     act(() => result.current.setPlanOpen(false))
     expect(result.current.browseAll).toBe(true)
+  })
+
+  it('本篇浏览是独立的开关（URL 面板 /p/browse-article）', () => {
+    const { result } = renderHook(() => useReaderPanels())
+    act(() => result.current.setBrowseArticle(true))
+    expect(result.current.browseArticle).toBe(true)
+    expect(result.current.browseAll).toBe(false)
+    act(() => result.current.setBrowseArticle(false))
+    expect(result.current.browseArticle).toBe(false)
   })
 
   it('学习日志可以直接跳到某一天', () => {

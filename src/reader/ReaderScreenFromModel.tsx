@@ -31,7 +31,6 @@ export interface ReaderAppModel {
   libraryLemmas: ReaderScreenProps['libraryLemmas']
   vocabSidSet: ReaderScreenProps['vocabSidSet']
   studiedTodayIds: ReaderScreenProps['studiedTodayIds']
-  allList: ReaderScreenProps['allList']
 
   ttsAccents: ReaderScreenProps['ttsAccents']
   ttsState: ReaderScreenProps['ttsState']
@@ -98,7 +97,6 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     articleVocab: app.articleVocab,
     libraryLemmas: app.libraryLemmas,
     vocabSidSet: app.vocabSidSet,
-    allList: app.allList,
     studiedTodayIds: app.studiedTodayIds,
 
     pasted: p.pasted,
@@ -138,6 +136,8 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     exportOpen: panels.exportOpen,
     goalOpen: panels.goalOpen,
     browseAll: panels.browseAll,
+    browseArticle: panels.browseArticle,
+    setBrowseArticle: panels.setBrowseArticle,
     flash: app.flash,
     peekSid: h.peekSid,
     selSid: d.selSid,

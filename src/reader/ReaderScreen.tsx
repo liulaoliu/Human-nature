@@ -2,7 +2,7 @@ import { useMemo, type ComponentProps } from 'react'
 import { articleKey } from '../core/docSignature'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../core/ports'
-import type { Sentence, VocabItem, VocabLibrary } from '../types/document'
+import type { Sentence, VocabLibrary } from '../types/document'
 import type { ReaderDoc } from './hooks/useReaderDoc'
 import ReaderShell from './ReaderShell'
 import ReaderToolbarHost from './ReaderToolbarHost'
@@ -84,7 +84,6 @@ export interface ReaderScreenProps {
   articleVocab: ReturnType<typeof useArticleVocabView>
   libraryLemmas: Set<string>
   vocabSidSet: Set<string>
-  allList: VocabItem[]
   studiedTodayIds: string[]
 
   // ---- 粘贴 / AI 配置 ----
@@ -127,6 +126,8 @@ export interface ReaderScreenProps {
   exportOpen: boolean
   goalOpen: boolean
   browseAll: boolean
+  browseArticle: boolean
+  setBrowseArticle: (v: boolean) => void
   flash: (message: string) => void
   peekSid: string | null
   selSid: string | null

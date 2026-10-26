@@ -59,6 +59,8 @@ export interface SideVocabProps {
 
   // 库 / 导出
   onBrowseAll: () => void
+  /** 整页查看本篇生词（同一个浏览页，首屏范围 = 本篇）。 */
+  onBrowseArticle: () => void
   onExportAnki: (items: VocabItem[], name?: string) => void
   onPrint: (
     items: VocabItem[],
@@ -142,6 +144,7 @@ export default function SideVocab({
   onOpenWriting,
   onWrongPractice,
   onBrowseAll,
+  onBrowseArticle,
   onExportAnki,
   onPrint,
   onPrintRows,
@@ -334,6 +337,13 @@ export default function SideVocab({
       <div className="bar">
         <button onClick={onBrowseAll} disabled={!hasItems} title="查看全部生词（跨文章）">
           全部生词
+        </button>
+        <button
+          onClick={onBrowseArticle}
+          disabled={!hasDoc}
+          title="整页查看本篇生词（可筛选、批量导出）"
+        >
+          本篇生词
         </button>
         <button onClick={() => onExportAnki(shown)} disabled={!shown.length} title="导出本篇（按当前类型过滤）为 Anki CSV">
           Anki（本篇）

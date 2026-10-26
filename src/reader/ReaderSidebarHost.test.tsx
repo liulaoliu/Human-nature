@@ -176,6 +176,7 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
       onShowLanguageChange: fn(),
       onOpenPlan: fn(),
       onBrowseAll: fn(),
+      onBrowseArticle: fn(),
       printTitle: '本篇生词',
       onOpenExport: fn(),
       onToggleStats: fn(),
