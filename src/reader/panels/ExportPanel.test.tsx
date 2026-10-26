@@ -47,6 +47,44 @@ const pick = (label: string | RegExp) => fireEvent.click(screen.getByLabelText(l
 /** 表头那句「将处理 N 条（范围）」 */
 const header = () => document.querySelector('.plan-head .muted')?.textContent ?? ''
 
+describe('ExportPanel：文章包', () => {
+  it('本篇：当前篇已保存时导出它的 saved id', () => {
+    const onExportArticlePackage = vi.fn()
+    setup({ articleSavedId: 'saved:A', onExportArticlePackage })
+    fireEvent.click(screen.getByRole('button', { name: /文章包/ }))
+    expect(onExportArticlePackage).toHaveBeenCalledWith(['saved:A'])
+  })
+
+  it('本篇没保存：按钮禁用，提示先保存', () => {
+    const onExportArticlePackage = vi.fn()
+    setup({ onExportArticlePackage })
+    const btn = screen.getByRole('button', { name: /文章包/ }) as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    expect(btn.getAttribute('title')).toContain('先点「保存」')
+  })
+
+  it('按文章：只导勾选的篇', () => {
+    const onExportArticlePackage = vi.fn()
+    const articles = [
+      { id: 'A', title: 'A 篇', lemmas: new Set<string>() },
+      { id: 'B', title: 'B 篇', lemmas: new Set<string>() },
+    ]
+    setup({ articles, onExportArticlePackage })
+    pick(/按文章/)
+    fireEvent.click(screen.getByRole('button', { name: '清空' }))
+    fireEvent.click(screen.getByLabelText(/B 篇/))
+    fireEvent.click(screen.getByRole('button', { name: /文章包/ }))
+    expect(onExportArticlePackage).toHaveBeenCalledWith(['B'])
+  })
+
+  it('按日期 / 全部：文章包禁用（只能按篇导）', () => {
+    const onExportArticlePackage = vi.fn()
+    setup({ articleSavedId: 'saved:A', onExportArticlePackage })
+    pick(/^全部（/)
+    expect((screen.getByRole('button', { name: /文章包/ }) as HTMLButtonElement).disabled).toBe(true)
+  })
+})
+
 describe('ExportPanel：内容口径', () => {
   it('默认全部；切「词组 / 习语」后只把词组交给打印（表头写清范围）', () => {
     const { onPrint } = setup()

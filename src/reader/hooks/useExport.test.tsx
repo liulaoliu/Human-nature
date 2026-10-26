@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, renderHook } from '@testing-library/react'
 import { useExport, type UseExportParams } from './useExport'
+import { ARTICLE_PACKAGE_FORMAT } from '../../core/articlePackage'
 import { createLibrary, markWord } from '../../core/vocab'
 import { TEST_NOW, vocabItem } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
@@ -103,7 +104,7 @@ afterEach(() => {
 describe('useExport：导入', () => {
   it('初始态：返回全部导出/导入动作', () => {
     const { result } = setup()
-    for (const key of ['download', 'doExportAnki', 'exportJson', 'exportWordList', 'exportBatch', 'doExportWrong', 'exportAll', 'onImportBackup', 'onMergeBackup', 'doPrint'] as const) {
+    for (const key of ['download', 'doExportAnki', 'exportJson', 'exportWordList', 'exportBatch', 'doExportWrong', 'exportAll', 'doExportArticlePackage', 'onImportBackup', 'onMergeBackup', 'doPrint'] as const) {
       expect(typeof result.current[key]).toBe('function')
     }
   })
@@ -186,6 +187,37 @@ describe('useExport：合并导入', () => {
     })
     expect(persistNow).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('合并失败：不是有效的 JSON 备份')
+  })
+})
+
+describe('useExport：文章包', () => {
+  it('当前篇没保存：只提示，不下载', () => {
+    const { result, flash } = setup()
+    result.current.doExportArticlePackage(['nope'])
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('还没保存'))
+  })
+
+  it('已保存的篇：导出 JSON（含这篇的词条），并提示用合并导入', () => {
+    const create = vi.fn(() => 'blob:test')
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: create })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const { result, flash } = setup({ saved: [article], library: backupLibrary() })
+    result.current.doExportArticlePackage([article.id])
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('已导出文章包'))
+  })
+
+  it('覆盖导入拿到文章包：拒绝，不碰词库（否则整库只剩这一篇）', async () => {
+    const { result, persistNow, flash } = setup()
+    await act(async () => {
+      await result.current.onImportBackup(
+        fileOf(JSON.stringify({ format: ARTICLE_PACKAGE_FORMAT, articles: [article], library: backupLibrary() })),
+      )
+    })
+    expect(persistNow).not.toHaveBeenCalled()
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('文章包'))
   })
 })
 

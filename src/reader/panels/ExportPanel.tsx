@@ -40,6 +40,8 @@ export interface ExportPanelProps {
   articleWords: VocabItem[]
   /** 当前篇稳定标识（按篇打印 / 编号用） */
   articleId?: string
+  /** 当前篇的「已保存」id；没保存时为空（文章包要带正文和 AI 结果，只能从已保存文章导） */
+  articleSavedId?: string
   /** 按篇收录音表（有则按篇只读它，不再按正文出现推） */
   articleEntries?: ArticleVocabEntry[]
   /** 已保存文章（按篇导出用） */
@@ -56,6 +58,8 @@ export interface ExportPanelProps {
   onPrintRows?: (rows: PrintRow[], title: string) => void
   onExportAnki: (items: VocabItem[], name?: string) => void
   onExportWordList: (items: VocabItem[], name?: string, opts?: { includePhrases?: boolean }) => void
+  /** 导出文章包（正文 + AI 结果 + 这篇的生词 / 语言点 + 相关学习记录）；导入侧用「合并导入」 */
+  onExportArticlePackage?: (ids: string[]) => void
 }
 
 /**
@@ -68,6 +72,7 @@ export default function ExportPanel({
   articleTitle,
   articleWords,
   articleId,
+  articleSavedId,
   articleEntries,
   articles,
   todayKey,
@@ -75,6 +80,7 @@ export default function ExportPanel({
   onPrintRows,
   onExportAnki,
   onExportWordList,
+  onExportArticlePackage,
 }: ExportPanelProps) {
   const [scope, setScope] = useState<PrintScope>('article')
   const [content, setContent] = useState<PrintContent>('all')
@@ -101,6 +107,24 @@ export default function ExportPanel({
   )
   const { contentCounts, pool, articlePool, items, rows, title, dates, articleCount, unprinted, isArticleOrder, canAct } = plan
   const effectiveScope: PrintScope = scope
+
+  /** 文章包只能按篇导：范围选「本篇」或「按文章」，且当前篇已保存 */
+  const packageIds =
+    effectiveScope === 'article'
+      ? articleSavedId
+        ? [articleSavedId]
+        : []
+      : effectiveScope === 'byArticle'
+        ? articles.filter((a) => pickedArticles.has(a.id)).map((a) => a.id)
+        : []
+  const canPackage = packageIds.length > 0 && !!onExportArticlePackage
+  const packageHint = !onExportArticlePackage
+    ? undefined
+    : effectiveScope !== 'article' && effectiveScope !== 'byArticle'
+      ? '文章包只能按篇导：范围选「本篇」或「按文章」'
+      : effectiveScope === 'article' && !articleSavedId
+        ? '本篇还没保存：先点「保存」再导出（文章包要带正文和 AI 结果）'
+        : '完整文章（正文 + AI 翻译 / 语法 / 语言点）+ 这篇的生词与语言点 + 相关学习记录；另一台电脑用「合并导入」'
 
   /** 新增生词的热力图（近 13 周；只用于按日期选范围） */
   const dateCount = useMemo(() => new Map(dates), [dates])
@@ -330,6 +354,13 @@ export default function ExportPanel({
             >
               📄 单词表 TXT
             </button>
+            <button
+              disabled={!canPackage}
+              onClick={() => onExportArticlePackage?.(packageIds)}
+              title={packageHint}
+            >
+              🗂 文章包 JSON
+            </button>
           </div>
           <div className="expick-title">
             打印 / 导出标题：<b>{title}</b>
@@ -337,6 +368,9 @@ export default function ExportPanel({
           <div className="muted extip">
             按文章 / 日期可**勾选多个**；同一词在不同篇各算一条（各打各的编号）。打印后会按篇记「已打印」，选「未打印」可只打新的。
             词组 / 习语 / 用法是语言点里**自动收藏**进来的，跟生词一起进词库{dateKinds ? '（当前内容口径）' : ''}。
+            <br />
+            文章包 = 单篇 / 多篇的完整迁移：正文、AI 结果、生词与语言点、这篇的学习记录（练习 / 错题 / 写作 / 回译 / 复述 / 读完）。
+            活动热力图、学习时长是全局统计，不随单篇走；整库搬家用侧栏「导出全部」。
           </div>
         </div>
       </div>

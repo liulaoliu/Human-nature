@@ -27,6 +27,12 @@ import {
   mergeWritingHistory,
 } from '../../core/mergeBackup'
 import { parseBackupPayload } from '../../core/backupParse'
+import { ARTICLE_PACKAGE_FORMAT, buildArticlePackage } from '../../core/articlePackage'
+
+/** 文章包走「合并导入」；覆盖导入会把整库清成只剩这一篇。 */
+function isArticlePackage(raw: unknown): boolean {
+  return !!raw && typeof raw === 'object' && (raw as { format?: unknown }).format === ARTICLE_PACKAGE_FORMAT
+}
 
 /** 一份备份里解析出来的各项数据（缺的字段为 undefined / 空）。 */
 export interface UseExportParams {
@@ -140,12 +146,41 @@ export function useExport({
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
   }
 
+  /**
+   * 导出文章包（单篇 / 多篇）：正文 + AI 结果 + 这篇的词条 / 语言点 + 能归属到这篇的学习记录。
+   * 只认已保存文章（正文和 AI 结果在 SavedArticle 里）；没保存就提示先保存。
+   */
+  const doExportArticlePackage = (ids: string[]) => {
+    const wanted = new Set(ids)
+    const picked = saved.filter((a) => wanted.has(a.id))
+    if (!picked.length) {
+      flash('这篇还没保存：先点「保存」再导出文章包（文章包要带上正文和 AI 结果）')
+      return
+    }
+    const pkg = buildArticlePackage({
+      articles: saved,
+      articleIds: picked.map((a) => a.id),
+      library,
+      learning: { ...learning, writingHistory },
+    })
+    const day = dayKeyLocal()
+    const label = picked.length === 1 ? picked[0].title : `${picked.length}篇`
+    const safe = label.replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40) || '文章'
+    download(`文章包-${safe}-${day}.json`, JSON.stringify(pkg, null, 2), 'application/json')
+    flash(`已导出文章包：${picked.length} 篇（含生词 / 语言点 / 相关记录）；另一台电脑用「合并导入」`)
+  }
+
   /** 导入备份（覆盖）：词库整库替换、统计整段替换，文章按 id 写入。 */
   const onImportBackup = async (file: File | null | undefined) => {
     if (!file) return
     let phase: 'parse' | 'write' = 'parse'
     try {
-      const parsed = parseBackupPayload(JSON.parse(await file.text()))
+      const raw = JSON.parse(await file.text())
+      if (isArticlePackage(raw)) {
+        flash('这是「文章包」，请改用「合并导入」：覆盖导入会把词库清成只剩这一篇')
+        return
+      }
+      const parsed = parseBackupPayload(raw)
       phase = 'write'
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
@@ -334,5 +369,5 @@ export function useExport({
     }
   }
 
-  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, onImportBackup, onMergeBackup, doPrint, doPrintRows }
+  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, doExportArticlePackage, onImportBackup, onMergeBackup, doPrint, doPrintRows }
 }

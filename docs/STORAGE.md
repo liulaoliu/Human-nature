@@ -263,6 +263,7 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
+| 应用内「文章包」（单篇 / 多篇） | 打印 / 导出面板「🗂 文章包 JSON」（范围选「本篇」或「按文章」） | 正文 + AI 结果（翻译/语法/语言点/生词/搭配）+ 这篇的词条与按篇收录 + 能归属到这篇的学习记录（练习/错题/读完/写作/回译/复述/略读/答题事件）。另一台电脑用「合并导入」；**覆盖导入会拒绝**（否则整库只剩这一篇）。活动/学习时长等全局统计不随单篇走 |
 
 **合并导入的落盘顺序不能反**：文章 → 词库（`persistNow` 等真正成功）→ 学习记录 → 最后才写
 `reader:importedBackups` 指纹。词库 409 / 断网时不能记指纹，否则同一份文件再导入会被去重直接跳过，

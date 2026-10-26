@@ -92,6 +92,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     copyCleanupPrompt,
     createArticle,
     editing,
+    savedId,
     draft,
     setDraft,
     renameArticle,
@@ -137,7 +138,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
   const { journalAllDays, journalData, journalSummaryRows, journalHeat, exportArticles } = props.viewData
   const { intensivePlan, intensiveSkimmed, myRetells, outputBoard } = props.articleDerived
   const { todayReadDone, readDone, readGoal, setReadGoal, goalMemo, setGoalMemo, articleReadDay, markReadDone, undoReadDone, saveRetell, deleteRetell, toggleSkimmed } = props.learning
-  const { doExportAnki, exportWordList, doPrint, doPrintRows, doExportWrong } = props.exporter
+  const { doExportAnki, exportWordList, doPrint, doPrintRows, doExportWrong, doExportArticlePackage } = props.exporter
 
   /** 本篇语境释义（速读和正文悬浮提示共用；不再全库扫） */
   const wordMeaning = (w: string, sid?: string | null) => meaningOf(w, sid)
@@ -280,6 +281,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           articleTitle,
           articleWords,
           articleId: articleIdentity,
+          articleSavedId: savedId ?? undefined,
           articleEntries: library.articleEntries,
           articles: exportArticles,
           todayKey,
@@ -287,6 +289,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onPrintRows: doPrintRows,
           onExportAnki: doExportAnki,
           onExportWordList: exportWordList,
+          onExportArticlePackage: doExportArticlePackage,
         }}
         journal={{
           open: journalOpen,
