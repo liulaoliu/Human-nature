@@ -18,6 +18,8 @@ export interface GoldenPanelProps {
   bankRows?: GoldenBankRow[]
   onExportBankMarkdown?: () => void
   onExportBankAnki?: () => void
+  onPrintBank?: () => void
+  onPrintLesson?: () => void
 }
 
 const ROLE_LABEL: Record<'intro' | 'body' | 'conclusion', string> = {
@@ -41,6 +43,8 @@ export default function GoldenPanel({
   bankRows = [],
   onExportBankMarkdown,
   onExportBankAnki,
+  onPrintBank,
+  onPrintLesson,
 }: GoldenPanelProps) {
   if (!api.open) return null
   return (
@@ -65,13 +69,20 @@ export default function GoldenPanel({
           onBack={() => api.setView('home')}
           onExportMarkdown={onExportBankMarkdown}
           onExportAnki={onExportBankAnki}
+          onPrint={onPrintBank}
         />
       )}
       {api.view === 'plan' && <GoldenPlan api={api} />}
       {api.view === 'drill' && <GoldenDrillView api={api} onSpeak={onSpeak} />}
       {api.view === 'recall' && <GoldenRecallView api={api} onSpeak={onSpeak} />}
       {api.view === 'summary' && (
-        <GoldenSummary api={api} onExportMarkdown={onExportMarkdown} onOpenWriting={onOpenWriting} onSpeak={onSpeak} />
+        <GoldenSummary
+          api={api}
+          onExportMarkdown={onExportMarkdown}
+          onOpenWriting={onOpenWriting}
+          onSpeak={onSpeak}
+          onPrint={onPrintLesson}
+        />
       )}
     </div>
   )
@@ -462,11 +473,13 @@ function GoldenBankView({
   onBack,
   onExportMarkdown,
   onExportAnki,
+  onPrint,
 }: {
   rows: GoldenBankRow[]
   onBack: () => void
   onExportMarkdown?: () => void
   onExportAnki?: () => void
+  onPrint?: () => void
 }) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<GoldenBankStatus>('all')
@@ -479,6 +492,7 @@ function GoldenBankView({
         <span className="muted">{filtered.length}/{rows.length} 句</span>
         {onExportMarkdown && <button onClick={onExportMarkdown}>导出 Markdown</button>}
         {onExportAnki && <button onClick={onExportAnki}>导出 Anki</button>}
+        {onPrint && <button onClick={onPrint}>打印金句本</button>}
       </div>
       <div className="bar golden-modes">
         <input
@@ -521,11 +535,12 @@ function GoldenBankView({
   )
 }
 
-function GoldenSummary({ api, onExportMarkdown, onOpenWriting, onSpeak }: {
+function GoldenSummary({ api, onExportMarkdown, onOpenWriting, onSpeak, onPrint }: {
   api: ReturnType<typeof useGoldenDrill>
   onExportMarkdown: () => void
   onOpenWriting?: (mustUse: string[]) => void
   onSpeak: (s: string) => void
+  onPrint?: () => void
 }) {
   const lesson = api.lesson
   const summary = api.summary
@@ -547,6 +562,7 @@ function GoldenSummary({ api, onExportMarkdown, onOpenWriting, onSpeak }: {
         <b>本课素材总结</b>
         <span className="muted">{summary?.masteredSentences ?? 0}/{summary?.selectedSentences ?? 0} 句掌握</span>
         <button onClick={onExportMarkdown}>导出 Markdown</button>
+        {onPrint && <button onClick={onPrint}>打印本课</button>}
         {onOpenWriting && <button onClick={() => onOpenWriting(targets.map((t) => t.en))}>去仿写</button>}
       </div>
       {lesson.outline.length > 0 && (

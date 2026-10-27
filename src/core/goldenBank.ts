@@ -135,6 +135,52 @@ function csvField(s: string): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+/** 金句本 A4 讲义：两栏密排，打印后就是一张写作素材纸。 */
+export function goldenBankToPrintHTML(rows: GoldenBankRow[], title = '全库金句本'): string {
+  const body = rows
+    .map((r) => {
+      const targets = r.targets
+        .map((t) => `${GOLDEN_TARGET_KIND_LABEL[t.kind]} ${escapeHtml(t.en)}${t.zh ? `（${escapeHtml(t.zh)}）` : ''}`)
+        .join('；')
+      return `<div class="item">
+        <div class="head">${r.mastered ? '✅ ' : ''}${escapeHtml(r.articleTitle)} · ${escapeHtml(r.sentenceId)}</div>
+        <div class="en">${escapeHtml(r.text)}</div>
+        ${r.zh ? `<div class="zh">${escapeHtml(r.zh)}</div>` : ''}
+        ${r.pattern ? `<div class="note">句型：${escapeHtml(r.pattern)}</div>` : ''}
+        ${r.tense ? `<div class="note">时态：${escapeHtml(r.tense)}</div>` : ''}
+        ${targets ? `<div class="note">学习点：${targets}</div>` : ''}
+      </div>`
+    })
+    .join('')
+  return `<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
+<style>
+@page { size: A4; margin: 10mm; }
+html, body { margin: 0; }
+body { font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; font-size: 9pt; line-height: 1.4; }
+h1 { font-size: 14pt; margin: 0 0 2mm; }
+.meta { color: #666; font-size: 8pt; margin: 0 0 3mm; }
+.items { columns: 2; column-gap: 6mm; column-rule: .3pt solid #ddd; }
+.item { break-inside: avoid; margin: 0 0 3mm; }
+.head { color: #666; font-size: 7.5pt; }
+.en { font-weight: 600; margin-top: .5mm; }
+.zh { color: #333; }
+.note { color: #555; font-size: 8pt; }
+</style></head><body>
+<h1>${escapeHtml(title)}</h1>
+<div class="meta">共 ${rows.length} 句 · ${rows.filter((r) => r.mastered).length} 句已掌握</div>
+<div class="items">${body}</div>
+</body></html>`
+}
+
 /** 金句本导出 Anki CSV：正面整句，背面中文 + 句型/时态 + 学习点。 */
 export function goldenBankToAnkiCSV(rows: GoldenBankRow[], header = true): string {
   const out: string[] = header ? ['Front,Back,Tags'] : []

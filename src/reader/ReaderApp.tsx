@@ -41,7 +41,12 @@ import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
 import { goldenToMarkdown } from '../core/goldenMarkdown'
-import { buildGoldenBank, goldenBankToAnkiCSV, goldenBankToMarkdown } from '../core/goldenBank'
+import {
+  buildGoldenBank,
+  goldenBankToAnkiCSV,
+  goldenBankToMarkdown,
+  goldenBankToPrintHTML,
+} from '../core/goldenBank'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -552,6 +557,46 @@ export default function ReaderApp() {
     download('全库金句本-anki.csv', goldenBankToAnkiCSV(goldenBankRows), 'text/csv;charset=utf-8')
   }
 
+  const printGoldenHTML = (title: string, html: string) => {
+    const win = window.open('', '_blank')
+    if (!win) {
+      flash('弹窗被拦截，允许后重试')
+      return
+    }
+    win.document.write(html)
+    win.document.close()
+    win.document.title = title
+  }
+
+  const printGoldenBank = () => {
+    if (!goldenBankRows.length) {
+      flash('还没有金句可打印')
+      return
+    }
+    printGoldenHTML('全库金句本', goldenBankToPrintHTML(goldenBankRows))
+  }
+
+  const printGoldenLesson = () => {
+    if (!doc || !golden.lesson) {
+      flash('先打开一篇金句课')
+      return
+    }
+    const rows = buildGoldenBank(
+      [{
+        id: articleKey || articleTitle || articleIdentity,
+        title: articleTitle || '未命名',
+        sentences: doc.sentences,
+        golden: golden.lesson,
+      }],
+      goldenDrills,
+    )
+    if (!rows.length) {
+      flash('本课还没有可打印的金句')
+      return
+    }
+    printGoldenHTML(articleTitle || 'D老师小课堂', goldenBankToPrintHTML(rows, articleTitle || 'D老师小课堂'))
+  }
+
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
   const articleDerived = useArticleDerived({
     articleIdentity,
@@ -738,6 +783,8 @@ export default function ReaderApp() {
     goldenBankRows,
     onExportGoldenBankMarkdown: exportGoldenBankMarkdown,
     onExportGoldenBankAnki: exportGoldenBankAnki,
+    onPrintGoldenBank: printGoldenBank,
+    onPrintGoldenLesson: printGoldenLesson,
     panels,
     browseFilters,
     articleRouting,

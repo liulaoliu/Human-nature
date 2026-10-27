@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { buildGoldenBank, filterGoldenBank, goldenBankToAnkiCSV, goldenBankToMarkdown } from './goldenBank'
+import {
+  buildGoldenBank,
+  filterGoldenBank,
+  goldenBankToAnkiCSV,
+  goldenBankToMarkdown,
+  goldenBankToPrintHTML,
+} from './goldenBank'
 import { buildLocalGoldenLesson, goldenDrillKey } from './golden'
 import { emptyGoldenRecord } from './goldenProgress'
 import type { Sentence } from '../types/document'
@@ -58,5 +64,9 @@ describe('全库金句本', () => {
     const csv = goldenBankToAnkiCSV(rows)
     expect(csv.split('\n')[0]).toBe('Front,Back,Tags')
     expect(csv).toContain('In response to the pandemic')
+    const html = goldenBankToPrintHTML(rows)
+    expect(html).toContain('<title>全库金句本</title>')
+    expect(html).toContain('In response to the pandemic')
+    expect(html).toContain('columns: 2')
   })
 })

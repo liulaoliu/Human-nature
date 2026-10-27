@@ -156,6 +156,8 @@ export interface ReaderScreenProps {
   goldenBankRows: GoldenBankRow[]
   onExportGoldenBankMarkdown: () => void
   onExportGoldenBankAnki: () => void
+  onPrintGoldenBank: () => void
+  onPrintGoldenLesson: () => void
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>
