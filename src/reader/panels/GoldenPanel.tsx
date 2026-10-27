@@ -1,7 +1,8 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import type { useGoldenDrill } from '../hooks/useGoldenDrill'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { GOLDEN_TARGET_KIND_LABEL, type GoldenCloze } from '../../core/golden'
+import { filterGoldenBank, type GoldenBankRow, type GoldenBankStatus } from '../../core/goldenBank'
 import type { GoldenPickMode, GoldenSentence } from '../../types/document'
 
 export interface GoldenPanelProps {
@@ -13,6 +14,10 @@ export interface GoldenPanelProps {
   onGenerate?: () => void
   /** 把本课词块带进仿写；没有就不显示按钮。 */
   onOpenWriting?: (mustUse: string[]) => void
+  /** 全库金句本。 */
+  bankRows?: GoldenBankRow[]
+  onExportBankMarkdown?: () => void
+  onExportBankAnki?: () => void
 }
 
 const ROLE_LABEL: Record<'intro' | 'body' | 'conclusion', string> = {
@@ -26,7 +31,17 @@ function isMastered(rec: GoldenDrillRecord | null): boolean {
 }
 
 /** D老师小课堂：课程页 / 选金句 / 逐句锤炼 / 逆向回顾 / 素材总结。 */
-export default function GoldenPanel({ api, articleTitle, onSpeak, onExportMarkdown, onGenerate, onOpenWriting }: GoldenPanelProps) {
+export default function GoldenPanel({
+  api,
+  articleTitle,
+  onSpeak,
+  onExportMarkdown,
+  onGenerate,
+  onOpenWriting,
+  bankRows = [],
+  onExportBankMarkdown,
+  onExportBankAnki,
+}: GoldenPanelProps) {
   if (!api.open) return null
   return (
     <div className="study golden">
@@ -41,7 +56,17 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, onExportMarkdo
           {api.summary ? `掌握 ${api.summary.masteredTargets}/${api.summary.totalTargets} 个学习点` : ''}
         </span>
       </div>
-      {api.view === 'home' && <GoldenHome api={api} onGenerate={onGenerate} />}
+      {api.view === 'home' && (
+        <GoldenHome api={api} onGenerate={onGenerate} bankCount={bankRows.length} onOpenBank={() => api.setView('bank')} />
+      )}
+      {api.view === 'bank' && (
+        <GoldenBankView
+          rows={bankRows}
+          onBack={() => api.setView('home')}
+          onExportMarkdown={onExportBankMarkdown}
+          onExportAnki={onExportBankAnki}
+        />
+      )}
       {api.view === 'plan' && <GoldenPlan api={api} />}
       {api.view === 'drill' && <GoldenDrillView api={api} onSpeak={onSpeak} />}
       {api.view === 'recall' && <GoldenRecallView api={api} onSpeak={onSpeak} />}
@@ -52,7 +77,17 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, onExportMarkdo
   )
 }
 
-function GoldenHome({ api, onGenerate }: { api: ReturnType<typeof useGoldenDrill>; onGenerate?: () => void }) {
+function GoldenHome({
+  api,
+  onGenerate,
+  bankCount,
+  onOpenBank,
+}: {
+  api: ReturnType<typeof useGoldenDrill>
+  onGenerate?: () => void
+  bankCount: number
+  onOpenBank: () => void
+}) {
   const selected = api.lesson?.selected.length ?? 0
   const summary = api.summary
   const step2Done = selected > 0 && api.ordered.every((s) => api.progressFor(s.id)?.summarySeen === true)
@@ -99,6 +134,12 @@ function GoldenHome({ api, onGenerate }: { api: ReturnType<typeof useGoldenDrill
           <span className="golden-step-go">→</span>
         </button>
       </div>
+      {bankCount > 0 && (
+        <div className="bar golden-plan-bar">
+          <button onClick={onOpenBank}>📚 全库金句本（{bankCount} 句）</button>
+          <span className="muted">跨文章搜索、筛选、导出 Markdown / Anki</span>
+        </div>
+      )}
       <div className="golden-kpis">
         <span>学习句子 <b>{summary?.selectedSentences ?? 0}</b></span>
         <span>掌握句子 <b>{summary?.masteredSentences ?? 0}</b></span>
@@ -412,6 +453,70 @@ function GoldenRecallView({ api, onSpeak }: { api: ReturnType<typeof useGoldenDr
           {cur.zh && <div className="muted">{cur.zh}</div>}
         </div>
       )}
+    </div>
+  )
+}
+
+function GoldenBankView({
+  rows,
+  onBack,
+  onExportMarkdown,
+  onExportAnki,
+}: {
+  rows: GoldenBankRow[]
+  onBack: () => void
+  onExportMarkdown?: () => void
+  onExportAnki?: () => void
+}) {
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState<GoldenBankStatus>('all')
+  const filtered = useMemo(() => filterGoldenBank(rows, { query, status }), [rows, query, status])
+  return (
+    <div className="golden-body">
+      <div className="bar golden-plan-bar">
+        <button onClick={onBack}>← 课程页</button>
+        <b>全库金句本</b>
+        <span className="muted">{filtered.length}/{rows.length} 句</span>
+        {onExportMarkdown && <button onClick={onExportMarkdown}>导出 Markdown</button>}
+        {onExportAnki && <button onClick={onExportAnki}>导出 Anki</button>}
+      </div>
+      <div className="bar golden-modes">
+        <input
+          className="golden-bank-search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="搜索英文 / 中文 / 句型 / 词块"
+        />
+        {(['all', 'todo', 'mastered', 'due'] as const).map((k) => (
+          <button key={k} className={status === k ? 'primary' : ''} onClick={() => setStatus(k)}>
+            {k === 'all' ? '全部' : k === 'todo' ? '待掌握' : k === 'mastered' ? '已掌握' : '待回顾'}
+          </button>
+        ))}
+      </div>
+      <div className="golden-bank-list">
+        {filtered.map((r) => (
+          <div className="golden-bank-row" key={`${r.articleId}|${r.sentenceId}`}>
+            <div className="golden-bank-head">
+              <b>{r.articleTitle}</b>
+              <span className="muted">{r.sentenceId}</span>
+              {r.due && <span className="golden-bank-due">待回顾</span>}
+              {r.mastered && <span className="golden-good">已掌握</span>}
+            </div>
+            <div className="golden-en">{r.text}</div>
+            {r.zh && <div className="muted">{r.zh}</div>}
+            {r.pattern && <div className="golden-note">句型：{r.pattern}</div>}
+            {r.tense && <div className="golden-note">时态：{r.tense}</div>}
+            <div className="golden-targets">
+              {r.targets.map((t, i) => (
+                <span className="golden-target" key={i}>
+                  <b>{GOLDEN_TARGET_KIND_LABEL[t.kind]}</b> {t.en}{t.zh ? ` — ${t.zh}` : ''}
+                </span>
+              ))}
+            </div>
+          </div>
+        ))}
+        {!filtered.length && <div className="muted">没有匹配的金句。</div>}
+      </div>
     </div>
   )
 }

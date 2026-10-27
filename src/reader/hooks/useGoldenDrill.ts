@@ -31,7 +31,7 @@ import type { PracticeKind } from '../../core/practice'
 import type { GoldenLesson, GoldenPickMode, GoldenSentence, Sentence } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
 
-export type GoldenView = 'home' | 'plan' | 'drill' | 'recall' | 'summary'
+export type GoldenView = 'home' | 'plan' | 'drill' | 'recall' | 'summary' | 'bank'
 export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary'
 
 export interface UseGoldenDrillParams {
@@ -63,7 +63,7 @@ function readSession(articleKey: string | null): { view: GoldenView; index: numb
     if (!v || typeof v !== 'object') return null
     const o = v as Record<string, unknown>
     const view = o.view
-    if (view !== 'home' && view !== 'plan' && view !== 'drill' && view !== 'recall' && view !== 'summary') return null
+    if (view !== 'home' && view !== 'plan' && view !== 'drill' && view !== 'recall' && view !== 'summary' && view !== 'bank') return null
     const index = Number(o.index)
     const recallIndex = Number(o.recallIndex)
     return {

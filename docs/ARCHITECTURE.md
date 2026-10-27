@@ -69,6 +69,7 @@ types ← core ← adapters ← reader
 | D老师小课堂：金句候选 / 目标抽取 / 挖空拼句 / 逆向默写 / 统计 / Markdown | `src/core/golden.ts` + `goldenProgress.ts` + `goldenMarkdown.ts` | 纯函数；内容存 `SavedArticle.golden`，进度存 `LearningData.goldenDrills`；改正文用 `pruneGoldenLesson` 失效旧内容 |
 | D老师小课堂：AI 提示词 / 解析 / 与本地合并 | `src/core/goldenAi.ts` | AI 只挑句/加注释，不写原句；目标必须逐字出现；AI 缺的用本地补 |
 | 金句课 → 仿写 | `src/reader/hooks/useWriting.ts` 的 `start({ model, mustUse })` | 总结页「去仿写」把本课目标带进 mustUse；不另写一套仿写提示词 |
+| 全库金句本 / Markdown / Anki | `src/core/goldenBank.ts` | 只读摊平 `SavedArticle.golden` + `goldenDrills`；搜索/状态筛选/导出，不写库 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
 | 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |

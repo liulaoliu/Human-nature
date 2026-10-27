@@ -64,7 +64,15 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
   } = props
   const { newLimit, setNewLimit, newToday, translateView, showLanguage, vocabView, setVocabView, vocabSort, setVocabSort } =
     props.prefs
-  const { golden, onExportGoldenMarkdown, onGenerateGolden, onOpenGoldenWriting } = props
+  const {
+    golden,
+    onExportGoldenMarkdown,
+    onGenerateGolden,
+    onOpenGoldenWriting,
+    goldenBankRows,
+    onExportGoldenBankMarkdown,
+    onExportGoldenBankAnki,
+  } = props
   const {
     knownLemmas,
     wordsInSentence,
@@ -201,6 +209,9 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onExportMarkdown={onExportGoldenMarkdown}
           onGenerate={onGenerateGolden}
           onOpenWriting={onOpenGoldenWriting}
+          bankRows={goldenBankRows}
+          onExportBankMarkdown={onExportGoldenBankMarkdown}
+          onExportBankAnki={onExportGoldenBankAnki}
         />
       )}
 

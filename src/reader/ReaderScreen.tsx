@@ -30,6 +30,7 @@ import type { useVocabEdits } from './hooks/useVocabEdits'
 import type { useSpeaking } from './hooks/useSpeaking'
 import type { usePregenerate } from './hooks/usePregenerate'
 import type { useGoldenDrill } from './hooks/useGoldenDrill'
+import type { GoldenBankRow } from '../core/goldenBank'
 
 
 type ShellP = ComponentProps<typeof ReaderShell>
@@ -151,6 +152,10 @@ export interface ReaderScreenProps {
   onGenerateGolden: () => void
   /** 把本课词块带进仿写 */
   onOpenGoldenWriting: (mustUse: string[]) => void
+  /** 全库金句本 */
+  goldenBankRows: GoldenBankRow[]
+  onExportGoldenBankMarkdown: () => void
+  onExportGoldenBankAnki: () => void
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>

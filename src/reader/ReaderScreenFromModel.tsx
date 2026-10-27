@@ -20,6 +20,9 @@ export interface ReaderAppModel {
   onExportGoldenMarkdown: () => void
   onGenerateGolden: () => void
   onOpenGoldenWriting: (mustUse: string[]) => void
+  goldenBankRows: ReaderScreenProps['goldenBankRows']
+  onExportGoldenBankMarkdown: () => void
+  onExportGoldenBankAnki: () => void
   panels: ReturnType<typeof useReaderPanelRouting>['panels']
   browseFilters: ReaderScreenProps['browseFilters']
   articleRouting: ReaderScreenProps['articleRouting']
@@ -164,6 +167,9 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     onExportGoldenMarkdown: app.onExportGoldenMarkdown,
     onGenerateGolden: app.onGenerateGolden,
     onOpenGoldenWriting: app.onOpenGoldenWriting,
+    goldenBankRows: app.goldenBankRows,
+    onExportGoldenBankMarkdown: app.onExportGoldenBankMarkdown,
+    onExportGoldenBankAnki: app.onExportGoldenBankAnki,
     ai: app.ai,
     ui: app.ui,
     derived: app.derived,

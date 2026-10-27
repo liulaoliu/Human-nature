@@ -351,6 +351,44 @@
   color: #1a8f4c;
 }
 
+.golden-bank-search {
+  flex: 1 1 220px;
+  min-width: 160px;
+  font-size: 15px;
+  padding: 7px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.golden-bank-list {
+  display: grid;
+  gap: 8px;
+}
+
+.golden-bank-row {
+  padding: 11px 13px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.golden-bank-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.golden-bank-due {
+  color: var(--accent);
+  font-size: 12px;
+}
+
 .golden-summary-list {
   display: grid;
   gap: 10px;

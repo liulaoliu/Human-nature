@@ -41,6 +41,7 @@ import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
 import { goldenToMarkdown } from '../core/goldenMarkdown'
+import { buildGoldenBank, goldenBankToAnkiCSV, goldenBankToMarkdown } from '../core/goldenBank'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -398,6 +399,25 @@ export default function ReaderApp() {
     setPendingSave,
   })
 
+  /** 全库金句本：已保存文章 + 当前文档（当前篇用内存里的最新 golden）。 */
+  const goldenBankRows = useMemo(() => {
+    const currentId = savedId ?? articleKey ?? articleTitle ?? articleIdentity
+    const sources = saved.map((a) => ({
+      id: a.id,
+      title: a.title,
+      sentences: a.sentences,
+      ...(a.golden ? { golden: a.golden } : {}),
+    }))
+    const currentLesson = doc ? doc.golden ?? golden.lesson : null
+    if (doc && currentLesson) {
+      const current = { id: currentId, title: articleTitle || '未命名', sentences: doc.sentences, golden: currentLesson }
+      const at = sources.findIndex((s) => s.id === currentId)
+      if (at >= 0) sources[at] = current
+      else sources.push(current)
+    }
+    return buildGoldenBank(sources, goldenDrills)
+  }, [saved, savedId, articleKey, articleTitle, articleIdentity, doc, golden.lesson, goldenDrills])
+
   /** 选区所在的句子（默认操作对象）与真正拿去用的文本：规则在 core/pickTarget */
   const sentence = useMemo(() => pickSentence(doc?.sentences, selectedId, exact), [doc, selectedId, exact])
   const target = useMemo(() => pickTarget(exact, useExact, sentence), [exact, useExact, sentence])
@@ -514,6 +534,22 @@ export default function ReaderApp() {
     })
     const safe = (articleTitle || '金句课').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)
     download(`D老师小课堂-${safe}.md`, md, 'text/markdown;charset=utf-8')
+  }
+
+  const exportGoldenBankMarkdown = () => {
+    if (!goldenBankRows.length) {
+      flash('还没有金句可导出')
+      return
+    }
+    download('全库金句本.md', goldenBankToMarkdown(goldenBankRows), 'text/markdown;charset=utf-8')
+  }
+
+  const exportGoldenBankAnki = () => {
+    if (!goldenBankRows.length) {
+      flash('还没有金句可导出')
+      return
+    }
+    download('全库金句本-anki.csv', goldenBankToAnkiCSV(goldenBankRows), 'text/csv;charset=utf-8')
   }
 
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
@@ -699,6 +735,9 @@ export default function ReaderApp() {
     onExportGoldenMarkdown: exportGoldenMarkdown,
     onGenerateGolden: () => void ai.aiTasksApi.copyGoldenPrompt(),
     onOpenGoldenWriting: openGoldenWriting,
+    goldenBankRows,
+    onExportGoldenBankMarkdown: exportGoldenBankMarkdown,
+    onExportGoldenBankAnki: exportGoldenBankAnki,
     panels,
     browseFilters,
     articleRouting,
