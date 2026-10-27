@@ -69,10 +69,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     onExportGoldenMarkdown,
     onGenerateGolden,
     onOpenGoldenWriting,
-    goldenBankRows,
-    onExportGoldenBankMarkdown,
-    onExportGoldenBankAnki,
-    onPrintGoldenBank,
+    goldenBank,
     onPrintGoldenLesson,
   } = props
   const {
@@ -211,10 +208,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onExportMarkdown={onExportGoldenMarkdown}
           onGenerate={onGenerateGolden}
           onOpenWriting={onOpenGoldenWriting}
-          bankRows={goldenBankRows}
-          onExportBankMarkdown={onExportGoldenBankMarkdown}
-          onExportBankAnki={onExportGoldenBankAnki}
-          onPrintBank={onPrintGoldenBank}
+          bank={goldenBank}
           onPrintLesson={onPrintGoldenLesson}
         />
       )}

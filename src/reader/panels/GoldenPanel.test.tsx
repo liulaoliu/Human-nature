@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import GoldenPanel from './GoldenPanel'
 import type { useGoldenDrill } from '../hooks/useGoldenDrill'
+import type { GoldenBankRow } from '../../core/goldenBank'
 
 function fakeApi(over: Record<string, unknown> = {}) {
   return {
@@ -47,5 +48,33 @@ describe('GoldenPanel', () => {
     render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} onExportMarkdown={vi.fn()} />)
     expect((screen.getByText('遣词造句').closest('button') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('逆向回顾').closest('button') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('全库金句本收一个 bank 对象，导出动作直接接上', () => {
+    const api = fakeApi({ view: 'bank' })
+    const rows = [{
+      articleId: 'a1',
+      articleTitle: 'A 篇',
+      sentenceId: 's1',
+      text: 'Team spirit is one of the main factors.',
+      zh: '团队精神是主要因素之一。',
+      targets: [],
+      mastered: false,
+      due: false,
+    }] as GoldenBankRow[]
+    const onExportMarkdown = vi.fn()
+    render(
+      <GoldenPanel
+        api={api}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        onExportMarkdown={vi.fn()}
+        bank={{ rows, onExportMarkdown }}
+      />,
+    )
+    expect(screen.getByText('全库金句本')).toBeTruthy()
+    expect(screen.getByText('Team spirit is one of the main factors.')).toBeTruthy()
+    fireEvent.click(screen.getByText('导出 Markdown'))
+    expect(onExportMarkdown).toHaveBeenCalled()
   })
 })
