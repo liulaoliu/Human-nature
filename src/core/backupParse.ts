@@ -12,7 +12,7 @@
  */
 import type { SavedArticle, VocabLibrary } from '../types/document'
 import { isArticleOrigin } from './articleOrigin'
-import { normalizeGoldenLesson } from './golden'
+import { normalizeGoldenLesson } from './goldenParse'
 import { normalizeLearning, type LearningData } from './learning'
 import { migrateLibrary } from './migrations'
 

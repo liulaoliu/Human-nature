@@ -1,4 +1,5 @@
-import { buildLocalGoldenSentence, dedupeGoldenLesson, normalizeGoldenLesson } from './golden'
+import { buildLocalGoldenSentence, dedupeGoldenLesson } from './golden'
+import { normalizeGoldenLesson } from './goldenParse'
 import type { GoldenLesson, GoldenSentence, Sentence } from '../types/document'
 
 /**

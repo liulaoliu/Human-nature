@@ -6,6 +6,7 @@ import {
   goldenBankToPrintHTML,
   type GoldenBankRow,
 } from '../../core/goldenBank'
+import { goldenToMarkdown } from '../../core/goldenMarkdown'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import type { GoldenLesson, SavedArticle } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
@@ -25,8 +26,12 @@ interface GoldenBankArgs {
 
 export interface GoldenBankApi {
   rows: GoldenBankRow[]
+  /** 全库金句本 Markdown */
   exportMarkdown: () => void
+  /** 全库金句本 Anki CSV */
   exportAnki: () => void
+  /** 本课素材 Markdown（带掌握状态） */
+  exportLesson: () => void
   printBank: () => void
   printLesson: () => void
 }
@@ -92,6 +97,21 @@ export function useGoldenBank({
         return
       }
       download('全库金句本-anki.csv', goldenBankToAnkiCSV(rows), 'text/csv;charset=utf-8')
+    },
+    exportLesson: () => {
+      if (!lesson || !doc) {
+        flash('先打开并生成一篇金句课')
+        return
+      }
+      const md = goldenToMarkdown(lesson, {
+        title: articleTitle || 'D老师小课堂',
+        sentences: doc.sentences,
+        records,
+        articleId: articleKey || articleTitle || articleIdentity,
+        includeProgress: true,
+      })
+      const safe = (articleTitle || '金句课').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)
+      download(`D老师小课堂-${safe}.md`, md, 'text/markdown;charset=utf-8')
     },
     printBank: () => {
       if (!rows.length) {

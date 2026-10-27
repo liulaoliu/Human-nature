@@ -28,7 +28,7 @@ import {
   mergeWritingHistory,
 } from '../../core/mergeBackup'
 import { parseBackupPayload } from '../../core/backupParse'
-import { mergeGoldenIntoArticle } from '../../core/golden'
+import { mergeGoldenIntoArticle } from '../../core/goldenParse'
 import { ARTICLE_PACKAGE_FORMAT, buildArticlePackage } from '../../core/articlePackage'
 
 /** 文章包走「合并导入」；覆盖导入会把整库清成只剩这一篇。 */

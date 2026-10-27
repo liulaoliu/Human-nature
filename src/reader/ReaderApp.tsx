@@ -40,8 +40,7 @@ import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
 import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
-import { goldenToMarkdown } from '../core/goldenMarkdown'
-import { useGoldenBank } from './hooks/useGoldenBank'
+import { useGoldenFeature } from './hooks/useGoldenFeature'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -488,49 +487,6 @@ export default function ReaderApp() {
   })
   const { download } = exporter
 
-  /** 全库金句本 / 本课打印导出；逻辑在 hooks/useGoldenBank。 */
-  const goldenBank = useGoldenBank({
-    saved,
-    savedId,
-    articleKey,
-    articleTitle,
-    articleIdentity,
-    doc,
-    lesson: golden.lesson,
-    records: goldenDrills,
-    download,
-    flash,
-  })
-
-  /** 从金句课去仿写：范句用第一句金句，必须用的词块带进仿写提示词。 */
-  const openGoldenWriting = (mustUse: string[]) => {
-    const firstId = golden.lesson?.selected[0] ?? golden.lesson?.sentences[0]?.id
-    const sentence = firstId ? doc?.sentences.find((s) => s.id === firstId) : null
-    if (!sentence) {
-      flash('先选一句金句再仿写')
-      return
-    }
-    golden.close()
-    services.writingApi.start({ model: sentence.text, mustUse })
-  }
-
-  /** 本课素材导出：带上当前掌握状态，贴到 Notion / 写作素材库直接能用。 */
-  const exportGoldenMarkdown = () => {
-    if (!golden.lesson || !doc) {
-      flash('先打开并生成一篇金句课')
-      return
-    }
-    const md = goldenToMarkdown(golden.lesson, {
-      title: articleTitle || 'D老师小课堂',
-      sentences: doc.sentences,
-      records: goldenDrills,
-      articleId: articleKey || articleTitle || articleIdentity,
-      includeProgress: true,
-    })
-    const safe = (articleTitle || '金句课').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)
-    download(`D老师小课堂-${safe}.md`, md, 'text/markdown;charset=utf-8')
-  }
-
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
   const articleDerived = useArticleDerived({
     articleIdentity,
@@ -652,6 +608,22 @@ export default function ReaderApp() {
 
   const { runAiLocal } = ai
 
+  /** 金句课功能装配：drill + 金句本 + 去仿写 / 导出，细节在 hooks/useGoldenFeature。 */
+  const goldenFeature = useGoldenFeature({
+    golden,
+    doc,
+    articleTitle,
+    articleKey,
+    articleIdentity,
+    savedId,
+    saved,
+    records: goldenDrills,
+    download,
+    flash,
+    onGenerate: () => void ai.aiTasksApi.copyGoldenPrompt(),
+    startWriting: services.writingApi.start,
+  })
+
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
     library,
@@ -711,16 +683,7 @@ export default function ReaderApp() {
     highlight,
     services,
     golden,
-    onExportGoldenMarkdown: exportGoldenMarkdown,
-    onGenerateGolden: () => void ai.aiTasksApi.copyGoldenPrompt(),
-    onOpenGoldenWriting: openGoldenWriting,
-    goldenBank: {
-      rows: goldenBank.rows,
-      onExportMarkdown: goldenBank.exportMarkdown,
-      onExportAnki: goldenBank.exportAnki,
-      onPrint: goldenBank.printBank,
-    },
-    onPrintGoldenLesson: goldenBank.printLesson,
+    goldenActions: goldenFeature.actions,
     panels,
     browseFilters,
     articleRouting,

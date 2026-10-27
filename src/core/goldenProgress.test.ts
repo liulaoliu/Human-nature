@@ -6,6 +6,7 @@ import {
   goldenCompleted,
   goldenMastered,
   goldenReviewDue,
+  goldenReviewSentenceIds,
   mergeGoldenDrills,
   resetGoldenRecord,
   normalizeGoldenDrills,
@@ -95,6 +96,15 @@ describe('golden progress', () => {
     expect(goldenReviewDue({ ...mastered, mastered: false, at: new Date(2026, 9, 26, 12).toISOString() }, today)).toBe(false)
     expect(goldenReviewDue({ ...mastered, at: 'bad-date' }, today)).toBe(false)
     expect(goldenReviewDue(null, today)).toBe(false)
+  })
+
+  it('待回顾队列按课文顺序，只留本课到期句', () => {
+    const today = dayKeyLocal(new Date(2026, 9, 27, 12))
+    const old = new Date(2026, 9, 26, 12).toISOString()
+    const r1 = { ...record(), id: 'r1', sentenceId: 's1', mastered: true, at: old }
+    const r2 = { ...record(), id: 'r2', sentenceId: 's2', mastered: true, at: new Date(2026, 9, 27, 12).toISOString() }
+    const r3 = { ...record(), id: 'r3', sentenceId: 's3', mastered: true, at: old, articleId: 'a2' }
+    expect(goldenReviewSentenceIds([r1, r2, r3], 'a1', ['s2', 's1', 's404'], today)).toEqual(['s1'])
   })
 
   it('统计默认按句独立；去重开关只影响计数', () => {

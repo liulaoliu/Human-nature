@@ -33,7 +33,7 @@ function fakeApi(over: Record<string, unknown> = {}) {
 describe('GoldenPanel', () => {
   it('课程页展示三个 STEP 和素材总结；点梳理思路切到选金句', () => {
     const api = fakeApi()
-    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} onExportMarkdown={vi.fn()} />)
+    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
     expect(screen.getByText('D老师小课堂')).toBeTruthy()
     expect(screen.getByText('梳理思路')).toBeTruthy()
     expect(screen.getByText('遣词造句')).toBeTruthy()
@@ -45,7 +45,7 @@ describe('GoldenPanel', () => {
 
   it('未选金句时，遣词造句 / 逆向回顾禁用', () => {
     const api = fakeApi()
-    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} onExportMarkdown={vi.fn()} />)
+    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
     expect((screen.getByText('遣词造句').closest('button') as HTMLButtonElement).disabled).toBe(true)
     expect((screen.getByText('逆向回顾').closest('button') as HTMLButtonElement).disabled).toBe(true)
   })
@@ -68,8 +68,7 @@ describe('GoldenPanel', () => {
         api={api}
         articleTitle="A"
         onSpeak={vi.fn()}
-        onExportMarkdown={vi.fn()}
-        bank={{ rows, onExportMarkdown }}
+        actions={{ onExportMarkdown: vi.fn(), bank: { rows, onExportMarkdown } }}
       />,
     )
     expect(screen.getByText('全库金句本')).toBeTruthy()

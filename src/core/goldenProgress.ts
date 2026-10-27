@@ -137,6 +137,24 @@ export function goldenReviewDue(
   return dayKeyLocal(new Date(at)) !== todayKey
 }
 
+/**
+ * 待回顾队列：只保留当前课里、已掌握且今天没回顾的句子，按课文顺序。
+ * 计数和真正开队列都用这一份，避免“数字比实际多/少”。
+ */
+export function goldenReviewSentenceIds(
+  records: GoldenDrillRecord[],
+  articleId: string,
+  sentenceIds: string[],
+  todayKey: string,
+): string[] {
+  const due = new Set(
+    records
+      .filter((r) => r.articleId === articleId && goldenReviewDue(r, todayKey))
+      .map((r) => r.sentenceId),
+  )
+  return sentenceIds.filter((id) => due.has(id))
+}
+
 function numberOrZero(v: unknown): number {
   const n = Number(v)
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0

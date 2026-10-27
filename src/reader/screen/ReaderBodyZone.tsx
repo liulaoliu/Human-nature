@@ -66,11 +66,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     props.prefs
   const {
     golden,
-    onExportGoldenMarkdown,
-    onGenerateGolden,
-    onOpenGoldenWriting,
-    goldenBank,
-    onPrintGoldenLesson,
+    goldenActions,
   } = props
   const {
     knownLemmas,
@@ -205,11 +201,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           api={golden}
           articleTitle={props.articleTitle}
           onSpeak={speak}
-          onExportMarkdown={onExportGoldenMarkdown}
-          onGenerate={onGenerateGolden}
-          onOpenWriting={onOpenGoldenWriting}
-          bank={goldenBank}
-          onPrintLesson={onPrintGoldenLesson}
+          actions={goldenActions}
         />
       )}
 

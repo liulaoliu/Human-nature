@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, type Dispatch, type MutableRef
 import { cleanText } from '../../core/cleaner'
 import { articleFingerprint } from '../../core/articleMeta'
 import { isArticleOrigin } from '../../core/articleOrigin'
-import { normalizeGoldenLesson, pruneGoldenLesson } from '../../core/golden'
+import { normalizeGoldenLesson, pruneGoldenLesson } from '../../core/goldenParse'
 import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
 import type { ArticleOrigin, GoldenLesson, Paragraph, Sentence } from '../../types/document'

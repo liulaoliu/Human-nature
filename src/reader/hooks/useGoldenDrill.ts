@@ -14,7 +14,7 @@ import {
   findGoldenRecord as findRecord,
   goldenCompleted,
   goldenMastered,
-  goldenReviewDue,
+  goldenReviewSentenceIds,
   recordGoldenStep,
   resetGoldenRecord,
   type GoldenDrillRecord,
@@ -127,14 +127,12 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
 
   /** 今天之前掌握、今天还没回顾过的句子（按记录里的 lastAt 逻辑日判断）。 */
   const todayKey = dayKeyLocal()
-  const reviewCount = useMemo(() => {
-    const ids = new Set<string>()
-    for (const r of records) {
-      if (r.articleId !== articleId || !goldenReviewDue(r, todayKey)) continue
-      if (ordered.some((s) => s.id === r.sentenceId)) ids.add(r.sentenceId)
-    }
-    return ids.size
-  }, [records, articleId, ordered, todayKey])
+  const orderedIds = useMemo(() => ordered.map((s) => s.id), [ordered])
+  const dueReviewIds = useMemo(
+    () => goldenReviewSentenceIds(records, articleId, orderedIds, todayKey),
+    [records, articleId, orderedIds, todayKey],
+  )
+  const reviewCount = dueReviewIds.length
   const recallList = useMemo(() => {
     if (!reviewIds.length) return ordered
     return reviewIds.map((id) => ordered.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s)
@@ -194,23 +192,18 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   )
 
   const startReview = useCallback(() => {
-    if (!reviewCount) {
+    if (!dueReviewIds.length) {
       flash('今天没有待回顾的金句')
       return
     }
-    const ids = [...new Set(records.filter((r) => {
-      if (r.articleId !== articleId || !goldenReviewDue(r, todayKey)) return false
-      return ordered.some((s) => s.id === r.sentenceId)
-    }).map((r) => r.sentenceId))]
-    if (!ids.length) return
-    setReviewIds(ids)
+    setReviewIds(dueReviewIds)
     setView('recall')
     setRecallIndex(0)
     setRecallInput('')
     setRecallChecked(null)
     setRecallRevealed(false)
     practicedRef.current = false
-  }, [reviewCount, records, articleId, todayKey, ordered, flash])
+  }, [dueReviewIds, flash])
 
   const startRecall = useCallback(() => {
     if (!ordered.length) {

@@ -83,6 +83,8 @@ describe('useGoldenBank', () => {
     expect(download).toHaveBeenCalledWith('全库金句本.md', expect.stringContaining('全库金句本'), 'text/markdown;charset=utf-8')
     act(() => result.current.exportAnki())
     expect(download).toHaveBeenCalledWith('全库金句本-anki.csv', expect.stringContaining('Front,Back,Tags'), 'text/csv;charset=utf-8')
+    act(() => result.current.exportLesson())
+    expect(download).toHaveBeenCalledWith(expect.stringContaining('D老师小课堂-'), expect.stringContaining('remote collaboration'), 'text/markdown;charset=utf-8')
     act(() => result.current.printBank())
     expect(open).toHaveBeenCalled()
     expect(write).toHaveBeenCalledWith(expect.stringContaining('remote collaboration'))

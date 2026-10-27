@@ -30,7 +30,7 @@ import type { useVocabEdits } from './hooks/useVocabEdits'
 import type { useSpeaking } from './hooks/useSpeaking'
 import type { usePregenerate } from './hooks/usePregenerate'
 import type { useGoldenDrill } from './hooks/useGoldenDrill'
-import type { GoldenBankActions } from './panels/golden/types'
+import type { GoldenPanelActions } from './panels/GoldenPanel'
 
 
 type ShellP = ComponentProps<typeof ReaderShell>
@@ -146,15 +146,8 @@ export interface ReaderScreenProps {
   dictReady: boolean
   tatoebaReady: boolean
   exporter: SidebarP['exporter']
-  /** 导出本课金句素材（Markdown） */
-  onExportGoldenMarkdown: () => void
-  /** 复制 AI 金句课提示词（模块内入口） */
-  onGenerateGolden: () => void
-  /** 把本课词块带进仿写 */
-  onOpenGoldenWriting: (mustUse: string[]) => void
-  /** 全库金句本：行 + 导出/打印动作打包 */
-  goldenBank: GoldenBankActions
-  onPrintGoldenLesson: () => void
+  /** 金句课的导出 / 生成 / 仿写 / 金句本动作，打包交给面板。 */
+  goldenActions: GoldenPanelActions
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>
