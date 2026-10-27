@@ -367,6 +367,7 @@ function GoldenRecallView({ api, onSpeak }: { api: ReturnType<typeof useGoldenDr
         <span className="muted">第 {api.recallIndex + 1} / {api.ordered.length} 句</span>
         {isMastered(rec) && <span className="golden-good">已掌握</span>}
         <button onClick={() => onSpeak(sentence.text)}>🔊</button>
+        <button onClick={api.restartRecallSentence} title="重开这一句的首次记录，回到填空/拼句/小结">再练一次本句</button>
       </div>
       <div className="golden-recall-zh">{cur.zh || sentence.translation || '（这句没有中文提示，直接回忆原句）'}</div>
       <div className="muted golden-hint">先想一下本句用到了哪些句型、词组和单词，再把整句写出来。</div>

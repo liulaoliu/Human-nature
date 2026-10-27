@@ -15,6 +15,8 @@ export interface IntensivePanelProps {
   onToggleSkimmed: () => void
   /** 主按钮：跑一键跑批（补词/句/语言点） */
   onRunBatch: () => void
+  /** 本篇还没跑的 AI 待办数（0 = 已完成；可省略，测试老调用不传）。 */
+  todoPending?: number
   /** 一键跑批进行中：进度（第几轮 / 阶段 / done/total）与错误。 */
   batchRunning: boolean
   /** 取消正在跑的轮询（服务端已发出的请求不撤回）。 */
@@ -52,6 +54,7 @@ export default function IntensivePanel({
   skimmed,
   onToggleSkimmed,
   onRunBatch,
+  todoPending,
   batchRunning,
   onCancelBatch,
   batchRound,
@@ -118,8 +121,12 @@ export default function IntensivePanel({
             )}
             <button
               onClick={onRunBatch}
-              disabled={!hasDoc || busy}
-              title="补齐音标/释义/例句/词组/习语/语法标记/翻译/语言点；跑批中不可重复点"
+              disabled={!hasDoc || busy || todoPending === 0}
+              title={
+                todoPending === 0
+                  ? `本批已完成；金句课可在「D老师小课堂」里重新生成`
+                  : `补齐音标/释义/例句/词组/习语/语法标记/翻译/语言点；${AI_BATCH_NAME}中不可重复点`
+              }
             >
               {batchLabel}
             </button>

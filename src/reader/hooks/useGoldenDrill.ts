@@ -490,6 +490,40 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     if (currentSentence) speak(currentSentence.text)
   }, [currentSentence, speak])
 
+  /** 逆向回顾失败后「再练一次本句」：重开首次记录，回到这句的遣词造句。 */
+  const restartRecallSentence = useCallback(() => {
+    const s = ordered[recallIndex]
+    const sentence = s ? bySentence.get(s.id) : null
+    if (!s || !sentence || !lesson) return
+    const t = goldenTargetsFor(lesson, s.id)
+    const key = goldenDrillKey(sentence.text, t)
+    const base = findRecord(records, articleId, s.id, key) ?? emptyGoldenRecord(articleId, articleTitle, s.id, key, new Date().toISOString())
+    recordGolden({
+      ...base,
+      fillFirst: undefined,
+      assembleFirst: undefined,
+      recallFirst: undefined,
+      fillTries: 0,
+      assembleTries: 0,
+      recallTries: 0,
+      summarySeen: false,
+      mastered: base.mastered,
+      completedAt: base.completedAt,
+      at: new Date().toISOString(),
+    })
+    setIndex(recallIndex)
+    setPhase('preview')
+    setFillInputs([])
+    setFillChecked(null)
+    setFillCorrect(null)
+    setAssembleOrder([])
+    setAssembleChecked(null)
+    setRecallInput('')
+    setRecallChecked(null)
+    setRecallRevealed(false)
+    setView('drill')
+  }, [ordered, recallIndex, bySentence, lesson, records, articleId, articleTitle, recordGolden])
+
   const currentRecallSentence = ordered[recallIndex] ?? null
   const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null
   const currentRecallProgress = currentRecallSentence ? progressFor(currentRecallSentence.id) : null
@@ -550,6 +584,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     checkRecall,
     revealRecall,
     nextRecall,
+    restartRecallSentence,
     speakCurrent,
     // 供面板显示“完成/掌握”的小工具
     isMastered: (r: GoldenDrillRecord | null) => !!r && goldenMastered(r),

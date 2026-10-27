@@ -257,6 +257,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           skimmed: intensiveSkimmed,
           onToggleSkimmed: toggleSkimmed,
           onRunBatch: () => void runAiLocal(),
+          todoPending: aiWebPending,
           batchRunning: aiLocalRunning,
           onCancelBatch: aiPack.cancelLocal,
           batchRound: aiLocalRound,
