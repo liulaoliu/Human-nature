@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
-import { useSpeaking } from './hooks/useSpeaking'
-import { buildArticleIndex } from '../core/articleIndex'
-import { useReaderArticleRouting, useReaderPanelRouting } from './hooks/useReaderRouting'
+
+import { useReaderArticleIdentity, useReaderPanelRouting } from './hooks/useReaderRouting'
+import { useReaderArticleNavigation } from './hooks/useReaderArticleNavigation'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useBrowseFilters } from './hooks/useBrowseFilters'
-import { useTtsEngines } from './hooks/useTtsEngines'
+
 import { useToast } from './hooks/useToast'
-import { buildTtsAccents } from '../core/ttsVoices'
+
 import { useLearningData } from './hooks/useLearningData'
-import { useHotkeys } from './useHotkeys'
+import { useReaderHotkeys } from './hooks/useReaderHotkeys'
 import { useLibraryAutoFill } from './hooks/useLibraryAutoFill'
 import { useVocabLibrary } from './hooks/useVocabLibrary'
 import { useVocabEdits } from './hooks/useVocabEdits'
@@ -25,7 +25,7 @@ import { useArticleUiActions } from './hooks/useArticleUiActions'
 import { useDocVocabSets } from './hooks/useDocVocabSets'
 import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
-import { usePregenerate } from './hooks/usePregenerate'
+import { useReaderSpeech } from './hooks/useReaderSpeech'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
 import { useExport } from './hooks/useExport'
 import { useSelection } from './hooks/useSelection'
@@ -38,6 +38,7 @@ import { useStorageQuotaToast } from './hooks/useStorageQuotaToast'
 import { useArticleVocabView } from './hooks/useArticleVocabView'
 import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
 import { pickSentence, pickTarget } from '../core/pickTarget'
+import { readerViewFlags } from '../core/readerView'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
 import { useGoldenFeature } from './hooks/useGoldenFeature'
@@ -87,25 +88,14 @@ export default function ReaderApp() {
     confusableBatchSize, aiPackScope, autoVocabDirect, newLimit, newToday,
     setSideTab, setNewToday,
   } = prefs
-  /**
-   * 文章标识 ↔ URL slug 的映射表。
-   *
-   * 地址栏里放的是由标题算出来的可读 slug（`005-leaders-post-truth-politics`），
-   * 不是 `b:005 Leaders` 这种内部标识 —— 后者编码进 URL 就是一堆 `%3A` / `%20`。
-   */
-  const articleIndex = useMemo(() => buildArticleIndex(book, saved), [book, saved])
-  /** 当前文章在路由里的内部标识：'b:<内置 key>' / 's:<已保存 id>' / 空串（没打开文章）。 */
-  const currentRef = savedId ? `s:${savedId}` : articleKey ? `b:${articleKey}` : ''
-  /** 当前文章在 URL 里的样子（空串 = 索引里还没有它，先别动地址栏）。 */
-  const currentSlug = currentRef ? articleIndex.slugOf(currentRef) : ''
+  /** 文章标识 ↔ URL slug 的映射表；内部标识 / slug 只在这一个 hook 里拼。 */
+  const { articleIndex, currentRef, currentSlug } = useReaderArticleIdentity(book, saved, articleKey, savedId)
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
   const { route, panels } = useReaderPanelRouting(currentSlug)
   /** 生词浏览页的筛选也走 URL query：刷新 / 分享回到同一组筛选（只 replace，不堆历史）。 */
   const browseFilters = useBrowseFilters(route.panel === 'browse-article' ? 'article' : 'all')
-  /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak */
-  // 引擎探测：发现本机离线引擎（SAPI / Piper）后，并入音色下拉
-  const ttsEngines = useTtsEngines()
-  const ttsAccents = useMemo(() => buildTtsAccents(ttsEngines), [ttsEngines])
+  /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak；引擎 / 音色 / 预生成都在 useReaderSpeech。 */
+  const { ttsAccents, speaking, pregenApi } = useReaderSpeech({ doc, selectedId, ttsVoice, flash })
   const highlight = useReaderHighlightState()
   const {
     peekSid, setPeekSid,
@@ -113,21 +103,6 @@ export default function ReaderApp() {
     lastPicked, setLastPicked,
     setBubblePos,
   } = highlight
-  /** 朗读（TTS）：单句 / 整篇 / 选中句自动读。speak 身份稳定，后面的回调可直接用，不用 ref 绕顺序。 */
-  const speaking = useSpeaking({
-    doc,
-    selectedId,
-    voice: ttsVoice,
-    onFallback: (reason) => {
-      if (reason === 'server') {
-        flash('服务端语音连不上，已改用浏览器语音；可在音色里选「离线 · 本地语音」（需安装 Piper）')
-      } else if (reason === 'local') {
-        flash('本地离线语音失败，已改用浏览器语音；请检查 Piper 是否可用')
-      } else {
-        flash('浏览器拦了自动播放，已改用浏览器语音（点一下页面再试）')
-      }
-    },
-  })
   const {
     speak,
     speakRange,
@@ -137,12 +112,6 @@ export default function ReaderApp() {
     ttsState,
     nowPlaying,
   } = speaking
-
-  // 整篇朗读预生成（查缓存 / 增量合成 / 取消）收口在 usePregenerate
-  const pregenApi = usePregenerate({
-    sentences: doc?.sentences ?? null,
-    voice: ttsVoice,
-  })
 
   /**
    * 每天「学过的不同单词 id」历史（每日目标进度 + 学习日志）由 useLearningData 统一管理。
@@ -316,25 +285,6 @@ export default function ReaderApp() {
   } = derived
 
 
-  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
-  useHotkeys(
-    (e) => {
-      // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
-      if (services.studyQueue || services.quizQueue || services.quickQueue || dictQueue) return
-      if (panels.speedReadOpen || services.listenOpen || services.backOpen || langOpen) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
-      const k = e.key.toLowerCase()
-      // 只认主键盘区的数字 1（小键盘 1 不抢）；W 照旧
-      if (k === 'w' || e.code === 'Digit1') toggleVocabRef.current()
-      else if (k === 'a') navVocabRef.current(-1)
-      else if (k === 'd') navVocabRef.current(1)
-    },
-    true,
-    10,
-  )
-
   // 考试听力题 / 听写逐句：一换就出声（两条接线在 hooks/useQueueAutoSpeak）
   useQueueAutoSpeak({ quizQueue: services.quizQueue, quizIndex: services.quizIndex, dictQueue, dictIndex, speak })
 
@@ -380,6 +330,18 @@ export default function ReaderApp() {
     langOpen,
     setPendingSave,
   } = workspace
+
+  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
+  useReaderHotkeys({
+    services,
+    panels,
+    dictQueue,
+    langOpen,
+    listenOpen: services.listenOpen,
+    backOpen: services.backOpen,
+    toggleVocabRef,
+    navVocabRef,
+  })
 
   /** D老师小课堂：一篇文章的金句课（内容在 doc.golden，进度在学习记录） */
   const golden = useGoldenDrill({
@@ -521,38 +483,19 @@ export default function ReaderApp() {
   })
   const { articleQuizCount } = viewData
 
-  // ---- 路由：/a/<slug> 决定「读哪一篇」；URL ↔ 文章的同步逻辑在 useReaderArticleRouting ----
-  // 目录和已保存列表到齐才敢按 URL 找文章（否则 slug 反查不到，会误判"这篇没了"）。
-  // 目录加载失败（bookError）也算就绪：已保存文章仍能按 slug 打开，内置文章会明确显示"不在了"，
-  // 而不是永远停在 loading。
+  // ---- 路由：/a/<slug> 决定「读哪一篇」；目录和已保存列表到齐才敢按 URL 找文章 ----
   const articleIndexReady = savedLoaded && (!!book || bookError)
-  const { routePick, articleRouting } = useReaderArticleRouting({
-    routeSlug: route.slug,
-    routePanel: route.panel,
-    routeOverlay: route.overlay,
+  const { articleRouting, routedWorkspace } = useReaderArticleNavigation({
+    route,
     currentRef,
-    slugOf: articleIndex.slugOf,
-    refOf: articleIndex.refOf,
-    indexReady: articleIndexReady,
+    articleIndex,
+    articleIndexReady,
     hasDoc: !!doc,
-    onPick: (ref) => workspace.docApi.onPick(ref),
-    onClear: () => {
-      setDoc(null)
-      setArticleKey(null)
-      setSavedId(null)
-      try {
-        localStorage.removeItem('reader:last')
-      } catch {
-        // 隐私模式忽略
-      }
-    },
+    workspace,
+    setDoc,
+    setArticleKey,
+    setSavedId,
   })
-
-  /** 文章选择器改成「只导航」，真正加载由 useArticleRoute 的第 ② 条负责。 */
-  const routedWorkspace = useMemo(
-    () => ({ ...workspace, docApi: { ...workspace.docApi, onPick: routePick } }),
-    [workspace, routePick],
-  )
 
   /** AI 服务：复制提示词 / 应用结果 / 工作包 / 粘回路由；逻辑在 hooks/useAiServices。 */
   const ai = useAiServices({
@@ -652,19 +595,21 @@ export default function ReaderApp() {
    * 考试 / 快刷 / 听写 / 听力 进行时（含设置面板与「先学一遍再考」的预习卡）：
    * 隐藏正文，别把原文当阅读看。
    */
-  const examActive =
-    services.quizSetupOpen ||
-    !!services.quizQueue ||
-    !!services.quizWarmup ||
-    !!services.quickQueue ||
-    !!dictQueue ||
-    services.listenOpen ||
-    services.backOpen ||
-    golden.open ||
-    panels.speedReadOpen
-  /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/回译/生词浏览）隐藏精读工具栏 */
-  const readingView =
-    !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll && !panels.browseArticle
+  const { examActive, readingView } = readerViewFlags({
+    studyOpen: !!services.studyQueue,
+    quizSetupOpen: services.quizSetupOpen,
+    quizQueue: !!services.quizQueue,
+    quizWarmup: !!services.quizWarmup,
+    quickQueue: !!services.quickQueue,
+    dictQueue: !!dictQueue,
+    listenOpen: services.listenOpen,
+    backOpen: services.backOpen,
+    goldenOpen: golden.open,
+    speedReadOpen: panels.speedReadOpen,
+    writingOpen: services.writingOpen,
+    browseAll: panels.browseAll,
+    browseArticle: panels.browseArticle,
+  })
 
   // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
   useReaderFlowRouting(route, currentSlug, {

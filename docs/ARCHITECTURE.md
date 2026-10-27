@@ -95,7 +95,10 @@ types ← core ← adapters ← reader
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方** |
-| 全局键盘 | `src/reader/useHotkeys.ts` + `hotkeys.ts` | 只允许一个全局分发器，按优先级启用当前模式；禁止再直接 `window.addEventListener('keydown')` |
+| URL ↔ 文章导航 | `src/reader/hooks/useReaderRouting.ts`（`useReaderArticleIdentity` / `useReaderPanelRouting`）+ `useReaderArticleNavigation.ts`（路由 / workspace） | ReaderApp 不自己拼 `b:` / `s:` 前缀，也不自己实现「返回就关文章」 |
+| 阅读页语音栈 | `src/reader/hooks/useReaderSpeech.ts` | 引擎探测 / 音色 / 朗读 / 整篇预生成一起收口，组合根只拿结果 |
+| 阅读页全局键盘 | `src/reader/hooks/useReaderHotkeys.ts` + `useHotkeys.ts` | W / 1 / A / D 的启用条件只在这里；禁止再直接 `window.addEventListener('keydown')` |
+| 正文 / 工具栏可见性 | `src/core/readerView.ts` 的 `readerViewFlags()` | 考试、金句、速读、背词、浏览……统一算 `examActive / readingView`，视图不自己拼布尔 |
 | 面板 / 列表 / 对话框 | `src/reader/panels/*.tsx` | 不准塞领域判断；判断回 core |
 | 词库自动补全（例句/收藏…） | 加进 `src/core/libraryAutoFill.ts` | **不许再写第二个 effect 去读写词库**（见下） |
 | 背单词的「加练 / 重练忘记的」出场次数 | `src/core/vocab/extra.ts` | 评「忘记了」就追加到队尾，**不封顶**，直到评「认识 / 模糊」；模糊即收尾、不再追加；「重练忘记的」每轮只发起一次。hook 只调 `planExtra` / `planRetryForgot`，不改评分 |
