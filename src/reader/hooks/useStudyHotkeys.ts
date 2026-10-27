@@ -1,4 +1,5 @@
 import type { ReviewFuzzyChoice, ReviewGrade, StudyMode } from '../../core/vocab'
+import { hasModifier, isComposing, isEditableTarget } from '../hotkeys'
 import { useHotkeys } from '../useHotkeys'
 
 /**
@@ -67,12 +68,11 @@ export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions):
       // 组末拼写测试：键盘交给输入框（回车检查），不给全局快捷键抢
       if (ctx.roundTest) return
       if (ctx.editOpen || ctx.drillOn || ctx.spellMiss) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (isComposing(e) || hasModifier(e)) return
 
       const key = e.key.toLowerCase()
       const main = e.key === ' ' || e.key === 'Enter'
-      const t = e.target as HTMLElement | null
-      const inField = !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+      const inField = isEditableTarget(e.target)
 
       /**
        * R = 朗读：跟「停在哪一屏」无关——释义题、看答案的高亮页、判完等「下一词」、

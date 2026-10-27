@@ -14,6 +14,22 @@ interface Entry {
   handler: Handler
 }
 
+/** 当前焦点是不是文本输入：全局快捷键默认不抢，除非该键明确是提交。 */
+export function isEditableTarget(target: EventTarget | null): boolean {
+  const el = target as HTMLElement | null
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || !!el.isContentEditable)
+}
+
+/** Ctrl / ⌘ / Alt 组合键不归普通单键快捷键处理。 */
+export function hasModifier(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'altKey'>): boolean {
+  return e.ctrlKey || e.metaKey || e.altKey
+}
+
+/** 中文输入法组合中的 keydown 不能当快捷键（否则回车选词会被吃掉）。 */
+export function isComposing(e: Pick<KeyboardEvent, 'isComposing'>): boolean {
+  return e.isComposing
+}
+
 const entries = new Map<symbol, Entry>()
 let installed = false
 

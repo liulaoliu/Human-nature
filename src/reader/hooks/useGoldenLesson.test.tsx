@@ -54,11 +54,13 @@ describe('useGoldenLesson', () => {
     expect(h.result.current.api.ordered.map((s) => s.id)).toEqual(['s2'])
   })
 
-  it('去重开关只改选项，不丢已选句子', () => {
+  it('去重 / 填空单位开关只改选项，不丢已选句子', () => {
     const h = setup()
     act(() => h.result.current.api.setPick('all'))
     act(() => h.result.current.api.setDedupe(true))
+    act(() => h.result.current.api.setBlankUnit('target'))
     expect(h.result.current.doc?.golden?.options?.dedupe).toBe(true)
+    expect(h.result.current.doc?.golden?.options?.blankUnit).toBe('target')
     expect(h.result.current.doc?.golden?.selected).toEqual(['s1', 's2'])
   })
 })

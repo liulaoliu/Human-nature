@@ -1,4 +1,5 @@
 import type { MutableRefObject } from 'react'
+import { hasModifier, isComposing, isEditableTarget } from '../hotkeys'
 import { useHotkeys } from '../useHotkeys'
 import type { useSessionServices } from './useSessionServices'
 
@@ -34,9 +35,7 @@ export function useReaderHotkeys({
       // 全屏练习/速读/语言点编辑打开时，别抢键盘（它们各有自己的按键）
       if (services.studyQueue || services.quizQueue || services.quickQueue || dictQueue) return
       if (panels.speedReadOpen || listenOpen || backOpen || langOpen) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
-      const t = e.target as HTMLElement | null
-      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      if (isComposing(e) || hasModifier(e) || isEditableTarget(e.target)) return
       const k = e.key.toLowerCase()
       // 只认主键盘区的数字 1（小键盘 1 不抢）；W 照旧
       if (k === 'w' || e.code === 'Digit1') toggleVocabRef.current()

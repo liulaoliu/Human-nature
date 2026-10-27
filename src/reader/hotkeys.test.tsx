@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { registerHotkeys, resetHotkeysForTest } from './hotkeys'
+import { hasModifier, isComposing, isEditableTarget, registerHotkeys, resetHotkeysForTest } from './hotkeys'
 import { useHotkeys } from './useHotkeys'
 
 afterEach(() => resetHotkeysForTest())
@@ -40,6 +40,18 @@ describe('集中键盘分发', () => {
     expect(low).toHaveBeenCalledTimes(1)
     resetHotkeysForTest()
     expect(() => press()).not.toThrow()
+  })
+
+  it('公共判定：输入框 / 修饰键 / 输入法组合', () => {
+    const input = document.createElement('input')
+    const area = document.createElement('textarea')
+    const div = document.createElement('div')
+    expect(isEditableTarget(input)).toBe(true)
+    expect(isEditableTarget(area)).toBe(true)
+    expect(isEditableTarget(div)).toBe(false)
+    expect(hasModifier({ ctrlKey: false, metaKey: false, altKey: false })).toBe(false)
+    expect(hasModifier({ ctrlKey: true, metaKey: false, altKey: false })).toBe(true)
+    expect(isComposing({ isComposing: true })).toBe(true)
   })
 
   it('useHotkeys：enabled=false 不响应，打开后响应', () => {

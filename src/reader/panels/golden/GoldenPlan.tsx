@@ -46,6 +46,14 @@ export default function GoldenPlan({ api }: { api: GoldenPlanApi }) {
           <input type="checkbox" checked={lesson?.options?.dedupe === true} onChange={(e) => api.setDedupe(e.target.checked)} />
           本课去重
         </label>
+        <label className="check-inline" title="一个单词一个空；关掉则一个语言点一个空（拼句始终按语言点块）">
+          <input
+            type="checkbox"
+            checked={lesson?.options?.blankUnit !== 'target'}
+            onChange={(e) => api.setBlankUnit(e.target.checked ? 'word' : 'target')}
+          />
+          填空按词拆
+        </label>
       </div>
       <div className="golden-cand-list">
         {api.candidates.map((c) => {

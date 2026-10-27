@@ -47,7 +47,8 @@ export interface GoldenCandidate {
   reasons: string[]
 }
 
-const MAX_TARGETS = 6
+/** 一句最多练多少个目标；只防 AI/坏数据无限塞，不再把正常语言点截到 6 个。 */
+export const GOLDEN_TARGET_LIMIT = 20
 const TENSE_AUX = new Set(['has', 'have', 'had', 'is', 'are', 'was', 'were', 'am'])
 const MODAL = new Set(['will', 'would', 'can', 'could', 'may', 'might', 'must', 'should'])
 const STOP = new Set([
@@ -159,13 +160,19 @@ export function normalizeGoldenTargets(text: string, raw: unknown): GoldenTarget
     seen.add(key)
     kept.push({ target, span })
   }
-  kept.sort((a, b) => a.span.start - b.span.start || b.span.end - b.span.start - (a.span.end - a.span.start))
+  // 先按长度挑重叠项（长语言点优先于被它包住的短词/时态），再按原句顺序输出。
+  kept.sort(
+    (a, b) =>
+      b.span.end - b.span.start - (a.span.end - a.span.start) ||
+      a.span.start - b.span.start,
+  )
   const out: { target: GoldenTarget; span: { start: number; end: number } }[] = []
   for (const row of kept) {
     if (out.some((x) => row.span.start < x.span.end && row.span.end > x.span.start)) continue
     out.push(row)
   }
-  return out.slice(0, MAX_TARGETS).map((x) => x.target)
+  out.sort((a, b) => a.span.start - b.span.start)
+  return out.slice(0, GOLDEN_TARGET_LIMIT).map((x) => x.target)
 }
 
 /** 本地兜底：语言点词组/习语 → 保守时态块 → 生词 → 较长的实词。 */
@@ -318,7 +325,7 @@ export function buildLocalGoldenSentence(sentence: Sentence, meanings?: Record<s
     ...(sentence.translation?.trim() ? { zh: sentence.translation.trim() } : {}),
     ...(structure ? { pattern: structure } : {}),
     ...(grammar ? { tense: grammar } : {}),
-    ...(usage.length ? { note: usage.slice(0, 2).join('；') } : {}),
+    ...(usage.length ? { note: usage.join('；') } : {}),
     targets: buildLocalTargets(sentence, meanings),
   }
 }
@@ -328,6 +335,8 @@ export interface LocalGoldenOptions {
   selected?: string[]
   meanings?: Record<string, string>
   dedupe?: boolean
+  /** 填空单位：一个词一个空（默认）或一个语言点一个空 */
+  blankUnit?: 'word' | 'target'
 }
 
 /** 没有 AI 也能用的金句课：结构、金句、目标全部由现有译文/语言点推导。 */
@@ -354,7 +363,11 @@ export function buildLocalGoldenLesson(
     outline: buildGoldenOutline(paragraphs, sentences, { sentences: content }),
     sentences: content,
     selected: content.map((s) => s.id),
-    options: { dedupe: !!opts.dedupe, pick: opts.selected?.length ? 'manual' : 'recommended' },
+    options: {
+      dedupe: !!opts.dedupe,
+      pick: opts.selected?.length ? 'manual' : 'recommended',
+      blankUnit: opts.blankUnit ?? 'word',
+    },
   }
   return opts.dedupe ? dedupeGoldenLesson(lesson) : lesson
 }

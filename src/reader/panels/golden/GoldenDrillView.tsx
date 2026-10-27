@@ -48,8 +48,11 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
         <span className={'golden-chip' + (phase === 'fill' ? ' on' : '')}>句子填空</span>
         <span className={'golden-chip' + (phase === 'assemble' ? ' on' : '')}>拼接整句</span>
         <span className={'golden-chip' + (phase === 'summary' ? ' on' : '')}>本句小结</span>
+        {phase === 'fill' && api.fillRoundCount > 0 && (
+          <span className="muted">第 {api.fillRound + 1}/{api.fillRoundCount} 组</span>
+        )}
         <button onClick={api.speakCurrent} title="播放整句">🔊</button>
-        <button onClick={api.restartSentence} title="重开本轮首次记录；已掌握不会降级">再练一次</button>
+        <button onClick={api.restartSentence} title="重开本轮首次记录；已掌握不会降级">再练一次 <kbd>X</kbd></button>
       </div>
       {phase === 'preview' && (
         <>
@@ -60,9 +63,9 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
             {cur.tense && <div className="golden-note">时态：{cur.tense}</div>}
           </div>
           <div className="bar">
-            <button className="primary" onClick={api.beginFill}>开始练习</button>
-            <button onClick={() => onSpeak(sentence.text)}>🔊 听整句</button>
-            <button onClick={api.nextSentence}>跳过本句</button>
+            <button className="primary" onClick={api.beginFill}>开始练习 <kbd>Enter</kbd></button>
+            <button onClick={() => onSpeak(sentence.text)}>🔊 听整句 <kbd>R</kbd></button>
+            <button onClick={api.nextSentence}>跳过本句 <kbd>E</kbd></button>
           </div>
         </>
       )}
@@ -70,8 +73,8 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
         <div className="golden-preview">
           <div className="muted">本句没有要填的学习点（可能已被「本课去重」跳过）。</div>
           <div className="bar">
-            <button className="primary" onClick={api.markSummary}>直接看本句小结</button>
-            <button onClick={api.nextSentence}>下一句</button>
+            <button className="primary" onClick={api.markSummary}>直接看本句小结 <kbd>S</kbd></button>
+            <button onClick={api.nextSentence}>下一句 <kbd>E</kbd></button>
           </div>
         </div>
       )}
@@ -80,13 +83,13 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
           <SentenceLine cloze={api.cloze} mode="fill" api={api} />
           <div className="golden-inputs">
             {api.cloze.blanks.map((b) => (
-              <label key={b.targetIndex}>
+              <label key={b.index}>
                 <span>[{b.index}] {b.hint ?? GOLDEN_TARGET_KIND_LABEL[b.kind]}</span>
                 <input
-                  value={api.fillInputs[b.targetIndex] ?? ''}
+                  value={api.fillInputs[b.index - 1] ?? ''}
                   onChange={(e) => {
                     const next = [...api.fillInputs]
-                    next[b.targetIndex] = e.target.value
+                    next[b.index - 1] = e.target.value
                     api.setFillInputs(next)
                   }}
                   placeholder={b.hint ?? '填英文'}
@@ -98,15 +101,16 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
             ))}
           </div>
           <div className="bar">
-            <button className="primary" onClick={api.checkFill}>检查</button>
-            <button onClick={() => api.setPhase('preview')}>看整句</button>
+            <button className="primary" onClick={api.checkFill}>检查 <kbd>Enter</kbd></button>
+            <button onClick={() => api.setPhase('preview')}>看整句 <kbd>H</kbd></button>
             {api.fillCorrect === false && <span className="golden-bad">还有空不对，改一下再检查</span>}
-            {api.fillCorrect === true && <button className="primary" onClick={api.beginAssemble}>下一步：拼接整句</button>}
+            {api.fillRoundPassed && <button className="primary" onClick={api.nextFillRound}>本组正确，继续下一组 <kbd>Enter</kbd></button>}
+            {api.fillCorrect === true && <button className="primary" onClick={api.beginAssemble}>下一步：拼接整句 <kbd>Enter</kbd></button>}
           </div>
           {api.fillChecked && (
             <div className="golden-feedback">
               {api.cloze.blanks.map((b, i) => (
-                <span key={b.targetIndex} className={api.fillChecked?.[i] ? 'good' : 'bad'}>
+                <span key={b.index} className={api.fillChecked?.[i] ? 'good' : 'bad'}>
                   [{b.index}] {b.answer} {api.fillChecked?.[i] ? '✓' : '✗'}
                 </span>
               ))}
@@ -132,10 +136,10 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
             {!api.assembleOrder.length && <span className="muted">按句子顺序点下面的词块</span>}
           </div>
           <div className="bar">
-            <button className="primary" onClick={api.checkAssemble} disabled={api.assembleOrder.length !== api.assembly.cloze.targets.length}>提交答案</button>
-            <button onClick={api.beginAssemble}>重来</button>
+            <button className="primary" onClick={api.checkAssemble} disabled={api.assembleOrder.length !== api.assembly.cloze.targets.length}>提交答案 <kbd>Enter</kbd></button>
+            <button onClick={api.beginAssemble}>重来 <kbd>X</kbd></button>
             {api.assembleChecked === false && <span className="golden-bad">顺序不对，再试一次</span>}
-            {api.assembleChecked === true && <button className="primary" onClick={api.markSummary}>看本句小结</button>}
+            {api.assembleChecked === true && <button className="primary" onClick={api.markSummary}>看本句小结 <kbd>S</kbd></button>}
           </div>
         </>
       )}
@@ -157,9 +161,9 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
           </div>
           <div className="bar">
             <button className="primary" onClick={api.nextSentence}>
-              {api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'}
+              {api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'} <kbd>Enter</kbd>
             </button>
-            <button onClick={api.speakCurrent}>🔊 听整句</button>
+            <button onClick={api.speakCurrent}>🔊 听整句 <kbd>R</kbd></button>
           </div>
         </>
       )}

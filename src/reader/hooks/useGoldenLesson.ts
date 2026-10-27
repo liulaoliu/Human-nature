@@ -164,6 +164,14 @@ export function useGoldenLesson({
     [lesson, persistLesson],
   )
 
+  const setBlankUnit = useCallback(
+    (blankUnit: 'word' | 'target') => {
+      if (!lesson) return
+      persistLesson({ ...lesson, options: { ...lesson.options, blankUnit } })
+    },
+    [lesson, persistLesson],
+  )
+
   return {
     lesson,
     ordered,
@@ -175,5 +183,6 @@ export function useGoldenLesson({
     setPick,
     toggleSentence,
     setDedupe,
+    setBlankUnit,
   }
 }

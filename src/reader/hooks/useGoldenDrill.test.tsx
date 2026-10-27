@@ -67,9 +67,18 @@ describe('useGoldenDrill', () => {
     act(() => h.result.current.api.beginFill())
     const targets = h.result.current.api.targets
     expect(targets.length).toBeGreaterThan(0)
-    act(() => h.result.current.api.setFillInputs(targets.map((t) => t.en)))
-    act(() => h.result.current.api.checkFill())
+    expect(h.result.current.api.blankUnit).toBe('word')
+    let rounds = 0
+    while (h.result.current.api.fillCorrect !== true && rounds++ < 20) {
+      const blanks = h.result.current.api.cloze?.blanks ?? []
+      act(() => h.result.current.api.setFillInputs(blanks.map((b) => b.answer)))
+      act(() => h.result.current.api.checkFill())
+      if (h.result.current.api.fillRoundPassed) {
+        act(() => h.result.current.api.nextFillRound())
+      }
+    }
     expect(h.result.current.api.fillCorrect).toBe(true)
+    expect(h.result.current.api.fillRoundCount).toBeGreaterThan(1)
     expect(h.result.current.records[0].fillFirst).toBe(true)
 
     act(() => h.result.current.api.beginAssemble())
@@ -99,6 +108,27 @@ describe('useGoldenDrill', () => {
     act(() => h.result.current.api.restartSentence())
     expect(h.result.current.records[0].mastered).toBe(true)
     expect(h.result.current.records[0].summarySeen).toBeFalsy()
+  })
+
+  it('细碎填空中途首答错，后面全对也不给 fillFirst', () => {
+    const h = setup()
+    act(() => h.result.current.api.openGolden())
+    act(() => h.result.current.api.startDrill())
+    act(() => h.result.current.api.beginFill())
+    const first = h.result.current.api.cloze?.blanks ?? []
+    act(() => h.result.current.api.setFillInputs(first.map((b) => (b.index === 1 ? 'wrong' : b.answer))))
+    act(() => h.result.current.api.checkFill())
+    expect(h.result.current.api.fillCorrect).toBe(false)
+
+    let guard = 0
+    while (h.result.current.api.fillCorrect !== true && guard++ < 20) {
+      const blanks = h.result.current.api.cloze?.blanks ?? []
+      act(() => h.result.current.api.setFillInputs(blanks.map((b) => b.answer)))
+      act(() => h.result.current.api.checkFill())
+      if (h.result.current.api.fillRoundPassed) act(() => h.result.current.api.nextFillRound())
+    }
+    expect(h.result.current.api.fillCorrect).toBe(true)
+    expect(h.result.current.records[0].fillFirst).toBeFalsy()
   })
 
   it('没完成遣词造句不让进逆向回顾', () => {

@@ -1,4 +1,9 @@
-import { buildLocalGoldenSentence, dedupeGoldenLesson } from './golden'
+import {
+  GOLDEN_TARGET_LIMIT,
+  buildLocalGoldenSentence,
+  dedupeGoldenLesson,
+  normalizeGoldenTargets,
+} from './golden'
 import { normalizeGoldenLesson } from './goldenParse'
 import type { GoldenLesson, GoldenSentence, Sentence } from '../types/document'
 
@@ -49,8 +54,8 @@ export function buildGoldenPrompt(input: GoldenPromptInput): string {
     '- zh：整句中文（有现成译文就用它，不要改写意思）；',
     '- pattern：一句话点出值得迁移的句型；',
     '- tense：时态 / 语态重点（只写句子真实用到的）；',
-    '- note：一条用法提醒（没有就省略）；',
-    '- targets：3–6 个学习点，按在句中出现的先后排列。每项：',
+    '- note：用法提醒；本句所有无法逐字挖空的语法/用法都可以放这里，不要省略；',
+    '- targets：尽量覆盖本句所有可迁移语言点（phrases / idioms / collocations / words），按在句中出现的先后排列；通常 3–12 个，最多 ' + GOLDEN_TARGET_LIMIT + ' 个，不要只挑 3–6 个。每项：',
     '  - en：**必须是原句里逐字出现的连续片段**，不要改写、不要补标点；',
     '  - zh：简短中文提示（填空时给用户看）；',
     '  - kind：只能是 pattern / tense / collocation / idiom / usage / word 之一。',
@@ -62,7 +67,7 @@ export function buildGoldenPrompt(input: GoldenPromptInput): string {
     '',
     '硬规则：',
     '- 只从给定句子里挑，不要编造句子；',
-    '- targets.en 必须是原句的逐字片段；找不到就把该项删掉，不要硬造；',
+    '- targets.en 必须是原句的逐字片段；语法/结构/用法不是逐字片段的，放 pattern / tense / note，不要硬造成 target；',
     '- 不要输出 Markdown、不要解释，只输出一个 JSON 对象。',
     '',
     '输出格式：',
@@ -141,6 +146,8 @@ export interface MergeGoldenOptions {
   dedupe?: boolean
   /** 首次 AI 生成时用 AI 挑的金句；用户手动改过选择后默认保留本地。 */
   preferAI?: boolean
+  /** 填空单位；用户本课设置优先。 */
+  blankUnit?: 'word' | 'target'
 }
 
 /**
@@ -163,7 +170,8 @@ export function mergeGoldenLessons(
     if (!sentence) continue
     const a = aiContent.get(id)
     const l = localContent.get(id) ?? buildLocalGoldenSentence(sentence)
-    const targets = a?.targets.length ? a.targets : l.targets
+    // AI 注释优先，但本地语言点不能被覆盖：两边取并集后再按原句重排/去重。
+    const targets = normalizeGoldenTargets(sentence.text, [...(a?.targets ?? []), ...l.targets])
     if (!a && !l) continue
     merged.push({
       id,
@@ -188,6 +196,7 @@ export function mergeGoldenLessons(
     options: {
       dedupe: opts.dedupe ?? local.options?.dedupe ?? false,
       pick: opts.preferAI ? 'ai' : local.options?.pick ?? 'manual',
+      blankUnit: opts.blankUnit ?? local.options?.blankUnit ?? 'word',
     },
     updatedAt: new Date().toISOString(),
   }

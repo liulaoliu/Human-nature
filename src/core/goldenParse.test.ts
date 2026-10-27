@@ -25,6 +25,13 @@ describe('normalize / prune golden lesson', () => {
     ],
   }
 
+  it('本课设置保留填空单位；旧数据缺省不在解析层硬写', () => {
+    const target = normalizeGoldenLesson({ ...raw, options: { blankUnit: 'target' } }, sentences)
+    expect(target?.options?.blankUnit).toBe('target')
+    const old = normalizeGoldenLesson(raw, sentences)
+    expect(old?.options?.blankUnit).toBeUndefined()
+  })
+
   it('未知句子与编造目标被丢掉，保留有效内容', () => {
     const lesson = normalizeGoldenLesson(raw, sentences)
     expect(lesson).not.toBeNull()

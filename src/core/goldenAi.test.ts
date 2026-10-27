@@ -14,6 +14,7 @@ const S = (): Sentence => ({
   vocab: [],
   tags: [],
   reviewState: { ease: 2.5, due: null, interval: 0, repetitions: 0 },
+  language: { phrases: ['remote collaboration — 远程协作'] },
 })
 
 const sentence = S()
@@ -43,6 +44,7 @@ describe('golden AI', () => {
     expect(p).toContain('最多挑 10 句')
     expect(p).toContain('pattern / tense / collocation / idiom / usage / word')
     expect(p).toContain('必须是原句的逐字片段')
+    expect(p).toContain('覆盖本句所有可迁移语言点')
     expect(p).toContain('s1')
   })
 
@@ -68,6 +70,6 @@ describe('golden AI', () => {
     expect(merged.source).toBe('merged')
     expect(merged.summary).toBe('远程协作成为新常态。')
     expect(merged.sentences[0].pattern).toContain('In response to')
-    expect(merged.sentences[0].targets.map((t) => t.en)).toEqual(['in response to', 'has become'])
+    expect(merged.sentences[0].targets.map((t) => t.en)).toEqual(['in response to', 'remote collaboration', 'has become'])
   })
 })

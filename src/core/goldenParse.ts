@@ -48,9 +48,13 @@ export function normalizeGoldenLesson(raw: unknown, sentences: GoldenTextMeta[])
     rawPick === 'recommended' || rawPick === 'all' || rawPick === 'manual' || rawPick === 'ai'
       ? rawPick
       : undefined
+  const rawBlankUnit = isObject(raw.options) ? raw.options.blankUnit : undefined
+  const blankUnit: 'word' | 'target' | undefined =
+    rawBlankUnit === 'target' ? 'target' : rawBlankUnit === 'word' ? 'word' : undefined
   const options: GoldenLesson['options'] = {
     dedupe: isObject(raw.options) ? raw.options.dedupe === true : false,
     ...(pick ? { pick } : {}),
+    ...(blankUnit ? { blankUnit } : {}),
   }
   return {
     version: 1,

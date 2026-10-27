@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import { readNum, writeNum } from '../storage'
+import { hasModifier, isComposing, isEditableTarget } from '../hotkeys'
 import { useHotkeys } from '../useHotkeys'
 import {
   DEFAULT_WPM,
@@ -238,10 +239,8 @@ export function useSpeedReadSession({
   useHotkeys(
     (e) => {
       // 正在输入框里打字时，不要触发空格翻页 / 数字选项
-      const el = e.target as HTMLElement | null
-      if (langEditorOpen) return
-      if (el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)) return
-      if (e.ctrlKey || e.metaKey || e.altKey) return
+      if (langEditorOpen || isComposing(e)) return
+      if (isEditableTarget(e.target) || hasModifier(e)) return
       /**
        * 翻页滚动：速读的正文可以很长，只手够鼠标太别扭。
        * W/S 与 ↑/↓/PageUp/PageDown 都走这里 —— **滚的是 `.reader-main`**（真正的滚动容器，

@@ -14,7 +14,7 @@ export default function GoldenRecallView({ api, onSpeak }: { api: GoldenRecallAp
         <span className="muted">第 {api.recallIndex + 1} / {api.recallList.length} 句</span>
         {isMastered(rec) && <span className="golden-good">已掌握</span>}
         <button onClick={() => onSpeak(sentence.text)}>🔊</button>
-        <button onClick={api.restartRecallSentence} title="重开这一句的首次记录，回到填空/拼句/小结">再练一次本句</button>
+        <button onClick={api.restartRecallSentence} title="重开这一句的首次记录，回到填空/拼句/小结">再练一次本句 <kbd>X</kbd></button>
       </div>
       <div className="golden-recall-zh">{cur.zh || sentence.translation || '（这句没有中文提示，直接回忆原句）'}</div>
       <div className="muted golden-hint">先想一下本句用到了哪些句型、词组和单词，再把整句写出来。</div>
@@ -23,15 +23,15 @@ export default function GoldenRecallView({ api, onSpeak }: { api: GoldenRecallAp
         rows={4}
         value={api.recallInput}
         onChange={(e) => api.setRecallInput(e.target.value)}
-        placeholder="默写整句（首答 exact / 接近才算掌握；点“看答案”算未掌握）"
+        placeholder="默写整句（Ctrl/⌘ + Enter 提交；点“看答案”算未掌握）"
         autoCapitalize="off"
         autoCorrect="off"
         spellCheck={false}
       />
       <div className="bar">
-        <button className="primary" onClick={api.checkRecall} disabled={!api.recallInput.trim()}>检查</button>
-        <button onClick={api.revealRecall}>看答案</button>
-        <button className="primary" onClick={api.nextRecall}>下一句</button>
+        <button className="primary" onClick={api.checkRecall} disabled={!api.recallInput.trim()}>检查 <kbd>Ctrl+Enter</kbd></button>
+        <button onClick={api.revealRecall}>看答案 <kbd>H</kbd></button>
+        <button className="primary" onClick={api.nextRecall}>下一句 <kbd>E</kbd></button>
       </div>
       {api.recallChecked && (
         <div className={'golden-recall-result ' + (api.recallChecked.firstOk ? 'good' : 'bad')}>

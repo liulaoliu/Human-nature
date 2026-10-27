@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   buildLocalGoldenLesson,
+  buildLocalGoldenSentence,
   buildLocalTargets,
   goldenTargetsFor,
   findGoldenTargetSpans,
@@ -37,6 +38,15 @@ describe('golden target matching', () => {
     expect(findGoldenTargetSpans('A bad-tempered man.', 'bad–tempered')).toHaveLength(1)
   })
 
+  it('重叠时长的优先，输出仍按原句顺序', () => {
+    const text = 'The committee will examine the draft.'
+    const out = normalizeGoldenTargets(text, [
+      { en: 'will examine', kind: 'tense' },
+      { en: 'examine the draft', kind: 'collocation' },
+    ])
+    expect(out.map((t) => t.en)).toEqual(['examine the draft'])
+  })
+
   it('清洗目标：丢掉编造/重复/重叠，保留长目标', () => {
     const text = 'In response to the pandemic, remote collaboration has become the new norm.'
     const out = normalizeGoldenTargets(text, [
@@ -47,6 +57,29 @@ describe('golden target matching', () => {
       { en: 'not in the sentence', kind: 'word' },
     ])
     expect(out.map((t) => t.en)).toEqual(['in response to', 'remote collaboration'])
+  })
+
+  it('本地目标不再卡 6 个；所有不重叠的语言点都保留', () => {
+    const s = S('s1', 'The committee examines the draft, the board considers the budget, and the staff publishes the report tomorrow.', {
+      language: {
+        phrases: ['examines the draft', 'considers the budget', 'publishes the report'],
+        usage: ['正式场合用 committee', 'report 可数'],
+      },
+      vocab: ['committee', 'board', 'staff', 'tomorrow'],
+    })
+    const out = buildLocalTargets(s)
+    expect(out.map((t) => t.en)).toEqual(expect.arrayContaining([
+      'examines the draft',
+      'considers the budget',
+      'publishes the report',
+      'committee',
+      'board',
+      'staff',
+      'tomorrow',
+    ]))
+    expect(out.length).toBeGreaterThan(6)
+    expect(buildLocalGoldenSentence(s).note).toContain('正式场合用 committee')
+    expect(buildLocalGoldenSentence(s).note).toContain('report 可数')
   })
 
   it('本地目标：语言点词组/习语优先，保守抽时态', () => {

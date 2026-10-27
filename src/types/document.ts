@@ -410,8 +410,8 @@ export interface GoldenLesson {
   selected: string[]
   /** AI 首次挑中的句子 id；用户切“AI 推荐”时用 */
   aiSelected?: string[]
-  /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源 */
-  options?: { dedupe?: boolean; pick?: GoldenPickMode }
+  /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源；填空单位 */
+  options?: { dedupe?: boolean; pick?: GoldenPickMode; blankUnit?: 'word' | 'target' }
   updatedAt?: string
 }
 

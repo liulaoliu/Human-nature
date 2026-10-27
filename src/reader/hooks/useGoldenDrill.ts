@@ -3,6 +3,7 @@ import { goldenDrillKey, goldenTargetsFor } from '../../core/golden'
 import {
   buildGoldenAssembly,
   buildGoldenCloze,
+  buildGoldenFillRounds,
   checkGoldenAssembly,
   checkGoldenFill,
   checkGoldenRecall,
@@ -25,6 +26,7 @@ import type { PracticeKind } from '../../core/practice'
 import type { ReaderDoc } from './useReaderDoc'
 import { readGoldenSession, writeGoldenSession, type GoldenView } from './goldenSession'
 import { useGoldenLesson } from './useGoldenLesson'
+import { useGoldenHotkeys } from './useGoldenHotkeys'
 
 export type { GoldenView } from './goldenSession'
 export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary'
@@ -78,6 +80,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const [fillInputs, setFillInputs] = useState<string[]>([])
   const [fillChecked, setFillChecked] = useState<boolean[] | null>(null)
   const [fillCorrect, setFillCorrect] = useState<boolean | null>(null)
+  const [fillRound, setFillRound] = useState(0)
+  const [fillRoundPassed, setFillRoundPassed] = useState(false)
+  const fillEverWrongRef = useRef(false)
   const [assembleOrder, setAssembleOrder] = useState<string[]>([])
   const [assembleChecked, setAssembleChecked] = useState<boolean | null>(null)
   const [recallInput, setRecallInput] = useState('')
@@ -98,6 +103,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setPick,
     toggleSentence,
     setDedupe,
+    setBlankUnit,
   } = useGoldenLesson({
     doc,
     articleId,
@@ -110,10 +116,18 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const current = ordered[index] ?? null
   const currentSentence = current ? bySentence.get(current.id) ?? null : null
   const targets = lesson && current ? goldenTargetsFor(lesson, current.id) : []
-  const cloze = useMemo(
-    () => (currentSentence ? buildGoldenCloze(currentSentence.text, targets) : null),
-    [currentSentence, targets],
-  )
+  const blankUnit = lesson?.options?.blankUnit ?? 'word'
+  const fillRounds = useMemo(() => {
+    if (!currentSentence) return []
+    if (blankUnit === 'target') {
+      const c = buildGoldenCloze(currentSentence.text, targets)
+      return c ? [{ targetIndex: 0, wordFrom: 0, cloze: c }] : []
+    }
+    return buildGoldenFillRounds(currentSentence.text, targets)
+  }, [currentSentence, targets, blankUnit])
+  const fillRoundCount = fillRounds.length
+  const currentFillRound = fillRounds[Math.min(fillRound, Math.max(0, fillRoundCount - 1))] ?? null
+  const cloze = currentFillRound?.cloze ?? null
   const assembly = useMemo(
     () => (currentSentence ? buildGoldenAssembly(currentSentence.text, targets) : null),
     [currentSentence, targets],
@@ -184,6 +198,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
       setFillInputs([])
       setFillChecked(null)
       setFillCorrect(null)
+      setFillRound(0)
+      setFillRoundPassed(false)
+      fillEverWrongRef.current = false
       setAssembleOrder([])
       setAssembleChecked(null)
       practicedRef.current = false
@@ -227,6 +244,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setFillInputs([])
     setFillChecked(null)
     setFillCorrect(null)
+    setFillRound(0)
+    setFillRoundPassed(false)
+    fillEverWrongRef.current = false
     setAssembleOrder([])
     setAssembleChecked(null)
     setPhase('preview')
@@ -241,12 +261,18 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setFillInputs([])
     setFillChecked(null)
     setFillCorrect(null)
+    setFillRound(0)
+    setFillRoundPassed(false)
+    fillEverWrongRef.current = false
     setAssembleOrder([])
     setAssembleChecked(null)
   }, [index])
 
   const beginFill = useCallback(() => {
     setPhase('fill')
+    setFillRound(0)
+    setFillRoundPassed(false)
+    fillEverWrongRef.current = false
     setFillInputs([])
     setFillChecked(null)
     setFillCorrect(null)
@@ -257,19 +283,53 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     const results = checkGoldenFill(cloze, fillInputs)
     const ok = goldenFillAllCorrect(results)
     setFillChecked(results)
-    setFillCorrect(ok)
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
-    const next = recordGoldenStep(base, 'fill', ok, new Date().toISOString())
-    recordGolden(next)
     recordAnswer?.({
       articleId,
       source: 'golden',
       kind: 'fill',
       cat: 'write',
       correct: ok,
-      questionId: `${current.id}:fill`,
+      questionId: `${current.id}:fill:${fillRound}`,
     })
-  }, [cloze, currentSentence, current, drillKey, fillInputs, currentRecord, articleId, articleTitle, recordGolden, recordAnswer])
+    if (!ok) {
+      fillEverWrongRef.current = true
+      setFillRoundPassed(false)
+      setFillCorrect(false)
+      return
+    }
+    if (fillRound + 1 < fillRoundCount) {
+      setFillRoundPassed(true)
+      setFillCorrect(null)
+      return
+    }
+    setFillRoundPassed(false)
+    setFillCorrect(true)
+    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
+    const next = recordGoldenStep(base, 'fill', !fillEverWrongRef.current, new Date().toISOString())
+    recordGolden(next)
+  }, [
+    cloze,
+    currentSentence,
+    current,
+    drillKey,
+    fillInputs,
+    fillRound,
+    fillRoundCount,
+    currentRecord,
+    articleId,
+    articleTitle,
+    recordGolden,
+    recordAnswer,
+  ])
+
+  const nextFillRound = useCallback(() => {
+    if (fillRound + 1 >= fillRoundCount) return
+    setFillRound((r) => r + 1)
+    setFillRoundPassed(false)
+    setFillInputs([])
+    setFillChecked(null)
+    setFillCorrect(null)
+  }, [fillRound, fillRoundCount])
 
   const beginAssemble = useCallback(() => {
     setPhase('assemble')
@@ -312,6 +372,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setFillInputs([])
     setFillChecked(null)
     setFillCorrect(null)
+    setFillRound(0)
+    setFillRoundPassed(false)
+    fillEverWrongRef.current = false
     setAssembleOrder([])
     setAssembleChecked(null)
   }, [current, drillKey, currentRecord, articleId, articleTitle, recordGolden])
@@ -386,6 +449,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setFillInputs([])
     setFillChecked(null)
     setFillCorrect(null)
+    setFillRound(0)
+    setFillRoundPassed(false)
+    fillEverWrongRef.current = false
     setAssembleOrder([])
     setAssembleChecked(null)
     setRecallInput('')
@@ -397,6 +463,42 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const currentRecallSentence = recallList[recallIndex] ?? null
   const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null
   const currentRecallProgress = currentRecallSentence ? progressFor(currentRecallSentence.id) : null
+
+  useGoldenHotkeys(
+    {
+      open,
+      view,
+      phase,
+      hasCloze: !!cloze,
+      hasAssembly: !!assembly,
+      fillCorrect,
+      fillRoundPassed,
+      assembleChecked,
+      assembleOrderLength: assembleOrder.length,
+      assembleTargetCount: assembly?.cloze.targets.length ?? 0,
+      recallChecked: !!recallChecked,
+    },
+    {
+      close,
+      startDrill,
+      setView,
+      setPhase,
+      beginFill,
+      checkFill,
+      nextFillRound,
+      beginAssemble,
+      checkAssemble,
+      markSummary,
+      nextSentence,
+      prevSentence,
+      restartSentence,
+      revealRecall,
+      checkRecall,
+      nextRecall,
+      restartRecallSentence,
+      speakCurrent,
+    },
+  )
 
   return {
     open,
@@ -429,6 +531,10 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setFillInputs,
     fillChecked,
     fillCorrect,
+    fillRound,
+    fillRoundCount,
+    fillRoundPassed,
+    nextFillRound,
     assembleOrder,
     setAssembleOrder,
     assembleChecked,
@@ -445,6 +551,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setPick,
     toggleSentence,
     setDedupe,
+    blankUnit,
+    setBlankUnit,
     startDrill,
     startRecall,
     nextSentence,
