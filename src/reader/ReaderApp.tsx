@@ -59,7 +59,7 @@ export default function ReaderApp() {
   const paste = usePasteState()
   const {
     pasted, setPasted,
-    askedWordsRef, askedIdsRef,
+    askedWordsRef, askedIdsRef, askedArticleKeyRef,
     setPasteReport,
     pasteMissing, setPasteMissing,
     lastTask, setLastTask,
@@ -607,6 +607,7 @@ export default function ReaderApp() {
     setBatch,
     askedWordsRef,
     askedIdsRef,
+    askedArticleKeyRef,
     pasteMissing,
     mergeBatch,
     batchItemsFromWords,

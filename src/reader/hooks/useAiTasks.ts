@@ -54,6 +54,8 @@ export interface UseAiTasksParams {
   setBatch: (updater: [] | ((prev: BatchItemLike[]) => BatchItemLike[])) => void
   askedWordsRef: MutableRefObject<string[]>
   askedIdsRef: MutableRefObject<string[]>
+  /** 上次请求所属文章（金句课粘回时校验，防切篇写错）。 */
+  askedArticleKeyRef?: MutableRefObject<string | null>
   /** 上次回执里缺失的词（有值才能「一键复制未返回的」） */
   pasteMissing: { task: MissingTask; words: string[] } | null
 }
@@ -83,6 +85,7 @@ export function useAiTasks({
   setBatch,
   askedWordsRef,
   askedIdsRef,
+  askedArticleKeyRef,
   pasteMissing,
 }: UseAiTasksParams) {
   const copy = async (prompt: string, okMsg: string) => {
@@ -118,6 +121,7 @@ export function useAiTasks({
     setLastTask('golden')
     askedWordsRef.current = []
     askedIdsRef.current = doc.sentences.map((s) => s.id)
+    if (askedArticleKeyRef) askedArticleKeyRef.current = articleKey
     await copy(
       buildGoldenPrompt({
         sentences: doc.sentences.map((s) => ({

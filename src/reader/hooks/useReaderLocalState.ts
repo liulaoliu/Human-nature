@@ -37,6 +37,8 @@ export function usePasteState() {
   const askedWordsRef = useRef<string[]>([])
   /** 上次「全文翻译」请求的句子 id（用于校验是否逐句返回） */
   const askedIdsRef = useRef<string[]>([])
+  /** 上次请求所属文章（至少金句课用它防止切篇后粘错）。 */
+  const askedArticleKeyRef = useRef<string | null>(null)
   /** 应用结果后的回执（成功 / 缺失 / 无效） */
   const [pasteReport, setPasteReport] = useState<string[]>([])
   /** 上次回执里缺失的词（用于「一键复制未返回的」重试）；类型跟着 hook 走，别再抄一份联合 */
@@ -48,6 +50,7 @@ export function usePasteState() {
     setPasted,
     askedWordsRef,
     askedIdsRef,
+    askedArticleKeyRef,
     pasteReport,
     setPasteReport,
     pasteMissing,

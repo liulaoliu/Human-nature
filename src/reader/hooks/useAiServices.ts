@@ -38,6 +38,7 @@ export interface UseAiServicesParams {
   setBatch: TaskP['setBatch']
   askedWordsRef: MutableRefObject<string[]>
   askedIdsRef: MutableRefObject<string[]>
+  askedArticleKeyRef?: MutableRefObject<string | null>
   pasteMissing: TaskP['pasteMissing']
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
@@ -94,6 +95,7 @@ export function useAiServices({
   setBatch,
   askedWordsRef,
   askedIdsRef,
+  askedArticleKeyRef,
   pasteMissing,
   mergeBatch,
   batchItemsFromWords,
@@ -141,6 +143,7 @@ export function useAiServices({
     setBatch,
     askedWordsRef,
     askedIdsRef,
+    askedArticleKeyRef,
     pasteMissing,
   })
 
@@ -234,6 +237,7 @@ export function useAiServices({
     applyTaskResult,
     askedWordsRef,
     askedIdsRef,
+    askedArticleKeyRef,
     onReport,
     onMissing,
     applyAiWeb,

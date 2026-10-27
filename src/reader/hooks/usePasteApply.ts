@@ -17,9 +17,12 @@ export interface UsePasteApplyParams {
     raw: string,
     askedWords: string[],
     askedIds: string[],
+    meta?: { articleKey?: string },
   ) => ApplyOutcome
   askedWordsRef: MutableRefObject<string[]>
   askedIdsRef: MutableRefObject<string[]>
+  /** 上次请求所属文章（金句课粘回时校验）。 */
+  askedArticleKeyRef?: MutableRefObject<string | null>
   /** 回执（成功 / 缺失 / 无效）写回面板 */
   onReport: (report: string[]) => void
   /** 缺失词写回面板，供「一键复制未返回的」重试 */
@@ -49,6 +52,7 @@ export function usePasteApply({
   applyTaskResult,
   askedWordsRef,
   askedIdsRef,
+  askedArticleKeyRef,
   onReport,
   onMissing,
   applyAiWeb,
@@ -61,7 +65,10 @@ export function usePasteApply({
     // 这里自动识别：含 structure/grammar/idioms/phrases/usage 且没有 translation → 按语言点应用。
     const looksLikeLang = /"(structure|grammar|idioms|phrases|usage)"\s*:/.test(raw) && !/"translation"\s*:/.test(raw)
     const task = lastTask === 'language' || looksLikeLang ? 'language' : lastTask
-    const res = applyTaskResult(task, raw, askedWordsRef.current, askedIdsRef.current)
+    const key = askedArticleKeyRef?.current
+    const res = key
+      ? applyTaskResult(task, raw, askedWordsRef.current, askedIdsRef.current, { articleKey: key })
+      : applyTaskResult(task, raw, askedWordsRef.current, askedIdsRef.current)
     onReport(res.report)
     onMissing(res.missing)
     if (res.ok) {
@@ -70,7 +77,7 @@ export function usePasteApply({
     } else {
       flash(res.report[0] ?? '没解析出内容')
     }
-  }, [pasted, clearPasted, lastTask, applyTaskResult, askedWordsRef, askedIdsRef, onReport, onMissing, flash])
+  }, [pasted, clearPasted, lastTask, applyTaskResult, askedWordsRef, askedIdsRef, askedArticleKeyRef, onReport, onMissing, flash])
 
   const applyAnyPaste = useCallback(() => {
     const text = pasted.trim()
