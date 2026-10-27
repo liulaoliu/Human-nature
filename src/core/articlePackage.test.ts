@@ -106,6 +106,10 @@ const learning = {
     { at: '2026-10-02T00:00:00.000Z', day: '2026-10-02', articleId: 'b-key', source: 'quiz' as const, kind: 'cloze', cat: 'vocab' as const, correct: false },
     { at: '2026-10-03T00:00:00.000Z', day: '2026-10-03', articleId: '', source: 'quiz' as const, kind: 'cloze', cat: 'vocab' as const, correct: true },
   ],
+  goldenDrills: [
+    { id: 'a-key|s1|k', articleId: 'a-key', sentenceId: 's1', drillKey: 'k', at: '2026-10-01T00:00:00.000Z', mastered: true },
+    { id: 'b-key|s2|k', articleId: 'b-key', sentenceId: 's2', drillKey: 'k', at: '2026-10-02T00:00:00.000Z', mastered: false },
+  ],
 }
 
 const build = (ids: string[]) =>
@@ -148,6 +152,7 @@ describe('buildArticlePackage：只带选中篇', () => {
     expect(pkg.retells?.map((r) => r.articleId)).toEqual(['a-key'])
     expect(pkg.skimmed).toEqual(['a-key'])
     expect(pkg.answerEvents?.map((e) => e.articleId)).toEqual(['a-key'])
+    expect(pkg.goldenDrills?.map((r) => r.articleId)).toEqual(['a-key'])
     for (const global of ['activity', 'studyDays', 'sessions', 'studiedDays', 'kindStats', 'readGoal', 'goalMemo']) {
       expect(pkg).not.toHaveProperty(global)
     }
@@ -159,6 +164,7 @@ describe('buildArticlePackage：只带选中篇', () => {
     expect(pkg.library.items.map((it) => it.lemma).sort()).toEqual(['fall back on', 'other', 'run'])
     expect(pkg.skimmed).toEqual(['a-key', 'b-key'])
     expect(pkg.practice).toHaveLength(2)
+    expect(pkg.goldenDrills).toHaveLength(2)
   })
 
   it('手动粘贴的文章：旧数据按标题归属也能带出来', () => {
@@ -175,6 +181,7 @@ describe('buildArticlePackage：只带选中篇', () => {
     expect(pkg.library.articleEntries).toEqual([])
     expect(pkg.practice).toEqual([])
     expect(pkg.mistakes).toEqual([])
+    expect(pkg.goldenDrills).toEqual([])
   })
 
   it('同一词条被多条记录引用时只出现一次', () => {

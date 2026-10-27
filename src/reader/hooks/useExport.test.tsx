@@ -37,6 +37,7 @@ const learning: LearningCollections = {
   skimmed: [],
   kindStats: {},
   answerEvents: [],
+  goldenDrills: [],
   backTranslations: [],
   retells: [],
   readDone: [],
@@ -143,6 +144,24 @@ describe('useExport：合并导入', () => {
     })
     expect(persistNow).toHaveBeenCalledTimes(1)
     expect(flash.mock.calls[0][0]).toContain('合并完成')
+  })
+
+  it('旧备份没有金句课时，合并导入不冲掉现有金句课', async () => {
+    const golden = {
+      version: 1 as const,
+      source: 'local' as const,
+      outline: [],
+      sentences: [{ id: 's1', targets: [{ en: 'Hello', kind: 'word' as const }] }],
+      selected: ['s1'],
+    }
+    const existing: SavedArticle = { ...article, golden, updatedAt: '2026-10-03T00:00:00.000Z' }
+    const { result, save, articles } = setup()
+    articles.current!.get = vi.fn(async () => existing)
+    const old = { ...article, updatedAt: '2026-10-01T00:00:00.000Z' }
+    await act(async () => {
+      await result.current.onMergeBackup(fileOf(JSON.stringify({ articles: [old] })))
+    })
+    expect(save).toHaveBeenCalledWith(expect.objectContaining({ golden }))
   })
 
   it('同一份文件第二次合并：跳过，不重复累加学习时长', async () => {

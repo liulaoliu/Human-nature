@@ -106,7 +106,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(8)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(9)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -426,6 +426,25 @@ describe('sqliteStore：学习记录', () => {
         correct: false,
       },
     ],
+    goldenDrills: [
+      {
+        id: 'a1|s1|k',
+        at: '2026-01-07T00:00:00.000Z',
+        articleId: 'a1',
+        articleTitle: 'A',
+        sentenceId: 's1',
+        drillKey: 'k',
+        fillFirst: true,
+        assembleFirst: true,
+        recallFirst: true,
+        fillTries: 1,
+        assembleTries: 1,
+        recallTries: 1,
+        summarySeen: true,
+        mastered: true,
+        completedAt: '2026-01-07T00:00:00.000Z',
+      },
+    ],
   }
 
   it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', async () => {
@@ -454,6 +473,8 @@ describe('sqliteStore：学习记录', () => {
       gradedBy: 'local',
     })
     expect(got.backTranslations[0].feedback).toMatchObject({ total: 86, max: 100 })
+    expect(got.goldenDrills).toHaveLength(1)
+    expect(got.goldenDrills[0]).toMatchObject({ id: 'a1|s1|k', mastered: true, fillFirst: true, summarySeen: true })
 
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM practice_records').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM answer_events').get().n).toBe(2)
@@ -656,7 +677,7 @@ describe('sqliteStore：v1 → v7 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(8)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(9)
     // 迁移前整库备份，出事能回到 v1。
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))

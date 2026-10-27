@@ -77,6 +77,7 @@ describe('学习记录 localStorage 同步缓存', () => {
       skimmed: [],
       kindStats: {},
       answerEvents: [],
+      goldenDrills: [],
     })
 
     await hydrateLearningFromServer()
@@ -104,6 +105,7 @@ describe('学习记录 localStorage 同步缓存', () => {
       skimmed: [],
       kindStats: {},
       answerEvents: [],
+      goldenDrills: [],
     })
 
     await hydrateLearningFromServer()

@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, type Dispatch, type MutableRef
 import { cleanText } from '../../core/cleaner'
 import { articleFingerprint } from '../../core/articleMeta'
 import { isArticleOrigin } from '../../core/articleOrigin'
+import { normalizeGoldenLesson, pruneGoldenLesson } from '../../core/golden'
 import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
-import type { ArticleOrigin, Paragraph, Sentence } from '../../types/document'
+import type { ArticleOrigin, GoldenLesson, Paragraph, Sentence } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 
 /** 一篇打开的文档。 */
 export interface ReaderDoc {
   paragraphs: Paragraph[]
   sentences: Sentence[]
+  /** D老师小课堂：AI / 本地金句课内容；老文章没有，按需推导 */
+  golden?: GoldenLesson
 }
 
 /** 待选项最小形状（与 reader 的 BatchItem 结构一致）。 */
@@ -168,7 +171,8 @@ export function useReaderDoc({
       const text = a.text || reconstructText(a)
       // 服务端 / IndexedDB 的旧数据也可能带坏值；只认白名单，其余当未知。
       const origin = isArticleOrigin(a.origin) ? a.origin : undefined
-      setDoc({ paragraphs: a.paragraphs, sentences: a.sentences })
+      const golden = normalizeGoldenLesson(a.golden, a.sentences) ?? undefined
+      setDoc({ paragraphs: a.paragraphs, sentences: a.sentences, ...(golden ? { golden } : {}) })
       setSourceText(text)
       setEditing(false)
       resetSelection()
@@ -180,7 +184,11 @@ export function useReaderDoc({
       setBatch(batchMapRef.current[a.sourceKey ?? a.id ?? a.title] ?? [])
       remember(a.sourceKey, a.id)
       // 刚打开的这一版就是「已落盘版本」：点击列表本身不算改动，不刷新 updatedAt。
-      savedFingerprintRef.current = fingerprintOf(a.title, a.book ?? '', origin, text, a)
+      savedFingerprintRef.current = fingerprintOf(a.title, a.book ?? '', origin, text, {
+        paragraphs: a.paragraphs,
+        sentences: a.sentences,
+        ...(golden ? { golden } : {}),
+      })
       createdAtRef.current = a.createdAt ?? null
     },
     [resetSelection, setDoc, setSourceText, setEditing, setArticleKey, setArticleTitle, setArticleBook, setArticleOrigin, setSavedId, setBatch, batchMapRef, remember],
@@ -224,6 +232,7 @@ export function useReaderDoc({
       text: sourceText,
       paragraphs: doc.paragraphs,
       sentences: doc.sentences,
+      ...(doc.golden ? { golden: doc.golden } : {}),
       createdAt,
       updatedAt: new Date().toISOString(),
     }
@@ -286,6 +295,7 @@ export function useReaderDoc({
         text: sourceText,
         paragraphs: doc.paragraphs,
         sentences: doc.sentences,
+        ...(doc.golden ? { golden: doc.golden } : {}),
         createdAt: createdAtRef.current ?? undefined,
         updatedAt: new Date().toISOString(),
       })
@@ -308,7 +318,8 @@ export function useReaderDoc({
     const cleaned = cleanText(draft)
     const next = segment(cleaned)
     const sentences = carryAnalysis(doc?.sentences ?? [], next.sentences)
-    setDoc({ paragraphs: next.paragraphs, sentences })
+    const golden = pruneGoldenLesson(doc?.golden, sentences)
+    setDoc({ paragraphs: next.paragraphs, sentences, ...(golden ? { golden } : {}) })
     setSourceText(cleaned)
     setEditing(false)
     setPendingSave(true)

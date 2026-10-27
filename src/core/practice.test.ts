@@ -57,6 +57,7 @@ describe('sumPractice / sumByKind', () => {
       quiz: { total: 15, correct: 11 },
       dictation: { total: 4, correct: 3 },
       listening: { total: 0, correct: 0 },
+      golden: { total: 0, correct: 0 },
     })
   })
 })

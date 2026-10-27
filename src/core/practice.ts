@@ -4,12 +4,13 @@
  * 纯函数，方便单测；存储是一串记录，落 localStorage。
  */
 
-export type PracticeKind = 'quiz' | 'dictation' | 'listening'
+export type PracticeKind = 'quiz' | 'dictation' | 'listening' | 'golden'
 
 export const PRACTICE_LABEL: Record<PracticeKind, string> = {
   quiz: '考试',
   dictation: '听写',
   listening: '听力理解',
+  golden: 'D老师小课堂',
 }
 
 export interface PracticeRecord {
@@ -63,6 +64,7 @@ export function sumByKind(list: PracticeRecord[]): Record<PracticeKind, Practice
     quiz: { total: 0, correct: 0 },
     dictation: { total: 0, correct: 0 },
     listening: { total: 0, correct: 0 },
+    golden: { total: 0, correct: 0 },
   }
   for (const r of list) {
     out[r.kind].total += r.total

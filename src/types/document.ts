@@ -359,6 +359,63 @@ export interface VocabLibrary {
 }
 
 /**
+ * 「D老师小课堂」金句课的目标类型。
+ *
+ * `pattern` / `tense` 是写作最值得迁移的句型与时态；`collocation` / `idiom` /
+ * `usage` / `word` 复用现有语言点与词库的口径。类型只在这里定义一次。
+ */
+export type GoldenTargetKind = 'pattern' | 'tense' | 'collocation' | 'idiom' | 'usage' | 'word'
+
+/** 一个要被填/拼/回忆的学习点；`en` 必须是原句里逐字出现的片段。 */
+export interface GoldenTarget {
+  en: string
+  zh?: string
+  kind: GoldenTargetKind
+}
+
+/** 一句金句的 AI / 本地内容（不含用户进度）。 */
+export interface GoldenSentence {
+  /** 对应 `Sentence.id` */
+  id: string
+  /** 中文提示；没有就用原句译文 */
+  zh?: string
+  /** 句型（写作迁移用） */
+  pattern?: string
+  /** 时态 / 语态重点 */
+  tense?: string
+  /** 用法提醒 */
+  note?: string
+  /** 填空 / 拼句目标，按原句出现顺序 */
+  targets: GoldenTarget[]
+}
+
+/** 文章结构的一段（开头 / 主体 / 结尾），对应原文段落。 */
+export interface GoldenSection {
+  paraId: string
+  role: 'intro' | 'body' | 'conclusion'
+  title?: string
+  points: string[]
+}
+
+/** 一篇文章的金句课内容。AI 生成或本地推导，存 `SavedArticle.golden`。 */
+export type GoldenPickMode = 'recommended' | 'all' | 'manual' | 'ai'
+
+export interface GoldenLesson {
+  version: 1
+  source: 'ai' | 'local' | 'merged'
+  summary?: string
+  outline: GoldenSection[]
+  sentences: GoldenSentence[]
+  /** 用户/AI 选中的句子 id；空 = 由调用方按推荐重算 */
+  selected: string[]
+  /** AI 首次挑中的句子 id；用户切“AI 推荐”时用 */
+  aiSelected?: string[]
+  /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源 */
+  options?: { dedupe?: boolean; pick?: GoldenPickMode }
+  updatedAt?: string
+}
+
+/**
  * 已保存的文章。
  *
  * 为什么要存整篇（而不是只存原文、每次重新切句）：
@@ -381,6 +438,8 @@ export interface SavedArticle {
   text: string
   paragraphs: Paragraph[]
   sentences: Sentence[]
+  /** D老师小课堂：AI / 本地生成的金句课内容；老文章没有，按需推导 */
+  golden?: GoldenLesson
   /** 首次创建时间（老数据没有 → 用 updatedAt 兜底） */
   createdAt?: string
   updatedAt: string

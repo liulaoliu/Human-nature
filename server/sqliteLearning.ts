@@ -36,6 +36,7 @@ export interface LearningOut {
   skimmed: string[]
   kindStats: Record<string, Record<string, { total: number; correct: number }>>
   answerEvents: LearningAnswerEvent[]
+  goldenDrills: LearningGoldenDrill[]
 }
 
 export interface LearningPractice {
@@ -129,6 +130,24 @@ export interface LearningAnswerEvent {
   questionId?: string
 }
 
+export interface LearningGoldenDrill {
+  id: string
+  at: string
+  articleId: string
+  articleTitle?: string
+  sentenceId: string
+  drillKey: string
+  fillFirst?: boolean
+  assembleFirst?: boolean
+  recallFirst?: boolean
+  fillTries: number
+  assembleTries: number
+  recallTries: number
+  summarySeen?: boolean
+  mastered: boolean
+  completedAt?: string
+}
+
 export function emptyLearning(): LearningOut {
   return {
     practice: [],
@@ -144,6 +163,7 @@ export function emptyLearning(): LearningOut {
     skimmed: [],
     kindStats: {},
     answerEvents: [],
+    goldenDrills: [],
   }
 }
 
@@ -179,6 +199,7 @@ function assertLearning(data: unknown): asserts data is Record<string, unknown> 
     'studiedDays',
     'skimmed',
     'answerEvents',
+    'goldenDrills',
   ]) {
     if (rec[key] !== undefined && !Array.isArray(rec[key])) {
       throw new Error(`学习记录 ${key} 必须是数组`)
@@ -447,6 +468,32 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       }
       if (r.question_id !== null && r.question_id !== undefined) ev.questionId = String(r.question_id)
       return ev
+    })
+
+  out.goldenDrills = db
+    .prepare(
+      'SELECT id, at, article_id, article_title, sentence_id, drill_key, fill_first, assemble_first, recall_first, fill_tries, assemble_tries, recall_tries, summary_seen, mastered, completed_at FROM golden_drill_records ORDER BY at ASC, id ASC',
+    )
+    .all()
+    .map((r): LearningGoldenDrill => {
+      const rec: LearningGoldenDrill = {
+        id: String(r.id),
+        at: String(r.at),
+        articleId: String(r.article_id ?? ''),
+        sentenceId: String(r.sentence_id ?? ''),
+        drillKey: String(r.drill_key ?? ''),
+        fillTries: Number(r.fill_tries) || 0,
+        assembleTries: Number(r.assemble_tries) || 0,
+        recallTries: Number(r.recall_tries) || 0,
+        mastered: Number(r.mastered) !== 0,
+      }
+      if (r.article_title !== null && r.article_title !== undefined) rec.articleTitle = String(r.article_title)
+      if (Number(r.fill_first) !== 0) rec.fillFirst = true
+      if (Number(r.assemble_first) !== 0) rec.assembleFirst = true
+      if (Number(r.recall_first) !== 0) rec.recallFirst = true
+      if (Number(r.summary_seen) !== 0) rec.summarySeen = true
+      if (r.completed_at !== null && r.completed_at !== undefined) rec.completedAt = String(r.completed_at)
+      return rec
     })
 
   return out

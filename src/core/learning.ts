@@ -15,6 +15,8 @@ import type { AnswerEvent } from './answerEvents'
 import { ANSWER_EVENT_CAP, normalizeAnswerEvents } from './answerEvents'
 import type { BackTranslationRecord } from './backTranslate'
 import { normalizeBackTranslationRecords } from './backTranslate'
+import type { GoldenDrillRecord } from './goldenProgress'
+import { normalizeGoldenDrills } from './goldenProgress'
 import type { ReadDone } from './goals'
 import type { MistakeEntry } from './mistakes'
 import type { PracticeRecord } from './practice'
@@ -59,6 +61,8 @@ export interface LearningData {
   kindStats: KindStats
   /** 每题对错的原始事件（append-only，用于对账 / 重建聚合） */
   answerEvents: AnswerEvent[]
+  /** D老师小课堂：每句的填空/拼句/回忆进度（按句独立） */
+  goldenDrills: GoldenDrillRecord[]
 }
 
 /** 学习记录里可以单独增量同步的部分。 */
@@ -87,6 +91,7 @@ export const LEARNING_KEYS = {
   skimmed: 'reader:intensiveSkimmed',
   kindStats: 'reader:kindStats',
   answerEvents: 'reader:answerEvents',
+  goldenDrills: 'reader:goldenDrills',
 } as const satisfies Record<LearningSection, string>
 
 export const LEARNING_SECTIONS: LearningSection[] = Object.keys(LEARNING_KEYS) as LearningSection[]
@@ -107,6 +112,7 @@ export function emptyLearning(): LearningData {
     skimmed: [],
     kindStats: {},
     answerEvents: [],
+    goldenDrills: [],
   }
 }
 
@@ -189,6 +195,7 @@ export function normalizeLearning(raw: unknown): LearningData {
     }
   }
   out.answerEvents = normalizeAnswerEvents(raw.answerEvents).slice(-ANSWER_EVENT_CAP)
+  out.goldenDrills = normalizeGoldenDrills(raw.goldenDrills)
   return out
 }
 
@@ -207,6 +214,7 @@ export function hasLearningData(data: LearningData): boolean {
     data.studiedDays.some((d) => d.ids.length > 0) ||
     data.skimmed.length > 0 ||
     Object.keys(data.kindStats).length > 0 ||
-    data.answerEvents.length > 0
+    data.answerEvents.length > 0 ||
+    data.goldenDrills.length > 0
   )
 }

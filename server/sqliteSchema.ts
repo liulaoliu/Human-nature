@@ -7,7 +7,7 @@
  * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号、不再建表。
  */
 
-export const SCHEMA_VERSION = 8
+export const SCHEMA_VERSION = 9
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -365,6 +365,27 @@ CREATE TABLE IF NOT EXISTS learning_derived_baseline (
  * 记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看；
  * 按 id 去重，长期保留，不做「只留最近 N 条」的截断。
  */
+export const SCHEMA_V9 = `
+CREATE TABLE IF NOT EXISTS golden_drill_records (
+  id TEXT PRIMARY KEY,
+  at TEXT NOT NULL,
+  article_id TEXT NOT NULL DEFAULT '',
+  article_title TEXT,
+  sentence_id TEXT NOT NULL DEFAULT '',
+  drill_key TEXT NOT NULL,
+  fill_first INTEGER NOT NULL DEFAULT 0,
+  assemble_first INTEGER NOT NULL DEFAULT 0,
+  recall_first INTEGER NOT NULL DEFAULT 0,
+  fill_tries INTEGER NOT NULL DEFAULT 0,
+  assemble_tries INTEGER NOT NULL DEFAULT 0,
+  recall_tries INTEGER NOT NULL DEFAULT 0,
+  summary_seen INTEGER NOT NULL DEFAULT 0,
+  mastered INTEGER NOT NULL DEFAULT 0,
+  completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_golden_drill_records_article ON golden_drill_records(article_id, at DESC);
+`
+
 export const SCHEMA_V8 = `
 CREATE TABLE IF NOT EXISTS back_translation_records (
   id TEXT PRIMARY KEY,

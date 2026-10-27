@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 8`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
+schema 版本：`PRAGMA user_version = 9`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -177,7 +177,7 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 手动/AI 语言点 | `lang_points` + `lang_point_terms`（词组/习语/用法） |
 | 历史版本 | `vocab_snapshots`（整库 JSON） |
 
-### 4.3 学习记录（v3–v8）
+### 4.3 学习记录（v3–v9）
 
 学习记录不是偏好，不能只靠 localStorage。表是规范化的事件/记录表，不做“万能 KV”：
 
@@ -200,6 +200,10 @@ skimmed_articles(article_id)                                              -- 精
 kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
 answer_events(id, at, day, article_id, source, kind, cat, correct,
               question_id)                                                -- 每题对错（v7，append-only）
+golden_drill_records(id PK, at, article_id, article_title, sentence_id,
+                     drill_key, fill_first, assemble_first, recall_first,
+                     fill_tries, assemble_tries, recall_tries, summary_seen,
+                     mastered, completed_at)                              -- D老师小课堂每句进度（v9）
 learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
 ```
 
@@ -263,7 +267,7 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
-| 应用内「文章包」（单篇 / 多篇） | 打印 / 导出面板「🗂 文章包 JSON」（范围选「本篇」或「按文章」） | 正文 + AI 结果（翻译/语法/语言点/生词/搭配）+ 这篇的词条与按篇收录 + 能归属到这篇的学习记录（练习/错题/读完/写作/回译/复述/略读/答题事件）。另一台电脑用「合并导入」；**覆盖导入会拒绝**（否则整库只剩这一篇）。活动/学习时长等全局统计不随单篇走 |
+| 应用内「文章包」（单篇 / 多篇） | 打印 / 导出面板「🗂 文章包 JSON」（范围选「本篇」或「按文章」） | 正文 + AI 结果（翻译/语法/语言点/生词/搭配/金句课）+ 这篇的词条与按篇收录 + 能归属到这篇的学习记录（练习/错题/读完/写作/回译/复述/略读/答题事件/金句进度）。另一台电脑用「合并导入」；**覆盖导入会拒绝**（否则整库只剩这一篇）。活动/学习时长等全局统计不随单篇走 |
 
 **合并导入的落盘顺序不能反**：文章 → 词库（`persistNow` 等真正成功）→ 学习记录 → 最后才写
 `reader:importedBackups` 指纹。词库 409 / 断网时不能记指纹，否则同一份文件再导入会被去重直接跳过，

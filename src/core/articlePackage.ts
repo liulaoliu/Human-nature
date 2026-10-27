@@ -15,6 +15,7 @@
  */
 import type { SavedArticle, VocabLibrary } from '../types/document'
 import type { AnswerEvent } from './answerEvents'
+import type { GoldenDrillRecord } from './goldenProgress'
 import type { BackTranslationRecord } from './backTranslate'
 import type { ReadDone } from './goals'
 import type { RetellRecord } from './learning'
@@ -37,6 +38,8 @@ export interface ArticlePackageLearning {
   /** 略读过的文章标识 */
   skimmed?: string[]
   answerEvents?: AnswerEvent[]
+  /** D老师小课堂：这篇的逐句进度 */
+  goldenDrills?: GoldenDrillRecord[]
 }
 
 export interface ArticlePackageInput {
@@ -149,5 +152,6 @@ export function buildArticlePackage(input: ArticlePackageInput): ArticlePackage 
   pkg.retells = (learning.retells ?? []).filter((r) => keys.has(r.articleId))
   pkg.skimmed = (learning.skimmed ?? []).filter((id) => keys.has(id))
   pkg.answerEvents = (learning.answerEvents ?? []).filter((e) => keys.has(e.articleId))
+  pkg.goldenDrills = (learning.goldenDrills ?? []).filter((r) => keys.has(r.articleId))
   return pkg
 }

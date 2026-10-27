@@ -115,6 +115,7 @@ export function readLearningFromLocalStorage(): LearningData {
     skimmed: readJson(LEARNING_KEYS.skimmed, []),
     kindStats: readJson(LEARNING_KEYS.kindStats, {}),
     answerEvents: readJson(LEARNING_KEYS.answerEvents, []),
+    goldenDrills: readJson(LEARNING_KEYS.goldenDrills, []),
   })
 }
 
@@ -139,6 +140,7 @@ export function writeLearningToLocalStorage(data: LearningData, onlyMissing = fa
     [LEARNING_KEYS.skimmed]: data.skimmed,
     [LEARNING_KEYS.kindStats]: data.kindStats,
     [LEARNING_KEYS.answerEvents]: data.answerEvents,
+    [LEARNING_KEYS.goldenDrills]: data.goldenDrills,
   }
   for (const [key, value] of Object.entries(values)) {
     try {

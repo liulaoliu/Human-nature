@@ -174,4 +174,41 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.library).toBeNull()
     expect(parsed.dropped).toBe(1)
   })
+
+  it('金句课内容与 goldenDrills 也过运行时守卫', () => {
+    const parsed = parseBackupPayload({
+      articles: [
+        article({
+          golden: {
+            version: 1,
+            source: 'ai',
+            selected: ['s1'],
+            outline: [],
+            sentences: [{ id: 's1', targets: [{ en: 'Hello', kind: 'word' }, { en: 'made up', kind: 'word' }] }],
+          },
+        }),
+      ],
+      goldenDrills: [
+        {
+          id: 'a1|s1|k',
+          articleId: 'a1',
+          sentenceId: 's1',
+          drillKey: 'k',
+          at,
+          fillTries: 1,
+          assembleTries: 1,
+          recallTries: 1,
+          fillFirst: true,
+          assembleFirst: true,
+          recallFirst: true,
+          summarySeen: true,
+          mastered: true,
+        },
+        { id: 'bad', articleId: 'a1', at: 'bad' },
+      ],
+    })
+    expect(parsed.articles[0].golden?.sentences[0].targets.map((t) => t.en)).toEqual(['Hello'])
+    expect(parsed.goldenDrills).toHaveLength(1)
+    expect(parsed.goldenDrills?.[0].mastered).toBe(true)
+  })
 })

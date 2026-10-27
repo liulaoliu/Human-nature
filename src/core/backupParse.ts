@@ -12,6 +12,7 @@
  */
 import type { SavedArticle, VocabLibrary } from '../types/document'
 import { isArticleOrigin } from './articleOrigin'
+import { normalizeGoldenLesson } from './golden'
 import { normalizeLearning, type LearningData } from './learning'
 import { migrateLibrary } from './migrations'
 
@@ -48,13 +49,17 @@ function isArticle(v: unknown): v is SavedArticle {
 
 /** 老文章可能没有 title/text/createdAt：补默认值，别整篇丢。 */
 function sanitizeArticle(a: SavedArticle): SavedArticle {
+  const { golden: rawGolden, ...rest } = a as SavedArticle & { golden?: unknown }
+  const golden = normalizeGoldenLesson(rawGolden, a.sentences)
   return {
-    ...a,
+    ...rest,
     title: typeof a.title === 'string' && a.title.trim() ? a.title : '未命名',
     text: typeof a.text === 'string' ? a.text : '',
     sourceKey: typeof a.sourceKey === 'string' || a.sourceKey === null ? a.sourceKey : null,
     // 外部备份里的来源只接受白名单；坏值当未知，不整篇丢。
     origin: isArticleOrigin(a.origin) ? a.origin : undefined,
+    // 金句课内容也得过运行时守卫：坏目标/未知句子丢掉，文章本身保留。
+    ...(golden ? { golden } : {}),
   }
 }
 
@@ -72,6 +77,7 @@ const LEARNING_KEYS = [
   'skimmed',
   'kindStats',
   'answerEvents',
+  'goldenDrills',
 ] as const
 
 type LearningKey = (typeof LEARNING_KEYS)[number]
@@ -90,6 +96,7 @@ const LEARNING_LABEL: Record<LearningKey, string> = {
   skimmed: '略读标记',
   kindStats: '题型统计',
   answerEvents: '答题事件',
+  goldenDrills: '金句锤炼记录',
 }
 
 function countArray(v: unknown): number {
@@ -168,6 +175,7 @@ export function parseBackupPayload(data: unknown): ParsedBackup {
     skimmed: obj.skimmed,
     kindStats: obj.kindStats,
     answerEvents: obj.answerEvents,
+    goldenDrills: obj.goldenDrills,
   }
   const normalized = normalizeLearning(learningRaw)
   for (const key of LEARNING_KEYS) {

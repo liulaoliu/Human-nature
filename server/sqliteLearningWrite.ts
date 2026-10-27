@@ -198,6 +198,40 @@ function writeKindStats(db: DatabaseSync, data: LearningData): void {
   }
 }
 
+function writeGoldenDrills(db: DatabaseSync, data: LearningData): void {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO golden_drill_records
+      (id, at, article_id, article_title, sentence_id, drill_key,
+       fill_first, assemble_first, recall_first, fill_tries, assemble_tries, recall_tries,
+       summary_seen, mastered, completed_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list<unknown>(data.goldenDrills)) {
+    if (!isRecord(r) || typeof r.id !== 'string' || !r.id) continue
+    const articleId = text(r.articleId)
+    const sentenceId = text(r.sentenceId)
+    const drillKey = text(r.drillKey)
+    if (!articleId || !sentenceId || !drillKey) continue
+    insert.run(
+      r.id,
+      text(r.at) ?? nowIso(),
+      articleId,
+      text(r.articleTitle),
+      sentenceId,
+      drillKey,
+      r.fillFirst === true ? 1 : 0,
+      r.assembleFirst === true ? 1 : 0,
+      r.recallFirst === true ? 1 : 0,
+      num(r.fillTries),
+      num(r.assembleTries),
+      num(r.recallTries),
+      r.summarySeen === true ? 1 : 0,
+      r.mastered === true ? 1 : 0,
+      text(r.completedAt),
+    )
+  }
+}
+
 function writeAnswerEvents(db: DatabaseSync, data: LearningData): void {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
@@ -234,6 +268,7 @@ const WRITERS: Record<string, (db: DatabaseSync, data: LearningData) => void> = 
   skimmed: writeSkimmed,
   kindStats: writeKindStats,
   answerEvents: writeAnswerEvents,
+  goldenDrills: writeGoldenDrills,
 }
 
 /** 清掉指定 section 对应的表（答题事件是 append-only，永远不清）。 */
@@ -244,6 +279,8 @@ export function clearLearningSections(db: DatabaseSync, sections: string[]): voi
     if (section === 'answerEvents') continue
     // 回译存档同理：长期资产，绝不清表；写入用 INSERT OR REPLACE 按 id 去重。
     if (section === 'backTranslations') continue
+    // 金句进度也是长期资产：只 upsert，不因整份保存把旧记录清掉。
+    if (section === 'goldenDrills') continue
     for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
   }
   for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()

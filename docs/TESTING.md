@@ -221,6 +221,16 @@
    `HTTPS_PROXY=http://127.0.0.1:1` 起探针连续要三个新句子验证。
    Edge 本身偶发失败多与 `HTTPS_PROXY` 指向的本机代理有关（`node-edge-tts` 握手没有连接超时，
    卡住时只能靠 `SYNTH_TIMEOUT_MS` 兜），缓存目录里 `.mp3.local.wav` 多于 `.mp3` 就是信号。
+35. **D老师小课堂：AI 结果不能写错文章，重新生成不能清进度**（2026-10-27）。
+   AI 任务带 `articleKey`，应用前校验；用户切文章后结果对不上就提示「文章已切换，未应用」。
+   金句课内容 `SavedArticle.golden` 与每句进度 `LearningData.goldenDrills` 分两条线：
+   重新生成只换内容，进度按 `drillKey = 句子 + 目标` 匹配，内容变了旧记录失效但不删除。
+   统计默认**按句独立**（同一词块在多句各算一次）；「本课去重」是显式开关，只影响取目标/计数。
+   SQLite v9 加 `golden_drill_records`；`v7` 迁移里 `saveDerivedBaseline` 会读整份学习记录，
+   所以 v7 块必须先把 v8/v9 表建好，否则老库打开报 `no such table`。
+   AI 目标必须逐字出现在原句；编造/重叠/重复的片段在 `normalizeGoldenTargets` 丢弃。
+   测试钉住：`core/golden` / `goldenProgress` / `goldenAi` / `useGoldenDrill` / `useExport` 的
+   “旧备份不冲掉金句课”“AI 只返回部分句子”“去重开关可关”“首答错重练不降级已掌握”。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -257,6 +267,10 @@
 | 回译训练 / 存档 | 顶栏「🔁 回译」→ 选一句写英文 → AI 批改（没 key 时复制提示词、粘回 JSON）→ 退出重进/刷新 → 历史 | 提交前不显示原句；批改后有分数、原文对照、专名不计分提示；记录（中文/答案/原句/批改）重启后仍在，文章删了也能在「全部」历史回看 |
 | 旧地址兼容 | 浏览器打开 `/reader.html#/a/<slug>`（收藏夹里的老链接） | 地址栏 `replaceState` 成 `/reader/a/<slug>`，文章正常打开；普通路径不被改写 |
 | dev SPA 回落 | dev server 跑着时：`curl -s -o /dev/null -w '%{http_code} %{content_type}' http://localhost:5173/reader`；再试 `/reader/a/x`、`/assets/nope.js`、`/reader/missing.js` | `/reader` 与 `/reader/a/x` 返回 `200 text/html`；两个带扩展名的缺失资源返回 `404`（不能回落成 HTML） |
+| D老师小课堂 · 完整闭环 | 打开一篇有译文/语言点的文章 → 顶栏「🖋 D老师小课堂」→ 选金句 → 填空 → 拼句 → 小结 → 逆向回顾（先默写，再故意点「看答案」） | 每一步有即时反馈；首答全对才算掌握；直接看答案不算掌握；进度刷新后还在；总结页可导出 Markdown |
+| D老师小课堂 · AI 金句课 | 点「AI 生成本课」或跑一次 `D指导指导指导` | 本篇没有金句课时生成；生成后 D指导 不再排这一项；文案显示 D老师小课堂；切到别的文章后旧结果不会写进新文章 |
+| D老师小课堂 · 旧备份 | 用没有 `golden` / `goldenDrills` 的旧备份做「合并导入」 | 现有金句课和进度保留；文章正文/词库正常合并；不报错 |
+| D老师小课堂 · 去重开关 | 选金句 → 打开「本课去重」→ 换一门课再回来 | 同一目标只在第一句练；关掉后目标恢复；统计按去重口径变化 |
 
 ## 五、已经就绪的层 / 还差什么
 

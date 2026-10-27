@@ -6,6 +6,8 @@ import type { BackTranslationRecord } from '../../core/backTranslate'
 import { addBackTranslationRecord, normalizeBackTranslationRecords } from '../../core/backTranslate'
 import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
 import { addAnswerEvent, createAnswerEvent, normalizeAnswerEvents } from '../../core/answerEvents'
+import type { GoldenDrillRecord } from '../../core/goldenProgress'
+import { normalizeGoldenDrills } from '../../core/goldenProgress'
 import type { ReadDone } from '../../core/goals'
 import { removeMistake, upsertMistake, type MistakeEntry } from '../../core/mistakes'
 import { addPracticeRecord, type PracticeKind, type PracticeRecord } from '../../core/practice'
@@ -46,6 +48,7 @@ export interface LearningCollections {
   skimmed: string[]
   kindStats: KindStats
   answerEvents: AnswerEvent[]
+  goldenDrills: GoldenDrillRecord[]
   backTranslations: BackTranslationRecord[]
   retells: RetellRecord[]
   readDone: ReadDone[]
@@ -64,6 +67,7 @@ export interface LearningSetters {
   setSkimmed: (v: string[]) => void
   setKindStats: (v: KindStats) => void
   setAnswerEvents: (v: AnswerEvent[]) => void
+  setGoldenDrills: (v: GoldenDrillRecord[] | ((prev: GoldenDrillRecord[]) => GoldenDrillRecord[])) => void
   setBackTranslations: (updater: BackTranslationRecord[] | ((prev: BackTranslationRecord[]) => BackTranslationRecord[])) => void
   setRetells: (v: RetellRecord[]) => void
   setReadDone: (v: ReadDone[]) => void
@@ -109,6 +113,15 @@ export function useLearningData(params: UseLearningDataParams) {
       }
     },
   })
+  const [goldenDrills, setGoldenDrills] = useLocalStorageState<GoldenDrillRecord[]>(LEARNING_KEYS.goldenDrills, [], {
+    parse: (raw) => {
+      try {
+        return normalizeGoldenDrills(JSON.parse(raw))
+      } catch {
+        return []
+      }
+    },
+  })
   const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [])
   const [backTranslations, setBackTranslations] = useLocalStorageState<BackTranslationRecord[]>(
     LEARNING_KEYS.backTranslations,
@@ -145,6 +158,20 @@ export function useLearningData(params: UseLearningDataParams) {
       setAnswerEvents((prev) => addAnswerEvent(prev, createAnswerEvent(event, now ? now() : new Date())))
     },
     [now, setAnswerEvents],
+  )
+
+  /** D老师小课堂：按句写入进度；同一 id 覆盖（hook 里只有一个写入方）。 */
+  const recordGolden = useCallback(
+    (rec: GoldenDrillRecord) => {
+      setGoldenDrills((prev) => {
+        const i = prev.findIndex((x) => x.id === rec.id)
+        if (i < 0) return [...prev, rec]
+        const next = [...prev]
+        next[i] = rec
+        return next
+      })
+    },
+    [setGoldenDrills],
   )
 
   /** 记一条复述打卡（空文本 / 没打开文章 → 不记）。 */
@@ -196,6 +223,7 @@ export function useLearningData(params: UseLearningDataParams) {
       skimmed: skimmedArticles,
       kindStats,
       answerEvents,
+      goldenDrills,
       backTranslations,
       retells,
       readDone,
@@ -212,6 +240,7 @@ export function useLearningData(params: UseLearningDataParams) {
       skimmedArticles,
       kindStats,
       answerEvents,
+      goldenDrills,
       backTranslations,
       retells,
       readDone,
@@ -231,6 +260,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setSkimmed: setSkimmedArticles,
       setKindStats,
       setAnswerEvents,
+      setGoldenDrills,
       setBackTranslations,
       setRetells,
       setReadDone,
@@ -247,6 +277,7 @@ export function useLearningData(params: UseLearningDataParams) {
       setSkimmedArticles,
       setKindStats,
       setAnswerEvents,
+      setGoldenDrills,
       setBackTranslations,
       setRetells,
       setReadDone,
@@ -365,6 +396,9 @@ export function useLearningData(params: UseLearningDataParams) {
     answerEvents,
     setAnswerEvents,
     recordAnswer,
+    goldenDrills,
+    setGoldenDrills,
+    recordGolden,
     retells,
     setRetells,
     backTranslations,

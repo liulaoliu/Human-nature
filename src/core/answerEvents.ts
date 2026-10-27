@@ -32,7 +32,7 @@ export interface AnswerEvent {
 /** localStorage 缓存上限：SQLite 才是耐久主存，这里只保证最近一段能离线对账。 */
 export const ANSWER_EVENT_CAP = 5000
 
-const SOURCES: ReadonlySet<string> = new Set(['quiz', 'dictation', 'listening'])
+const SOURCES: ReadonlySet<string> = new Set(['quiz', 'dictation', 'listening', 'golden'])
 const CATS: ReadonlySet<string> = new Set(ACTIVITY_CATS)
 
 function isObject(v: unknown): v is Record<string, unknown> {

@@ -16,6 +16,7 @@ import {
   mergeAnswerEvents,
   mergeBackTranslations,
   mergeKindStats,
+  mergeGoldenDrills,
   mergeLibraries,
   mergeMistakes,
   mergePractice,
@@ -27,6 +28,7 @@ import {
   mergeWritingHistory,
 } from '../../core/mergeBackup'
 import { parseBackupPayload } from '../../core/backupParse'
+import { mergeGoldenIntoArticle } from '../../core/golden'
 import { ARTICLE_PACKAGE_FORMAT, buildArticlePackage } from '../../core/articlePackage'
 
 /** 文章包走「合并导入」；覆盖导入会把整库清成只剩这一篇。 */
@@ -69,7 +71,7 @@ export function useExport({
   setWritingHistory,
 }: UseExportParams) {
   // 展开成旧名字：函数体不动，参数从 30 个降到 11 个
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, backTranslations, readDone, readGoal, goalMemo } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, backTranslations, readDone, readGoal, goalMemo } =
     learning
   const {
     setSessions,
@@ -82,6 +84,7 @@ export function useExport({
     setSkimmed,
     setKindStats,
     setAnswerEvents,
+    setGoldenDrills,
     setBackTranslations,
     setReadDone,
     setReadGoal,
@@ -138,6 +141,7 @@ export function useExport({
       skimmed,
       kindStats,
       answerEvents,
+      goldenDrills,
       readDone,
       readGoal,
       goalMemo,
@@ -184,7 +188,8 @@ export function useExport({
       phase = 'write'
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
-          await articles.current?.save(a)
+          const existing = (await articles.current?.get(a.id)) ?? null
+          await articles.current?.save(mergeGoldenIntoArticle(existing, a))
         }
       }
       if (parsed.library) {
@@ -205,6 +210,7 @@ export function useExport({
       if (parsed.skimmed) setSkimmed(parsed.skimmed)
       if (parsed.kindStats) setKindStats(parsed.kindStats)
       if (parsed.answerEvents) setAnswerEvents(parsed.answerEvents)
+      if (parsed.goldenDrills) setGoldenDrills(parsed.goldenDrills)
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
@@ -240,7 +246,8 @@ export function useExport({
       let added = 0
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
-          await articles.current?.save(a)
+          const existing = (await articles.current?.get(a.id)) ?? null
+          await articles.current?.save(mergeGoldenIntoArticle(existing, a))
           added += 1
         }
       }
@@ -260,6 +267,7 @@ export function useExport({
       if (parsed.skimmed) setSkimmed(mergeSkimmed(skimmed, parsed.skimmed))
       if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
       if (parsed.answerEvents) setAnswerEvents(mergeAnswerEvents(answerEvents, parsed.answerEvents))
+      if (parsed.goldenDrills) setGoldenDrills(mergeGoldenDrills(goldenDrills, parsed.goldenDrills))
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
       writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))

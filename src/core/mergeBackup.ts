@@ -23,6 +23,8 @@ import type { MistakeEntry } from './mistakes'
 import type { KindStats, RetellRecord, StudiedDay } from './learning'
 import type { AnswerEvent } from './answerEvents'
 
+export { mergeGoldenDrills } from './goldenProgress'
+
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段；按篇条目取并集。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
   const sentenceTexts = { ...(current.sentenceTexts ?? {}), ...(incoming.sentenceTexts ?? {}) }

@@ -21,6 +21,7 @@ export const LEARNING_SECTION_TABLES: Record<string, string[]> = {
   skimmed: ['skimmed_articles'],
   kindStats: ['kind_stats'],
   answerEvents: ['answer_events'],
+  goldenDrills: ['golden_drill_records'],
 }
 
 export const LEARNING_SECTIONS = Object.keys(LEARNING_SECTION_TABLES)

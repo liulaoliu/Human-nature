@@ -66,6 +66,8 @@ types ← core ← adapters ← reader
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |
 | 回译（中译英）提示词 / 批改解析 / 原句对照 | `src/core/backTranslate.ts` | 原句只是参考，不是唯一答案；专名拼写差异 `deduct:false`。存档自包含，别在视图里另写一套解析 |
+| D老师小课堂：金句候选 / 目标抽取 / 挖空拼句 / 逆向默写 / 统计 / Markdown | `src/core/golden.ts` + `goldenProgress.ts` + `goldenMarkdown.ts` | 纯函数；内容存 `SavedArticle.golden`，进度存 `LearningData.goldenDrills`；改正文用 `pruneGoldenLesson` 失效旧内容 |
+| D老师小课堂：AI 提示词 / 解析 / 与本地合并 | `src/core/goldenAi.ts` | AI 只挑句/加注释，不写原句；目标必须逐字出现；AI 缺的用本地补 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
 | 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |
@@ -267,6 +269,11 @@ types ← core ← adapters ← reader
    → 坏了就靠「导入备份」＋ 历史快照 / `data/backups/`；写入侧永远走上面四条。
 
 > 新增「用户资产」时先问：**它有第二份吗？** 没有就先补上第二份，再谈别的。
+>
+> D老师小课堂是“内容 / 进度”分开的样板：AI 生成的金句课存 `SavedArticle.golden`
+>（随文章备份、文章包、SQLite/IndexedDB 走）；每句首次对错 / 是否掌握存
+> `LearningData.goldenDrills`（SQLite `golden_drill_records` + localStorage + 备份 + 文章包）。
+> 重新生成 AI 只换内容，**不删除**进度；导入旧备份没有这两个字段时保留现有数据。
 
 ### 整份覆盖的代价（2026-10-22 两次事故的结构原因）
 
@@ -408,7 +415,8 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   `browse` 与 `browse-article` 是同一个 `VocabBrowsePanel`，URL 只决定首屏范围（全部 / 本篇）；
   类型 / 搜索 / 日期 / 含已掌握是页面内筛选，不写 URL。
 - **整页会话 / 工具页**：`study`（背单词）/ `quiz`（考试）/ `quick`（快刷）/ `dict`（听写）/
-  `listen`（听力）/ `write`（仿写）/ `back`（回译）/ `lang`（语言点编辑）/ `compose`（新建/导入文章）。
+  `listen`（听力）/ `write`（仿写）/ `back`（回译）/ `golden`（D老师小课堂）/ `lang`（语言点编辑）/
+  `compose`（新建/导入文章）。
 
 **浮层（`OVERLAY_FLOWS`）只能叠在布尔面板上**，目前只有 `lang`：语言点编辑器是居中弹层
 （`.lang-editor-overlay`），从速读里点「语言点」时它盖在速读上面、底下的速读不能停 ——
@@ -422,7 +430,9 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 `PanelLoading` 必须带「取消」出口，避免 chunk 一直不回来时用户无路可走。
 
 **为什么整页会话也要进 URL**：它们一打开就占满正文，用户按返回键应该回到「点它之前那一页」
-（文章 / 列表 / 上一个面板），而不是直接退出阅读器。接线在：
+（文章 / 列表 / 上一个面板），而不是直接退出阅读器。D老师小课堂的地址是
+`/reader/a/<slug>/p/golden`；课内步骤（选金句 / 遣词造句 / 逆向回顾 / 总结）只改组件内 view
+和本机会话快照，不再往历史里塞每一小步。接线在：
 
 - `route.ts` 的 `useRoutedPanels`：布尔面板 ↔ URL；
 - `hooks/useRoutedFlows.ts`：会话状态 ↔ URL。规则是

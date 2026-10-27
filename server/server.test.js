@@ -297,7 +297,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(8)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(9)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

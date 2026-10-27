@@ -4,7 +4,7 @@ import { calendarDayKey } from './activity'
 /** 参与「内容有没有变」判断的字段；标题 / 书名 / 来源也算改动。 */
 export type ArticleContent = Pick<
   SavedArticle,
-  'title' | 'book' | 'origin' | 'text' | 'paragraphs' | 'sentences'
+  'title' | 'book' | 'origin' | 'text' | 'paragraphs' | 'sentences' | 'golden'
 >
 
 /**
@@ -15,7 +15,7 @@ export type ArticleContent = Pick<
  * JSON 的键顺序固定，数组顺序本身就是内容的一部分。
  */
 export function articleFingerprint(a: ArticleContent): string {
-  return JSON.stringify([a.title, a.book ?? '', a.origin ?? '', a.text, a.paragraphs, a.sentences])
+  return JSON.stringify([a.title, a.book ?? '', a.origin ?? '', a.text, a.paragraphs, a.sentences, a.golden ?? null])
 }
 
 export interface ArticleDateKeys {
