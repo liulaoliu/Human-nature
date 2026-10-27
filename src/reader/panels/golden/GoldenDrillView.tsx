@@ -1,4 +1,5 @@
-import { GOLDEN_TARGET_KIND_LABEL, type GoldenCloze } from '../../../core/golden'
+import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
+import type { GoldenCloze } from '../../../core/goldenDrill'
 import type { GoldenDrillApi, GoldenSentenceLineApi } from './types'
 
 function SentenceLine({ cloze, mode, api }: {

@@ -7,6 +7,7 @@ import {
   goldenMastered,
   goldenReviewDue,
   mergeGoldenDrills,
+  resetGoldenRecord,
   normalizeGoldenDrills,
   recordGoldenStep,
   summarizeGolden,
@@ -73,6 +74,17 @@ describe('golden progress', () => {
     const merged = mergeGoldenDrills([{ ...good, mastered: true, fillFirst: true, assembleFirst: true, recallFirst: true, summarySeen: true }], [good])
     expect(merged[0].mastered).toBe(true)
     expect(merged[0].id).toBe(goldenRecordId('a1', 's1', good.drillKey))
+  })
+
+  it('再练一次清空首次记录，但已掌握 / 完成时间不降级', () => {
+    const base = { ...record(), mastered: true, completedAt: '2026-10-27T00:04:00.000Z', fillFirst: true, assembleFirst: true, recallFirst: true, summarySeen: true, fillTries: 2 }
+    const reset = resetGoldenRecord(base, '2026-10-28T00:00:00.000Z')
+    expect(reset.mastered).toBe(true)
+    expect(reset.completedAt).toBe(base.completedAt)
+    expect(reset.fillTries).toBe(0)
+    expect(reset.fillFirst).toBeUndefined()
+    expect(reset.summarySeen).toBe(false)
+    expect(reset.at).toBe('2026-10-28T00:00:00.000Z')
   })
 
   it('待回顾只看已掌握且今天还没回顾', () => {

@@ -66,7 +66,11 @@ types ← core ← adapters ← reader
 | 日期键（今天/哪天） | `src/core/activity.ts` | `dayKeyLocal`（逻辑日，04:00 结算）/ `calendarDayKey`（日历日）；**不许自己拼**（R6） |
 | 学习记录「重建派生后对账」 | `src/core/learningCheck.ts` | 只比派生聚合（活动 / 题型统计），不比 `practice` 等原始记录（会把「还没同步」误报成差异） |
 | 回译（中译英）提示词 / 批改解析 / 原句对照 | `src/core/backTranslate.ts` | 原句只是参考，不是唯一答案；专名拼写差异 `deduct:false`。存档自包含，别在视图里另写一套解析 |
-| D老师小课堂：金句候选 / 目标抽取 / 挖空拼句 / 逆向默写 / 统计 / Markdown | `src/core/golden.ts` + `goldenProgress.ts` + `goldenMarkdown.ts` | 纯函数；内容存 `SavedArticle.golden`，进度存 `LearningData.goldenDrills`；改正文用 `pruneGoldenLesson` 失效旧内容 |
+| D老师小课堂：金句候选 / 目标抽取 / 课程解析 / 统计 / Markdown | `src/core/golden.ts` + `goldenProgress.ts` + `goldenMarkdown.ts` | 纯函数；内容存 `SavedArticle.golden`，进度存 `LearningData.goldenDrills`；改正文用 `pruneGoldenLesson` 失效旧内容 |
+| D老师小课堂：挖空 / 拼句 / 逆向默写判分 | `src/core/goldenDrill.ts` | 只构造练习和判分；会话状态、记录写入在 hook，别把两者混回一个文件 |
+| D老师小课堂：内容 / 选句 | `src/reader/hooks/useGoldenLesson.ts` | 本地推导、候选、统计、`progressFor`、写回 `doc.golden`；不碰视图状态 |
+| D老师小课堂：练习状态机 | `src/reader/hooks/useGoldenDrill.ts` | 当前句 / 输入 / 待回顾 / 进度写入；会话位置走 `goldenSession.ts` |
+| D老师小课堂：会话位置 | `src/reader/hooks/goldenSession.ts` | `GoldenView` 枚举 + localStorage 解析；加视图时改这一处 |
 | D老师小课堂：AI 提示词 / 解析 / 与本地合并 | `src/core/goldenAi.ts` | AI 只挑句/加注释，不写原句；目标必须逐字出现；AI 缺的用本地补 |
 | 金句课 → 仿写 | `src/reader/hooks/useWriting.ts` 的 `start({ model, mustUse })` | 总结页「去仿写」把本课目标带进 mustUse；不另写一套仿写提示词 |
 | 全库金句本 / Markdown / Anki / A4 | `src/core/goldenBank.ts` | 只读摊平 `SavedArticle.golden` + `goldenDrills`；搜索/状态筛选/导出，不写库 |

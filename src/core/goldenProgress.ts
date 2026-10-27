@@ -66,6 +66,26 @@ export function goldenCompleted(r: Pick<GoldenDrillRecord, 'fillTries' | 'assemb
 }
 
 /**
+ * 「再练一次」：清空本轮首次记录，给用户重新拿掌握的机会。
+ * 已掌握 / 完成时间不降级；这是重练唯一的口径。
+ */
+export function resetGoldenRecord(record: GoldenDrillRecord, at: string): GoldenDrillRecord {
+  return {
+    ...record,
+    fillFirst: undefined,
+    assembleFirst: undefined,
+    recallFirst: undefined,
+    fillTries: 0,
+    assembleTries: 0,
+    recallTries: 0,
+    summarySeen: false,
+    mastered: record.mastered,
+    completedAt: record.completedAt,
+    at,
+  }
+}
+
+/**
  * 记一步。首次答错后重试不会把 `*First` 改回 true；这是“掌握”口径的底线。
  * 纯函数，调用方只负责把它写进唯一的 goldenDrills。
  */

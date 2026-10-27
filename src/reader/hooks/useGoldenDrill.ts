@@ -1,21 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { goldenDrillKey, goldenTargetsFor } from '../../core/golden'
 import {
   buildGoldenAssembly,
   buildGoldenCloze,
-  buildLocalGoldenLesson,
   checkGoldenAssembly,
   checkGoldenFill,
   checkGoldenRecall,
-  dedupeGoldenLesson,
-  goldenDrillKey,
   goldenFillAllCorrect,
-  goldenTargetsFor,
-  pickGoldenCandidates,
-  rankGoldenCandidates,
-  type GoldenCandidate,
   type GoldenRecallResult,
-  type GoldenTextMeta,
-} from '../../core/golden'
+} from '../../core/goldenDrill'
 import {
   emptyGoldenRecord,
   findGoldenRecord as findRecord,
@@ -23,16 +16,17 @@ import {
   goldenMastered,
   goldenReviewDue,
   recordGoldenStep,
-  summarizeGolden,
+  resetGoldenRecord,
   type GoldenDrillRecord,
 } from '../../core/goldenProgress'
 import { dayKeyLocal, type ActivityCat } from '../../core/activity'
 import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
-import type { GoldenLesson, GoldenPickMode, GoldenSentence, Sentence } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
+import { readGoldenSession, writeGoldenSession, type GoldenView } from './goldenSession'
+import { useGoldenLesson } from './useGoldenLesson'
 
-export type GoldenView = 'home' | 'plan' | 'drill' | 'recall' | 'summary' | 'bank'
+export type { GoldenView } from './goldenSession'
 export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary'
 
 export interface UseGoldenDrillParams {
@@ -50,73 +44,6 @@ export interface UseGoldenDrillParams {
   flash: (message: string) => void
   setDoc: Dispatch<SetStateAction<ReaderDoc | null>>
   setPendingSave: (v: boolean) => void
-}
-
-function sessionKey(articleKey: string | null): string {
-  return `reader:goldenSession:${articleKey ?? ''}`
-}
-
-function readSession(articleKey: string | null): { view: GoldenView; index: number; recallIndex: number } | null {
-  try {
-    const raw = localStorage.getItem(sessionKey(articleKey))
-    if (!raw) return null
-    const v: unknown = JSON.parse(raw)
-    if (!v || typeof v !== 'object') return null
-    const o = v as Record<string, unknown>
-    const view = o.view
-    if (view !== 'home' && view !== 'plan' && view !== 'drill' && view !== 'recall' && view !== 'summary' && view !== 'bank') return null
-    const index = Number(o.index)
-    const recallIndex = Number(o.recallIndex)
-    return {
-      view,
-      index: Number.isFinite(index) && index >= 0 ? Math.floor(index) : 0,
-      recallIndex: Number.isFinite(recallIndex) && recallIndex >= 0 ? Math.floor(recallIndex) : 0,
-    }
-  } catch {
-    return null
-  }
-}
-
-function sentenceTexts(doc: ReaderDoc | null): GoldenTextMeta[] {
-  return (doc?.sentences ?? []).map((s) => ({
-    id: s.id,
-    text: s.text,
-    ...(s.translation ? { translation: s.translation } : {}),
-  }))
-}
-
-/** 把选中的句子按原文顺序排好，缺内容的用本地内容补。 */
-function withSelection(
-  lesson: GoldenLesson,
-  sentences: Sentence[],
-  ids: string[],
-  pick: GoldenPickMode,
-  dedupe: boolean,
-): GoldenLesson {
-  const byId = new Map(sentences.map((s) => [s.id, s]))
-  const existing = new Map(lesson.sentences.map((s) => [s.id, s]))
-  const content: GoldenSentence[] = []
-  for (const id of ids) {
-    const hit = existing.get(id)
-    if (hit) {
-      content.push(hit)
-      continue
-    }
-    const sentence = byId.get(id)
-    if (!sentence) continue
-    const built = buildLocalGoldenLesson([sentence], undefined, { selected: [id] }).sentences[0]
-    if (built) content.push(built)
-  }
-  const order = new Map(sentences.map((s, i) => [s.id, i]))
-  content.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0))
-  const next: GoldenLesson = {
-    ...lesson,
-    sentences: content,
-    selected: ids,
-    options: { ...lesson.options, dedupe, pick },
-    updatedAt: new Date().toISOString(),
-  }
-  return dedupe ? dedupeGoldenLesson(next) : next
 }
 
 /**
@@ -160,18 +87,26 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const [reviewIds, setReviewIds] = useState<string[]>([])
   const practicedRef = useRef(false)
 
-  const localLesson = useMemo(
-    () => (doc ? buildLocalGoldenLesson(doc.sentences, doc.paragraphs, { selected: doc.golden?.selected }) : null),
-    [doc],
-  )
-  const lesson = doc?.golden ?? localLesson
-  const ordered = useMemo(() => {
-    if (!lesson) return []
-    const byId = new Map(lesson.sentences.map((s) => [s.id, s]))
-    const ids = lesson.selected.length ? lesson.selected : lesson.sentences.map((s) => s.id)
-    return ids.map((id) => byId.get(id)).filter((s): s is NonNullable<typeof s> => !!s)
-  }, [lesson])
-  const bySentence = useMemo(() => new Map((doc?.sentences ?? []).map((s) => [s.id, s])), [doc?.sentences])
+  const {
+    lesson,
+    ordered,
+    bySentence,
+    candidates,
+    summary,
+    progressFor,
+    setSelected,
+    setPick,
+    toggleSentence,
+    setDedupe,
+  } = useGoldenLesson({
+    doc,
+    articleId,
+    records,
+    setDoc,
+    setPendingSave,
+    flash,
+  })
+
   const current = ordered[index] ?? null
   const currentSentence = current ? bySentence.get(current.id) ?? null : null
   const targets = lesson && current ? goldenTargetsFor(lesson, current.id) : []
@@ -189,22 +124,6 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     return findRecord(records, articleId, current.id, drillKey)
   }, [records, articleId, current, drillKey])
   const progress = currentRecord ?? (current && drillKey ? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString()) : null)
-  const candidates = useMemo<GoldenCandidate[]>(() => (doc ? rankGoldenCandidates(doc.sentences) : []), [doc])
-  const summary = useMemo(
-    () => (lesson && doc ? summarizeGolden(lesson, sentenceTexts(doc), records, articleId, doc.paragraphs) : null),
-    [lesson, doc, records, articleId],
-  )
-
-  const progressFor = useCallback(
-    (sentenceId: string): GoldenDrillRecord | null => {
-      if (!lesson) return null
-      const sentence = bySentence.get(sentenceId)
-      if (!sentence) return null
-      const t = goldenTargetsFor(lesson, sentenceId)
-      return findRecord(records, articleId, sentenceId, goldenDrillKey(sentence.text, t))
-    },
-    [lesson, bySentence, records, articleId],
-  )
 
   /** 今天之前掌握、今天还没回顾过的句子（按记录里的 lastAt 逻辑日判断）。 */
   const todayKey = dayKeyLocal()
@@ -222,20 +141,12 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   }, [reviewIds, ordered])
   const reviewMode = reviewIds.length > 0
 
-  const persistLesson = useCallback(
-    (next: GoldenLesson) => {
-      setDoc((d) => (d ? { ...d, golden: next } : d))
-      setPendingSave(true)
-    },
-    [setDoc, setPendingSave],
-  )
-
   const openGolden = useCallback(() => {
     if (!doc || !doc.sentences.length) {
       flash('先打开一篇文章')
       return
     }
-    const saved = readSession(sessionId)
+    const saved = readGoldenSession(sessionId)
     setOpen(true)
     setView(saved?.view ?? 'home')
     setIndex(saved?.index ?? 0)
@@ -260,58 +171,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   // 会话位置落本机：刷新后能回到同一课/同一句（学习进度另有 goldenDrills）。
   useEffect(() => {
     if (!open) return
-    try {
-      localStorage.setItem(sessionKey(sessionId), JSON.stringify({ view, index, recallIndex }))
-    } catch {
-      // 隐私模式忽略
-    }
+    writeGoldenSession(sessionId, { view, index, recallIndex })
   }, [open, sessionId, view, index, recallIndex])
-
-  const setSelected = useCallback(
-    (ids: string[], pick: GoldenPickMode) => {
-      if (!lesson || !doc) return
-      persistLesson(withSelection(lesson, doc.sentences, [...new Set(ids)], pick, lesson.options?.dedupe === true))
-    },
-    [lesson, doc, persistLesson],
-  )
-
-  const setPick = useCallback(
-    (pick: GoldenPickMode) => {
-      if (!lesson || !doc) return
-      if (pick === 'manual') {
-        persistLesson({ ...lesson, options: { ...lesson.options, pick: 'manual' } })
-        return
-      }
-      let ids: string[] = []
-      if (pick === 'recommended') ids = pickGoldenCandidates(doc.sentences, 10).map((c) => c.id)
-      else if (pick === 'all') ids = doc.sentences.map((s) => s.id)
-      else if (pick === 'ai') ids = lesson.aiSelected ?? lesson.selected
-      if (!ids.length) {
-        flash('这一档没有可选句子')
-        return
-      }
-      setSelected(ids, pick)
-    },
-    [lesson, doc, persistLesson, setSelected, flash],
-  )
-
-  const toggleSentence = useCallback(
-    (id: string) => {
-      if (!lesson) return
-      const has = lesson.selected.includes(id)
-      const ids = has ? lesson.selected.filter((x) => x !== id) : [...lesson.selected, id]
-      setSelected(ids, 'manual')
-    },
-    [lesson, setSelected],
-  )
-
-  const setDedupe = useCallback(
-    (on: boolean) => {
-      if (!lesson) return
-      persistLesson({ ...lesson, options: { ...lesson.options, dedupe: on } })
-    },
-    [lesson, persistLesson],
-  )
 
   const startDrill = useCallback(
     (from = 0) => {
@@ -450,22 +311,10 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
 
   const restartSentence = useCallback(() => {
     if (!current || !drillKey) return
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
+    const at = new Date().toISOString()
+    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, at)
     // 已掌握的不降级；没掌握的“再练一次”重开一轮首次记录，给用户掌握的机会。
-    const reset: GoldenDrillRecord = {
-      ...base,
-      fillFirst: undefined,
-      assembleFirst: undefined,
-      recallFirst: undefined,
-      fillTries: 0,
-      assembleTries: 0,
-      recallTries: 0,
-      summarySeen: false,
-      mastered: base.mastered,
-      completedAt: base.completedAt,
-      at: new Date().toISOString(),
-    }
-    recordGolden(reset)
+    recordGolden(resetGoldenRecord(base, at))
     setPhase('preview')
     setFillInputs([])
     setFillChecked(null)
@@ -536,20 +385,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     if (!s || !sentence || !lesson) return
     const t = goldenTargetsFor(lesson, s.id)
     const key = goldenDrillKey(sentence.text, t)
-    const base = findRecord(records, articleId, s.id, key) ?? emptyGoldenRecord(articleId, articleTitle, s.id, key, new Date().toISOString())
-    recordGolden({
-      ...base,
-      fillFirst: undefined,
-      assembleFirst: undefined,
-      recallFirst: undefined,
-      fillTries: 0,
-      assembleTries: 0,
-      recallTries: 0,
-      summarySeen: false,
-      mastered: base.mastered,
-      completedAt: base.completedAt,
-      at: new Date().toISOString(),
-    })
+    const at = new Date().toISOString()
+    const base = findRecord(records, articleId, s.id, key) ?? emptyGoldenRecord(articleId, articleTitle, s.id, key, at)
+    recordGolden(resetGoldenRecord(base, at))
     setIndex(recallIndex)
     setPhase('preview')
     setFillInputs([])
