@@ -41,12 +41,7 @@ import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
 import { goldenToMarkdown } from '../core/goldenMarkdown'
-import {
-  buildGoldenBank,
-  goldenBankToAnkiCSV,
-  goldenBankToMarkdown,
-  goldenBankToPrintHTML,
-} from '../core/goldenBank'
+import { useGoldenBank } from './hooks/useGoldenBank'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -404,25 +399,6 @@ export default function ReaderApp() {
     setPendingSave,
   })
 
-  /** 全库金句本：已保存文章 + 当前文档（当前篇用内存里的最新 golden）。 */
-  const goldenBankRows = useMemo(() => {
-    const currentId = savedId ?? articleKey ?? articleTitle ?? articleIdentity
-    const sources = saved.map((a) => ({
-      id: a.id,
-      title: a.title,
-      sentences: a.sentences,
-      ...(a.golden ? { golden: a.golden } : {}),
-    }))
-    const currentLesson = doc ? doc.golden ?? golden.lesson : null
-    if (doc && currentLesson) {
-      const current = { id: currentId, title: articleTitle || '未命名', sentences: doc.sentences, golden: currentLesson }
-      const at = sources.findIndex((s) => s.id === currentId)
-      if (at >= 0) sources[at] = current
-      else sources.push(current)
-    }
-    return buildGoldenBank(sources, goldenDrills)
-  }, [saved, savedId, articleKey, articleTitle, articleIdentity, doc, golden.lesson, goldenDrills])
-
   /** 选区所在的句子（默认操作对象）与真正拿去用的文本：规则在 core/pickTarget */
   const sentence = useMemo(() => pickSentence(doc?.sentences, selectedId, exact), [doc, selectedId, exact])
   const target = useMemo(() => pickTarget(exact, useExact, sentence), [exact, useExact, sentence])
@@ -512,6 +488,20 @@ export default function ReaderApp() {
   })
   const { download } = exporter
 
+  /** 全库金句本 / 本课打印导出；逻辑在 hooks/useGoldenBank。 */
+  const goldenBank = useGoldenBank({
+    saved,
+    savedId,
+    articleKey,
+    articleTitle,
+    articleIdentity,
+    doc,
+    lesson: golden.lesson,
+    records: goldenDrills,
+    download,
+    flash,
+  })
+
   /** 从金句课去仿写：范句用第一句金句，必须用的词块带进仿写提示词。 */
   const openGoldenWriting = (mustUse: string[]) => {
     const firstId = golden.lesson?.selected[0] ?? golden.lesson?.sentences[0]?.id
@@ -539,62 +529,6 @@ export default function ReaderApp() {
     })
     const safe = (articleTitle || '金句课').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)
     download(`D老师小课堂-${safe}.md`, md, 'text/markdown;charset=utf-8')
-  }
-
-  const exportGoldenBankMarkdown = () => {
-    if (!goldenBankRows.length) {
-      flash('还没有金句可导出')
-      return
-    }
-    download('全库金句本.md', goldenBankToMarkdown(goldenBankRows), 'text/markdown;charset=utf-8')
-  }
-
-  const exportGoldenBankAnki = () => {
-    if (!goldenBankRows.length) {
-      flash('还没有金句可导出')
-      return
-    }
-    download('全库金句本-anki.csv', goldenBankToAnkiCSV(goldenBankRows), 'text/csv;charset=utf-8')
-  }
-
-  const printGoldenHTML = (title: string, html: string) => {
-    const win = window.open('', '_blank')
-    if (!win) {
-      flash('弹窗被拦截，允许后重试')
-      return
-    }
-    win.document.write(html)
-    win.document.close()
-    win.document.title = title
-  }
-
-  const printGoldenBank = () => {
-    if (!goldenBankRows.length) {
-      flash('还没有金句可打印')
-      return
-    }
-    printGoldenHTML('全库金句本', goldenBankToPrintHTML(goldenBankRows))
-  }
-
-  const printGoldenLesson = () => {
-    if (!doc || !golden.lesson) {
-      flash('先打开一篇金句课')
-      return
-    }
-    const rows = buildGoldenBank(
-      [{
-        id: articleKey || articleTitle || articleIdentity,
-        title: articleTitle || '未命名',
-        sentences: doc.sentences,
-        golden: golden.lesson,
-      }],
-      goldenDrills,
-    )
-    if (!rows.length) {
-      flash('本课还没有可打印的金句')
-      return
-    }
-    printGoldenHTML(articleTitle || 'D老师小课堂', goldenBankToPrintHTML(rows, articleTitle || 'D老师小课堂'))
   }
 
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
@@ -780,11 +714,11 @@ export default function ReaderApp() {
     onExportGoldenMarkdown: exportGoldenMarkdown,
     onGenerateGolden: () => void ai.aiTasksApi.copyGoldenPrompt(),
     onOpenGoldenWriting: openGoldenWriting,
-    goldenBankRows,
-    onExportGoldenBankMarkdown: exportGoldenBankMarkdown,
-    onExportGoldenBankAnki: exportGoldenBankAnki,
-    onPrintGoldenBank: printGoldenBank,
-    onPrintGoldenLesson: printGoldenLesson,
+    goldenBankRows: goldenBank.rows,
+    onExportGoldenBankMarkdown: goldenBank.exportMarkdown,
+    onExportGoldenBankAnki: goldenBank.exportAnki,
+    onPrintGoldenBank: goldenBank.printBank,
+    onPrintGoldenLesson: goldenBank.printLesson,
     panels,
     browseFilters,
     articleRouting,
