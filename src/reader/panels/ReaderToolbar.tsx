@@ -52,6 +52,7 @@ export interface ReaderToolbarProps {
   readingAll: boolean
   onToggleReadAll: () => void
   onSpeedRead: () => void
+  onOpenGolden: () => void
   onOpenBack: () => void
   onOpenIntensive: () => void
   onOpenJournal: () => void
@@ -139,6 +140,7 @@ export default function ReaderToolbar({
   readingAll,
   onToggleReadAll,
   onSpeedRead,
+  onOpenGolden,
   onOpenBack,
   onOpenIntensive,
   onOpenJournal,
@@ -370,6 +372,15 @@ export default function ReaderToolbar({
         {hasDoc && !editing && (
           <button className="tb-speed" onClick={onSpeedRead} title="逐句速读：一次一句，先自己读→空格看释义/语言点；超时算不太理解，来个填空拷打">
             ⚡ 速读
+          </button>
+        )}
+        {hasDoc && !editing && (
+          <button
+            className="tb-golden"
+            onClick={onOpenGolden}
+            title="D老师小课堂：挑金句 → 填空 / 拼句 / 小结 → 逆向回顾；学完能直接拿去写"
+          >
+            🖋 D老师小课堂
           </button>
         )}
         {!editing && (

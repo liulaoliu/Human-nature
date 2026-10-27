@@ -16,6 +16,9 @@ export interface ReaderAppModel {
   paste: ReturnType<typeof usePasteState>
   highlight: ReturnType<typeof useReaderHighlightState>
   services: ReaderScreenProps['services']
+  golden: ReaderScreenProps['golden']
+  onExportGoldenMarkdown: () => void
+  onGenerateGolden: () => void
   panels: ReturnType<typeof useReaderPanelRouting>['panels']
   browseFilters: ReaderScreenProps['browseFilters']
   articleRouting: ReaderScreenProps['articleRouting']
@@ -156,6 +159,9 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
 
     workspace: app.workspace,
     services: app.services,
+    golden: app.golden,
+    onExportGoldenMarkdown: app.onExportGoldenMarkdown,
+    onGenerateGolden: app.onGenerateGolden,
     ai: app.ai,
     ui: app.ui,
     derived: app.derived,

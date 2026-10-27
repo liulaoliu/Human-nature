@@ -19,6 +19,7 @@ export const AI_JOB_TASKS = [
   'grammar_mark',
   'listening',
   'language',
+  'golden',
   'imitation',
   'feedback',
 ] as const
@@ -42,6 +43,7 @@ export const AI_TASK_LABEL: Record<AiJobTask, string> = {
   grammar_mark: '语法标记',
   listening: '听力',
   language: '语言点',
+  golden: 'D老师小课堂',
   imitation: '仿写',
   feedback: '批改',
 }
@@ -58,6 +60,8 @@ export interface AiJob {
   askedIds: string[]
   /** 要原样发给 AI 的完整提示词。 */
   prompt: string
+  /** 这条任务属于哪篇文章（正文签名）；应用前校验，防止切文章后写错。 */
+  articleKey?: string
 }
 
 export interface AiJobPack {

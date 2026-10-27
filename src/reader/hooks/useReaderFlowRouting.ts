@@ -11,6 +11,8 @@ export interface ReaderFlowRoutingParams {
   sentence: Sentence | null
   /** 词库已加载：深链接 `/reader/p/study` 要等它，否则会被误判成「没词可背」。 */
   ready: boolean
+  /** D老师小课堂的会话开关（单独一个 hook，不塞进六类练习会话）。 */
+  golden: { active: boolean; open: () => void; close: () => void }
 }
 
 /**
@@ -24,7 +26,7 @@ export interface ReaderFlowRoutingParams {
 export function useReaderFlowRouting(
   route: ReaderRoute,
   slug: string,
-  { services, workspace, sentence, ready }: ReaderFlowRoutingParams,
+  { services, workspace, sentence, ready, golden }: ReaderFlowRoutingParams,
 ): void {
   const {
     studyQueue,
@@ -70,6 +72,7 @@ export function useReaderFlowRouting(
     },
     write: { active: writingOpen, open: openWriting, close: () => writingApi.setOpen(false) },
     back: { active: backOpen, open: openBack, close: backApi.close },
+    golden: { active: golden.active, open: golden.open, close: golden.close },
     lang: {
       active: langOpen,
       open: () => openLangFor(sentence),

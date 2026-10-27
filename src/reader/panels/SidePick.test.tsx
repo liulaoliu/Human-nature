@@ -192,10 +192,10 @@ describe('SidePick：选区任务与粘回', () => {
 describe('SidePick：一键跑批与进度', () => {
   it('没有待办 / 未配 key 时跑批按钮禁用并给出原因', () => {
     const { rerender } = render(<SidePick {...props()} />)
-    expect((screen.getByRole('button', { name: /一键跑批（0 项）/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /D指导指导指导（0 项）/ }) as HTMLButtonElement).disabled).toBe(true)
 
     rerender(<SidePick {...props({ webPending: 3, localConfigured: false })} />)
-    expect((screen.getByRole('button', { name: /一键跑批（3 项）/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /D指导指导指导（3 项）/ }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/未配置 key/)).toBeTruthy()
   })
 

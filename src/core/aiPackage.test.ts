@@ -203,6 +203,31 @@ describe('buildAiJobs / countAiJobs', () => {
     expect(jobs[0].prompt).toContain('alpha')
   })
 
+  it('没有金句课时生成 D老师小课堂，带 articleKey；已有就不再排', () => {
+    const sentence = {
+      id: 's1',
+      paraId: 'p01',
+      text: 'In response to the pandemic, remote collaboration has become the new norm.',
+      audio: null,
+      translation: '为了应对疫情，远程协作已经成为新常态。',
+      grammarNote: null,
+      collocations: [],
+      vocab: [],
+      tags: [],
+      reviewState: review(),
+      language: { phrases: ['in response to — 为了应对'] },
+    }
+    const input = emptyInput({ sentences: [sentence], hasGolden: false, articleKey: 'art-1@x' })
+    const jobs = buildAiJobs(input)
+    const golden = jobs.find((j) => j.task === 'golden')
+    expect(golden).toBeTruthy()
+    expect(golden?.askedIds).toEqual(['s1'])
+    expect(golden?.articleKey).toBe('art-1@x')
+    expect(golden?.prompt).toContain('In response to the pandemic')
+    expect(countAiJobs(input)).toBe(jobs.length)
+    expect(buildAiJobs({ ...input, hasGolden: true }).some((j) => j.task === 'golden')).toBe(false)
+  })
+
   it('缺音标/释义按 30 个一份分块', () => {
     const items = Array.from({ length: 65 }, (_, i) => mkItem({ word: `w${i}`, phonetic: null }))
     const jobs = buildAiJobs(emptyInput({ items }))

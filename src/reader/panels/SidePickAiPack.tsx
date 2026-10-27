@@ -1,4 +1,5 @@
 import type { ChangeEvent, RefObject } from 'react'
+import { AI_BATCH_NAME } from '../labels'
 
 export interface SidePickAiPackProps {
   /** 粘回与应用。 */
@@ -173,7 +174,7 @@ export default function SidePickAiPack({
         )}
         <label
           className="ai-direct"
-          title="开启后：自动标词挑出的词直接写进生词本（跳过「待选」），下次跑批再自动补音标/释义"
+          title={`开启后：自动标词挑出的词直接写进生词本（跳过「待选」），下次${AI_BATCH_NAME}再自动补音标/释义`}
         >
           <input
             type="checkbox"
@@ -185,7 +186,7 @@ export default function SidePickAiPack({
         {autoVocabDoneHere && (
           <div className="ai-direct-done">
             <span className="muted">本篇「自动标词」已做过（不再自动进待办）</span>
-            <button onClick={onRerunAutoVocab} title="清掉本篇「已标词」标记，让一键跑批重新标词">
+            <button onClick={onRerunAutoVocab} title={`清掉本篇「已标词」标记，让${AI_BATCH_NAME}重新标词`}>
               🔄 重跑自动标词
             </button>
           </div>
@@ -217,7 +218,7 @@ export default function SidePickAiPack({
                 : '把待办直接发给本机服务端跑，跑完自动应用；会自动串联多轮（如：先选词进生词本，再自动补音标/释义），不用复制粘贴、不用命令行'
             }
           >
-            {localRunning ? `⚡ 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ 一键跑批（${webPending} 项）`}
+            {localRunning ? `⚡ ${AI_BATCH_NAME} · 第 ${localRound} 轮 · ${localPhase || '处理中'} ${localDone}/${localTotal}` : `⚡ ${AI_BATCH_NAME}（${webPending} 项）`}
           </button>
           {localConfigured === false && <span className="muted"> 未配置 key（config.local.json）</span>}
           {localError && <span className="web-miss"> · {localError}</span>}

@@ -80,10 +80,10 @@ describe('SidePickAiPack：粘回与应用', () => {
 describe('SidePickAiPack：跑批与进度', () => {
   it('没有待办 / 未配 key 时禁用并说明原因；跑批中显示轮次', () => {
     const { rerender } = render(<SidePickAiPack {...props()} />)
-    expect((screen.getByRole('button', { name: /一键跑批（0 项）/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /D指导指导指导（0 项）/ }) as HTMLButtonElement).disabled).toBe(true)
 
     rerender(<SidePickAiPack {...props({ webPending: 3, localConfigured: false })} />)
-    expect((screen.getByRole('button', { name: /一键跑批（3 项）/ }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: /D指导指导指导（3 项）/ }) as HTMLButtonElement).disabled).toBe(true)
     expect(screen.getByText(/未配置 key/)).toBeTruthy()
 
     rerender(

@@ -1,6 +1,7 @@
 import { lemmaOf } from '../../core/vocab'
 import SessionHost from '../SessionHost'
 import ReaderOverlaysHost from '../ReaderOverlaysHost'
+import GoldenPanel from '../panels/GoldenPanel'
 import Composer from '../panels/Composer'
 import ReaderArticle from '../ReaderArticle'
 import type { ReaderScreenProps } from '../ReaderScreen'
@@ -63,6 +64,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
   } = props
   const { newLimit, setNewLimit, newToday, translateView, showLanguage, vocabView, setVocabView, vocabSort, setVocabSort } =
     props.prefs
+  const { golden, onExportGoldenMarkdown, onGenerateGolden } = props
   const {
     knownLemmas,
     wordsInSentence,
@@ -157,7 +159,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
     currentRef: articleRouting.currentRef,
     hasDoc: !!doc,
   })
-  const bodyVisible = !studyQueue && !browseAll && !browseArticle && !examActive && !writingOpen
+  const bodyVisible = !studyQueue && !browseAll && !browseArticle && !examActive && !writingOpen && !golden.open
 
   return (
     <>
@@ -190,6 +192,16 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
         writing={writingApi}
         back={props.services.backApi}
       />
+
+      {golden.open && (
+        <GoldenPanel
+          api={golden}
+          articleTitle={props.articleTitle}
+          onSpeak={speak}
+          onExportMarkdown={onExportGoldenMarkdown}
+          onGenerate={onGenerateGolden}
+        />
+      )}
 
       <ReaderOverlaysHost
         speed={{

@@ -15,6 +15,7 @@ import {
 import type { AiJob, AiJobTask, AiJobsInput, AiResultEntry } from '../../core/aiPackage'
 import { dayKeyLocal } from '../../core/activity'
 import { CANCEL_MESSAGE, fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
+import { AI_BATCH_NAME } from '../labels'
 import { useLocalStorageState } from './useLocalStorageState'
 
 export interface UseAiPackParams {
@@ -24,6 +25,7 @@ export interface UseAiPackParams {
     raw: string,
     askedWords: string[],
     askedIds: string[],
+    meta?: { articleKey?: string },
   ) => { report: string[]; ok: boolean }
   download: (name: string, content: string, mime: string) => void
   flash: (message: string) => void
@@ -138,13 +140,13 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     if (jobsInput.batch.length) {
       return `待选有 ${jobsInput.batch.length} 个词还没进生词本：先点「加入生词本」，再跑一次批处理补齐音标/释义。`
     }
-    if (localRunning) return `跑批中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
+    if (localRunning) return `${AI_BATCH_NAME}中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
     if (pending.length > 0) {
       const tasks = [...new Set(pending.map((j) => AI_TASK_LABEL[j.task] ?? j.task))]
       const words: string[] = []
       for (const j of pending) for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
       const w = words.length ? `（${words.slice(0, 6).join('、')}${words.length > 6 ? '…' : ''}）` : ''
-      return `还有 ${pending.length} 项待办【${tasks.join('、')}】${w}，可点「⚡ 一键跑批」。`
+      return `还有 ${pending.length} 项待办【${tasks.join('、')}】${w}，可点「⚡ ${AI_BATCH_NAME}」。`
     }
     if (round.length > 0) {
       return `本轮已跑完；还有 ${round.length} 项没补全（多半是模型没返回这些词）：可点「📖 补齐生词本」（离线），或删掉不需要的词。`
@@ -171,7 +173,13 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
           failCount++
           continue
         }
-        const res = applyTaskResult(task, r.raw, job?.askedWords ?? r.askedWords ?? [], job?.askedIds ?? r.askedIds ?? [])
+        const res = applyTaskResult(
+          task,
+          r.raw,
+          job?.askedWords ?? r.askedWords ?? [],
+          job?.askedIds ?? r.askedIds ?? [],
+          job?.articleKey ? { articleKey: job.articleKey } : undefined,
+        )
         if (res.ok) {
           okCount++
           if (job) appliedIds.push(job.id)
@@ -272,7 +280,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     setAutoVocabDone((prev) => prev.filter((id) => id !== jobsInput.articleId))
     // 同时清掉「自动标词」的历史完成标记（doneIds），否则它仍会被判成已完成而不进待办
     setDoneIds((prev) => prev.filter((id) => !id.startsWith('auto_vocab-')))
-    flash('已重置本篇「自动标词」；再点一次「⚡ 一键跑批」即可重新标词')
+    flash(`已重置本篇「自动标词」；再点一次「⚡ ${AI_BATCH_NAME}」即可重新标词`)
   }, [jobsInput.articleId, setAutoVocabDone, setDoneIds, flash])
 
   /** 本篇是否已经「自动标过词」（标过就不再进默认待办）。 */
@@ -432,7 +440,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         okTotal += okCount
         failTotal += failCount
         setDoneIds((prev) => [...new Set([...prev, ...appliedIds])])
-        const report = [`一键跑批（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)]
+        const report = [`${AI_BATCH_NAME}（第 ${r + 1} 轮）：成功 ${okCount} / 失败 ${failCount}`, ...lines.slice(0, 40)]
         if (dropped) report.push(`⚠️ 丢弃了 ${dropped} 条结构不完整的 AI 结果（缺 raw / 不是对象）`)
         if (failed.length) {
           const byId = new Map(all.map((j) => [j.id, j]))
@@ -454,9 +462,9 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         // 等数据落地、下一轮待办浮现
         await settle(input)
       }
-      if (failTotal) flash(`一键跑批结束：成功 ${okTotal} 项、失败 ${failTotal} 项（失败的会留在待办里，可重试）`)
+      if (failTotal) flash(`${AI_BATCH_NAME}结束：成功 ${okTotal} 项、失败 ${failTotal} 项（失败的会留在待办里，可重试）`)
       else if (planned === 0) flash('没有待办')
-      else flash(`一键跑批完成（${okTotal} 项）`)
+      else flash(`${AI_BATCH_NAME}完成（${okTotal} 项）`)
     } catch (e) {
       if (ctrl.signal.aborted) {
         // 用户主动取消：不当错误展示

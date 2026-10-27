@@ -29,6 +29,7 @@ import type { useBatchQueue } from './hooks/useBatchQueue'
 import type { useVocabEdits } from './hooks/useVocabEdits'
 import type { useSpeaking } from './hooks/useSpeaking'
 import type { usePregenerate } from './hooks/usePregenerate'
+import type { useGoldenDrill } from './hooks/useGoldenDrill'
 
 
 type ShellP = ComponentProps<typeof ReaderShell>
@@ -144,10 +145,16 @@ export interface ReaderScreenProps {
   dictReady: boolean
   tatoebaReady: boolean
   exporter: SidebarP['exporter']
+  /** 导出本课金句素材（Markdown） */
+  onExportGoldenMarkdown: () => void
+  /** 复制 AI 金句课提示词（模块内入口） */
+  onGenerateGolden: () => void
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>
   services: ReturnType<typeof useSessionServices>
+  /** D老师小课堂整页会话 */
+  golden: ReturnType<typeof useGoldenDrill>
   ai: ReturnType<typeof useAiServices>
   ui: ReturnType<typeof useArticleUiActions>
   derived: ReturnType<typeof useReaderDerived>

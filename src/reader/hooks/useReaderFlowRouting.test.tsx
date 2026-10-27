@@ -78,7 +78,13 @@ function setup(ready = true) {
 
   const route: ReaderRoute = { slug: 'my-article', panel: '', overlay: '' }
   renderHook(() =>
-    useReaderFlowRouting(route, 'my-article', { services, workspace, sentence: null, ready }),
+    useReaderFlowRouting(route, 'my-article', {
+      services,
+      workspace,
+      sentence: null,
+      ready,
+      golden: { active: false, open: vi.fn(), close: vi.fn() },
+    }),
   )
 
   return {
@@ -111,7 +117,7 @@ describe('useReaderFlowRouting：字段映射', () => {
     expect(captured.slug).toBe('my-article')
     expect(captured.ready).toBe(false)
     expect(Object.keys(flows).sort()).toEqual(
-      ['compose', 'dict', 'listen', 'lang', 'quick', 'quiz', 'study', 'write', 'back'].sort(),
+      ['compose', 'dict', 'listen', 'lang', 'golden', 'quick', 'quiz', 'study', 'write', 'back'].sort(),
     )
   })
 

@@ -11,6 +11,7 @@ import {
   type VocabLevel,
 } from '../../core/analyzer'
 import { dedupeLibrary, markWord, relemmaLibrary } from '../../core/vocab'
+import { buildGoldenPrompt } from '../../core/goldenAi'
 import { buildLanguagePrompt } from '../../core/language'
 import { buildMissingPrompt, type MissingTask } from '../missingPrompts'
 import type { Sentence, VocabItem, VocabLibrary, VocabVia } from '../../types/document'
@@ -26,6 +27,7 @@ export type AiTaskKey =
   | 'grammar_mark'
   | 'listening'
   | 'language'
+  | 'golden'
   | 'imitation'
   | 'feedback'
 
@@ -104,6 +106,28 @@ export function useAiTasks({
     await copy(
       buildLanguagePrompt(doc.sentences.map((s) => ({ id: s.id, text: s.text }))),
       '已复制语言点分析提示词；把 AI 的 JSON 粘回「应用结果」',
+    )
+  }
+
+  /** D老师小课堂：复制金句课提示词（模块里手动重跑用）。 */
+  const copyGoldenPrompt = async () => {
+    if (!doc || !doc.sentences.length) {
+      flash('先打开一篇文章')
+      return
+    }
+    setLastTask('golden')
+    askedWordsRef.current = []
+    askedIdsRef.current = doc.sentences.map((s) => s.id)
+    await copy(
+      buildGoldenPrompt({
+        sentences: doc.sentences.map((s) => ({
+          id: s.id,
+          text: s.text,
+          ...(s.translation ? { translation: s.translation } : {}),
+          paraId: s.paraId,
+        })),
+      }),
+      '已复制 D老师小课堂提示词；把 AI 的 JSON 粘回「应用结果」',
     )
   }
 
@@ -272,6 +296,7 @@ export function useAiTasks({
   return {
     copyPrompt,
     copyLanguagePrompt,
+    copyGoldenPrompt,
     copyMissingAgain,
     commitBatch,
     copyBatchPrompt,

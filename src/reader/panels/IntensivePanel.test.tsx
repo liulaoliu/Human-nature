@@ -77,11 +77,11 @@ describe('IntensivePanel：头部与下一步', () => {
     const { rerender } = render(
       <IntensivePanel {...props({ onRunBatch, plan: { ...plan, nextKey: null } })} />,
     )
-    fireEvent.click(screen.getAllByRole('button', { name: /一键跑批/ })[0])
+    fireEvent.click(screen.getAllByRole('button', { name: /D指导指导指导/ })[0])
     expect(onRunBatch).toHaveBeenCalled()
 
     rerender(<IntensivePanel {...props({ onRunBatch, hasDoc: false, plan: { ...plan, nextKey: null } })} />)
-    expect((screen.getAllByRole('button', { name: /一键跑批/ })[0] as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getAllByRole('button', { name: /D指导指导指导/ })[0] as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('跑批中：显示轮次进度、可取消、所有动作锁住', () => {
@@ -101,7 +101,7 @@ describe('IntensivePanel：头部与下一步', () => {
       />,
     )
     expect(screen.getAllByText(/第 2 轮 · 查词 3\/8/).length).toBeGreaterThan(0)
-    expect(screen.getByText(/跑批中：按钮已锁/)).toBeTruthy()
+    expect(screen.getByText(/D指导指导指导中：按钮已锁/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
     expect(onCancelBatch).toHaveBeenCalled()
     // 主按钮在跑批中显示进度并禁用（同时保留跑批按钮）
@@ -114,9 +114,9 @@ describe('IntensivePanel：头部与下一步', () => {
 
   it('跑批错误在非运行态显示', () => {
     const { rerender } = render(<IntensivePanel {...props({ batchError: '服务端失联' })} />)
-    expect(screen.getByText('跑批出错：服务端失联')).toBeTruthy()
+    expect(screen.getByText('D指导指导指导出错：服务端失联')).toBeTruthy()
     rerender(<IntensivePanel {...props({ batchError: '服务端失联', batchRunning: true })} />)
-    expect(screen.queryByText('跑批出错：服务端失联')).toBeNull()
+    expect(screen.queryByText('D指导指导指导出错：服务端失联')).toBeNull()
   })
 })
 

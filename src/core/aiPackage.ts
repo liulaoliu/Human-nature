@@ -37,6 +37,7 @@ import {
 } from './aiTodos'
 import { makeJobId } from './aiPackIO'
 import { AI_TASK_LABEL } from './aiJobTypes'
+import { buildGoldenPrompt } from './goldenAi'
 import { buildLanguagePrompt, hasSentenceLanguage } from './language'
 import { buildListeningQuizPrompt } from './listening'
 import type { AiJob, AiJobTask } from './aiJobTypes'
@@ -61,8 +62,12 @@ export interface AiJobsInput {
   confusableBatchSize: number
   /** 当前文章的稳定标识（用于自动标词的「已完成」标记 / 稳定 id）。 */
   articleId: string
+  /** 正文签名键（`core/docSignature.articleKey`）；金句结果应用前校验。 */
+  articleKey?: string
   /** 本篇是否已经应用过「自动标词」（应用过就不再进默认待办）。 */
   autoVocabDone?: boolean
+  /** 本篇是否已经有金句课（有就不再进默认待办）。 */
+  hasGolden?: boolean
   /** 当前文章的句子。 */
   sentences: Sentence[]
   /** 自动标词的词汇标准。 */
@@ -92,7 +97,15 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
     // 再按文章隔离——否则像「自动标词」这种内容指纹为空的任务，id 会在所有文章间相同，
     // 一篇应用过就会把别的文章的同一任务也判成「已完成」（doneSet 误杀）。
     const key = `${input.articleId}|${idKey ?? `${askedWords.join('\n')}|${askedIds.join('\n')}`}`
-    jobs.push({ id: makeJobId(task, key), task, label, askedWords, askedIds, prompt })
+    jobs.push({
+      id: makeJobId(task, key),
+      task,
+      label,
+      askedWords,
+      askedIds,
+      prompt,
+      ...(input.articleKey ? { articleKey: input.articleKey } : {}),
+    })
   }
 
   const base = pickTodoBase(input)
@@ -225,6 +238,24 @@ export function buildAiJobs(input: AiJobsInput): AiJob[] {
       part.map((s) => s.id),
     )
   }
+  // 还没有金句课 → D老师小课堂。只给当前文章做：这是长 prompt，不跟「全库」范围走。
+  if (input.sentences.length && input.hasGolden === false) {
+    push(
+      'golden',
+      `D老师小课堂（${Math.min(10, input.sentences.length)} 句）`,
+      buildGoldenPrompt({
+        sentences: input.sentences.map((s) => ({
+          id: s.id,
+          text: s.text,
+          ...(s.translation ? { translation: s.translation } : {}),
+          paraId: s.paraId,
+        })),
+        maxSentences: 10,
+      }),
+      [],
+      input.sentences.map((s) => s.id),
+    )
+  }
   // 没有听力题 → 生成听力理解题
   if (input.sentences.length && !input.hasListenQuiz) {
     push(
@@ -252,6 +283,7 @@ export function countAiJobs(input: AiJobsInput): number {
   n += markChunks(base).length
   n += sentenceChunks(input.sentences.filter((s) => !s.translation)).length
   n += sentenceChunks(input.sentences.filter((s) => !hasSentenceLanguage(s))).length
+  if (input.sentences.length && input.hasGolden === false) n++
   if (input.sentences.length && !input.hasListenQuiz) n++
   return n
 }

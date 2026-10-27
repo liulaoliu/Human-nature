@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { AI_BATCH_NAME } from '../labels'
 import { readJson, writeJson } from '../storage'
 
 export interface PlanPanelProps {
@@ -24,7 +25,7 @@ interface Step {
 }
 
 const STEPS: Step[] = [
-  { id: 'read', label: '精读一篇 + 「⚡ 一键跑批」（补翻译 / 语言点 / 生词音标释义）' },
+  { id: 'read', label: `精读一篇 + 「⚡ ${AI_BATCH_NAME}」（补翻译 / 语言点 / 生词音标释义 / 金句课）` },
   { id: 'speed', label: '逐句速读一遍（生词左键选中 → 加入清单，或右键直接入库）' },
   { id: 'vocab', label: '背单词（先清今天到期，再看新词）' },
   { id: 'speak', label: '跟读 / 朗读 2–3 句，出声跟读' },

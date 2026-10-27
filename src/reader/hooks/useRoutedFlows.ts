@@ -23,7 +23,7 @@ export interface FlowControl {
 export type FlowControls = Record<FlowName, FlowControl>
 
 /** 同时有多个（切换瞬间）：按「谁更占屏」取一个，和原来的 examActive/readingView 口径一致。 */
-const PRIORITY: FlowName[] = ['study', 'quiz', 'quick', 'dict', 'listen', 'write', 'back', 'lang', 'compose']
+const PRIORITY: FlowName[] = ['study', 'quiz', 'quick', 'dict', 'listen', 'write', 'back', 'golden', 'lang', 'compose']
 
 function activeFlow(flows: FlowControls): FlowName | '' {
   for (const name of PRIORITY) {

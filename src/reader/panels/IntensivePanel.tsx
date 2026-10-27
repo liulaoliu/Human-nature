@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { AI_BATCH_NAME } from '../labels'
 import type { IntensivePlan, IntensiveStageKey } from '../../core/intensive'
 import type { OutputBoard } from '../../core/output'
 
@@ -70,8 +71,8 @@ export default function IntensivePanel({
   // 跑批进行中：整个面板的动作先锁住，避免重复提交 / 中途切会话。
   const busy = batchRunning
   const batchLabel = busy
-    ? `⏳ 第 ${batchRound} 轮 · ${batchPhase || '处理中'} ${batchDone}/${batchTotal}`
-    : '⚡ 一键跑批'
+    ? `⏳ ${AI_BATCH_NAME} · 第 ${batchRound} 轮 · ${batchPhase || '处理中'} ${batchDone}/${batchTotal}`
+    : `⚡ ${AI_BATCH_NAME}`
   return (
     // 跑批中：点遮罩不关（一不留神就点没了，还以为是跑批失败）。真要收起来走「隐藏」按钮，
     // 跑批在后台继续，再打开面板能看到进度和「取消」。
@@ -83,22 +84,22 @@ export default function IntensivePanel({
           <span className="muted">总进度 {plan.progress}%</span>
           <button
             onClick={onClose}
-            title={busy ? '跑批在后台继续；再打开「🎯 精读」可以看进度或取消' : undefined}
+            title={busy ? `${AI_BATCH_NAME}在后台继续；再打开「🎯 精读」可以看进度或取消` : undefined}
           >
-            {busy ? '隐藏（跑批继续）' : '关闭'}
+            {busy ? `隐藏（${AI_BATCH_NAME}继续）` : '关闭'}
           </button>
         </div>
         {articleTitle && <div className="muted intensive-art">当前：{articleTitle}</div>}
         {busy && (
           <div className="intensive-run" title="正在跑，请等这一步结束；重复点击不会再启动一轮">
             {batchLabel}
-            <span className="muted">（跑批中：按钮已锁，重复点击不会重跑）</span>
+            <span className="muted">（{AI_BATCH_NAME}中：按钮已锁，重复点击不会重跑）</span>
             <button onClick={onCancelBatch} title="停止等待结果（服务端已发出的请求不会撤回）">
               取消
             </button>
           </div>
         )}
-        {batchError && !busy && <div className="intensive-err">跑批出错：{batchError}</div>}
+        {batchError && !busy && <div className="intensive-err">{AI_BATCH_NAME}出错：{batchError}</div>}
 
         <div className="intensive-next">
           <div className="intensive-next-head">

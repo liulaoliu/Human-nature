@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import type { AnalysisTask } from '../../core/analyzer'
-import type { Paragraph, Sentence } from '../../types/document'
+import type { GoldenLesson, Paragraph, Sentence } from '../../types/document'
 import type { ApplyOutcome } from './useApplyTaskResult'
 
 /**
@@ -13,6 +13,7 @@ import type { ApplyOutcome } from './useApplyTaskResult'
 export interface ReaderDoc {
   paragraphs: Paragraph[]
   sentences: Sentence[]
+  golden?: GoldenLesson
 }
 
 export type PasteTaskKind =
@@ -25,6 +26,7 @@ export type PasteTaskKind =
   | 'grammar_mark'
   | 'listening'
   | 'language'
+  | 'golden'
   | 'imitation'
   | 'feedback'
 

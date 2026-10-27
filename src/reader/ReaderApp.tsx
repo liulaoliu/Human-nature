@@ -39,6 +39,8 @@ import { useArticleVocabView } from './hooks/useArticleVocabView'
 import { useQueueAutoSpeak } from './hooks/useQueueAutoSpeak'
 import { pickSentence, pickTarget } from '../core/pickTarget'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
+import { useGoldenDrill } from './hooks/useGoldenDrill'
+import { goldenToMarkdown } from '../core/goldenMarkdown'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -189,6 +191,8 @@ export default function ReaderApp() {
     recordActivity,
     recordPractice,
     mergeKindStats,
+    goldenDrills,
+    recordGolden,
     addMistake,
     dropMistake,
     data: learningData,
@@ -377,6 +381,23 @@ export default function ReaderApp() {
     setPendingSave,
   } = workspace
 
+  /** D老师小课堂：一篇文章的金句课（内容在 doc.golden，进度在学习记录） */
+  const golden = useGoldenDrill({
+    doc,
+    articleId: articleKey || articleTitle || articleIdentity,
+    articleTitle,
+    articleKey,
+    records: goldenDrills,
+    recordGolden,
+    recordActivity,
+    recordPractice,
+    recordAnswer,
+    speak,
+    flash,
+    setDoc,
+    setPendingSave,
+  })
+
   /** 选区所在的句子（默认操作对象）与真正拿去用的文本：规则在 core/pickTarget */
   const sentence = useMemo(() => pickSentence(doc?.sentences, selectedId, exact), [doc, selectedId, exact])
   const target = useMemo(() => pickTarget(exact, useExact, sentence), [exact, useExact, sentence])
@@ -465,6 +486,23 @@ export default function ReaderApp() {
     setWritingHistory: services.setWritingHistory,
   })
   const { download } = exporter
+
+  /** 本课素材导出：带上当前掌握状态，贴到 Notion / 写作素材库直接能用。 */
+  const exportGoldenMarkdown = () => {
+    if (!golden.lesson || !doc) {
+      flash('先打开并生成一篇金句课')
+      return
+    }
+    const md = goldenToMarkdown(golden.lesson, {
+      title: articleTitle || 'D老师小课堂',
+      sentences: doc.sentences,
+      records: goldenDrills,
+      articleId: articleKey || articleTitle || articleIdentity,
+      includeProgress: true,
+    })
+    const safe = (articleTitle || '金句课').replace(/[\\/:*?"<>|\s]+/g, '-').slice(0, 40)
+    download(`D老师小课堂-${safe}.md`, md, 'text/markdown;charset=utf-8')
+  }
 
   /** 本篇派生：掌握度 / 精读工作流 / 复述 / 产出看板（逻辑在 hooks/useArticleDerived）。 */
   const articleDerived = useArticleDerived({
@@ -622,13 +660,21 @@ export default function ReaderApp() {
     !!dictQueue ||
     services.listenOpen ||
     services.backOpen ||
+    golden.open ||
     panels.speedReadOpen
   /** 是否处于「阅读」视图：否则（背单词/考试/听写/听力/仿写/回译/生词浏览）隐藏精读工具栏 */
   const readingView =
     !services.studyQueue && !examActive && !services.writingOpen && !panels.browseAll && !panels.browseArticle
 
   // 整页会话/工具页也进 URL：打开 push、返回关闭、页面内退出 replace。
-  useReaderFlowRouting(route, currentSlug, { services, workspace, sentence, ready: libraryLoaded })
+  useReaderFlowRouting(route, currentSlug, {
+    services,
+    workspace,
+    sentence,
+    // 金句课需要正文；深链接刷新时等正文/索引就绪再开，文章不存在则让路由回落。
+    ready: libraryLoaded && (route.panel !== 'golden' || !!doc || !route.slug || articleRouting.indexReady),
+    golden: { active: golden.open, open: golden.openGolden, close: golden.close },
+  })
 
   const model: ReaderAppModel = {
     prefs,
@@ -636,6 +682,9 @@ export default function ReaderApp() {
     paste,
     highlight,
     services,
+    golden,
+    onExportGoldenMarkdown: exportGoldenMarkdown,
+    onGenerateGolden: () => void ai.aiTasksApi.copyGoldenPrompt(),
     panels,
     browseFilters,
     articleRouting,

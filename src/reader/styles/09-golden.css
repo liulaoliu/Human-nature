@@ -1,0 +1,390 @@
+/* D老师小课堂（金句锤炼）。整页会话，沿用 .study 的底，但内容区自己排版。 */
+
+.golden {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.golden-art {
+  max-width: 34ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.golden-count {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.golden-body {
+  padding: 18px 22px 40px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-width: 980px;
+  width: 100%;
+  margin: 0 auto;
+  box-sizing: border-box;
+}
+
+.golden-summary {
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  line-height: 1.65;
+}
+
+.golden-steps {
+  display: grid;
+  gap: 10px;
+}
+
+.golden-step {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.golden-step:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.golden-step:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.golden-step-no {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 700;
+  flex: none;
+}
+
+.golden-step small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+  line-height: 1.45;
+}
+
+.golden-step-go {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.golden-kpis {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  color: var(--muted);
+}
+
+.golden-kpis b {
+  color: var(--text);
+}
+
+.golden-hint {
+  line-height: 1.6;
+}
+
+.golden-plan-bar,
+.golden-drill-bar {
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.golden-outline {
+  display: grid;
+  gap: 8px;
+}
+
+.golden-sec {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.golden-modes {
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.golden-cand-list {
+  display: grid;
+  gap: 6px;
+}
+
+.golden-cand {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 11px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  cursor: pointer;
+}
+
+.golden-cand.on {
+  border-color: var(--accent);
+}
+
+.golden-cand input {
+  margin-top: 4px;
+}
+
+.golden-cand-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  line-height: 1.5;
+  min-width: 0;
+}
+
+.golden-cand-text small {
+  color: var(--muted);
+}
+
+.golden-reason {
+  font-size: 12px;
+}
+
+.golden-score {
+  margin-left: auto;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.golden-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.golden-chip.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.golden-preview {
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.golden-en {
+  font-size: 19px;
+  line-height: 1.65;
+  font-weight: 600;
+}
+
+.golden-note {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.golden-sentence {
+  font-size: 18px;
+  line-height: 2;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.golden-blank {
+  display: inline-block;
+  min-width: 2.2em;
+  border-bottom: 2px solid var(--accent);
+  color: var(--accent);
+  text-align: center;
+  font-weight: 700;
+}
+
+.golden-inputs {
+  display: grid;
+  gap: 8px;
+}
+
+.golden-inputs label {
+  display: grid;
+  grid-template-columns: minmax(120px, 220px) 1fr;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+}
+
+.golden-inputs input {
+  font-size: 16px;
+  padding: 8px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+}
+
+.golden-feedback,
+.golden-targets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  line-height: 1.6;
+}
+
+.golden-feedback .good,
+.golden-good {
+  color: #1a8f4c;
+}
+
+.golden-feedback .bad,
+.golden-bad {
+  color: #c0392b;
+}
+
+.golden-bank,
+.golden-order {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.golden-bank button,
+.golden-order button {
+  padding: 6px 10px;
+  border-radius: 7px;
+  border: 1px solid var(--accent);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.golden-bank button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.golden-target {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.golden-recall-zh {
+  font-size: 18px;
+  line-height: 1.7;
+  padding: 16px 18px;
+  border-radius: 10px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+}
+
+.golden-recall-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  line-height: 1.7;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--text);
+  resize: vertical;
+}
+
+.golden-recall-result {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  line-height: 1.6;
+}
+
+.golden-recall-result.good {
+  border-color: #1a8f4c;
+}
+
+.golden-recall-result.bad {
+  border-color: #c0392b;
+}
+
+.golden-diff {
+  margin-top: 6px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.golden-diff .add {
+  color: #c0392b;
+}
+
+.golden-diff .del {
+  color: #1a8f4c;
+}
+
+.golden-summary-list {
+  display: grid;
+  gap: 10px;
+}
+
+.golden-summary-item {
+  padding: 12px 14px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.golden-summary-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.golden-summary-head button {
+  margin-left: auto;
+}
+
+@media (max-width: 720px) {
+  .golden-body {
+    padding: 12px 12px 32px;
+  }
+  .golden-inputs label {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .golden-en {
+    font-size: 17px;
+  }
+}
