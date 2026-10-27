@@ -21,6 +21,7 @@ import {
   findGoldenRecord as findRecord,
   goldenCompleted,
   goldenMastered,
+  goldenReviewDue,
   recordGoldenStep,
   summarizeGolden,
   type GoldenDrillRecord,
@@ -210,9 +211,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const reviewCount = useMemo(() => {
     const ids = new Set<string>()
     for (const r of records) {
-      if (r.articleId !== articleId || !r.mastered) continue
-      if (!r.at || Number.isNaN(Date.parse(r.at))) continue
-      if (dayKeyLocal(new Date(r.at)) === todayKey) continue
+      if (r.articleId !== articleId || !goldenReviewDue(r, todayKey)) continue
       if (ordered.some((s) => s.id === r.sentenceId)) ids.add(r.sentenceId)
     }
     return ids.size
@@ -339,9 +338,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
       return
     }
     const ids = [...new Set(records.filter((r) => {
-      if (r.articleId !== articleId || !r.mastered || !r.at) return false
-      if (Number.isNaN(Date.parse(r.at))) return false
-      return dayKeyLocal(new Date(r.at)) !== todayKey && ordered.some((s) => s.id === r.sentenceId)
+      if (r.articleId !== articleId || !goldenReviewDue(r, todayKey)) return false
+      return ordered.some((s) => s.id === r.sentenceId)
     }).map((r) => r.sentenceId))]
     if (!ids.length) return
     setReviewIds(ids)

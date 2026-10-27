@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest'
+import { dayKeyLocal } from './activity'
 import { buildLocalGoldenLesson, goldenDrillKey, goldenRecordId } from './golden'
 import {
   emptyGoldenRecord,
   goldenCompleted,
   goldenMastered,
+  goldenReviewDue,
   mergeGoldenDrills,
   normalizeGoldenDrills,
   recordGoldenStep,
@@ -71,6 +73,16 @@ describe('golden progress', () => {
     const merged = mergeGoldenDrills([{ ...good, mastered: true, fillFirst: true, assembleFirst: true, recallFirst: true, summarySeen: true }], [good])
     expect(merged[0].mastered).toBe(true)
     expect(merged[0].id).toBe(goldenRecordId('a1', 's1', good.drillKey))
+  })
+
+  it('待回顾只看已掌握且今天还没回顾', () => {
+    const today = dayKeyLocal(new Date(2026, 9, 27, 12))
+    const mastered = { ...record(), mastered: true }
+    expect(goldenReviewDue({ ...mastered, at: new Date(2026, 9, 26, 12).toISOString() }, today)).toBe(true)
+    expect(goldenReviewDue({ ...mastered, at: new Date(2026, 9, 27, 12).toISOString() }, today)).toBe(false)
+    expect(goldenReviewDue({ ...mastered, mastered: false, at: new Date(2026, 9, 26, 12).toISOString() }, today)).toBe(false)
+    expect(goldenReviewDue({ ...mastered, at: 'bad-date' }, today)).toBe(false)
+    expect(goldenReviewDue(null, today)).toBe(false)
   })
 
   it('统计默认按句独立；去重开关只影响计数', () => {

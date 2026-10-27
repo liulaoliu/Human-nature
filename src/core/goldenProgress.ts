@@ -1,3 +1,4 @@
+import { dayKeyLocal } from './activity'
 import { goldenDrillKey, goldenRecordId, goldenTargetKey, type GoldenTextMeta } from './golden'
 import type { GoldenLesson, GoldenSection, GoldenTargetKind, Paragraph } from '../types/document'
 
@@ -98,6 +99,22 @@ export function findGoldenRecord(
 ): GoldenDrillRecord | null {
   const id = goldenRecordId(articleId, sentenceId, drillKey)
   return records.find((r) => r.id === id) ?? null
+}
+
+/**
+ * 待回顾口径：已掌握 + 今天还没回顾。
+ *
+ * 金句本的「待回顾」筛选和课内的回顾队列都走这一条；日期键由调用方传
+ * `dayKeyLocal()`，不要在视图/金句本里再写第二套比较。
+ */
+export function goldenReviewDue(
+  record: Pick<GoldenDrillRecord, 'mastered' | 'at'> | null | undefined,
+  todayKey: string,
+): boolean {
+  if (!record?.mastered || !record.at) return false
+  const at = Date.parse(record.at)
+  if (Number.isNaN(at)) return false
+  return dayKeyLocal(new Date(at)) !== todayKey
 }
 
 function numberOrZero(v: unknown): number {

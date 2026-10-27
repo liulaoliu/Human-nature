@@ -1,6 +1,6 @@
 import { dayKeyLocal } from './activity'
 import { GOLDEN_TARGET_KIND_LABEL, goldenDrillKey, goldenTargetsFor } from './golden'
-import { findGoldenRecord, type GoldenDrillRecord } from './goldenProgress'
+import { findGoldenRecord, goldenReviewDue, type GoldenDrillRecord } from './goldenProgress'
 import type { GoldenLesson, GoldenTarget } from '../types/document'
 
 /**
@@ -70,7 +70,7 @@ export function buildGoldenBank(
         targets,
         mastered,
         ...(lastAt ? { lastAt } : {}),
-        due: mastered && !!lastAt && dayKeyLocal(new Date(lastAt)) !== today,
+        due: goldenReviewDue(rec, today),
       })
     }
   }
