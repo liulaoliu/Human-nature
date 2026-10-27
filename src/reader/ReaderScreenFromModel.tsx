@@ -19,6 +19,7 @@ export interface ReaderAppModel {
   golden: ReaderScreenProps['golden']
   onExportGoldenMarkdown: () => void
   onGenerateGolden: () => void
+  onOpenGoldenWriting: (mustUse: string[]) => void
   panels: ReturnType<typeof useReaderPanelRouting>['panels']
   browseFilters: ReaderScreenProps['browseFilters']
   articleRouting: ReaderScreenProps['articleRouting']
@@ -162,6 +163,7 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     golden: app.golden,
     onExportGoldenMarkdown: app.onExportGoldenMarkdown,
     onGenerateGolden: app.onGenerateGolden,
+    onOpenGoldenWriting: app.onOpenGoldenWriting,
     ai: app.ai,
     ui: app.ui,
     derived: app.derived,

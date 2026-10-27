@@ -4,9 +4,9 @@ import { getSentenceLanguages } from '../../core/language'
 import { LEARNING_KEYS } from '../../core/learning'
 import { useLocalStorageState } from './useLocalStorageState'
 
-/** 仿写草稿（范句 / 作答 / 任务）持久化：刷新不丢。 */
-function loadWritingDraft(): { model: string; text: string; task: ImitationTask | null } {
-  const empty = { model: '', text: '', task: null as ImitationTask | null }
+/** 仿写草稿（范句 / 作答 / 任务 / 必须用的词块）持久化：刷新不丢。 */
+function loadWritingDraft(): { model: string; text: string; task: ImitationTask | null; mustUse: string[] } {
+  const empty = { model: '', text: '', task: null as ImitationTask | null, mustUse: [] as string[] }
   try {
     const raw = localStorage.getItem('reader:writingDraft')
     if (!raw) return empty
@@ -19,6 +19,7 @@ function loadWritingDraft(): { model: string; text: string; task: ImitationTask 
       model: typeof o.model === 'string' ? o.model : '',
       text: typeof o.text === 'string' ? o.text : '',
       task,
+      mustUse: Array.isArray(o.mustUse) ? o.mustUse.filter((x): x is string => typeof x === 'string' && !!x.trim()) : [],
     }
   } catch {
     return empty
@@ -52,23 +53,30 @@ export function useWriting({
   const [model, setModel] = useState(() => loadWritingDraft().model)
   const [task, setTask] = useState<ImitationTask | null>(() => loadWritingDraft().task)
   const [text, setText] = useState(() => loadWritingDraft().text)
+  const [mustUse, setMustUse] = useState<string[]>(() => loadWritingDraft().mustUse)
   const [feedback, setFeedback] = useState<WritingFeedback | null>(null)
   const [history, setHistory] = useLocalStorageState<WritingRecord[]>(LEARNING_KEYS.writingHistory, [])
 
-  /** 打开仿写训练（范句默认用当前选中句）。 */
-  const start = useCallback(() => {
-    if (!doc || !doc.sentences.length) {
-      flash('先打开一篇文章')
-      return
-    }
-    const first = doc.sentences.find((s) => s.id === selectedId) ?? doc.sentences[0]
-    closeOthers()
-    setOpen(true)
-    setModel(first.text)
-    setTask(null)
-    setText('')
-    setFeedback(null)
-  }, [doc, selectedId, flash, closeOthers])
+  /** 打开仿写训练（范句默认用当前选中句；也支持从金句课带 model + mustUse）。 */
+  const start = useCallback(
+    (opts?: { model?: string; mustUse?: string[] }) => {
+      if (!doc || !doc.sentences.length) {
+        flash('先打开一篇文章')
+        return
+      }
+      const first = opts?.model?.trim()
+        ? doc.sentences.find((s) => s.text === opts.model) ?? doc.sentences[0]
+        : doc.sentences.find((s) => s.id === selectedId) ?? doc.sentences[0]
+      closeOthers()
+      setOpen(true)
+      setModel(opts?.model?.trim() || first.text)
+      setMustUse((opts?.mustUse ?? []).filter(Boolean))
+      setTask(null)
+      setText('')
+      setFeedback(null)
+    },
+    [doc, selectedId, flash, closeOthers],
+  )
 
   const copyImitationTask = useCallback(async () => {
     const m = model.trim()
@@ -78,18 +86,19 @@ export function useWriting({
     }
     const s = doc?.sentences.find((x) => x.text === m)
     const first = s ? getSentenceLanguages(s)[0] : undefined
+    const words = mustUse.length ? mustUse : first?.phrases
     setLastTask('imitation')
     askedWordsRef.current = []
     askedIdsRef.current = []
     try {
       await navigator.clipboard.writeText(
-        buildImitationTaskPrompt({ model: m, structure: first?.structure, mustUse: first?.phrases }),
+        buildImitationTaskPrompt({ model: m, structure: first?.structure, mustUse: words }),
       )
       flash('已复制仿写任务提示词；把 AI 的 JSON 粘回「应用结果」')
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [model, doc, flash, setLastTask, askedWordsRef, askedIdsRef])
+  }, [model, doc, mustUse, flash, setLastTask, askedWordsRef, askedIdsRef])
 
   const copyFeedback = useCallback(async () => {
     if (!task) {
@@ -122,11 +131,11 @@ export function useWriting({
   // 仿写草稿（范句 / 作答 / 任务）持久化
   useEffect(() => {
     try {
-      localStorage.setItem('reader:writingDraft', JSON.stringify({ model, text, task }))
+      localStorage.setItem('reader:writingDraft', JSON.stringify({ model, text, task, mustUse }))
     } catch {
       // 忽略
     }
-  }, [model, text, task])
+  }, [model, text, task, mustUse])
 
   return {
     open,
@@ -137,6 +146,8 @@ export function useWriting({
     setTask,
     text,
     setText,
+    mustUse,
+    setMustUse,
     feedback,
     setFeedback,
     history,

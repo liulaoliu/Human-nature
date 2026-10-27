@@ -25,7 +25,7 @@ import {
   summarizeGolden,
   type GoldenDrillRecord,
 } from '../../core/goldenProgress'
-import type { ActivityCat } from '../../core/activity'
+import { dayKeyLocal, type ActivityCat } from '../../core/activity'
 import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import type { GoldenLesson, GoldenPickMode, GoldenSentence, Sentence } from '../../types/document'
@@ -155,6 +155,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const [recallInput, setRecallInput] = useState('')
   const [recallChecked, setRecallChecked] = useState<GoldenRecallResult | null>(null)
   const [recallRevealed, setRecallRevealed] = useState(false)
+  /** 非空 = 本次是「待回顾」队列，只过已掌握、今天还没回顾的句子。 */
+  const [reviewIds, setReviewIds] = useState<string[]>([])
   const practicedRef = useRef(false)
 
   const localLesson = useMemo(
@@ -202,6 +204,24 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     },
     [lesson, bySentence, records, articleId],
   )
+
+  /** 今天之前掌握、今天还没回顾过的句子（按记录里的 lastAt 逻辑日判断）。 */
+  const todayKey = dayKeyLocal()
+  const reviewCount = useMemo(() => {
+    const ids = new Set<string>()
+    for (const r of records) {
+      if (r.articleId !== articleId || !r.mastered) continue
+      if (!r.at || Number.isNaN(Date.parse(r.at))) continue
+      if (dayKeyLocal(new Date(r.at)) === todayKey) continue
+      if (ordered.some((s) => s.id === r.sentenceId)) ids.add(r.sentenceId)
+    }
+    return ids.size
+  }, [records, articleId, ordered, todayKey])
+  const recallList = useMemo(() => {
+    if (!reviewIds.length) return ordered
+    return reviewIds.map((id) => ordered.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s)
+  }, [reviewIds, ordered])
+  const reviewMode = reviewIds.length > 0
 
   const persistLesson = useCallback(
     (next: GoldenLesson) => {
@@ -313,6 +333,26 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     [ordered.length, flash],
   )
 
+  const startReview = useCallback(() => {
+    if (!reviewCount) {
+      flash('今天没有待回顾的金句')
+      return
+    }
+    const ids = [...new Set(records.filter((r) => {
+      if (r.articleId !== articleId || !r.mastered || !r.at) return false
+      if (Number.isNaN(Date.parse(r.at))) return false
+      return dayKeyLocal(new Date(r.at)) !== todayKey && ordered.some((s) => s.id === r.sentenceId)
+    }).map((r) => r.sentenceId))]
+    if (!ids.length) return
+    setReviewIds(ids)
+    setView('recall')
+    setRecallIndex(0)
+    setRecallInput('')
+    setRecallChecked(null)
+    setRecallRevealed(false)
+    practicedRef.current = false
+  }, [reviewCount, records, articleId, todayKey, ordered, flash])
+
   const startRecall = useCallback(() => {
     if (!ordered.length) {
       flash('先练完遣词造句')
@@ -322,6 +362,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
       flash('先完成全部句子的遣词造句，再进逆向回顾')
       return
     }
+    setReviewIds([])
     setView('recall')
     setRecallIndex(0)
     setRecallInput('')
@@ -470,7 +511,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   }, [current, drillKey, currentRecord, articleId, articleTitle, recordGolden, recordAnswer, recallChecked])
 
   const nextRecall = useCallback(() => {
-    if (recallIndex + 1 < ordered.length) {
+    if (recallIndex + 1 < recallList.length) {
       setRecallIndex(recallIndex + 1)
       setRecallInput('')
       setRecallChecked(null)
@@ -478,13 +519,13 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
       return
     }
     setView('summary')
-    if (!practicedRef.current) {
+    if (!reviewMode && !practicedRef.current) {
       practicedRef.current = true
       const total = ordered.length
       const correct = summary?.masteredSentences ?? 0
       recordPractice('golden', total, correct)
     }
-  }, [recallIndex, ordered.length, summary, recordPractice])
+  }, [recallIndex, recallList.length, reviewMode, ordered.length, summary, recordPractice])
 
   const speakCurrent = useCallback(() => {
     if (currentSentence) speak(currentSentence.text)
@@ -492,7 +533,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
 
   /** 逆向回顾失败后「再练一次本句」：重开首次记录，回到这句的遣词造句。 */
   const restartRecallSentence = useCallback(() => {
-    const s = ordered[recallIndex]
+    const s = recallList[recallIndex]
     const sentence = s ? bySentence.get(s.id) : null
     if (!s || !sentence || !lesson) return
     const t = goldenTargetsFor(lesson, s.id)
@@ -522,9 +563,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setRecallChecked(null)
     setRecallRevealed(false)
     setView('drill')
-  }, [ordered, recallIndex, bySentence, lesson, records, articleId, articleTitle, recordGolden])
+  }, [recallList, recallIndex, bySentence, lesson, records, articleId, articleTitle, recordGolden])
 
-  const currentRecallSentence = ordered[recallIndex] ?? null
+  const currentRecallSentence = recallList[recallIndex] ?? null
   const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null
   const currentRecallProgress = currentRecallSentence ? progressFor(currentRecallSentence.id) : null
 
@@ -537,6 +578,10 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     doc,
     lesson,
     ordered,
+    recallList,
+    reviewCount,
+    reviewMode,
+    startReview,
     candidates,
     summary,
     progress,

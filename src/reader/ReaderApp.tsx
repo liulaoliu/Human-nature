@@ -487,6 +487,18 @@ export default function ReaderApp() {
   })
   const { download } = exporter
 
+  /** 从金句课去仿写：范句用第一句金句，必须用的词块带进仿写提示词。 */
+  const openGoldenWriting = (mustUse: string[]) => {
+    const firstId = golden.lesson?.selected[0] ?? golden.lesson?.sentences[0]?.id
+    const sentence = firstId ? doc?.sentences.find((s) => s.id === firstId) : null
+    if (!sentence) {
+      flash('先选一句金句再仿写')
+      return
+    }
+    golden.close()
+    services.writingApi.start({ model: sentence.text, mustUse })
+  }
+
   /** 本课素材导出：带上当前掌握状态，贴到 Notion / 写作素材库直接能用。 */
   const exportGoldenMarkdown = () => {
     if (!golden.lesson || !doc) {
@@ -685,6 +697,7 @@ export default function ReaderApp() {
     golden,
     onExportGoldenMarkdown: exportGoldenMarkdown,
     onGenerateGolden: () => void ai.aiTasksApi.copyGoldenPrompt(),
+    onOpenGoldenWriting: openGoldenWriting,
     panels,
     browseFilters,
     articleRouting,

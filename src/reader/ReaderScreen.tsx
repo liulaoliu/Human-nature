@@ -149,6 +149,8 @@ export interface ReaderScreenProps {
   onExportGoldenMarkdown: () => void
   /** 复制 AI 金句课提示词（模块内入口） */
   onGenerateGolden: () => void
+  /** 把本课词块带进仿写 */
+  onOpenGoldenWriting: (mustUse: string[]) => void
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>

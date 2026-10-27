@@ -94,6 +94,11 @@ describe('useGoldenDrill', () => {
     expect(h.result.current.api.summary?.masteredSentences).toBe(1)
     expect(h.recordPractice).toHaveBeenCalledWith('golden', 1, 1)
     expect(h.recordAnswer).toHaveBeenCalled()
+
+    // 已掌握后重练：本轮首答记录清空，但 mastered 不降级
+    act(() => h.result.current.api.restartSentence())
+    expect(h.result.current.records[0].mastered).toBe(true)
+    expect(h.result.current.records[0].summarySeen).toBeFalsy()
   })
 
   it('没完成遣词造句不让进逆向回顾', () => {

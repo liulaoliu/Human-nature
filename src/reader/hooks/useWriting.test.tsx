@@ -92,6 +92,17 @@ describe('useWriting：开始与复制提示词', () => {
     expect(result.current.feedback).toBeNull()
   })
 
+  it('从金句课带范句 + mustUse；复制任务时用 mustUse 覆盖语言点 phrases', async () => {
+    const p = params()
+    const { result } = renderHook(() => useWriting(p))
+    act(() => result.current.start({ model: 'Run fast.', mustUse: ['run fast', 'in response to'] }))
+    expect(result.current.model).toBe('Run fast.')
+    expect(result.current.mustUse).toEqual(['run fast', 'in response to'])
+    await act(async () => result.current.copyImitationTask())
+    const prompt = (navigator.clipboard.writeText as ReturnType<typeof vi.fn>).mock.calls[0][0] as string
+    expect(prompt).toContain('in response to')
+  })
+
   it('复制仿写任务：空范句只提示；成功时清空提问上下文', async () => {
     const p = params()
     const { result } = renderHook(() => useWriting(p))

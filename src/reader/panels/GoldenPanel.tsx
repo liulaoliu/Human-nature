@@ -104,6 +104,14 @@ function GoldenHome({ api, onGenerate }: { api: ReturnType<typeof useGoldenDrill
         <span>掌握句子 <b>{summary?.masteredSentences ?? 0}</b></span>
         <span>学习点 <b>{summary?.masteredTargets ?? 0}/{summary?.totalTargets ?? 0}</b></span>
       </div>
+      {api.reviewCount > 0 && (
+        <div className="bar golden-plan-bar">
+          <button className="primary" onClick={api.startReview}>
+            🔁 待回顾（{api.reviewCount} 句）
+          </button>
+          <span className="muted">已掌握、今天还没回顾的金句</span>
+        </div>
+      )}
       <div className="bar golden-plan-bar">
         {onGenerate && (
           <button onClick={onGenerate} title="复制 AI 金句课提示词；把 JSON 粘回「应用结果」后写回文章">
@@ -363,8 +371,8 @@ function GoldenRecallView({ api, onSpeak }: { api: ReturnType<typeof useGoldenDr
     <div className="golden-body">
       <div className="bar golden-drill-bar">
         <button onClick={() => api.setView('home')}>← 课程页</button>
-        <b>逆向回顾</b>
-        <span className="muted">第 {api.recallIndex + 1} / {api.ordered.length} 句</span>
+        <b>{api.reviewMode ? '待回顾' : '逆向回顾'}</b>
+        <span className="muted">第 {api.recallIndex + 1} / {api.recallList.length} 句</span>
         {isMastered(rec) && <span className="golden-good">已掌握</span>}
         <button onClick={() => onSpeak(sentence.text)}>🔊</button>
         <button onClick={api.restartRecallSentence} title="重开这一句的首次记录，回到填空/拼句/小结">再练一次本句</button>
