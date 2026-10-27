@@ -207,6 +207,20 @@
    打开保留底下那层、关闭 replace 回它、浏览器返回只关浮层。测试钉在
    `route.test.ts`（解析/构造）、`useRoutedFlows.test.tsx`（push/replace/返回/回落）、
    `route.panels.test.tsx`（`/p/speed/lang` 下速读仍然开着）。
+34. **TTS「降级期」不能把兜底引擎一起跳过**（2026-10-27）。Edge 偶发连不上时控制台报
+   `GET /api/tts?... 502`，而 Piper 明明装着、上一句还能出声。两个独立缺陷叠在一起：
+   - `synthWithFallbacks` 里主引擎在冷却期（`edgeDownUntil`）时只 `continue` 跳过，
+     而 Piper 候选只在「主引擎失败」的 `catch` 里入队 → 冷却期内每个**新**句子直接跳到循环末尾，
+     抛 `tts failed`，**2 毫秒**就 502（缓存里已有兜底文件的句子仍能 200，所以看起来「偶发」）。
+     现在主引擎冷却时由 `planAttempts`（纯函数）直接给出兜底队列；主引擎正常时仍保持惰性解析，
+     不许回退成 §3-31 那种「兜底 bug 把主路径带崩」。
+   - 兜底 `.local.wav` 刚写完时 Edge 冷却可能刚好到期，`pickAudio` 不再认这份兜底文件，
+     外层抛 `tts produced no audio` 也是 502。现在 `synthWithFallbacks` 直接返回本次落盘的
+     `{ file, ext }`，不再让调用方二次按冷却期猜文件。
+   排查口径：502 先看响应正文（`tts failed: ...` / `tts produced no audio`）；冷却期行为可以直接
+   `HTTPS_PROXY=http://127.0.0.1:1` 起探针连续要三个新句子验证。
+   Edge 本身偶发失败多与 `HTTPS_PROXY` 指向的本机代理有关（`node-edge-tts` 握手没有连接超时，
+   卡住时只能靠 `SYNTH_TIMEOUT_MS` 兜），缓存目录里 `.mp3.local.wav` 多于 `.mp3` 就是信号。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

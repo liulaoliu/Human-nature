@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest'
-import { edgeLangFor, edgeProxyFromEnv, localFallbackTargets, parseTarget, pickVoiceFor } from './tts-core.mjs'
+import { describe, expect, it, vi } from 'vitest'
+import {
+  edgeLangFor,
+  edgeProxyFromEnv,
+  localFallbackTargets,
+  parseTarget,
+  pickVoiceFor,
+  planAttempts,
+} from './tts-core.mjs'
 import { piperStatus } from './tts-local.mjs'
 
 describe('parseTarget', () => {
@@ -106,6 +113,33 @@ describe('localFallbackTargets：Edge 挂了时的 Piper 兜底候选', () => {
     // 本机装没装 Piper 都有可能，这里只钉住「要么空数组、要么合法候选」这个契约
     const targets = localFallbackTargets('en-US-AriaNeural')
     expect(targets.length === 0 || targets.length === 1).toBe(true)
+  })
+})
+
+describe('planAttempts：降级期不能把兜底一起跳过', () => {
+  const edge = { engine: 'edge', voice: 'en-GB-LibbyNeural', ext: 'mp3' }
+  const piper = { engine: 'local', voice: 'local:piper-us-lessac', ext: 'wav' }
+
+  it('主引擎正常时只排主目标，兜底保持惰性', () => {
+    const fallback = vi.fn(() => [piper])
+    expect(planAttempts(edge, { fallback })).toEqual([edge])
+    expect(fallback).not.toHaveBeenCalled()
+  })
+
+  it('主引擎冷却中时直接排兜底', () => {
+    // 回归：Edge 失败后 20 秒冷却期内，这句以前返回空队列 → 每个新句子秒回 502
+    // `tts failed: tts failed`，而 Piper 明明装着。
+    expect(planAttempts(edge, { primaryDown: true, fallback: () => [piper] })).toEqual([piper])
+  })
+
+  it('兜底解析抛错只丢兜底并 warn，不把异常抛给调用方', () => {
+    const warn = vi.fn()
+    const boom = () => {
+      throw new Error('boom')
+    }
+    expect(planAttempts(edge, { primaryDown: true, fallback: boom, warn })).toEqual([])
+    expect(warn).toHaveBeenCalledOnce()
+    expect(String(warn.mock.calls[0][0])).toContain('boom')
   })
 })
 

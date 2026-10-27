@@ -288,6 +288,29 @@ function pickAudio(target, file) {
 }
 
 /**
+ * 规划一次合成的尝试顺序（纯函数，只有「主引擎在冷却期时怎么办」这一条规则）。
+ *
+ * - 主引擎正常：**只返回主目标**，兜底候选等它真的失败后再惰性解析 ——
+ *   兜底代码里的 bug 不许把主路径一起带崩（见 docs/TESTING.md §3-31）。
+ * - 主引擎冷却中：直接返回兜底候选。以前这里只 `continue` 跳过主引擎，
+ *   而兜底只在「主引擎失败」的 catch 里入队，于是冷却期内每个**新**句子都直接 502
+ *  （日志里的 `tts failed: tts failed`，见 docs/TESTING.md §3-34）。
+ * - 兜底解析抛错：只丢兜底并 warn，不抛给调用方。
+ */
+export function planAttempts(
+  target,
+  { primaryDown = false, fallback = fallbackTargets, warn = console.warn } = {},
+) {
+  if (!primaryDown) return [target]
+  try {
+    return fallback(target)
+  } catch (e) {
+    warn(`[tts] 兜底候选解析失败，本次没有备用引擎：${e && e.message ? e.message : e}`)
+    return []
+  }
+}
+
+/**
  * 按兜底链逐级合成：Edge → Piper；手动选 Piper 时只试 Piper。
  * 失败一次就把对应引擎打入临时降级期，后续请求直接走下一级，避免每句都等超时。
  * Piper 也没有/失败时由前端退回浏览器语音。
@@ -295,13 +318,18 @@ function pickAudio(target, file) {
 async function synthWithFallbacks(text, target, file) {
   const fallbackFile = fallbackFileFor(target, file)
   let lastErr
-  // 兜底候选**等主目标真的失败之后**才去解析。
-  //
-  // 之前写的是 `for (const attempt of [target, ...fallbackTargets(target)])` —— 数组在循环前
-  // 就展开了，于是兜底代码里一个笔误（`listPiperVoices` 根本没导入）会在**尝试 Edge 之前**
-  // 就抛 ReferenceError，把所有请求统一打成 502 "tts failed: listPiperVoices is not defined"，
-  // 而主路径（Edge）当时明明是好的。降级链再烂，也不该把主路径一起带崩。
-  const queue = [target]
+  const primaryDown = Date.now() < targetDownUntil(target)
+  // 主引擎冷却中 → 队列里直接是兜底；正常 → 只有主目标，兜底等失败后再入队。
+  const queue = planAttempts(target, { primaryDown })
+  const pushFallbacks = () => {
+    try {
+      queue.push(...fallbackTargets(target))
+    } catch (fe) {
+      // 兜底解析坏了只丢兜底，报出来但别影响主路径的失败原因
+      console.warn(`[tts] 兜底候选解析失败，本次只用主引擎：${fe && fe.message ? fe.message : fe}`)
+    }
+  }
+
   for (let i = 0; i < queue.length; i++) {
     const attempt = queue[i]
     if (Date.now() < targetDownUntil(attempt)) continue
@@ -309,22 +337,19 @@ async function synthWithFallbacks(text, target, file) {
     if (!outPath) continue
     try {
       await synthToFile(text, attempt, outPath)
-      return
+      // 明确告诉调用方「这次真正落盘的是哪个文件」：
+      // 兜底文件是否可服务还取决于冷却期，等到外面再 pickAudio 时冷却可能刚好到期，
+      // 刚生成的 .local.wav 就会被判成「不存在」，变成 502 tts produced no audio。
+      return { file: outPath, ext: attempt.ext }
     } catch (e) {
       lastErr = e
       if (attempt.engine === 'edge') edgeDownUntil = Date.now() + EDGE_RETRY_MS
       if (targetConfig(attempt)?.kind === 'piper') piperDownUntil = Date.now() + PIPER_RETRY_MS
-      if (i === 0) {
-        try {
-          queue.push(...fallbackTargets(target))
-        } catch (fe) {
-          // 兜底解析坏了只丢兜底，报出来但别影响主路径的失败原因
-          console.warn(`[tts] 兜底候选解析失败，本次只用主引擎：${fe && fe.message ? fe.message : fe}`)
-        }
-      }
+      // 只有「主目标自己失败」才需要展开兜底；降级期里队列第 0 个已经是兜底了。
+      if (attempt === target) pushFallbacks()
     }
   }
-  throw lastErr || new Error('tts failed')
+  throw lastErr || new Error('tts failed: 主引擎冷却中且没有可用兜底')
 }
 
 /**
@@ -338,18 +363,22 @@ async function ensureAudio(text, target, file, cacheDir) {
   let job = inflight.get(file)
   if (!job) {
     job = withSlot(async () => {
-      if (pickAudio(target, file)) return
-      await synthWithFallbacks(text, target, file)
+      const cached = pickAudio(target, file)
+      if (cached) return cached
+      const produced = await synthWithFallbacks(text, target, file)
       pruneCache(cacheDir)
+      return produced
     })
     inflight.set(file, job)
     try {
-      await job
+      const out = await job
+      if (out) return out
     } finally {
       inflight.delete(file)
     }
   } else {
-    await job
+    const out = await job
+    if (out) return out
   }
 
   const out = pickAudio(target, file)
