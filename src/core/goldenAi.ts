@@ -55,7 +55,7 @@ export function buildGoldenPrompt(input: GoldenPromptInput): string {
     '- pattern：一句话点出值得迁移的句型；',
     '- tense：时态 / 语态重点（只写句子真实用到的）；',
     '- note：用法提醒；本句所有无法逐字挖空的语法/用法都可以放这里，不要省略；',
-    '- targets：尽量覆盖本句所有可迁移语言点（phrases / idioms / collocations / words），按在句中出现的先后排列；通常 3–12 个，最多 ' + GOLDEN_TARGET_LIMIT + ' 个，不要只挑 3–6 个。每项：',
+    '- targets：尽量覆盖本句所有可迁移语言点（phrases / idioms / collocations / words），按在句中出现的先后排列；通常 3–12 个，最多 ' + GOLDEN_TARGET_LIMIT + ' 个（短句少、长句最多 20，程序会按句长再截断），不要只挑 3–6 个。每项：',
     '  - en：**必须是原句里逐字出现的连续片段**，不要改写、不要补标点；',
     '  - zh：简短中文提示（填空时给用户看）；',
     '  - kind：只能是 pattern / tense / collocation / idiom / usage / word 之一。',

@@ -275,7 +275,7 @@
 | D老师小课堂 · 重练不降级 | 已掌握一句 → 点「再练一次本句」→ 故意首答错 | 本轮不算掌握，但历史「已掌握」不被抹掉；记录仍可待回顾 |
 | D老师小课堂 · 细碎填空 | 选含 `keep up with` 的句子 → 开始练习 | 先出现 `keep up [with]`，本组正确后进入 `keep [up with]`，再进入整块；拼句仍是语言点块 |
 | D老师小课堂 · 填空大小写 | 填空输入 `FOR EVERY DAY` / 全小写 | 都判对；大小写、首尾标点差异不影响 |
-| D老师小课堂 · 语言点全量 | 用带多个 phrases/idioms/collocations/usage 的句子生成本地课；再跑一次 AI 合并 | 本地语言点不被 6 个上限截断；AI 只补不覆盖；usage 全进小结，非逐字语法进 pattern/tense/note |
+| D老师小课堂 · 语言点全量 | 用带多个 phrases/idioms/collocations/usage 的句子生成本地课；再跑一次 AI 合并 | 本地语言点不被固定 6 个截断；短句目标少、长句最多 20；AI 只补不覆盖；usage 全进小结，非逐字语法进 pattern/tense/note |
 | D老师小课堂 · 快捷键 | 填空按 Enter；拼句按 Enter / X / S；回顾按 Ctrl+Enter / H / X / E；按 Esc | 按钮有 kbd 提示；输入框里 R/Q/E/S/X 不抢输入，Enter 提交，Esc 退出 |
 | D老师小课堂 · 全库金句本 | 课程页「全库金句本」→ 搜索 / 切待掌握 / 已掌握 / 待回顾 → 导出 Markdown / Anki / 打印金句本 | 只出现有 golden 的文章；筛选与搜索即时生效；导出文件能打开，Anki CSV 三列，A4 两栏不缺句 |
 

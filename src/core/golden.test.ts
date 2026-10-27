@@ -3,6 +3,7 @@ import {
   buildLocalGoldenLesson,
   buildLocalGoldenSentence,
   buildLocalTargets,
+  goldenTargetLimit,
   goldenTargetsFor,
   findGoldenTargetSpans,
   normalizeGoldenTargets,
@@ -36,6 +37,15 @@ describe('golden target matching', () => {
     expect(findGoldenTargetSpans("Don't stop.", "don’t")).toHaveLength(1)
     expect(findGoldenTargetSpans('A bad-tempered man.', 'bad‑tempered')).toHaveLength(0)
     expect(findGoldenTargetSpans('A bad-tempered man.', 'bad–tempered')).toHaveLength(1)
+  })
+
+  it('目标上限按句长变化：短句少、长句最多 20', () => {
+    const words = (n: number) => Array.from({ length: n }, (_, i) => `word${i}`).join(' ')
+    expect(goldenTargetLimit('one two three')).toBe(6)
+    expect(goldenTargetLimit(words(10))).toBe(10)
+    expect(goldenTargetLimit(words(25))).toBe(20)
+    const raw = Array.from({ length: 25 }, (_, i) => ({ en: `word${i}`, kind: 'word' as const }))
+    expect(normalizeGoldenTargets(words(25), raw)).toHaveLength(20)
   })
 
   it('重叠时长的优先，输出仍按原句顺序', () => {

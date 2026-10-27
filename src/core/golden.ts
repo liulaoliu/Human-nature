@@ -47,8 +47,16 @@ export interface GoldenCandidate {
   reasons: string[]
 }
 
-/** 一句最多练多少个目标；只防 AI/坏数据无限塞，不再把正常语言点截到 6 个。 */
+/** 一句最多 / 最少练多少个目标；上限防 AI/坏数据无限塞，下限照顾短句。 */
+export const GOLDEN_TARGET_MIN = 6
 export const GOLDEN_TARGET_LIMIT = 20
+
+/** 按句长给目标上限：短句少、长句多，最多 20。 */
+export function goldenTargetLimit(text: string): number {
+  const words = wordSpans(text).length
+  return Math.min(GOLDEN_TARGET_LIMIT, Math.max(GOLDEN_TARGET_MIN, words))
+}
+
 const TENSE_AUX = new Set(['has', 'have', 'had', 'is', 'are', 'was', 'were', 'am'])
 const MODAL = new Set(['will', 'would', 'can', 'could', 'may', 'might', 'must', 'should'])
 const STOP = new Set([
@@ -172,7 +180,7 @@ export function normalizeGoldenTargets(text: string, raw: unknown): GoldenTarget
     out.push(row)
   }
   out.sort((a, b) => a.span.start - b.span.start)
-  return out.slice(0, GOLDEN_TARGET_LIMIT).map((x) => x.target)
+  return out.slice(0, goldenTargetLimit(text)).map((x) => x.target)
 }
 
 /** 本地兜底：语言点词组/习语 → 保守时态块 → 生词 → 较长的实词。 */
