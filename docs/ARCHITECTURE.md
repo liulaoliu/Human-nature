@@ -268,6 +268,14 @@ types ← core ← adapters ← reader
    `DrillWarmup` 预习卡（词 + 释义 + 词块），点「开始拷打」才 `begin()`；
    卡片内容由**题目反推**（`core/quizWarmup` 的 `buildWarmupCards`），不另写一套「考哪些词」的筛选。
    英英释义 / 语法标记 / 听力这些不涉及「没见过」的题型不加预习。
+7. **三条路各自一个 hook**（2026-10-28）。`useAiPack` 原来 471 行，同时管文件、剪贴板、轮询和队列；
+   现在只剩 187 行共享编排：
+   - `useAiAgentPack`（98 行）：导出 / 导入 `ai-jobs-*.json`；
+   - `useAiWebPack`（146 行）：网页版分批复制、粘回、缺项重试、重置进度；
+   - `useAiLocalBatch`（210 行）：服务端直连、自动串联多轮、取消、跳过。
+   共享状态（`doneIds` / `autoVocabDone`）留在 `useAiPack` 一处，三个路径 hook 只拿注入的
+   `applyResults` / `setDoneIds`，不各自再写一份进度库。原来的 `useAiPack.test.tsx` 继续当
+   组合层集成测试，覆盖三条路径的接线。
 
 ## 三·五、数据安全（事故之后立的规矩）
 用户的词库是**唯一资产**，任何重构都不许让它的丢法变多。四条铁律：

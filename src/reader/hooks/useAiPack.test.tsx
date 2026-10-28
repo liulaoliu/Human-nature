@@ -118,6 +118,19 @@ describe('useAiPack：导出与导入', () => {
   })
 })
 
+describe('useAiPack：跳过待办', () => {
+  it('把当前 pending 标记为已处理，不改成果数据', async () => {
+    await mount(input({ batch: [{ word: 'alpha', sentence: 'A.' }] }))
+    expect(api!.webPending).toBeGreaterThan(0)
+
+    act(() => api!.skipPending())
+
+    expect(api!.webPending).toBe(0)
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('已跳过'))
+    expect(applyTaskResult).not.toHaveBeenCalled()
+  })
+})
+
 describe('useAiPack：一键跑批的轮询有界 / 可取消', () => {
   const json = (body: unknown, ok = true): Response => ({ ok, json: async () => body }) as unknown as Response
 
