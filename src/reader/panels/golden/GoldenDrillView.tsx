@@ -58,22 +58,32 @@ export default function GoldenDrillView({
 
   if (!cur || !sentence) return <div className="golden-body muted">没有可练的句子。</div>
   const fillDone = api.fillRoundPassed || api.fillCorrect === true
+  const drillBar = (
+    <div className="bar golden-drill-bar">
+      <button onClick={() => api.setView('home')}>← 课程页</button>
+      <span className="muted">第 {api.index + 1} / {api.ordered.length} 句</span>
+      <span className={'golden-chip' + (phase === 'preview' ? ' on' : '')}>预览</span>
+      <span className={'golden-chip' + (phase === 'fill' ? ' on' : '')}>句子填空</span>
+      <span className={'golden-chip' + (phase === 'assemble' ? ' on' : '')}>拼接整句</span>
+      <span className={'golden-chip' + (phase === 'summary' ? ' on' : '')}>本句小结</span>
+      <span className={'golden-chip' + (phase === 'imitation' ? ' on' : '')}>本句仿写</span>
+      {phase === 'fill' && api.fillRoundCount > 0 && (
+        <span className="muted">第 {api.fillRound + 1}/{api.fillRoundCount} 组</span>
+      )}
+      <button onClick={api.speakCurrent} title="播放整句" aria-label="播放整句">🔊</button>
+      <button onClick={api.restartSentence} title="重开本轮首次记录；已掌握不会降级">再练一次 <kbd>X</kbd></button>
+    </div>
+  )
   return (
     <div className="golden-body">
-      <div className="bar golden-drill-bar">
-        <button onClick={() => api.setView('home')}>← 课程页</button>
-        <span className="muted">第 {api.index + 1} / {api.ordered.length} 句</span>
-        <span className={'golden-chip' + (phase === 'preview' ? ' on' : '')}>预览</span>
-        <span className={'golden-chip' + (phase === 'fill' ? ' on' : '')}>句子填空</span>
-        <span className={'golden-chip' + (phase === 'assemble' ? ' on' : '')}>拼接整句</span>
-        <span className={'golden-chip' + (phase === 'summary' ? ' on' : '')}>本句小结</span>
-        <span className={'golden-chip' + (phase === 'imitation' ? ' on' : '')}>本句仿写</span>
-        {phase === 'fill' && api.fillRoundCount > 0 && (
-          <span className="muted">第 {api.fillRound + 1}/{api.fillRoundCount} 组</span>
-        )}
-        <button onClick={api.speakCurrent} title="播放整句" aria-label="播放整句">🔊</button>
-        <button onClick={api.restartSentence} title="重开本轮首次记录；已掌握不会降级">再练一次 <kbd>X</kbd></button>
-      </div>
+      {phase === 'fill' && api.cloze ? (
+        <div className="golden-fill-head">
+          {drillBar}
+          <SentenceLine cloze={api.cloze} mode="fill" api={api} />
+        </div>
+      ) : (
+        drillBar
+      )}
       {phase === 'preview' && (
         <>
           <div className="golden-preview">
@@ -100,7 +110,6 @@ export default function GoldenDrillView({
       )}
       {phase === 'fill' && api.cloze && (
         <>
-          <SentenceLine cloze={api.cloze} mode="fill" api={api} />
           <div className="golden-inputs">
             {api.cloze.blanks.map((b) => (
               <label key={b.index}>

@@ -111,6 +111,26 @@
   gap: 8px;
 }
 
+/* 填空多到需要滚动时，把「阶段按钮 + 当前句挖空」一起吸顶：
+   滚的是 .golden（overflow:auto），负 margin 抵消 .golden-body 的 padding，
+   让条贴边、横铺满；底色不透明，输入框从下面过不会透出来。 */
+.golden-fill-head {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: -18px -22px 0;
+  padding: 12px 22px 10px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.golden-fill-head .golden-drill-bar {
+  margin-bottom: 0;
+}
+
 .golden-outline {
   display: grid;
   gap: 8px;
@@ -451,6 +471,13 @@
 @media (max-width: 720px) {
   .golden-body {
     padding: 12px 12px 32px;
+  }
+  /* 窄屏一屏本来就矮，吸顶会吃掉正文；回到普通流。 */
+  .golden-fill-head {
+    position: static;
+    margin: 0;
+    padding: 0;
+    border-bottom: 0;
   }
   .golden-inputs label {
     grid-template-columns: 1fr;

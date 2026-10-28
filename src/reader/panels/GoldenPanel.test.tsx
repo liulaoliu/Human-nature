@@ -145,6 +145,16 @@ describe('GoldenPanel', () => {
     expect(screen.getByRole('button', { name: '播放整句' })).toBeTruthy()
   })
 
+  it('填空阶段把阶段条和挖空句包进吸顶容器', () => {
+    const { container } = render(
+      <GoldenPanel api={drillApi()} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />,
+    )
+    const head = container.querySelector('.golden-fill-head')
+    expect(head).toBeTruthy()
+    expect(head?.querySelector('.golden-drill-bar')).toBeTruthy()
+    expect(head?.querySelector('.golden-sentence')).toBeTruthy()
+  })
+
   it('填空本组正确后检查按钮禁用，Enter 留给继续下一组', () => {
     const api = drillApi({ fillRoundPassed: true })
     render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
