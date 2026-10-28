@@ -26,7 +26,8 @@
 □ 新增 core 模块 → 同名 .test.ts（否则架构门禁 R7 失败）
 □ 新增/修改整页界面 → 路由四件套齐全：可寻址、返回层级、深链失败回落、URL hook 测试
   （按 docs/ARCHITECTURE.md §三·八「新增整页界面 checklist」逐条做）
-□ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + 架构门禁
+□ 新 hook 先按 ≤ 400 行规划；超过 500 行先拆职责（`check_hook_size`）
+□ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁
 □ 结构/分层/新增目录变化 → docs/ARCHITECTURE.md 同步
 □ 新增踩坑 → 本文档 §3 补一条（编号 +1）
 □ 影响面跨模块 / 动了共享层（type、core 通用函数）→ 跑全量 npm test
@@ -522,7 +523,7 @@ npm run gates:fast            # 改动相关测试 + tsc + 静态门禁（开发
 npm run gates:core            # 只跑 core / adapters
 npm run gates:ui              # 只跑 reader / ui / state
 npm run gates:server          # 只跑 server / tools
-npm run gates:static          # 只跑上帝文件 / 架构 / 词汇义项
+npm run gates:static          # 只跑上帝文件 / hook 体量 / 架构 / 词汇义项
 npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
 ```
 
