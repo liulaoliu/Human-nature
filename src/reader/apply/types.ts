@@ -10,7 +10,7 @@ import type {
 import type { MissingTask } from '../missingPrompts'
 import type { Sentence, VocabLibrary, VocabVia } from '../../types/document'
 import type { BatchItemLike } from '../batchItem'
-import type { AiTaskKey } from '../hooks/useAiTasks'
+import type { AiTaskKey } from '../hooks/aiTasks'
 import type { ReaderDoc } from '../hooks/useReaderDoc'
 
 export interface ApplyOutcome {

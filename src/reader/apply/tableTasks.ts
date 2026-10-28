@@ -1,5 +1,5 @@
 import { applyTableTask, type ApplyTableTask } from '../../core/aiApply'
-import type { AiTaskKey } from '../hooks/useAiTasks'
+import type { AiTaskKey } from '../hooks/aiTasks'
 import type { ApplyContext, ApplyOutcome } from './types'
 
 /**

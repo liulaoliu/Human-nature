@@ -18,7 +18,7 @@ const mocks = vi.hoisted(() => ({
   pasteParams: null as null | Record<string, unknown>,
 }))
 
-vi.mock('./useAiTasks', () => ({ useAiTasks: () => mocks.tasks }))
+vi.mock('./aiTasks', () => ({ createAiTasks: () => mocks.tasks }))
 vi.mock('./useApplyTaskResult', () => ({ useApplyTaskResult: () => mocks.apply }))
 vi.mock('./useAiPack', () => ({
   useAiPack: (p: Record<string, unknown>) => {

@@ -1,11 +1,10 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
-import { renderHook, act } from '@testing-library/react'
 import type { MutableRefObject } from 'react'
 import { createLibrary } from '../../core/vocab'
 import { sentenceFixture, vocabItem } from '../../core/testFixtures'
 import type { VocabLibrary } from '../../types/document'
-import { useAiTasks, type UseAiTasksParams } from './useAiTasks'
+import { createAiTasks, type AiTasksParams } from './aiTasks'
 
 function stubClipboard(impl: (text: string) => Promise<void> = async () => {}) {
   const writeText = vi.fn(impl)
@@ -15,13 +14,13 @@ function stubClipboard(impl: (text: string) => Promise<void> = async () => {}) {
 
 const libraryWith = (...items: VocabLibrary['items']): VocabLibrary => ({ ...createLibrary(), items })
 
-function setup(over: Partial<UseAiTasksParams> = {}) {
+function setup(over: Partial<AiTasksParams> = {}) {
   const askedWordsRef = { current: [] } as MutableRefObject<string[]>
   const askedIdsRef = { current: [] } as MutableRefObject<string[]>
   const flash = vi.fn()
   const setLastTask = vi.fn()
   const persist = vi.fn()
-  const base: UseAiTasksParams = {
+  const base: AiTasksParams = {
     exact: '',
     useExact: false,
     sentence: null,
@@ -45,15 +44,14 @@ function setup(over: Partial<UseAiTasksParams> = {}) {
     pasteMissing: null,
     ...over,
   }
-  const hook = renderHook(() => useAiTasks(base))
-  return { ...hook, flash, setLastTask, persist, askedWordsRef, askedIdsRef }
+  return { tasks: createAiTasks(base), flash, setLastTask, persist, askedWordsRef, askedIdsRef }
 }
 
-describe('useAiTasks.copyLanguagePrompt', () => {
+describe('aiTasks.copyLanguagePrompt', () => {
   it('没打开文章：提示，不碰剪贴板', async () => {
     const writeText = stubClipboard()
-    const { result, flash } = setup({ doc: null })
-    await act(() => result.current.copyLanguagePrompt())
+    const { tasks, flash } = setup({ doc: null })
+    await tasks.copyLanguagePrompt()
     expect(flash).toHaveBeenCalledWith('先打开一篇文章')
     expect(writeText).not.toHaveBeenCalled()
   })
@@ -61,8 +59,8 @@ describe('useAiTasks.copyLanguagePrompt', () => {
   it('有文章：复制提示词，记任务与问过的句子', async () => {
     const writeText = stubClipboard()
     const doc = { sentences: [sentenceFixture('s1', 'First.'), sentenceFixture('s2', 'Second.')] }
-    const { result, setLastTask, askedWordsRef, askedIdsRef, flash } = setup({ doc })
-    await act(() => result.current.copyLanguagePrompt())
+    const { tasks, setLastTask, askedWordsRef, askedIdsRef, flash } = setup({ doc })
+    await tasks.copyLanguagePrompt()
     expect(writeText).toHaveBeenCalledOnce()
     const text = writeText.mock.calls[0][0]
     expect(text).toContain('First.')
@@ -77,28 +75,28 @@ describe('useAiTasks.copyLanguagePrompt', () => {
     stubClipboard(async () => {
       throw new Error('denied')
     })
-    const { result, flash } = setup({ doc: { sentences: [sentenceFixture('s1')] } })
-    await act(() => result.current.copyLanguagePrompt())
+    const { tasks, flash } = setup({ doc: { sentences: [sentenceFixture('s1')] } })
+    await tasks.copyLanguagePrompt()
     expect(flash).toHaveBeenCalledWith('复制失败：浏览器需要 localhost 或 https')
   })
 })
 
-describe('useAiTasks.copyMissingAgain', () => {
+describe('aiTasks.copyMissingAgain', () => {
   it('没有缺失词：不复制', async () => {
     const writeText = stubClipboard()
-    const { result } = setup({ pasteMissing: null })
-    await act(() => result.current.copyMissingAgain())
+    const { tasks } = setup({ pasteMissing: null })
+    await tasks.copyMissingAgain()
     expect(writeText).not.toHaveBeenCalled()
   })
 
   it('按缺失词重组提示词，并记下重问范围', async () => {
     const writeText = stubClipboard()
     const item = vocabItem({ word: 'running', lemma: 'run', meaning: '跑' })
-    const { result, setLastTask, askedWordsRef, askedIdsRef, flash } = setup({
+    const { tasks, setLastTask, askedWordsRef, askedIdsRef, flash } = setup({
       library: libraryWith(item),
       pasteMissing: { task: 'lookup', words: ['run'] },
     })
-    await act(() => result.current.copyMissingAgain())
+    await tasks.copyMissingAgain()
     const text = writeText.mock.calls[0][0]
     expect(text).toContain('run')
     expect(setLastTask).toHaveBeenCalledWith('lookup')
@@ -111,22 +109,22 @@ describe('useAiTasks.copyMissingAgain', () => {
     stubClipboard(async () => {
       throw new Error('denied')
     })
-    const { result, flash } = setup({ pasteMissing: { task: 'confusable', words: ['run'] } })
-    await act(() => result.current.copyMissingAgain())
+    const { tasks, flash } = setup({ pasteMissing: { task: 'confusable', words: ['run'] } })
+    await tasks.copyMissingAgain()
     expect(flash).toHaveBeenCalledWith('复制失败：浏览器需要 localhost 或 https')
   })
 })
 
-describe('useAiTasks.commitBatch：保留待选来源', () => {
+describe('aiTasks.commitBatch：保留待选来源', () => {
   it('词典挑词 / 手动点选 / AI 自动标词分别写入 via 和 origin', () => {
-    const { result, persist } = setup({
+    const { tasks, persist } = setup({
       visibleBatch: [
         { word: 'run', sentence: 'I run.', sentenceId: 's1', via: 'dict' },
         { word: 'walk', sentence: 'I walk.', sentenceId: 's2', via: 'manual' },
         { word: 'talk', sentence: 'I talk.', sentenceId: 's3', via: 'ai' },
       ],
     })
-    act(() => result.current.commitBatch())
+    tasks.commitBatch()
     const lib = persist.mock.calls[0][0] as VocabLibrary
     expect(lib.articleEntries).toMatchObject([
       { lemma: 'run', origin: 'auto', via: 'dict' },
@@ -136,10 +134,10 @@ describe('useAiTasks.commitBatch：保留待选来源', () => {
   })
 
   it('旧待选没有 via：标成 batch，不冒充手动', () => {
-    const { result, persist } = setup({
+    const { tasks, persist } = setup({
       visibleBatch: [{ word: 'run', sentence: 'I run.', sentenceId: 's1' }],
     })
-    act(() => result.current.commitBatch())
+    tasks.commitBatch()
     const lib = persist.mock.calls[0][0] as VocabLibrary
     expect(lib.articleEntries?.[0]).toMatchObject({ origin: 'auto', via: 'batch' })
   })

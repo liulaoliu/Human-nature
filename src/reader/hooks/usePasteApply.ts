@@ -1,6 +1,6 @@
 import { useCallback } from 'react'
 import type { MutableRefObject } from 'react'
-import type { AiTaskKey } from './useAiTasks'
+import type { AiTaskKey } from './aiTasks'
 import type { ApplyOutcome } from './useApplyTaskResult'
 
 type PasteMissing = ApplyOutcome['missing']

@@ -278,7 +278,7 @@
              「成功 / 坏输入 / 幂等」测试。这刀最大，可以再拆成 2–3 个子主题分别提交。
              - [x] **4a 词库增删**：`commitBatchItems` / `addItemsToVocab` / `addPhrasesToVocab` /
                    `removeWordFromVocab` → `hooks/useVocabEdits`（+9 条钩子测试；`ReaderApp` 2190 → 2115）
-             - [x] **4b 提示词复制**：`copyLanguagePrompt` / `copyMissingAgain` → `hooks/useAiTasks`（+6 条钩子测试）
+             - [x] **4b 提示词复制**：`copyLanguagePrompt` / `copyMissingAgain` → `hooks/aiTasks`（+6 条钩子测试）
              - [x] **4c 粘贴应用**：`applyPaste` / `applyAnyPaste` → `hooks/usePasteApply`（+9 条钩子测试）
              - [x] **4d 复述 / 略读**：`saveRetell` / `deleteRetell` / `toggleSkimmed` → `hooks/useLearningData`（+4 条钩子测试）
              - [x] **4e 错题重练 / 包围战**：`retryMistakeVocab/Listen/Dict` / `startSiege` → `hooks/useMistakeActions`

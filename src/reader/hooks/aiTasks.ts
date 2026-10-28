@@ -32,7 +32,7 @@ export type AiTaskKey =
   | 'imitation'
   | 'feedback'
 
-export interface UseAiTasksParams {
+export interface AiTasksParams {
   exact: string
   useExact: boolean
   sentence: Sentence | null
@@ -62,8 +62,10 @@ export interface UseAiTasksParams {
 /**
  * 各类「复制提示词给 AI」的动作：选区任务、待选批量查词、补音标、全文翻译、自动标词、
  * 混淆项 / 原形 / -ing-ed，以及去重整理。只负责拼提示词 + 剪贴板 + 记「问过哪些词/句」。
+ *
+ * 普通 factory：没有 React 状态 / effect，调用方按需创建，别为了命名一致包成 hook。
  */
-export function useAiTasks({
+export function createAiTasks({
   exact,
   useExact,
   sentence,
@@ -86,7 +88,7 @@ export function useAiTasks({
   askedIdsRef,
   askedArticleKeyRef,
   pasteMissing,
-}: UseAiTasksParams) {
+}: AiTasksParams) {
   const copy = async (prompt: string, okMsg: string) => {
     try {
       await navigator.clipboard.writeText(prompt)
@@ -312,3 +314,6 @@ export function useAiTasks({
     dedupeNow,
   }
 }
+
+/** 提示词动作集合；给 props 类型用。 */
+export type AiTasksApi = ReturnType<typeof createAiTasks>

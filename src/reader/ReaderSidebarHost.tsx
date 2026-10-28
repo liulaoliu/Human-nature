@@ -2,7 +2,7 @@ import type { ComponentProps } from 'react'
 import type { AnalysisTask } from '../core/analyzer'
 import type { VocabItem, VocabLibrary, VocabMeaningSource, VocabVia } from '../types/document'
 import type { useAiPack } from './hooks/useAiPack'
-import type { useAiTasks } from './hooks/useAiTasks'
+import type { AiTasksApi } from './hooks/aiTasks'
 import type { useDictTools } from './hooks/useDictTools'
 import type { useDictation } from './hooks/useDictation'
 import type { useExport } from './hooks/useExport'
@@ -88,7 +88,7 @@ export interface ReaderSidebarHostProps {
 
   // ---- AI / 工具 / 导出（整包传入） ----
   ai: ReturnType<typeof useAiPack>
-  tasks: ReturnType<typeof useAiTasks>
+  tasks: AiTasksApi
   exporter: ReturnType<typeof useExport>
   dictTools: ReturnType<typeof useDictTools>
   dictReady: boolean

@@ -4,15 +4,15 @@ import type { AiJobsInput } from '../../core/aiPackage'
 import { articleKey as articleKeyOf } from '../../core/docSignature'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
 import type { BatchItemLike } from '../batchItem'
-import type { AiTaskKey } from './useAiTasks'
+import type { AiTaskKey } from './aiTasks'
 import type { ReaderDoc } from './useReaderDoc'
-import { useAiTasks } from './useAiTasks'
+import { createAiTasks } from './aiTasks'
 import { useApplyTaskResult } from './useApplyTaskResult'
 import { useAiPack } from './useAiPack'
 import { usePasteApply } from './usePasteApply'
 
 type ApplyP = Parameters<typeof useApplyTaskResult>[0]
-type TaskP = Parameters<typeof useAiTasks>[0]
+type TaskP = Parameters<typeof createAiTasks>[0]
 type PasteP = Parameters<typeof usePasteApply>[0]
 
 export interface UseAiServicesParams {
@@ -122,7 +122,7 @@ export function useAiServices({
   onReport,
   onMissing,
 }: UseAiServicesParams) {
-  const aiTasksApi = useAiTasks({
+  const aiTasksApi = createAiTasks({
     exact,
     useExact,
     sentence,

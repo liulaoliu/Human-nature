@@ -1,5 +1,5 @@
 import type { VocabLibrary } from '../../types/document'
-import type { AiTaskKey } from '../hooks/useAiTasks'
+import type { AiTaskKey } from '../hooks/aiTasks'
 import { applyAnalysisResult } from './analysis'
 import { applyAutoVocab } from './autoVocab'
 import { applyGoldenLesson } from './goldenLesson'

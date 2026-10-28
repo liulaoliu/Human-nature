@@ -3,7 +3,7 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useApplyTaskResult, type UseApplyTaskResultParams } from './useApplyTaskResult'
 import type { VocabItem, VocabLibrary } from '../../types/document'
-import type { AiTaskKey } from './useAiTasks'
+import type { AiTaskKey } from './aiTasks'
 import { createLibrary } from '../../core/vocab'
 
 const now = '2026-10-19T00:00:00.000Z'
