@@ -60,6 +60,17 @@
   4. 只是搬 props / 拍平返回值？**别拆**，先改 API；
   5. 同一段 reset / timer / snapshot 出现第二次？**先抽公共实现，再写新逻辑**。
   存量超限在 `tool/check_hook_size.mjs` 的 `BASELINE` 登记，**只准变小，拆完删基线**。
+- **状态与边界**（详见 `docs/ARCHITECTURE.md` §三·九）：
+  1. **先问状态属于谁**：组件临时 UI → `useState`；一次会话流程 → 会话 hook；
+     刷新/分享要回到 → URL；跨篇跨天 → 仓库；**全局 store 是最后手段**。
+  2. **宽接口 ≠ prop drilling**：同一个值穿三四层才叫 drilling；一个容器一次交 80 个字段
+     叫宽视图模型。先按域分组 + 拆视图，别上 Zustand / Redux / 大 Context。
+  3. **纯展示组件收显式 props**：容器或翻译层把 hook 结果映射成视图模型；
+     叶子组件只拿自己那一组。参考 `ReaderScreenFromModel` / `StudyPanelFromModel`。
+  4. **一组状态一个写入方**：派生值不在视图里重算；规则下沉 `core/`。
+  5. **拆文件先拆行为边界**：能单独测的状态机 / 优先级 / IO 才拆；只搬 props 不算拆。
+  6. **新增全局状态库或大 Context 必须先写决策**：生命周期、怎么 reset、测试怎么隔离、
+     与 URL / 仓库谁是事实来源；这四条答不上来就不加。
 - **收尾门禁**（提交前必跑，别把不绿的留给我）：
   ```bash
   npm run gates    # tsc -b + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁

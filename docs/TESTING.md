@@ -13,6 +13,7 @@
 | 有状态编排（effect / 会话状态机 / 写入策略） | **钩子测试 + 把判断抽成纯函数** | `hooks/useLibraryAutoFill.test.tsx`、`hooks/useReadDone.test.tsx`、`core/libraryAutoFill.ts` |
 | 路由 / 历史 / 深链接 | **纯函数单测 + 钩子测试（`MemoryRouter`）** | `reader/route.test.ts`、`hooks/useRoutedFlows.test.tsx`；用 `Link` 的组件测试包 `MemoryRouter` |
 | 单个面板 / 列表 / 对话框 | 组件测试（环境已就绪；29 个面板全部有测试） | `reader/panels/*` |
+| 视图模型 / 翻译层（hook 结果 → 面板模型） | **纯函数单测**：分组、动作身份、默认值 | `ReaderScreenFromModel.test.tsx`、`StudyPanelFromModel.test.tsx` |
 | 浏览器能力（打印对话框 / TTS / 剪贴板 / IndexedDB 真库） | **人工用例**（§4） | 登记，不写自动化 |
 
 **判定原则**：先问「这块判断能不能抽成纯函数」。能 → 抽出去写单测（最便宜、最稳）；
@@ -26,6 +27,7 @@
 □ 新增 core 模块 → 同名 .test.ts（否则架构门禁 R7 失败）
 □ 新增/修改整页界面 → 路由四件套齐全：可寻址、返回层级、深链失败回落、URL hook 测试
   （按 docs/ARCHITECTURE.md §三·八「新增整页界面 checklist」逐条做）
+□ 新增视图模型 / 翻译层 → 纯函数测试「字段落到哪一组、动作是否保持原身份」
 □ 新 hook 先按 ≤ 400 行规划；超过 500 行先拆职责（`check_hook_size`）
 □ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁
 □ 结构/分层/新增目录变化 → docs/ARCHITECTURE.md 同步
