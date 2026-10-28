@@ -4,7 +4,8 @@ import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useGoldenDrill } from './useGoldenDrill'
 import type { ReaderDoc } from './useReaderDoc'
-import type { GoldenDrillRecord } from '../../core/goldenProgress'
+import { buildLocalGoldenLesson, goldenDrillKey, goldenTargetsFor } from '../../core/golden'
+import { emptyGoldenRecord, recordGoldenStep, type GoldenDrillRecord } from '../../core/goldenProgress'
 import type { Sentence } from '../../types/document'
 
 const sentence: Sentence = {
@@ -25,8 +26,38 @@ const sentence: Sentence = {
   },
 }
 
-function setup() {
-  const initial: ReaderDoc = { paragraphs: [{ id: 'p01', sentenceIds: ['s1'] }], sentences: [sentence] }
+const sentence2: Sentence = {
+  ...sentence,
+  id: 's2',
+  text: 'Small habits compound into remarkable results over time.',
+  translation: '小习惯会随时间累积成显著的结果。',
+  language: {
+    phrases: ['compound into — 累积成'],
+    idioms: [],
+    grammar: '一般现在时',
+  },
+}
+
+const defaultDoc: ReaderDoc = { paragraphs: [{ id: 'p01', sentenceIds: ['s1'] }], sentences: [sentence] }
+
+/** 造两份「已掌握、昨天学过」的记录，让待回顾队列立刻有内容。 */
+function dueRecords(doc: ReaderDoc): GoldenDrillRecord[] {
+  const ids = doc.sentences.map((s) => s.id)
+  const lesson = buildLocalGoldenLesson(doc.sentences, doc.paragraphs, { selected: ids })
+  const at = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  return ids.map((id) => {
+    const s = doc.sentences.find((x) => x.id === id)
+    if (!s) throw new Error(`missing sentence ${id}`)
+    const key = goldenDrillKey(s.text, goldenTargetsFor(lesson, id))
+    let record = emptyGoldenRecord('a1', '文章', id, key, at)
+    for (const step of ['fill', 'assemble', 'recall', 'summary'] as const) {
+      record = recordGoldenStep(record, step, true, at)
+    }
+    return record
+  })
+}
+
+function setup(initial: ReaderDoc = defaultDoc, initialRecords: GoldenDrillRecord[] = []) {
   const recordPractice = vi.fn()
   const recordActivity = vi.fn()
   const recordAnswer = vi.fn()
@@ -35,7 +66,7 @@ function setup() {
   const speak = vi.fn()
   const hook = renderHook(() => {
     const [doc, setDoc] = useState<ReaderDoc | null>(initial)
-    const [records, setRecords] = useState<GoldenDrillRecord[]>([])
+    const [records, setRecords] = useState<GoldenDrillRecord[]>(initialRecords)
     const api = useGoldenDrill({
       doc,
       articleId: 'a1',
@@ -150,5 +181,43 @@ describe('useGoldenDrill', () => {
     act(() => h.result.current.api.startRecall())
     expect(h.result.current.api.view).toBe('home')
     expect(h.flash).toHaveBeenCalledWith('先完成全部句子的遣词造句，再进逆向回顾')
+  })
+
+  it('逆向回顾从队列第一句开始判分，不受学习页当前句影响', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [{ id: 'p01', sentenceIds: ['s1', 's2'] }],
+      sentences: [sentence, sentence2],
+    }
+    const h = setup(doc, dueRecords(doc))
+    act(() => h.result.current.api.openGolden())
+    act(() => h.result.current.api.startDrill(1))
+    expect(h.result.current.api.currentSentence?.id).toBe('s2')
+
+    act(() => h.result.current.api.startRecall())
+    expect(h.result.current.api.currentRecallSentence?.id).toBe('s1')
+    act(() => h.result.current.api.setRecallInput(sentence.text))
+    act(() => h.result.current.api.checkRecall())
+    expect(h.result.current.api.recallChecked?.firstOk).toBe(true)
+    expect(h.recordAnswer).toHaveBeenLastCalledWith(expect.objectContaining({ questionId: 's1:recall' }))
+  })
+
+  it('待回顾按队列当前句判分，不用学习页的 index 顶替', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [{ id: 'p01', sentenceIds: ['s1', 's2'] }],
+      sentences: [sentence, sentence2],
+    }
+    const h = setup(doc, dueRecords(doc))
+    act(() => h.result.current.api.openGolden())
+    act(() => h.result.current.api.startDrill())
+    act(() => h.result.current.api.startReview())
+    expect(h.result.current.api.reviewCount).toBe(2)
+    expect(h.result.current.api.recallList.map((s) => s.id)).toEqual(['s1', 's2'])
+
+    act(() => h.result.current.api.nextRecall())
+    expect(h.result.current.api.currentRecallSentence?.id).toBe('s2')
+    act(() => h.result.current.api.setRecallInput(sentence2.text))
+    act(() => h.result.current.api.checkRecall())
+    expect(h.result.current.api.recallChecked?.firstOk).toBe(true)
+    expect(h.recordAnswer).toHaveBeenLastCalledWith(expect.objectContaining({ questionId: 's2:recall' }))
   })
 })

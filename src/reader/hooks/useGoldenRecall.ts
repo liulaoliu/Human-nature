@@ -25,10 +25,6 @@ export interface UseGoldenRecallParams {
   articleTitle: string
   recallIndex: number
   setRecallIndex: (index: number) => void
-  current: GoldenSentence | null
-  currentSentence: Sentence | null
-  currentRecord: GoldenDrillRecord | null
-  drillKey: string
   progressFor: (sentenceId: string) => GoldenDrillRecord | null
   summary: GoldenMasterySummary | null
   recordGolden: (record: GoldenDrillRecord) => void
@@ -56,10 +52,6 @@ export function useGoldenRecall({
   articleTitle,
   recallIndex,
   setRecallIndex,
-  current,
-  currentSentence,
-  currentRecord,
-  drillKey,
   progressFor,
   summary,
   recordGolden,
@@ -91,6 +83,13 @@ export function useGoldenRecall({
     return reviewIds.map((id) => ordered.find((s) => s.id === id)).filter((s): s is NonNullable<typeof s> => !!s)
   }, [reviewIds, ordered])
   const reviewMode = reviewIds.length > 0
+
+  const currentRecallSentence = recallList[recallIndex] ?? null
+  const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null
+  const currentRecallProgress = currentRecallSentence ? progressFor(currentRecallSentence.id) : null
+  const currentRecallTargets =
+    lesson && currentRecallSentence ? goldenTargetsFor(lesson, currentRecallSentence.id) : []
+  const currentRecallDrillKey = currentRecallText ? goldenDrillKey(currentRecallText.text, currentRecallTargets) : ''
 
   const resetRecall = useCallback(() => {
     setRecallInput('')
@@ -126,10 +125,12 @@ export function useGoldenRecall({
   }, [ordered, progressFor, flash, setView, setRecallIndex, resetRecall])
 
   const checkRecall = useCallback(() => {
-    if (!currentSentence || !current || !drillKey) return
-    const result = checkGoldenRecall(recallInput, currentSentence.text)
+    if (!currentRecallText || !currentRecallSentence || !currentRecallDrillKey) return
+    const result = checkGoldenRecall(recallInput, currentRecallText.text)
     setRecallChecked(result)
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
+    const base =
+      currentRecallProgress ??
+      emptyGoldenRecord(articleId, articleTitle, currentRecallSentence.id, currentRecallDrillKey, new Date().toISOString())
     recordGolden(recordGoldenStep(base, 'recall', result.firstOk, new Date().toISOString()))
     recordAnswer?.({
       articleId,
@@ -137,15 +138,27 @@ export function useGoldenRecall({
       kind: 'recall',
       cat: 'write',
       correct: result.firstOk,
-      questionId: `${current.id}:recall`,
+      questionId: `${currentRecallSentence.id}:recall`,
     })
-  }, [currentSentence, current, drillKey, recallInput, currentRecord, articleId, articleTitle, recordGolden, recordAnswer])
+  }, [
+    currentRecallText,
+    currentRecallSentence,
+    currentRecallDrillKey,
+    recallInput,
+    currentRecallProgress,
+    articleId,
+    articleTitle,
+    recordGolden,
+    recordAnswer,
+  ])
 
   const revealRecall = useCallback(() => {
-    if (!current || !drillKey) return
+    if (!currentRecallSentence || !currentRecallDrillKey) return
     setRecallRevealed(true)
     if (recallChecked) return
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
+    const base =
+      currentRecallProgress ??
+      emptyGoldenRecord(articleId, articleTitle, currentRecallSentence.id, currentRecallDrillKey, new Date().toISOString())
     if ((base.recallTries ?? 0) === 0) {
       recordGolden(recordGoldenStep(base, 'recall', false, new Date().toISOString()))
       recordAnswer?.({
@@ -154,10 +167,19 @@ export function useGoldenRecall({
         kind: 'recall',
         cat: 'write',
         correct: false,
-        questionId: `${current.id}:recall`,
+        questionId: `${currentRecallSentence.id}:recall`,
       })
     }
-  }, [current, drillKey, currentRecord, articleId, articleTitle, recordGolden, recordAnswer, recallChecked])
+  }, [
+    currentRecallSentence,
+    currentRecallDrillKey,
+    currentRecallProgress,
+    articleId,
+    articleTitle,
+    recordGolden,
+    recordAnswer,
+    recallChecked,
+  ])
 
   const nextRecall = useCallback(() => {
     if (recallIndex + 1 < recallList.length) {
@@ -206,10 +228,6 @@ export function useGoldenRecall({
     setPhase,
     setView,
   ])
-
-  const currentRecallSentence = recallList[recallIndex] ?? null
-  const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null
-  const currentRecallProgress = currentRecallSentence ? progressFor(currentRecallSentence.id) : null
 
   return {
     recallList,

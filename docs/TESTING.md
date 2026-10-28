@@ -673,3 +673,8 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     不够：`pendingGroupEndRef` 留着上一组的组末下标，重置后一个迟到的 `finishGroup`
     仍会把新一轮的指针推到旧组末。重开会话时 state、拼写状态机、`pendingGroupEndRef`
     要一起清；`useStudySequence.test` 用「先进入组末 → load → finishGroup」锁住。
+52. **逆向回顾判分要用回顾队列的当前句，不是学习页的 `index`**（2026-10-28）。
+    `startRecall` / `startReview` 只重置 `recallIndex`，`index` 可能还停在最后一句；
+    `checkRecall` / `revealRecall` 若用 `current` / `currentRecord`，答案会记到另一句。
+    `useGoldenRecall` 统一按 `recallList[recallIndex]` 取原文、`drillKey` 和记录；
+    `useGoldenDrill.test` 覆盖「index=最后一句、recallIndex=第一句」和待回顾第二句。

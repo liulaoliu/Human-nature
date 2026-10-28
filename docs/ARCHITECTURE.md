@@ -78,7 +78,7 @@ types ← core ← adapters ← reader
 | D老师小课堂：会话外壳 | `src/reader/hooks/useGoldenSession.ts` | `open/view/phase/index/recallIndex` + localStorage 恢复；只存“人走到哪了” |
 | D老师小课堂：当前句与进度写入 | `src/reader/hooks/useGoldenCurrent.ts` | 当前句、目标、`drillKey`、当前记录、小结 / 重练；进度唯一入口仍是 `recordGolden` |
 | D老师小课堂：练习状态机 | `src/reader/hooks/useGoldenFillAssemble.ts` | 细碎轮次、输入、判分与写回；换句 / 重练只走 `resetFillAssemble` |
-| D老师小课堂：逆向回顾 | `src/reader/hooks/useGoldenRecall.ts` | 待回顾队列、默写输入、判分 / 看答案、逐句推进 |
+| D老师小课堂：逆向回顾 | `src/reader/hooks/useGoldenRecall.ts` | 待回顾队列、默写输入、判分 / 看答案、逐句推进；判分一律按 `recallList[recallIndex]`，不用学习页的 `index` |
 | D老师小课堂：组合根 | `src/reader/hooks/useGoldenDrill.ts` | 把选句、会话、当前句、填空拼句、回顾、热键装在一起；只做编排，不重写子状态机规则 |
 | D老师小课堂：快捷键 | `src/reader/hooks/useGoldenHotkeys.ts` | Enter 主操作、Ctrl+Enter 默写提交、H/R/S/X/Q/E/Esc；输入框只放行提交键 |
 | D老师小课堂：功能装配 | `src/reader/hooks/useGoldenFeature.ts` | 把 drill + bank + 去仿写 / 导出收成一个 `actions`，ReaderApp 不再自己拼回调 |
