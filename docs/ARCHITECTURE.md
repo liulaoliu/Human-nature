@@ -688,6 +688,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
   考试设置（题型/范围/题量/鞭打）在 `hooks/useQuizSettings`（候选池与出题集在 `core/quizPool`），
   回译出题 / 导航在 `hooks/useBackTranslateSession`，批改与存档在 `hooks/useBackTranslateGrading`；
   播放媒体与一次播放生命周期在 `hooks/useTtsMedia`，连播 / 点词 seek 在 `hooks/useTtsPlayback`；
+  速读状态 / 计时在 `hooks/useSpeedReadState`，阶段推进在 `hooks/useSpeedReadFlow`；
   导出 / 打印 / 备份导入在 `hooks/exportApi`，内部按 `exportFiles` / `backupIO` / `printActions` 三块普通 factory 分开；
   AI 结果落地规则在 `core/aiApply`、服务端跑批客户端在 `adapters/aiRun`，
   软上限 800 行（上帝文件门禁的线）。
