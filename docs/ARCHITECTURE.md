@@ -97,7 +97,7 @@ types ← core ← adapters ← reader
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` | 范围 × 题型 → 候选词与题量；设置持久化在 `hooks/useQuizSettings` |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
-| 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方**；新 hook 目标 ≤ 400 行、硬线 500 行（`check_hook_size`） |
+| 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方**；新 hook 目标 ≤ 200 行、300 行提醒、硬线 500 行（`check_hook_size`） |
 | URL ↔ 文章导航 | `src/reader/hooks/useReaderRouting.ts`（`useReaderArticleIdentity` / `useReaderPanelRouting`）+ `useReaderArticleNavigation.ts`（路由 / workspace） | ReaderApp 不自己拼 `b:` / `s:` 前缀，也不自己实现「返回就关文章」 |
 | 阅读页语音栈 | `src/reader/hooks/useReaderSpeech.ts` | 引擎探测 / 音色 / 朗读 / 整篇预生成一起收口，组合根只拿结果 |
 | 阅读页全局键盘 | `src/reader/hooks/useReaderHotkeys.ts` + `useHotkeys.ts` | W / 1 / A / D 的启用条件只在这里；禁止再直接 `window.addEventListener('keydown')` |
@@ -612,27 +612,36 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 - **离线词典/例句加载器已搬到 `adapters/`**：`adapters/dictionary.ts`、`adapters/tatoeba.ts`；
   `core/dictionary.ts` 只保留纯断词判断（不碰 fetch）。
 
-### hook 体量：500 行是硬线，别等超了再拆
+### Hook 是函数：默认 200 行，300 行起该拆了
 
-hook 和普通文件不一样：它把「状态 + 派生 + 动作 + effect」揉在一起，600 行以后改一个分支
-要读全文，测试也很难只钉一个行为。所以 **hook 的新硬线是 500 行**：
+Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状态/动作。它大，通常不是需求大，
+而是把**纯规则、IO、状态机、任务分派**全塞进了一个闭包。规矩：
 
-- **新 hook > 500 行 → 门禁直接失败**。先按职责拆，再继续写；
-- 480–500 行会打印提醒，仍能过，但新逻辑优先拆子 hook；
-- 存量超限登记在 `tool/check_hook_size.mjs` 的 `BASELINE`，**只准变小**；
-  拆回 500 行以内后必须删掉基线，否则门禁失败；
-- 普通 `.ts/.tsx` 仍是 800 行硬线（`check_god_file`），测试文件 1000 行。
+- **默认目标 ≤ 200 行**；200–300 行要能一句话说清「为什么必须是一个 hook」；
+- **300 行起门禁提醒**；**500 行硬线**：新 hook > 500 直接失败，存量基线只准变小；
+- 写之前先过五问：
+  1. 没有 React 状态 / effect？→ 写普通函数或 factory，别包成 hook；
+  2. 是纯判断 / 解析 / 格式化？→ `core/` + 单测；
+  3. 是定时器 / 存储 / 网络？→ 独立 hook 或 adapter，别和业务状态混；
+  4. 只是搬 props / 拍平返回值？→ **别拆**，先改 API；
+  5. 同一段 reset / timer / snapshot 出现第二次？→ **先抽，再写新逻辑**。
+- 反模式：一个 `useCallback` 里塞十个任务处理器；用 `useMemo` 包纯函数只为「看起来像 hook」；
+  为了行数把 return 映射搬到新文件。
 
-这不是「按行数机械拆文件」。判断顺序仍是：先找**独立职责**（状态机 / 输入判分 / 会话位置 /
-IO 接线），能单独测试就拆；只是把 props 搬来搬去的「拆」不算拆。
+判断顺序仍是先找**能单独测试的职责**（状态机 / 输入判分 / 会话位置 / IO 接线）；
+只是把 props 搬来搬去的「拆」不算拆。
 2026-10-28 的例子：`useGoldenDrill` 602 行 → 把「填空 + 拼句」拆成
 `useGoldenFillAssemble`（当前句的轮次、输入、判分、写回），主 hook 只留选句 / 会话 / 逆向回顾；
 `useQuizSession` 581 → 496（预习卡进 `core/quizWarmup`、恢复进 `useQuizSessionSnapshot`、自动切题进
 `useQuizAdvance`）；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
+`useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
+开篇/片段/错题重练合并到 `beginRound`）。
+`useApplyTaskResult` 这种没有 React 状态的「大 useCallback」，应该往普通 factory + 任务处理器收，
+不是继续拆成更多 hook。
 
 ### 拆文件：拆**职责**，不是拆行数
 
-超过 500 行的 hook、或超过 600 行的普通文件，先判断它是哪一种，再决定拆不拆：
+超过 300 行的 hook（或 200 行但职责不单一）、或超过 600 行的普通文件，先判断它是哪一种，再决定拆不拆：
 
 | 它是什么 | 怎么办 |
 | --- | --- |
@@ -651,7 +660,7 @@ IO 接线），能单独测试就拆；只是把 props 搬来搬去的「拆」�
 npm run gates        # 收尾门禁：tsc + 全部测试 + 上帝文件 + hook 体量 + 架构
 npm run check:arch   # 只跑架构门禁（含存量豁免清单）
 npm run check:size   # 只跑上帝文件门禁（含基线）
-npm run check:hooks  # 只跑 hook 体量门禁（500 行硬线）
+npm run check:hooks  # 只跑 hook 体量门禁（目标 200 / 300 提醒 / 500 硬线）
 npm test             # vitest run
 npm run test:watch   # 开发循环
 ```

@@ -5,10 +5,11 @@
 //   普通文件有 800 行上帝文件门禁，但 hook 是「状态 + 派生 + 动作 + effect」的混合体，
 //   一旦靠到 600 行，改一个分支要读全文、测试也难聚焦。等它超 800 再拆已经晚了。
 // 规则：
-//   1. 新 hook 超过 500 行 → 失败（先拆职责再写）；
-//   2. 480–500 行打印提醒（还能读，但别再往里塞）；
-//   3. 存量超限登记在 BASELINE，只准变小；降回 500 以内后必须删掉基线；
-//   4. 基线文件变大 → 失败。
+//   1. 新 hook 默认目标 200 行，能写成普通函数/factory 的别包成 hook；
+//   2. 超过 300 行打印提醒（不是“快满了”，是“该看职责了”）；
+//   3. 新 hook 超过 500 行 → 失败（先拆职责再写）；
+//   4. 存量超限登记在 BASELINE，只准变小；降回 500 以内后必须删掉基线；
+//   5. 基线文件变大 → 失败。
 //
 // 用法：node tool/check_hook_size.mjs
 // ============================================================
@@ -16,8 +17,9 @@ import { readFileSync, readdirSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
+export const TARGET_HOOK_LINES = 200
+export const WARN_HOOK_LINES = 300
 export const MAX_HOOK_LINES = 500
-export const WARN_HOOK_LINES = 480
 
 /** 存量超限 hook：相对路径 → 允许的最高行数（只准下调）。 */
 export const BASELINE = {
@@ -51,7 +53,9 @@ export function auditHookSizes(entries, baseline = BASELINE, max = MAX_HOOK_LINE
     if (lines > max) {
       violations.push(`${file}: ${lines} 行 > 上限 ${max} 行 —— 先按职责拆分，再继续加逻辑`)
     } else if (lines > warn) {
-      warnings.push(`${file}: ${lines} 行，已接近 ${max} 行上限；新逻辑优先拆子 hook`)
+      warnings.push(
+        `${file}: ${lines} 行，超过 ${warn} 行提醒线（目标 ${TARGET_HOOK_LINES} 行，硬线 ${max} 行）；新逻辑优先拆子 hook`,
+      )
     }
   }
 
@@ -80,7 +84,7 @@ function main() {
 
   const { violations, warnings, notes } = auditHookSizes(entries)
   if (warnings.length) {
-    console.log('提示：以下 hook 接近上限，改动时优先拆职责：')
+    console.log(`提示：以下 hook 超过目标 ${TARGET_HOOK_LINES} 行且已到 300 行提醒线，改动时优先拆职责：`)
     for (const w of warnings) console.log('  - ' + w)
   }
   if (notes.length) {
