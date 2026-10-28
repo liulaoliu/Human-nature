@@ -76,14 +76,7 @@ export default function GoldenDrillView({
   )
   return (
     <div className="golden-body">
-      {phase === 'fill' && api.cloze ? (
-        <div className="golden-fill-head">
-          {drillBar}
-          <SentenceLine cloze={api.cloze} mode="fill" api={api} />
-        </div>
-      ) : (
-        drillBar
-      )}
+      {drillBar}
       {phase === 'preview' && (
         <>
           <div className="golden-preview">
@@ -110,6 +103,7 @@ export default function GoldenDrillView({
       )}
       {phase === 'fill' && api.cloze && (
         <>
+          <SentenceLine cloze={api.cloze} mode="fill" api={api} />
           <div className="golden-inputs">
             {api.cloze.blanks.map((b) => (
               <label key={b.index}>
