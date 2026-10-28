@@ -76,34 +76,52 @@ export default function GoldenDrillView({
   )
   return (
     <div className="golden-body">
-      {drillBar}
-      {phase === 'preview' && (
-        <>
+      <div className="golden-top">
+        {drillBar}
+        {phase === 'preview' && (
           <div className="golden-preview">
             <div className="golden-en">{sentence.text}</div>
             {cur.zh || sentence.translation ? <div className="muted">{cur.zh ?? sentence.translation}</div> : null}
             {cur.pattern && <div className="golden-note">句型：{cur.pattern}</div>}
             {cur.tense && <div className="golden-note">时态：{cur.tense}</div>}
           </div>
-          <div className="bar">
-            <button className="primary" onClick={api.beginFill}>开始练习 <kbd>Enter</kbd></button>
-            <button onClick={() => onSpeak(sentence.text)}>🔊 听整句 <kbd>R</kbd></button>
-            <button onClick={api.nextSentence}>跳过本句 <kbd>E</kbd></button>
+        )}
+        {phase === 'fill' && !api.cloze && (
+          <div className="golden-preview">
+            <div className="muted">本句没有要填的学习点（可能已被「本课去重」跳过）。</div>
           </div>
-        </>
+        )}
+        {phase === 'fill' && api.cloze && <SentenceLine cloze={api.cloze} mode="fill" api={api} />}
+        {phase === 'assemble' && !api.assembly && (
+          <div className="golden-preview">
+            <div className="muted">本句没有可拼的学习点。</div>
+          </div>
+        )}
+        {phase === 'summary' && (
+          <div className="golden-preview">
+            <div className="golden-en">{sentence.text}</div>
+            {cur.zh || sentence.translation ? <div className="muted">{cur.zh ?? sentence.translation}</div> : null}
+            {cur.pattern && <div className="golden-note">句型：{cur.pattern}</div>}
+            {cur.tense && <div className="golden-note">时态：{cur.tense}</div>}
+            {cur.note && <div className="golden-note">用法：{cur.note}</div>}
+          </div>
+        )}
+      </div>
+      {phase === 'preview' && (
+        <div className="bar">
+          <button className="primary" onClick={api.beginFill}>开始练习 <kbd>Enter</kbd></button>
+          <button onClick={() => onSpeak(sentence.text)}>🔊 听整句 <kbd>R</kbd></button>
+          <button onClick={api.nextSentence}>跳过本句 <kbd>E</kbd></button>
+        </div>
       )}
       {phase === 'fill' && !api.cloze && (
-        <div className="golden-preview">
-          <div className="muted">本句没有要填的学习点（可能已被「本课去重」跳过）。</div>
-          <div className="bar">
-            <button className="primary" onClick={api.markSummary}>直接看本句小结 <kbd>S</kbd></button>
-            <button onClick={api.nextSentence}>下一句 <kbd>E</kbd></button>
-          </div>
+        <div className="bar">
+          <button className="primary" onClick={api.markSummary}>直接看本句小结 <kbd>S</kbd></button>
+          <button onClick={api.nextSentence}>下一句 <kbd>E</kbd></button>
         </div>
       )}
       {phase === 'fill' && api.cloze && (
         <>
-          <SentenceLine cloze={api.cloze} mode="fill" api={api} />
           <div className="golden-inputs">
             {api.cloze.blanks.map((b) => (
               <label key={b.index}>
@@ -145,10 +163,7 @@ export default function GoldenDrillView({
         </>
       )}
       {phase === 'assemble' && !api.assembly && (
-        <div className="golden-preview">
-          <div className="muted">本句没有可拼的学习点。</div>
-          <button className="primary" onClick={api.markSummary}>看本句小结</button>
-        </div>
+        <button className="primary" onClick={api.markSummary}>看本句小结</button>
       )}
       {phase === 'assemble' && api.assembly && (
         <>
@@ -171,13 +186,6 @@ export default function GoldenDrillView({
       )}
       {phase === 'summary' && (
         <>
-          <div className="golden-preview">
-            <div className="golden-en">{sentence.text}</div>
-            {cur.zh || sentence.translation ? <div className="muted">{cur.zh ?? sentence.translation}</div> : null}
-            {cur.pattern && <div className="golden-note">句型：{cur.pattern}</div>}
-            {cur.tense && <div className="golden-note">时态：{cur.tense}</div>}
-            {cur.note && <div className="golden-note">用法：{cur.note}</div>}
-          </div>
           <div className="golden-targets">
             {cur.targets.map((t, i) => (
               <span key={i} className="golden-target">

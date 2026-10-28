@@ -113,16 +113,25 @@
   gap: 8px;
 }
 
-/* 金句课的功能区（阶段按钮 + 进度/轮次文本）吸顶：滚动交给 .reader-main，
-   负 margin 抵消 .golden-body 的 padding；底色不透明，内容从下面过不会透出来。 */
-.golden-body > .golden-drill-bar {
+/* 金句课顶部功能区（阶段按钮 + 当前句/预览文本）吸顶：
+   滚动交给 .reader-main；负 margin 抵消 .golden-body 的 padding；
+   底色不透明，输入框从下面过不会透出来。 */
+.golden-top {
   position: sticky;
   top: 0;
   z-index: 20;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin: -18px -22px 0;
   padding: 12px 22px 10px;
   background: var(--bg);
   border-bottom: 1px solid var(--line-soft);
+}
+
+.golden-top > .golden-drill-bar,
+.golden-top > .golden-preview {
+  margin-bottom: 0;
 }
 
 .golden-outline {
@@ -467,9 +476,9 @@
     padding: 12px 12px 32px;
   }
   /* 窄屏一屏本来就矮，吸顶会吃掉正文；回到普通流。 */
-  .golden-body > .golden-drill-bar {
+  .golden-top {
     position: static;
-    margin: 0 0 16px;
+    margin: 0;
     padding: 0;
     border-bottom: 0;
   }
