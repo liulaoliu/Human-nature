@@ -1,11 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import {
-  AI_TASK_LABEL,
   buildAiJobs,
   buildJobPack,
   buildWebPackPrompt,
   countAiJobs,
-  isAiJobTask,
   jobPhaseLabel,
   missingJobIds,
   parseAiResultPack,
@@ -14,6 +12,8 @@ import {
 } from '../../core/aiPackage'
 import type { AiJob, AiJobTask, AiJobsInput, AiResultEntry } from '../../core/aiPackage'
 import { dayKeyLocal } from '../../core/activity'
+import { applyAiResults } from '../../core/aiApplyResult'
+import { aiNextHint, buildAiBreakdown, buildAiChecklist } from '../../core/aiProgress'
 import { CANCEL_MESSAGE, fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 import { AI_BATCH_NAME } from '../labels'
 import { useLocalStorageState } from './useLocalStorageState'
@@ -96,103 +96,46 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const missing = useMemo(() => round.filter((j) => askedSet.has(j.id) && !doneSet.has(j.id)), [round, askedSet, doneSet])
 
   /** 按任务类型分组的全流程进度（完成/总数），顺序按首次出现。 */
-  const webBreakdown = useMemo(() => {
-    const order: AiJobTask[] = []
-    const map = new Map<AiJobTask, { task: AiJobTask; label: string; done: number; total: number }>()
-    for (const j of round) {
-      let g = map.get(j.task)
-      if (!g) {
-        g = { task: j.task, label: AI_TASK_LABEL[j.task] ?? j.task, done: 0, total: 0 }
-        map.set(j.task, g)
-        order.push(j.task)
-      }
-      g.total++
-      if (doneSet.has(j.id)) g.done++
-    }
-    return order.map((t) => map.get(t)!)
-  }, [round, doneSet])
+  const webBreakdown = useMemo(() => buildAiBreakdown(round, doneSet), [round, doneSet])
 
   /**
    * 工作待办检查：把「AI 任务进度」和「需要人工跟进的步骤」合成一张清单。
    * 关键是把「自动标词 → 待选 → 加入生词本 → 补查释义」这个断层显式列出来，
    * 免得跑完批处理以为完事、结果生词本还是空的。
    */
-  const checklist = useMemo(() => {
-    const items: { key: string; label: string; done: number; total: number; manual?: boolean }[] = []
-    for (const g of webBreakdown) {
-      items.push({ key: g.task, label: g.label, done: g.done, total: g.total })
-    }
-    if (jobsInput.batch.length) {
-      items.push({ key: 'commitBatch', label: `待选入库（${jobsInput.batch.length} 词）`, done: 0, total: 1, manual: true })
-    }
-    return items
-  }, [webBreakdown, jobsInput.batch])
+  const checklist = useMemo(() => buildAiChecklist(webBreakdown, jobsInput.batch.length), [webBreakdown, jobsInput.batch.length])
 
   const checklistDone = useMemo(() => checklist.reduce((n, it) => n + it.done, 0), [checklist])
   const checklistTotal = useMemo(() => checklist.reduce((n, it) => n + it.total, 0), [checklist])
 
-  /**
-   * 下一步该干嘛。
-   * 「待办」按 **pending（还没试过的）** 算——试过一次的即使没补全也不再重复排队（否则会无限重跑）；
-   * 若所有都试过但数据仍有缺口（多半是模型没返回），另给一行提示，引导用离线「补齐生词本」。
-   */
-  const nextHint = useMemo(() => {
-    if (jobsInput.batch.length) {
-      return `待选有 ${jobsInput.batch.length} 个词还没进生词本：先点「加入生词本」，再跑一次批处理补齐音标/释义。`
-    }
-    if (localRunning) return `${AI_BATCH_NAME}中… 第 ${localRound} 轮 · ${localPhase || '处理中'}（${localDone}/${localTotal}）`
-    if (pending.length > 0) {
-      const tasks = [...new Set(pending.map((j) => AI_TASK_LABEL[j.task] ?? j.task))]
-      const words: string[] = []
-      for (const j of pending) for (const w of j.askedWords) if (!words.includes(w)) words.push(w)
-      const w = words.length ? `（${words.slice(0, 6).join('、')}${words.length > 6 ? '…' : ''}）` : ''
-      return `还有 ${pending.length} 项待办【${tasks.join('、')}】${w}，可点「⚡ ${AI_BATCH_NAME}」。`
-    }
-    if (round.length > 0) {
-      return `本轮已跑完；还有 ${round.length} 项没补全（多半是模型没返回这些词）：可点「📖 补齐生词本」（离线），或删掉不需要的词。`
-    }
-    if (autoVocabDone.includes(jobsInput.articleId)) {
-      return '本篇已「自动标过词」，所以不再生成标词待办；想重新标词点「↺ 重置自动标词」，或改用「📖 离线挑超纲词」。'
-    }
-    return '本篇待办已全部完成 🎉'
-  }, [jobsInput.batch.length, jobsInput.articleId, autoVocabDone, localRunning, localRound, localPhase, localDone, localTotal, pending, round.length])
+  /** 本篇是否已经「自动标过词」（标过就不再进默认待办）。 */
+  const autoVocabDoneHere = useMemo(
+    () => autoVocabDone.includes(jobsInput.articleId),
+    [autoVocabDone, jobsInput.articleId],
+  )
+
+  const nextHint = aiNextHint({
+    batchCount: jobsInput.batch.length,
+    running: localRunning,
+    round: localRound,
+    phase: localPhase,
+    done: localDone,
+    total: localTotal,
+    pending,
+    roundCount: round.length,
+    autoVocabDone: autoVocabDoneHere,
+    batchName: AI_BATCH_NAME,
+  })
 
   /** 逐条应用结果；返回成功应用的 id（供网页版标记完成）。 */
   const applyResults = useCallback(
     (results: AiResultEntry[], jobs: AiJob[]) => {
-      const byId = new Map(jobs.map((j) => [j.id, j]))
-      const lines: string[] = []
-      const appliedIds: string[] = []
-      let okCount = 0
-      let failCount = 0
-      for (const r of results) {
-        const job = r.id ? byId.get(r.id) : undefined
-        const task = job?.task ?? (isAiJobTask(r.task) ? r.task : null)
-        if (!task) {
-          lines.push(`跳过：找不到任务（id=${r.id || '无'}）`)
-          failCount++
-          continue
-        }
-        const res = applyTaskResult(
-          task,
-          r.raw,
-          job?.askedWords ?? r.askedWords ?? [],
-          job?.askedIds ?? r.askedIds ?? [],
-          job?.articleKey ? { articleKey: job.articleKey } : undefined,
-        )
-        if (res.ok) {
-          okCount++
-          if (job) appliedIds.push(job.id)
-        } else {
-          failCount++
-        }
-        lines.push(`【${job?.label ?? task}】${res.report[0] ?? (res.ok ? '已应用' : '未解析')}`)
-      }
+      const summary = applyAiResults(results, jobs, applyTaskResult)
       // 应用了「自动标词」→ 记下本篇已完成，之后不再进默认待办
-      if (appliedIds.some((id) => jobs.find((j) => j.id === id)?.task === 'auto_vocab')) {
+      if (summary.autoVocab) {
         setAutoVocabDone((prev) => (prev.includes(jobsInput.articleId) ? prev : [...prev, jobsInput.articleId]))
       }
-      return { okCount, failCount, lines, appliedIds }
+      return summary
     },
     [applyTaskResult, jobsInput.articleId, setAutoVocabDone],
   )
@@ -283,9 +226,6 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
     flash(`已重置本篇「自动标词」；再点一次「⚡ ${AI_BATCH_NAME}」即可重新标词`)
   }, [jobsInput.articleId, setAutoVocabDone, setDoneIds, flash])
 
-  /** 本篇是否已经「自动标过词」（标过就不再进默认待办）。 */
-  const autoVocabDoneHere = useMemo(() => autoVocabDone.includes(jobsInput.articleId), [autoVocabDone, jobsInput.articleId])
-
   /** 复制「下一批待处理」的网页版提示词（自动跳过已完成的）。 */
   const copyWebPrompt = useCallback(async () => {
     if (!round.length) {
@@ -358,13 +298,6 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
 
   // ---------- 一键跑批（服务端直连，自动串联多轮） ----------
 
-  /** 把一个批次发给服务端跑，轮询进度；onDone(本批已完成数) 用于进度显示。 */
-  const runBatchOnServer = useCallback(
-    (jobs: AiJob[], onDone: (done: number) => void, signal: AbortSignal) =>
-      runAiBatch(jobs, { signal, onProgress: onDone }),
-    [],
-  )
-
   /** 等 React 把应用后的新数据渲染出来（输入对象换了新引用即视为已就绪）。 */
   const settle = useCallback(async (prev: AiJobsInput) => {
     for (let i = 0; i < 60; i++) {
@@ -434,7 +367,10 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
         setLocalDone(0)
         setLocalTotal(todo.length)
 
-        const { results, failed, dropped } = await runBatchOnServer(todo, (d) => setLocalDone(d), ctrl.signal)
+        const { results, failed, dropped } = await runAiBatch(todo, {
+          signal: ctrl.signal,
+          onProgress: (d) => setLocalDone(d),
+        })
 
         const { okCount, failCount, lines, appliedIds } = applyResultsRef.current(results, all)
         okTotal += okCount
@@ -478,7 +414,7 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
       if (localAbortRef.current === ctrl) localAbortRef.current = null
       setLocalRunning(false)
     }
-  }, [localRunning, pending, round, runBatchOnServer, settle, setDoneIds, onReport, flash, jobsInput.scope])
+  }, [localRunning, pending, round, settle, setDoneIds, onReport, flash, jobsInput.scope])
 
   /** 取消正在跑的一键跑批：先叫服务端停（别继续花额度），再打断本地轮询。 */
   const cancelLocal = useCallback(() => {

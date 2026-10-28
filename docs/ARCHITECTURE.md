@@ -262,7 +262,7 @@ types ← core ← adapters ← reader
 6. **闭卷回忆要先学一遍**。记忆拷打 / 词块拷打是回忆题，直接开考等于让用户猜，猜错还会被当成
    「没记住」写进 SRS 和错题本。`useQuizSession.startDrill(kinds, scope, { warmup })` 先出一道
    `DrillWarmup` 预习卡（词 + 释义 + 词块），点「开始拷打」才 `begin()`；
-   卡片内容由**题目反推**（`buildWarmupCards`），不另写一套「考哪些词」的筛选。
+   卡片内容由**题目反推**（`core/quizWarmup` 的 `buildWarmupCards`），不另写一套「考哪些词」的筛选。
    英英释义 / 语法标记 / 听力这些不涉及「没见过」的题型不加预习。
 
 ## 三·五、数据安全（事故之后立的规矩）
@@ -626,7 +626,9 @@ hook 和普通文件不一样：它把「状态 + 派生 + 动作 + effect」揉
 这不是「按行数机械拆文件」。判断顺序仍是：先找**独立职责**（状态机 / 输入判分 / 会话位置 /
 IO 接线），能单独测试就拆；只是把 props 搬来搬去的「拆」不算拆。
 2026-10-28 的例子：`useGoldenDrill` 602 行 → 把「填空 + 拼句」拆成
-`useGoldenFillAssemble`（当前句的轮次、输入、判分、写回），主 hook 只留选句 / 会话 / 逆向回顾。
+`useGoldenFillAssemble`（当前句的轮次、输入、判分、写回），主 hook 只留选句 / 会话 / 逆向回顾；
+`useQuizSession` 581 → 496（预习卡进 `core/quizWarmup`、恢复进 `useQuizSessionSnapshot`、自动切题进
+`useQuizAdvance`）；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
 
 ### 拆文件：拆**职责**，不是拆行数
 
