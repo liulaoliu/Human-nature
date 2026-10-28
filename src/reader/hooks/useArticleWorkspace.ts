@@ -3,10 +3,9 @@ import type { Dispatch, MutableRefObject, RefObject, SetStateAction } from 'reac
 import type { ArticleBook } from '../../core/matchArticle'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 import type { ArticleOrigin, Sentence, SentenceLanguage } from '../../types/document'
+import type { BatchItemLike } from '../batchItem'
 import { useReaderDoc, type ReaderDoc } from './useReaderDoc'
 import { useArticleImport } from './useArticleImport'
-
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 
 export interface UseArticleWorkspaceParams {
   articles: RefObject<ArticleRepoPort | null>

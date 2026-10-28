@@ -6,8 +6,7 @@ import { enrichWithDict } from '../../core/dictEnrich'
 import { isWordEntry } from '../../core/entryKind'
 import type { VocabLibrary, VocabVia } from '../../types/document'
 import { dictionary, mwldLookupWord } from '../../adapters/dictionary'
-
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null; via?: VocabVia }
+import type { BatchItemLike } from '../batchItem'
 
 export interface UseDictToolsParams {
   library: VocabLibrary

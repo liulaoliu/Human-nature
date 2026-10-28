@@ -20,11 +20,9 @@ import { useLocalStorageState, persistentEnum, persistentNumber } from './useLoc
 import { useHotkeys } from '../useHotkeys'
 import type { DictItemData } from '../../core/sessionSnapshots'
 import { articleKey } from '../../core/docSignature'
+import type { BatchItemLike } from '../batchItem'
 import { useDelayedAction } from './useDelayedAction'
 import { useDictationSnapshot } from './useDictationSnapshot'
-
-/** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 
 /** 听写预热窗口：当前题往后预合成几题；太大时「不限题数」会让整篇排队。 */
 const DICT_WARM_AHEAD = 6

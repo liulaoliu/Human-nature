@@ -14,7 +14,8 @@ import { dedupeLibrary, markWord, relemmaLibrary } from '../../core/vocab'
 import { buildGoldenPrompt } from '../../core/goldenAi'
 import { buildLanguagePrompt } from '../../core/language'
 import { buildMissingPrompt, type MissingTask } from '../missingPrompts'
-import type { Sentence, VocabItem, VocabLibrary, VocabVia } from '../../types/document'
+import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+import type { BatchItemLike } from '../batchItem'
 
 /** 复制提示词时会用到的任务键。 */
 export type AiTaskKey =
@@ -30,8 +31,6 @@ export type AiTaskKey =
   | 'golden'
   | 'imitation'
   | 'feedback'
-
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null; via?: VocabVia }
 
 export interface UseAiTasksParams {
   exact: string

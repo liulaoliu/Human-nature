@@ -7,6 +7,7 @@ import { segment, carryAnalysis } from '../../core/segmenter'
 import { styleOf, type ArticleBook } from '../../core/matchArticle'
 import type { ArticleOrigin, GoldenLesson, Paragraph, Sentence } from '../../types/document'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
+import type { BatchItemLike } from '../batchItem'
 
 /** 一篇打开的文档。 */
 export interface ReaderDoc {
@@ -15,9 +16,6 @@ export interface ReaderDoc {
   /** D老师小课堂：AI / 本地金句课内容；老文章没有，按需推导 */
   golden?: GoldenLesson
 }
-
-/** 待选项最小形状（与 reader 的 BatchItem 结构一致）。 */
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 
 /** 按期次给内置文章分组。文件名写法区分两代（见 matchArticle.styleOf）。 */
 const EDITION_LABEL: Record<ReturnType<typeof styleOf>, string> = {

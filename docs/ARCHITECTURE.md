@@ -13,6 +13,7 @@ src/adapters/    实现 core 端口（ports）的 IO 层：SQLite(HTTP) / Indexe
 src/reader/      React 视图层
   hooks/         有状态编排（会话状态机、与 IO 的接线），不含排版
   apply/         无 React 状态的 AI 结果应用（factory + 按任务处理器，不放 JSX）
+  batchItem.ts   待选 / 查词一题的共享形状（词 + 来源句 + via），全 reader 只此一份
   panels/        展示组件（尽量薄：收 props、渲染）
   ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
   ReaderArticle.tsx 正文区（标题 + 编辑态 + ReaderBody）

@@ -3,6 +3,7 @@ import type { MutableRefObject } from 'react'
 import type { AiJobsInput } from '../../core/aiPackage'
 import { articleKey as articleKeyOf } from '../../core/docSignature'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+import type { BatchItemLike } from '../batchItem'
 import type { AiTaskKey } from './useAiTasks'
 import type { ReaderDoc } from './useReaderDoc'
 import { useAiTasks } from './useAiTasks'
@@ -10,7 +11,6 @@ import { useApplyTaskResult } from './useApplyTaskResult'
 import { useAiPack } from './useAiPack'
 import { usePasteApply } from './usePasteApply'
 
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
 type ApplyP = Parameters<typeof useApplyTaskResult>[0]
 type TaskP = Parameters<typeof useAiTasks>[0]
 type PasteP = Parameters<typeof usePasteApply>[0]

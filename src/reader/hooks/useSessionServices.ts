@@ -19,8 +19,7 @@ import { useVocabMode } from './useVocabMode'
 import { useMistakeActions } from './useMistakeActions'
 import { useHotkeys } from '../useHotkeys'
 import type { PickSession } from '../../core/vocabStats'
-
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+import type { BatchItemLike } from '../batchItem'
 
 export interface UseSessionServicesParams {
   library: VocabLibrary

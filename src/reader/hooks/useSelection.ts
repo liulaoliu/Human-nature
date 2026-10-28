@@ -2,8 +2,7 @@ import { useCallback, useEffect, useRef, type MouseEvent, type MutableRefObject,
 import { snapSelection, wordSpans } from '../../core/wordSelect'
 import { lemmaOf, markWord } from '../../core/vocab'
 import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
-
-type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
+import type { BatchItemLike } from '../batchItem'
 
 /** 顺着节点往上找它所在的句子 span（用 class="sent" 认）。 */
 function sentSpanOf(node: Node | null): HTMLElement | null {
