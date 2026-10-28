@@ -7,6 +7,7 @@ import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
 import type { VocabLibrary } from '../../types/document'
+import type { QuizKind } from '../../core/quiz'
 
 /**
  * 考试会话的接线测试（出题/判分/错题/失败提示）。
@@ -25,7 +26,15 @@ const dropMistake = vi.fn()
 const closeOthers = vi.fn()
 const speak = vi.fn()
 
-function Harness({ library, onRelearn }: { library: VocabLibrary; onRelearn?: (ids: string[]) => void }) {
+function Harness({
+  library,
+  onRelearn,
+  onKinds,
+}: {
+  library: VocabLibrary
+  onRelearn?: (ids: string[]) => void
+  onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
+}) {
   api = useQuizSession({
     library,
     articleIdentity: 'A',
@@ -41,6 +50,7 @@ function Harness({ library, onRelearn }: { library: VocabLibrary; onRelearn?: (i
     recordAnswer,
     addMistake,
     dropMistake,
+    onKinds,
     onRelearn,
   })
   return null
@@ -60,6 +70,7 @@ beforeEach(() => {
 
 afterEach(() => {
   restoreStorage()
+  vi.useRealTimers()
   vi.restoreAllMocks()
 })
 
@@ -141,6 +152,60 @@ describe('useQuizSession：出题与判分', () => {
     act(() => api!.check())
     unmount()
     expect(clear).toHaveBeenCalled()
+  })
+
+  it('答完一轮：成绩只记一次，并按题型汇总', () => {
+    const onKinds = vi.fn()
+    const { rerender } = render(<Harness library={lib([word()])} onKinds={onKinds} />)
+    act(() => api!.startItems(['w1'], ['spell']))
+    act(() => api!.setInput('run'))
+    act(() => api!.check())
+    act(() => api!.next())
+
+    expect(recordPractice).toHaveBeenCalledWith('quiz', 1, 1)
+    expect(onKinds).toHaveBeenCalledWith([{ kind: 'spell', total: 1, correct: 1 }])
+
+    // 重渲染不能把同一轮成绩再记一遍
+    rerender(<Harness library={lib([word()])} onKinds={onKinds} />)
+    expect(recordPractice).toHaveBeenCalledTimes(1)
+  })
+
+  it('反复鞭打：答错后自动重练错题', () => {
+    vi.useFakeTimers()
+    localStorage.setItem('reader:quizLoopWrong', '1')
+    render(<Harness library={lib([word({ usage: ['run a business'] })])} />)
+    act(() => api!.startItems(['w1'], ['usage']))
+    act(() => api!.setInput('wrong'))
+    act(() => api!.check())
+    act(() => api!.next())
+
+    expect(api!.drillRound).toBe(1)
+    act(() => vi.advanceTimersByTime(1500))
+    expect(api!.queue).toHaveLength(1)
+    expect(api!.index).toBe(0)
+    expect(api!.results).toEqual([])
+  })
+
+  it('快捷键：回车判分 / 确认拼错，Esc 退出', () => {
+    render(<Harness library={lib([word()])} />)
+    act(() => api!.startItems(['w1'], ['spell']))
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    })
+    expect(api!.checked).toBe(true)
+    expect(api!.spellMiss).not.toBeNull()
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    })
+    expect(api!.spellMiss).toBeNull()
+    expect(api!.index).toBe(1)
+
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(api!.queue).toBeNull()
   })
 })
 

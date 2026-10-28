@@ -13,6 +13,7 @@ src/adapters/    实现 core 端口（ports）的 IO 层：SQLite(HTTP) / Indexe
 src/reader/      React 视图层
   hooks/         有状态编排（会话状态机、与 IO 的接线），不含排版
   apply/         无 React 状态的 AI 结果应用（factory + 按任务处理器，不放 JSX）
+  quiz/          无 React 状态的考试判分（factory，不放 JSX / 状态）
   batchItem.ts   待选 / 查词一题的共享形状（词 + 来源句 + via），全 reader 只此一份
   panels/        展示组件（尽量薄：收 props、渲染）
   ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
@@ -97,6 +98,7 @@ types ← core ← adapters ← reader
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` + `src/reader/apply/*` | 六个表格型任务在 core；自动标词（要离线词典）在 `apply/autoVocab`，查词（要来源句）在 `apply/analysis`；`useApplyTaskResult` 只负责保住函数身份 |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` | 范围 × 题型 → 候选词与题量；设置持久化在 `hooks/useQuizSettings` |
+| 考试判分落库 | `src/reader/quiz/createQuizCheck.ts` | 对/错 → SRS、错题本、活动、答题事件、朗读、自动切题；无 React 状态，主 hook 传当前快照 |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方**；新 hook 目标 ≤ 200 行、300 行提醒、硬线 500 行（`check_hook_size`） |
@@ -635,7 +637,9 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 2026-10-28 的例子：`useGoldenDrill` 602 行 → 把「填空 + 拼句」拆成
 `useGoldenFillAssemble`（当前句的轮次、输入、判分、写回），主 hook 只留选句 / 会话 / 逆向回顾；
 `useQuizSession` 581 → 496（预习卡进 `core/quizWarmup`、恢复进 `useQuizSessionSnapshot`、自动切题进
-`useQuizAdvance`）；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
+`useQuizAdvance`），再 496 → 294：进行中状态进 `useQuizRunState`、出卷进 `useQuizStarts`、判分改成
+`reader/quiz/createQuizCheck` factory、完成结算 / 反复鞭打进 `useQuizCompletion`、计时 / 快捷键进
+`useQuizTimer` / `useQuizHotkeys`；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
 开篇/片段/错题重练合并到 `beginRound`）。
 `useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
