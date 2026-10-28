@@ -131,6 +131,17 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setIndex,
   })
 
+  /** 开新一轮 / 重做错题共用的会话字段重置。 */
+  const resetProgress = useCallback(() => {
+    setIndex(0)
+    setInput('')
+    setChecked(false)
+    setResult(null)
+    setSpellMiss(null)
+    setResults([])
+    recordedRef.current = false
+  }, [])
+
   // ---- 候选池与题量（规则在 core/quizPool） ----
   /** 可考的：用法笔记（中文说明）不出题 */
   const studyable = useMemo(() => studyableItems(library.items), [library.items])
@@ -153,17 +164,11 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setDrillRound(0)
       setArticleRun(!!opts?.article)
       setQueue(shuffleQuiz(qs))
-      setIndex(0)
-      setInput('')
-      setChecked(false)
-      setResult(null)
-      setSpellMiss(null)
-      setResults([])
-      recordedRef.current = false
+      resetProgress()
       setAutoRun(auto)
       setSetupOpen(false)
     },
-    [clearAdvance, closeOthers, auto, flash],
+    [clearAdvance, closeOthers, auto, flash, resetProgress],
   )
 
   /** 文章级测验：按当前文章出题（英译中/中译英/功能词填空/句子排序/结构语法）。 */
@@ -291,12 +296,13 @@ export function useQuizSession(params: UseQuizSessionParams) {
       if (!ok && spellingKind && !isArticle) {
         setSpellMiss({ itemId: q.itemId, word: q.word, input: ans })
       }
-      recordActivity(isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab', 1)
+      const cat = isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab'
+      recordActivity(cat, 1)
       recordAnswer?.({
         articleId: articleIdentity,
         source: 'quiz',
         kind: q.kind,
-        cat: isArticle ? 'read' : q.kind === 'listen' || q.kind === 'ear' ? 'listen' : 'vocab',
+        cat,
         correct: ok,
         questionId: q.id,
       })
@@ -356,14 +362,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     }
     clearAdvance()
     setQueue(shuffleQuiz(qs))
-    setIndex(0)
-    setInput('')
-    setChecked(false)
-    setResult(null)
-    setSpellMiss(null)
-    setResults([])
-    recordedRef.current = false
-  }, [results, clearAdvance, flash])
+    resetProgress()
+  }, [results, clearAdvance, flash, resetProgress])
 
   // 计时：开考清零，每秒 +1
   useEffect(() => {

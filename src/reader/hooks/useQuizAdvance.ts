@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback } from 'react'
+import { useDelayedAction } from './useDelayedAction'
 
 interface UseQuizAdvanceParams {
   /** 拼写判错未确认时不许切题。 */
@@ -12,18 +13,11 @@ interface UseQuizAdvanceParams {
 /**
  * 考试的「下一题」时序：手动下一题 + 自动切题定时器。
  *
- * 抽出来是因为定时器、spellMiss 拦截、卸载清理三件事必须一起看；
+ * 抽出来是因为定时器、spellMiss 拦截、状态重置三件事必须一起看；
  * 判分/出卷仍留在 useQuizSession。
  */
 export function useQuizAdvance({ spellMiss, setInput, setChecked, setResult, setIndex }: UseQuizAdvanceParams) {
-  const advanceRef = useRef<number | null>(null)
-
-  const clearAdvance = useCallback(() => {
-    if (advanceRef.current) {
-      window.clearTimeout(advanceRef.current)
-      advanceRef.current = null
-    }
-  }, [])
+  const { clear: clearAdvance, schedule } = useDelayedAction()
 
   /** 真正切到下一题（不再做「拼错必须先确认」的拦截）。 */
   const advance = useCallback(() => {
@@ -41,18 +35,7 @@ export function useQuizAdvance({ spellMiss, setInput, setChecked, setResult, set
   }, [spellMiss, advance])
 
   /** 答完后按对错延迟自动切题；重复调用会覆盖上一个定时器。 */
-  const scheduleAdvance = useCallback(
-    (delay: number) => {
-      clearAdvance()
-      advanceRef.current = window.setTimeout(() => {
-        advanceRef.current = null
-        next()
-      }, delay)
-    },
-    [clearAdvance, next],
-  )
-
-  useEffect(() => clearAdvance, [clearAdvance])
+  const scheduleAdvance = useCallback((delay: number) => schedule(delay, next), [schedule, next])
 
   return { clearAdvance, advance, next, scheduleAdvance }
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef } from 'react'
 import {
   diffWords,
   dictationWrongWords,
@@ -8,7 +8,6 @@ import {
   pickBlankTargets,
   splitForDictationSpans,
   takeRound,
-  type DiffToken,
 } from '../../core/dictation'
 import { wordSpans } from '../../core/wordSelect'
 import type { Sentence } from '../../types/document'
@@ -19,12 +18,10 @@ import type { MistakeEntry } from '../../core/mistakes'
 import { dictMistake } from '../../core/mistakes'
 import { useLocalStorageState, persistentEnum, persistentNumber } from './useLocalStorageState'
 import { useHotkeys } from '../useHotkeys'
-import {
-  parseDictSessionSnapshot,
-  type DictItemData,
-  type DictSessionSnapshot,
-} from '../../core/sessionSnapshots'
+import type { DictItemData } from '../../core/sessionSnapshots'
 import { articleKey } from '../../core/docSignature'
+import { useDelayedAction } from './useDelayedAction'
+import { useDictationSnapshot } from './useDictationSnapshot'
 
 /** 待选项的最小形状（与 reader 的 BatchItem 结构一致）。 */
 type BatchItemLike = { word: string; sentence: string; sentenceId: string | null }
@@ -52,16 +49,6 @@ function writeCursor(k: string, v: number): void {
 
 /** 听写面板的一题：句子 id + 原文；填空题额外带上「固定挖哪些空」。 */
 export type DictItem = DictItemData
-
-const DICT_SESSION_KEY = 'reader:dictSession'
-
-function loadDictSession(): DictSessionSnapshot | null {
-  try {
-    return parseDictSessionSnapshot(localStorage.getItem(DICT_SESSION_KEY))
-  } catch {
-    return null
-  }
-}
 
 export interface UseDictationParams {
   doc: { sentences: Sentence[] } | null
@@ -110,17 +97,7 @@ export function useDictation(params: UseDictationParams) {
     closeOthers,
   } = params
 
-  // ---- 会话（落盘：刷新可恢复） ----
-  const [restored] = useState<DictSessionSnapshot | null>(loadDictSession)
-  const [queue, setQueue] = useState<DictItem[] | null>(restored?.queue ?? null)
-  const [index, setIndex] = useState(restored?.index ?? 0)
-  const [input, setInput] = useState(restored?.input ?? '')
-  const [checked, setChecked] = useState(restored?.checked ?? false)
-  const [diff, setDiff] = useState<DiffToken[] | null>(restored?.diff ?? null)
-  const [blanks, setBlanks] = useState<string[]>(restored?.blanks ?? [])
-  const [results, setResults] = useState<boolean[]>(restored?.results ?? [])
-  const [wrongItems, setWrongItems] = useState<DictItem[]>(restored?.wrongItems ?? [])
-
+  // ---- 偏好设置（持久化） ----
   const [mode, setMode] = useLocalStorageState<'full' | 'cloze'>(
     'reader:dictMode',
     'full',
@@ -134,52 +111,32 @@ export function useDictation(params: UseDictationParams) {
   const [clozeWords, setClozeWords] = useLocalStorageState('reader:dictClozeWords', 40, persistentNumber)
   /** 每轮最多做多少题（0=不限）；做不完下次从断点继续。 */
   const [maxQuestions, setMaxQuestions] = useLocalStorageState('reader:dictMaxQuestions', 20, persistentNumber)
-  /** 本轮出自全篇的哪一段（用于显示「第 X–Y / 全篇 M」）。 */
-  const [roundInfo, setRoundInfo] = useState(restored?.round ?? { offset: 0, grand: 0 })
 
-  const advanceRef = useRef<number | null>(null)
+  // ---- 会话（落盘/恢复在 useDictationSnapshot） ----
+  const {
+    restored,
+    queue,
+    setQueue,
+    index,
+    setIndex,
+    input,
+    setInput,
+    checked,
+    setChecked,
+    diff,
+    setDiff,
+    blanks,
+    setBlanks,
+    results,
+    setResults,
+    wrongItems,
+    setWrongItems,
+    roundInfo,
+    setRoundInfo,
+  } = useDictationSnapshot({ mode, setMode })
   // 恢复的会话若已做完，别在挂载时把成绩再记一遍
   const recordedRef = useRef(!!restored && restored.index >= restored.queue.length)
-
-  // 对齐恢复会话的模式（队列是按这个模式建的）
-  useEffect(() => {
-    if (restored) setMode(restored.mode)
-    // 只在挂载时对齐一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  // 会话落盘：刷新页面后能接着听写
-  useEffect(() => {
-    try {
-      if (queue && queue.length) {
-        const snap: DictSessionSnapshot = {
-          v: 1,
-          queue,
-          index,
-          mode,
-          input,
-          checked,
-          diff,
-          blanks,
-          results,
-          wrongItems,
-          round: roundInfo,
-        }
-        localStorage.setItem(DICT_SESSION_KEY, JSON.stringify(snap))
-      } else {
-        localStorage.removeItem(DICT_SESSION_KEY)
-      }
-    } catch {
-      // 隐私模式 / 配额满：忽略
-    }
-  }, [queue, index, mode, input, checked, diff, blanks, results, wrongItems, roundInfo])
-
-  const clearAdvance = useCallback(() => {
-    if (advanceRef.current) {
-      window.clearTimeout(advanceRef.current)
-      advanceRef.current = null
-    }
-  }, [])
+  const { clear: clearAdvance, schedule } = useDelayedAction()
 
   const next = useCallback(() => {
     clearAdvance()
@@ -189,6 +146,20 @@ export function useDictation(params: UseDictationParams) {
     setBlanks([])
     setIndex((i) => i + 1)
   }, [clearAdvance])
+
+  /** 装一轮题：开篇 / 指定片段 / 重练错题共用同一套重置，别各写一份。 */
+  const beginRound = useCallback((items: DictItem[], info: { offset: number; grand: number }) => {
+    setQueue(items)
+    setRoundInfo(info)
+    setIndex(0)
+    setInput('')
+    setChecked(false)
+    setDiff(null)
+    setBlanks([])
+    setResults([])
+    setWrongItems([])
+    recordedRef.current = false
+  }, [])
 
   /** 当前短块的挖空题（每块稳定，不随重渲染乱跳）。 */
   const cloze = useMemo(() => {
@@ -278,16 +249,7 @@ export function useDictation(params: UseDictationParams) {
       writeCursor(key, nextCursor)
       setMode(nextMode)
       closeOthers()
-      setQueue(round)
-      setRoundInfo({ offset, grand: items.length })
-      setIndex(0)
-      setInput('')
-      setChecked(false)
-      setDiff(null)
-      setBlanks([])
-      setResults([])
-      setWrongItems([])
-      recordedRef.current = false
+      beginRound(round, { offset, grand: items.length })
     },
     [
       doc,
@@ -306,6 +268,7 @@ export function useDictation(params: UseDictationParams) {
       setBlankCount,
       setClozeWords,
       setMaxQuestions,
+      beginRound,
     ],
   )
 
@@ -316,18 +279,9 @@ export function useDictation(params: UseDictationParams) {
       clearAdvance()
       setMode('full')
       closeOthers()
-      setQueue(items)
-      setRoundInfo({ offset: 0, grand: items.length })
-      setIndex(0)
-      setInput('')
-      setChecked(false)
-      setDiff(null)
-      setBlanks([])
-      setResults([])
-      setWrongItems([])
-      recordedRef.current = false
+      beginRound(items, { offset: 0, grand: items.length })
     },
-    [clearAdvance, closeOthers, setMode],
+    [clearAdvance, closeOthers, setMode, beginRound],
   )
 
   const check = useCallback(() => {
@@ -361,30 +315,15 @@ export function useDictation(params: UseDictationParams) {
     if (ok) dropMistake(dictId)
     else addMistake(dictMistake(item.text, new Date().toISOString()))
     // 全对 → 自动下一句；有错 → 停下（显示原文，等手动下一句）
-    if (ok) {
-      clearAdvance()
-      advanceRef.current = window.setTimeout(() => {
-        advanceRef.current = null
-        next()
-      }, 700)
-    }
-  }, [queue, index, input, mode, blanks, cloze, recordActivity, recordAnswer, articleIdentity, next, clearAdvance, addMistake, dropMistake])
+    if (ok) schedule(700, next)
+  }, [queue, index, input, mode, blanks, cloze, recordActivity, recordAnswer, articleIdentity, next, schedule, addMistake, dropMistake])
 
   /** 听写「重练错题」：只重练本轮错的那些段。 */
   const retryWrong = useCallback(() => {
     if (!wrongItems.length) return
     clearAdvance()
-    setQueue(wrongItems)
-    setRoundInfo({ offset: 0, grand: wrongItems.length })
-    setIndex(0)
-    setInput('')
-    setChecked(false)
-    setDiff(null)
-    setBlanks([])
-    setResults([])
-    setWrongItems([])
-    recordedRef.current = false
-  }, [wrongItems, clearAdvance])
+    beginRound(wrongItems, { offset: 0, grand: wrongItems.length })
+  }, [wrongItems, clearAdvance, beginRound])
 
   /** 把本句漏写 / 填错的词加入待选。 */
   const wrongNow = useCallback(() => {
@@ -432,13 +371,6 @@ export function useDictation(params: UseDictationParams) {
       recordPractice('dictation', results.length, results.filter(Boolean).length)
     }
   }, [queue, index, results, recordPractice])
-
-  // 卸载时清掉「自动下一句」的定时器
-  useEffect(() => {
-    return () => {
-      if (advanceRef.current) window.clearTimeout(advanceRef.current)
-    }
-  }, [])
 
   // 快捷键：回车 检查 / 下一句，Tab 重听，Esc 退出
   useHotkeys(
