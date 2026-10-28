@@ -157,7 +157,7 @@ types ← core ← adapters ← reader
   从复习队列消失，还重复占每日新词配额。
 - 拼写判错：`core/vocab/spelling.ts`。`spellingMatches` 只忽略大小写/空白，不做词形兜底；
   `markSpellingMiss` 写 again + `relearn` + 「不认识」。会话（背单词 / 考试）判定后必须锁住
-  「再输一次 / 下一题 / 退出」，确认后才允许继续；重排由 `useStudySession.applySpellingMiss` 做。
+  「再输一次 / 下一题 / 退出」，确认后才允许继续；重排由 `useStudySpelling.applySpellingMiss` 做。
 - 选「忘记了」= 确实忘了：直接按 again 落库（repetitions 归零、进入重学），**不再弹二次确认**。
   用户点忘记已是明确表态，多一步「确实忘了 / 其实记得」是冗余（2026-10-24 移除）。
 - 超时「强制锤炼」该不该出现 + 为什么出现：`core/vocab/drill.ts` 的 `drillReason`
@@ -187,7 +187,7 @@ types ← core ← adapters ← reader
   （有哪步数据才出哪步）。2026-10-24 曾插过一步「看卡（继续写搭配）」，当天删掉：
   它不判对错、不产生状态，只多一次点击。写搭配那一步也**只留输入框**（2026-10-24 用户要求）：
   不再显示单词 / 释义 / 提示语，选完释义直接写，靠回忆出搭配。
-  锤炼做完回单词卡的那个展示在 `useStudySession.clearDrill` 之后，不在这里。
+  锤炼做完回单词卡的那个展示在 `useStudyCardUi.clearDrill` 之后，不在这里。
 
 ### 2.4.1) 词形只做屈折还原，派生词是另一个词
 
@@ -643,6 +643,9 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
 开篇/片段/错题重练合并到 `beginRound`）。
 `useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
+`useStudySession` 718 → 491：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
+`useStudyCardUi`，拼写判卷接线进 `useStudySpelling`，评分 / 学习四选项 / 复习三键 / 锤炼门禁进
+`useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。
 
 ### AI 结果应用：factory + 处理器，不包成 hook
 
@@ -664,7 +667,7 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 | --- | --- |
 | 一堆**状态机 / 优先级判断**藏在 JSX 里（九种状态靠三元链排先后） | **拆**。拆出来能单独测「哪个状态下出现哪个按钮」，顺序错了就是二次写库 |
 | 只是把一个 hook 的结果**拍平**成另一个组件的 props | **别拆**。拆了就是搬运 props，两头都得改，还多一层文件 |
-| 编排器，子逻辑已经在子 hook 里（`grading` / `spellingRound` / `timers` / `spellGate`） | **别硬拆**。两个共享十几个 setter 的 hook 比一个 718 行的编排器更难读；这类存量在 hook 基线里登记，只准不涨 |
+| 编排器，子逻辑已经在子 hook 里（`grading` / `spellingRound` / `timers` / `spellGate`） | **只拆独立状态机**：有自己的一组状态与推进规则（队列时序 / 卡面开关 / 答题判定）才拆；只是互相传十几个 setter 的别拆，那会比编排器更难读 |
 | 组合根（`ReaderApp`） | 只搬「成组的状态」出去（见 `useReaderPanels`），别为了行数把 `ReaderScreen` 的 props 改成嵌套对象 —— 那要让 4 个文件一起改 |
 
 例子（2026-10-23）：`panels/StudyPanel` 的动作区（锤炼 / 学习释义页 / 判完等下一词 / 复习三态 /

@@ -22,9 +22,7 @@ export const WARN_HOOK_LINES = 300
 export const MAX_HOOK_LINES = 500
 
 /** 存量超限 hook：相对路径 → 允许的最高行数（只准下调）。 */
-export const BASELINE = {
-  'src/reader/hooks/useStudySession.ts': 718,
-}
+export const BASELINE = {}
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
 const HOOK_RE = /(^|\/)use[A-Z][^/]*\.(ts|tsx)$/

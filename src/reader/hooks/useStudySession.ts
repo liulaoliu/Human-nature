@@ -1,29 +1,23 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useRef, useState } from 'react'
 import {
   canQuizMeaning,
   isRelearning,
   needsMeaningCheck,
-  planRetryForgot,
-  groupEndOf,
-  beginExtraRound,
-  displayMeaning,
   emptyExtraRound,
-  drillReason as getDrillReason,
-  type DrillReason,
   type ExtraRound,
-  type ReviewGrade,
 } from '../../core/vocab'
 import type { VocabItem, VocabLibrary } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
+import { useStudyAnswering } from './useStudyAnswering'
 import { useStudyCardEdit } from './useStudyCardEdit'
+import { useStudyCardUi } from './useStudyCardUi'
 import { useStudyGrading } from './useStudyGrading'
-import { useStudyLearnStep } from './useStudyLearnStep'
 import { useStudyPool, type StudyScope } from './useStudyPool'
-import { useStudySpellGate } from './useStudySpellGate'
-import { useStudyReviewStep } from './useStudyReviewStep'
 import { useStudyHotkeys } from './useStudyHotkeys'
 import { useStudyStarts } from './useStudyStarts'
 import { useStudySpellingRound } from './useStudySpellingRound'
+import { useStudySpelling } from './useStudySpelling'
+import { useStudySequence } from './useStudySequence'
 import { useStudyTimers } from './useStudyTimers'
 
 export type { StudyScope }
@@ -99,9 +93,22 @@ export function useStudySession(params: UseStudySessionParams) {
 
   const [queue, setQueue] = useState<VocabItem[] | null>(null)
   const [index, setIndex] = useState(0)
-  const [revealed, setRevealed] = useState(false)
-  const [input, setInput] = useState('')
-  const [checked, setChecked] = useState(false)
+  /** 一张卡的界面开关：翻面 / 输入 / 门禁 / 押后的评分。 */
+  const {
+    revealed,
+    setRevealed,
+    input,
+    setInput,
+    checked,
+    setChecked,
+    meaningCleared,
+    drillCleared,
+    pendingScore,
+    setPendingScore,
+    resetFlags,
+    clearDrill,
+    clearMeaningGate,
+  } = useStudyCardUi()
   /** 本轮加练 / 重练的出场账本（每卡最多出场 3 次，跨重练保留）。 */
   const [extraRound, setExtraRound] = useState<ExtraRound>(emptyExtraRound)
   /** 本轮总数（进度分母）——开始时冻结；忘记/模糊只加练，不撑大它。 */
@@ -125,21 +132,6 @@ export function useStudySession(params: UseStudySessionParams) {
   })
   /** 收尾「重练忘记的」：也按加练处理，标过不认识的词要先选释义。 */
   const [retrying, setRetrying] = useState(false)
-  /** 本卡是否已经通过「选中文释义」这一关（换卡/评分时重置）。 */
-  const [meaningCleared, setMeaningCleared] = useState(false)
-  /** 本卡是否已完成「强制锤炼」（完成才允许评分） */
-  const [drillCleared, setDrillCleared] = useState(false)
-  /**
-   * 重学卡上「押后」的评分：用户点了认识/模糊/忘记了，但这一卡还没过锤炼。
-   *
-   * 锤炼是**评分门禁**，不是查看门禁（2026-10-24 改）：摊开释义只是「看」，
-   * 不该被劫持进锤炼（用户报「点显示释义就直接进锤炼」）；真正要拦的是**评分那一刻**——
-   * 重学卡先做一道题（拼写 / 选义 / 搭配），过了才把这次评分落库。
-   *
-   * 押后而不是直接拦：用户点完「认识」看到的是锤炼板，过完自动按他点的那个分落库，
-   * 不用再点一次；也避免「拦下了但没记住他想按哪个」的尴尬。
-   */
-  const [pendingScore, setPendingScore] = useState<{ grade: ReviewGrade; advance: boolean } | null>(null)
   /**
    * 学习模式「4 条释义」那一关的状态（做题 / 揭示 / 等待下一词）。
    * 定义在 `resetCardUi` 之后也没关系：换卡时通过这个 ref 调它的 `reset`。
@@ -149,9 +141,11 @@ export function useStudySession(params: UseStudySessionParams) {
   const spellGateResetRef = useRef<() => void>(() => {})
   /** 复习模式三键的待定 / 已判状态；换卡时经这个 ref 清掉。 */
   const reviewResetRef = useRef<() => void>(() => {})
+  /** `finishGroup` 由 `useStudySequence` 提供；这里存引用给 `spellingRound.onDone` 用。 */
+  const finishGroupRef = useRef<(() => void) | null>(null)
   /**
    * 组末拼写测试（学习模式每组结束）：本组全部词挨个拼一遍。
-   * 触发与推进由主 hook 管（`forward` 到组末就 `begin`），词的状态机在子 hook 里。
+   * 触发与推进在 `useStudySequence`，词的状态机在子 hook 里。
    */
   const spellingRound = useStudySpellingRound({
     onMiss: (item) => {
@@ -161,12 +155,6 @@ export function useStudySession(params: UseStudySessionParams) {
     },
     onDone: () => finishGroupRef.current?.(),
   })
-  /** 正在拼写测试的这一组的组末下标（拼完把 index 推到这里）。 */
-  const pendingGroupEndRef = useRef<number | null>(null)
-  /** 当前组在队列里的起点（组完成时前移；重开一轮归零）。 */
-  const groupCursorRef = useRef(0)
-  /** `finishGroup` 定义在下面（要用到 `resetCardUi`）；这里存引用给 `spellingRound.onDone` 用。 */
-  const finishGroupRef = useRef<(() => void) | null>(null)
 
   /** 当前卡：优先取词库最新（评分/编辑后立刻反映），队列快照兜底；组末拼写测试时换测试里的词。 */
   const card = spellingRound.card
@@ -185,8 +173,6 @@ export function useStudySession(params: UseStudySessionParams) {
   const meaningRequired =
     !!card && !relearning && needsMeaningCheck(card, { extra: isExtraCard, retrying }) && canQuizMeaning(card, library.items)
   const meaningGate = meaningRequired && !meaningCleared
-
-  const clearMeaningGate = useCallback(() => setMeaningCleared(true), [])
 
   /** 卡内编辑 / 两步删除（队列与进度仍由本 hook 推进）。 */
   const {
@@ -225,139 +211,60 @@ export function useStudySession(params: UseStudySessionParams) {
     paused: editOpen,
   })
 
-  const clearDrill = useCallback(() => {
-    setDrillCleared(true)
-    // 锤炼里已经考过「选词义」；不再让同一张卡接着做一遍复习门禁。
-    setMeaningCleared(true)
-  }, [])
-
-  /**
-   * 锤炼通过 → 把「押后」的评分落库（重学卡上先做一道题，过了才按他点的分记）。
-   *
-   * 走 ref 而不是直接调 `applyGrade`：`applyGrade` 定义在下面（它依赖 `advanceFrom` 等），
-   * 而且它内部要读 `drillCleared`——同一个 render 里 `setDrillCleared(true)` 还没生效，
-   * 直接调会被当成「还没过锤炼」再押一次。放进 effect 后，`drillCleared` 已经是新值。
-   */
-  const applyGradeRef = useRef<(g: ReviewGrade, opts?: { advance?: boolean; learnPass?: boolean }) => void>(() => {})
-  useEffect(() => {
-    if (!drillCleared || !pendingScore) return
-    const p = pendingScore
-    setPendingScore(null)
-    applyGradeRef.current(p.grade, { advance: p.advance })
-  }, [drillCleared, pendingScore])
-
-  /** 换卡时重置卡片 UI 状态。 */
+  /** 换卡时重置卡片 UI 状态（卡面开关 + 编辑草稿 + 各模式子状态）。 */
   const resetCardUi = useCallback(() => {
-    setRevealed(false)
-    setInput('')
-    setChecked(false)
+    resetFlags()
     setEditOpen(false)
     setDraft(null)
     setDelArmed(false)
-    setDrillCleared(false)
-    setMeaningCleared(false)
-    // 押后的评分只属于这一张卡：换卡 / 结束会话 / 重开一轮都必须丢掉，
-    // 否则下一轮第一张卡会被上一轮残留的 pendingScore 直接拦成锤炼，
-    // 过完还会把那个分记到新卡上（2026-10-24 修）。
-    setPendingScore(null)
     spellGateResetRef.current()
     learnResetRef.current()
     reviewResetRef.current()
-  }, [])
+  }, [resetFlags])
 
-  const resetSession = useCallback(() => {
-    setExtraRound(emptyExtraRound())
-    grading.resetLedger()
-    setRetrying(false)
-    groupCursorRef.current = 0
-    finishGroupRef.current = null
-    spellingRound.reset()
-    resetCardUi()
-  }, [resetCardUi, spellingRound, grading.resetLedger])
+  /** 队列推进 / 组末拼写 / 装轮 / 收尾重练：规则集中在 `useStudySequence`。 */
+  const {
+    load,
+    advanceFrom,
+    finishGroup,
+    back: backStep,
+    forward: forwardStep,
+    retryForgot,
+    canRetryForgot,
+  } = useStudySequence({
+    library,
+    queue,
+    setQueue,
+    index,
+    setIndex,
+    roundTotal,
+    setRoundTotal,
+    extraRound,
+    setExtraRound,
+    setRetrying,
+    effectiveGroupSize,
+    spellingRound,
+    grading,
+    flash,
+    resetCardUi,
+  })
+  finishGroupRef.current = finishGroup
 
-  /**
-   * 推进到下一张卡：到了「每组 N 词」的组末先停下把本组全部词拼一遍，
-   * 拼完才由 `finishGroup` 把指针推到组末（Spec 2026-10-22：学多少拼多少）。
-   *
-   * 两种模式共用：学习模式判完点「下一词」、复习模式评「认识」都会走到这里。
-   * 加练 / 重练排在 `roundTotal` 之后的卡不触发组末（它们不是这一组的新内容）。
-   */
-  const advanceFrom = useCallback(
-    (from: number) => {
-      if (!queue) return
-      if (from < roundTotal) {
-        const end = groupEndOf(from, roundTotal, effectiveGroupSize)
-        if (from + 1 >= end) {
-          pendingGroupEndRef.current = end
-          spellingRound.begin(queue.slice(groupCursorRef.current, end))
-          return
-        }
-      }
-      resetCardUi()
-      setIndex(from + 1)
-    },
-    [queue, roundTotal, effectiveGroupSize, spellingRound, resetCardUi],
-  )
-
-  /**
-   * 拼写判定的落库与记账（判错卡的状态机在 `hooks/useStudySpellGate`）。
-   * 不做「再试一次」：拼写是硬门槛，允许反复输入等于把判断变成抄写。
-   *
-   * - 立刻按「忘记」写 SRS（`relearn` +1，进入重学）并打「不认识」标签；
-   * - 本轮把它重排到队尾（仍受每卡 3 次上限约束），揭示释义后强制走完整锤炼（拼写 → 选义 → 搭配）；
-   * - 在用户确认前锁住切卡 / 退出，避免拼错后直接略过。
-   */
-  const spellGate = useStudySpellGate({
+  /** 拼写判卷 / 确认 / 锤炼拼错：接线在 `useStudySpelling`。 */
+  const { spellMiss, resetSpellGate, ackSpellMiss, checkSpelling, applySpellingMiss } = useStudySpelling({
     active: !!queue && !!card,
     card,
-    judge: (typed: string) => {
-      const cur = card
-      if (!cur || !queue) return { requeued: false, word: typed, meaning: null }
-      // 写库 + 记账 + 本轮重排，都在 grading 里（和正常评分同一本账）
-      const requeued = grading.recordSpellingMiss(cur)
-      grading.showGradeInfo('拼写错误 · 判为不认识 · 已从零重学', 2000)
-      flash('拼写错误，已判为「不认识」：这个词会从零重学')
-      setChecked(true)
-      setRevealed(false)
-      return { requeued, word: cur.word, meaning: displayMeaning(cur) || null }
-    },
+    queue,
+    grading,
+    flash,
+    input,
+    checked,
+    setChecked,
+    setRevealed,
+    resetCardUi,
+    setIndex,
   })
-  const { spellMiss } = spellGate
-  spellGateResetRef.current = spellGate.reset
-
-  /** 确认拼写判错，进入下一张卡（这个词已重排在队尾）。 */
-  const ackSpellMiss = useCallback(() => {
-    if (!spellMiss) return
-    spellGate.ack()
-    resetCardUi()
-    setIndex((i) => i + 1)
-  }, [spellMiss, spellGate, resetCardUi])
-
-  /** 拼写模式的「检查」：对 → 解锁评分；错 → 立即判不认识（不提供第二次输入）。 */
-  const checkSpelling = useCallback(() => {
-    if (!queue || !card || checked) return
-    setChecked(true)
-    spellGate.check(input)
-  }, [queue, card, checked, input, spellGate])
-
-  /** 锤炼板拼写步的拼错回调：与正面拼写同一条判定与落库路径。 */
-  const applySpellingMiss = useCallback((typed: string) => spellGate.check(typed), [spellGate])
-
-  /**
-   * 装一轮队列：重置账本 → 队列 → 分母（本轮总数，开始时冻结）→ 指针归零。
-   * 「背哪些词」的决定在 `useStudyStarts`，这里只负责装进会话。
-   */
-  const load = useCallback(
-    (items: VocabItem[], opts?: { retrying?: boolean }) => {
-      resetSession()
-      setQueue(items)
-      setExtraRound(beginExtraRound(items.map((it) => it.id)))
-      setRoundTotal(items.length)
-      setRetrying(!!opts?.retrying)
-      setIndex(0)
-    },
-    [resetSession],
-  )
+  spellGateResetRef.current = resetSpellGate
 
   /** 开一轮 / 换模式 / 换范围 / 换牌组：「背哪些词」的规则在 `useStudyStarts`。 */
   const { start, switchMode, switchScope, switchDeck, startArticleAll, startRelearn } = useStudyStarts({
@@ -378,138 +285,46 @@ export function useStudySession(params: UseStudySessionParams) {
     clear: () => setQueue(null),
   })
 
-  /**
-   * 真正落库的评分（对外入口是下面的 `grade`，会先处理「忘记确认」）。
-   * 账本（写库 / 今日新词 / 计时 / 计数 / 重排 / 提示）在 `grading.recordGrade`；
-   * 这里只负责「清卡片 UI」和「要不要推进」。
-   *
-   * `opts.advance = false`：只写库不跳下一张（学习模式判完要停在单词卡等「下一词」）。
-   * `opts.learnPass`：学习模式里把「这次有没有没看答案就选对」一起写进
-   * `ReviewState.meaningPasses`——两次 persist 会互相覆盖，所以必须一次算完。
-   */
-  const applyGrade = useCallback(
-    (g: ReviewGrade, opts?: { advance?: boolean; learnPass?: boolean }) => {
-      if (spellMiss || spellingRound.test) return
-      if (!queue) return
-      const queued = queue[index]
-      if (!queued) return
-      // 重学卡 + 还没过锤炼 → 这次评分**押后**：先进锤炼板，过了再落库。
-      // （锤炼是评分门禁，不是查看门禁——摊开释义不劫持，2026-10-24 改）
-      if (relearning && !drillCleared && !pendingScore) {
-        setPendingScore({ grade: g, advance: opts?.advance !== false })
-        return
-      }
-      grading.recordGrade(g, queued, opts?.learnPass)
-      setRevealed(false)
-      setInput('')
-      setChecked(false)
-      setEditOpen(false)
-      setDelArmed(false)
-      setDrillCleared(false)
-      setMeaningCleared(false)
-      if (opts?.advance !== false) {
-        // 复习模式「认识」直接推进：组末拼写挂在这条路上；
-        // 学习模式判完不推进（advance:false），组末由「下一词 / E」的 forward 触发。
-        if (mode === 'review') advanceFrom(index)
-        else setIndex((i) => i + 1)
-      }
-    },
-    [queue, index, grading.recordGrade, spellMiss, spellingRound.test, mode, advanceFrom, relearning, drillCleared, pendingScore],
-  )
-  applyGradeRef.current = applyGrade
-
-  /**
-   * 学习模式「4 条中文释义」这一关：做题 → 判定 → 揭示停留 → 进单词卡 → 等「下一词」。
-   *
-   * 判定规则在 `core/vocab/learnStep`，卡片状态机在 `hooks/useStudyLearnStep`；
-   * 这里只负责把它接上：落库仍走 `applyGrade`（`advance: false`——判完要停在单词卡，
-   * 由用户点「下一词」才推进，见 Spec）。
-   */
-  const learn = useStudyLearnStep({
+  /** 一张卡的答题与判定：评分 / 学习四选项 / 复习三键 / 锤炼门禁。 */
+  const {
+    grade,
+    pressGrade,
+    learn,
+    reviewStep,
+    drillReason,
+    drillOn,
+    learnPhase,
+    learnReveal,
+    learnGraded,
+    resetLearn,
+    resetReview,
+  } = useStudyAnswering({
     mode,
+    queue,
+    index,
     card,
     items: library.items,
-    active: !!queue && !!card,
-    judge: (g, learnPass) => applyGrade(g, { advance: false, learnPass }),
-    showCard: () => setRevealed(true),
+    relearning,
+    spellMiss,
+    spellingRoundActive: !!spellingRound.test,
+    spelling,
+    checked,
+    meaningGate,
+    drillAfter,
+    cardSeconds,
+    drillCleared,
+    pendingScore,
+    setPendingScore,
+    setRevealed,
+    setEditOpen,
+    setDelArmed,
+    resetFlags,
+    setIndex,
+    advanceFrom,
+    grading,
   })
-  learnResetRef.current = learn.reset
-
-  const { learnPhase, learnReveal, learnGraded } = learn
-
-  /** 卡停超时（本轮这一卡还没锤炼过）。「该不该真锤炼」还要看是不是已经判完停着，见下面的 `drillOn`。 */
-  const drillTimedOut = drillAfter > 0 && cardSeconds >= drillAfter && !drillCleared
-
-  /**
-   * 评分入口：选了「忘记了」就是确实忘了，直接按 again 落库（repetitions 归零、进入重学）。
-   * 不再弹「确实忘了 / 其实记得」的二次确认——用户点忘记已是明确表态，多一步是冗余。
-   */
-  const grade = useCallback(
-    (g: ReviewGrade) => {
-      applyGrade(g)
-    },
-    [applyGrade],
-  )
-
-  /**
-   * 复习模式「只显示单词 + 三键」（Spec 2026-10-22）。
-   *
-   * 认识直接换下一张（组末拼写核验）；模糊先不写库、摊卡等「下一词 / 记错了」；
-   * 忘记立刻判不认识并停卡。释义门禁 / 锤炼进行中不抢这条路。
-   *
-   * 拼写模式开着时，判卷前输入框还在用：`!(spelling && !checked)` 把这一小段让给输入框。
-   *
-   * `!relearning` 去掉了（2026-10-24）：重学卡的三键以前永远不可点（`ready` 为 false），
-   * 于是「点认识 → 落库」这条路被堵死；而现在重学卡的评分改由 `applyGrade` 里的
-   * 「押后 → 锤炼 → 过了落库」处理，三键必须能点出去。
-   */
-  const reviewStep = useStudyReviewStep({
-    mode,
-    active: !!queue && !!card,
-    ready: !meaningGate && !drillTimedOut && !learnPhase && !spellMiss && !(spelling && !checked),
-    judge: (g, advance) => {
-      applyGrade(g, { advance })
-    },
-    showCard: () => setRevealed(true),
-  })
-  reviewResetRef.current = reviewStep.reset
-
-  /**
-   * 本卡是否处于「强制锤炼」（超时 / 重学卡正要评分）。
-   *
-   * 规则在 `core/vocab/drill`：**已经判完停着等「下一词」的卡不锤炼**——
-   * 打分都落库了，再考一次也解锁不了什么，但会把「看一眼单词卡」顶掉
-   * （选错释义 → 判 again → 这词立刻进重学，点「继续」就会撞上重学分支）。
-   *
-   * `relearnScoring` 不是「摊开过释义」而是「**正要评分**」（2026-10-24 改）：
-   * 摊开释义是**看**（用户只想知道这词什么意思），锤炼是**考核**（拼写 + 选义 + 搭配）。
-   * 两者混在一起的后果：点一下「显示释义」整页就被锤炼接管，释义一帧都没露；
-   * 而且 `relearn` 标记来源极隐蔽（按一次 U「不认识」或 3「忘记了」就永久写上），
-   * 用户压根不记得这个词被标过，于是表现为「莫名其妙就进锤炼」。
-   *
-   * `cleared` 兜的是「本卡本轮已经锤炼完」：重学卡摊开过释义就一直为真，
-   * 过完面板会原地重开（2026-10-22 用户报「写完搭配正确也退不出去」）。
-   *
-   * 触发原因由 `core/vocab/drill` 的 `drillReason` 一起给出：界面据此显示
-   * 「超时锤炼」还是「重学补考」。两道门禁考的是同一套题，但来路是两件事
-   * （我停太久 / 这词忘过），标题不分开用户会以为是自己点错了。
-   */
-  const drillReason: DrillReason | null = getDrillReason({
-    active: !!queue && !!card,
-    spellMiss: !!spellMiss,
-    learnPhase,
-    parked: learnGraded || reviewStep.graded || reviewStep.fuzzy,
-    timedOut: drillTimedOut,
-    relearnScoring: !!pendingScore,
-    cleared: drillCleared,
-  })
-  const drillOn = drillReason !== null
-
-  /** 面板「认识 / 模糊 / 忘记了」按钮的入口：复习模式走三键状态机，其它模式走原来的评分。 */
-  const pressGrade = useCallback(
-    (g: ReviewGrade) => (mode === 'review' ? reviewStep.answer(g) : grade(g)),
-    [mode, reviewStep, grade],
-  )
+  learnResetRef.current = resetLearn
+  reviewResetRef.current = resetReview
 
   const close = useCallback(() => {
     // 拼错后必须先确认「判为不认识」，不给直接退出把这次判罚吞掉
@@ -520,31 +335,14 @@ export function useStudySession(params: UseStudySessionParams) {
     setQueue(null)
   }, [spellMiss, flash])
 
-  /** 回滚到上一个单词（不撤销已评分，只回看/再练）。 */
+  /** 拼错未确认时锁住导航；其余交给 `useStudySequence`。 */
   const back = useCallback(() => {
-    if (spellMiss) return
-    if (!queue || index <= 0) return
-    resetCardUi()
-    setIndex((i) => Math.max(0, i - 1))
-  }, [queue, index, resetCardUi, spellMiss])
+    if (!spellMiss) backStep()
+  }, [spellMiss, backStep])
 
-  /** 切到下一个单词（不评分，只切换）；组末会先做拼写测试。 */
   const forward = useCallback(() => {
-    if (spellMiss || spellingRound.test) return
-    if (!queue || index >= queue.length) return
-    advanceFrom(index)
-  }, [queue, index, spellMiss, spellingRound.test, advanceFrom])
-
-  /** 本组拼写全过：把 index 推到组末（下一组的头），若是最后一组就进入本轮小结。 */
-  const finishGroup = useCallback(() => {
-    const end = pendingGroupEndRef.current
-    if (end == null) return
-    pendingGroupEndRef.current = null
-    groupCursorRef.current = end
-    resetCardUi()
-    setIndex(end)
-  }, [resetCardUi])
-  finishGroupRef.current = finishGroup
+    if (!spellMiss) forwardStep()
+  }, [spellMiss, forwardStep])
 
   /** 标「不认识」：安排复习（按「忘记」重置，比模糊更狠）+ 打标签；**本轮不重排**，不增加本轮总数。 */
   const markUnknown = useCallback(() => {
@@ -555,31 +353,6 @@ export function useStudySession(params: UseStudySessionParams) {
     resetCardUi()
     setIndex((i) => i + 1)
   }, [queue, index, grading.recordUnknown, resetCardUi])
-
-  /** 收尾重练本轮点过「忘记了」的词（每轮只发起一次，已练满 3 次的不再进队）。 */
-  const retryForgot = useCallback(() => {
-    const ids = new Set(grading.getForgotIds())
-    const items = library.items.filter((it) => ids.has(it.id))
-    if (!items.length) return
-    const plan = planRetryForgot(extraRound, items.map((it) => it.id))
-    if (plan.blocked) {
-      flash('本轮已经重练过忘记的词了')
-      return
-    }
-    setExtraRound(plan.round)
-    if (!plan.ids.length) {
-      flash('没有可重练的词')
-      return
-    }
-    const keep = new Set(plan.ids)
-    const retryItems = items.filter((it) => keep.has(it.id))
-    grading.resetLedger()
-    setQueue(retryItems)
-    setRoundTotal(retryItems.length)
-    setRetrying(true)
-    setIndex(0)
-    resetCardUi()
-  }, [library.items, extraRound, flash, resetCardUi, grading.resetLedger, grading.getForgotIds])
 
   /** 背单词的键盘映射集中在 `hooks/useStudyHotkeys`（面板按钮上的 kbd 与它一一对应）。 */
   useStudyHotkeys(
@@ -647,7 +420,7 @@ export function useStudySession(params: UseStudySessionParams) {
     delArmed,
     forgotCount: grading.forgotCount,
     /** 本轮还能不能点「重练忘记的」（每轮只发起一次）。 */
-    canRetryForgot: !extraRound.retried,
+    canRetryForgot,
     roundTotal,
     extraCount: grading.extraCount,
     card,
