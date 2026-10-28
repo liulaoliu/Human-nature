@@ -4,9 +4,11 @@ import {
   buildGoldenAssembly,
   buildGoldenCloze,
   buildGoldenFillRounds,
+  buildGoldenSentenceFillRounds,
   checkGoldenAssembly,
   checkGoldenFill,
   checkGoldenRecall,
+  goldenClozeKey,
   goldenFillAllCorrect,
   type GoldenRecallResult,
 } from '../../core/goldenDrill'
@@ -104,6 +106,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     toggleSentence,
     setDedupe,
     setBlankUnit,
+    setSentenceFill,
+    setExamAfter,
   } = useGoldenLesson({
     doc,
     articleId,
@@ -117,14 +121,27 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const currentSentence = current ? bySentence.get(current.id) ?? null : null
   const targets = lesson && current ? goldenTargetsFor(lesson, current.id) : []
   const blankUnit = lesson?.options?.blankUnit ?? 'word'
+  const sentenceFill = lesson?.options?.sentenceFill !== false
   const fillRounds = useMemo(() => {
     if (!currentSentence) return []
-    if (blankUnit === 'target') {
-      const c = buildGoldenCloze(currentSentence.text, targets)
-      return c ? [{ targetIndex: 0, wordFrom: 0, cloze: c }] : []
-    }
-    return buildGoldenFillRounds(currentSentence.text, targets)
-  }, [currentSentence, targets, blankUnit])
+    const targetRounds =
+      blankUnit === 'target'
+        ? (() => {
+            const c = buildGoldenCloze(currentSentence.text, targets)
+            return c ? [{ targetIndex: 0, wordFrom: 0, cloze: c, scope: 'target' as const }] : []
+          })()
+        : buildGoldenFillRounds(currentSentence.text, targets)
+    if (!sentenceFill) return targetRounds
+    // 整句渐进轮接在语言点轮后面；同一组空只练一次（例如目标词轮已经出现过）。
+    const seen = new Set(targetRounds.map((r) => goldenClozeKey(r.cloze)))
+    const extra = buildGoldenSentenceFillRounds(currentSentence.text, targets).filter((r) => {
+      const key = goldenClozeKey(r.cloze)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    return [...targetRounds, ...extra]
+  }, [currentSentence, targets, blankUnit, sentenceFill])
   const fillRoundCount = fillRounds.length
   const currentFillRound = fillRounds[Math.min(fillRound, Math.max(0, fillRoundCount - 1))] ?? null
   const cloze = currentFillRound?.cloze ?? null
@@ -511,6 +528,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     view,
     setView,
     doc,
+    articleId,
+    setDoc,
+    setPendingSave,
     lesson,
     ordered,
     recallList,
@@ -557,6 +577,9 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setDedupe,
     blankUnit,
     setBlankUnit,
+    sentenceFill,
+    setSentenceFill,
+    setExamAfter,
     startDrill,
     startRecall,
     nextSentence,

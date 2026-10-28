@@ -68,7 +68,8 @@ types ← core ← adapters ← reader
 | 回译（中译英）提示词 / 批改解析 / 原句对照 | `src/core/backTranslate.ts` | 原句只是参考，不是唯一答案；专名拼写差异 `deduct:false`。存档自包含，别在视图里另写一套解析 |
 | D老师小课堂：金句候选 / 目标抽取 / 课程构建 / 统计 / Markdown | `src/core/golden.ts` + `goldenProgress.ts` + `goldenMarkdown.ts` | 纯函数；内容存 `SavedArticle.golden`，进度存 `LearningData.goldenDrills`；每句目标上限 `clamp(词数, 6, 20)`（`goldenTargetLimit`），短句少、长句最多 20 |
 | D老师小课堂：导入校验 / 合并 / 改正文失效 | `src/core/goldenParse.ts` | `normalizeGoldenLesson` / `mergeGoldenIntoArticle` / `pruneGoldenLesson` 只在这里；AI、备份、文章包共用 |
-| D老师小课堂：挖空 / 拼句 / 逆向默写判分 | `src/core/goldenDrill.ts` | 填空默认一个词一个空，并按 `keep up with → with → up with → keep up with` 细分轮次；拼句仍按语言点块 |
+| D老师小课堂：挖空 / 拼句 / 逆向默写判分 | `src/core/goldenDrill.ts` | 填空默认一个词一个空，并按 `keep up with → with → up with → keep up with` 细分轮次；随后追加「一个词 → 全部目标词 → 分句/整句」的复述轮（长句最后一轮只挖目标所在分句）；拼句仍按语言点块 |
+| D老师小课堂：仿写考试 | `src/core/goldenExam.ts` + `src/reader/hooks/useGoldenExam.ts` | 完成 5/10 句后解锁；本地先出题，AI 可重出题并批改；题存 `GoldenLesson.exam`，成绩存 `WritingRecord.source='goldenExam'`；AI 结果必须过 `normalizeGoldenExam`（句子 id / 范句 / mustUse 校验） |
 | D老师小课堂：内容 / 选句 | `src/reader/hooks/useGoldenLesson.ts` | 本地推导、候选、统计、`progressFor`、写回 `doc.golden`；不碰视图状态 |
 | D老师小课堂：练习状态机 | `src/reader/hooks/useGoldenDrill.ts` | 当前句 / 细碎轮次 / 待回顾 / 进度写入；会话位置走 `goldenSession.ts` |
 | D老师小课堂：快捷键 | `src/reader/hooks/useGoldenHotkeys.ts` | Enter 主操作、Ctrl+Enter 默写提交、H/R/S/X/Q/E/Esc；输入框只放行提交键 |

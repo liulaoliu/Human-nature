@@ -32,6 +32,8 @@ export default function WritingPanel({
   onLoadRecord,
 }: WritingPanelProps) {
   const [historyOpen, setHistoryOpen] = useState(false)
+  // 仿写考试的记录由金句课自己回看；这里只列普通仿写，避免两套题目混在一起。
+  const rows = history.filter((rec) => rec.source !== 'goldenExam')
 
   return (
     <div className="study writing">
@@ -42,7 +44,7 @@ export default function WritingPanel({
         <button className="primary" onClick={onFeedback} disabled={!task || !text.trim()}>
           ② 批改
         </button>
-        <button onClick={() => setHistoryOpen((v) => !v)}>历史（{history.length}）</button>
+        <button onClick={() => setHistoryOpen((v) => !v)}>历史（{rows.length}）</button>
       </div>
 
       <div className="write-block">
@@ -110,15 +112,15 @@ export default function WritingPanel({
       {historyOpen && (
         <div className="write-history">
           <div className="bar">
-            <span className="muted">练习历史（{history.length}）</span>
-            {history.length > 0 && (
+            <span className="muted">练习历史（{rows.length}）</span>
+            {rows.length > 0 && (
               <button className="danger" onClick={onClearHistory}>
                 清空
               </button>
             )}
           </div>
-          {history.length ? (
-            history.map((rec, i) => (
+          {rows.length ? (
+            rows.map((rec, i) => (
               <button
                 key={i}
                 className="write-hist-row"

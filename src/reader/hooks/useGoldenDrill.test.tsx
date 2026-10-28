@@ -131,6 +131,19 @@ describe('useGoldenDrill', () => {
     expect(h.result.current.records[0].fillFirst).toBeFalsy()
   })
 
+  it('整句渐进开关：关掉只剩语言点轮，打开追加词→目标→整句', () => {
+    const h = setup()
+    act(() => h.result.current.api.openGolden())
+    act(() => h.result.current.api.startDrill())
+    act(() => h.result.current.api.setBlankUnit('target'))
+    act(() => h.result.current.api.setSentenceFill(false))
+    act(() => h.result.current.api.beginFill())
+    expect(h.result.current.api.fillRoundCount).toBe(1)
+    act(() => h.result.current.api.setSentenceFill(true))
+    expect(h.result.current.api.fillRoundCount).toBeGreaterThan(1)
+    expect(h.result.current.api.sentenceFill).toBe(true)
+  })
+
   it('没完成遣词造句不让进逆向回顾', () => {
     const h = setup()
     act(() => h.result.current.api.openGolden())

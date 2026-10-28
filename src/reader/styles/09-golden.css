@@ -414,6 +414,34 @@
   margin-left: auto;
 }
 
+.golden-exam-task {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.golden-exam-input {
+  width: 100%;
+  margin: 10px 0;
+}
+
+.golden-exam-paste {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--panel);
+}
+
+.golden-exam-paste summary {
+  cursor: pointer;
+  color: var(--muted);
+}
+
+.golden-exam-paste textarea {
+  width: 100%;
+  margin-top: 8px;
+}
+
 @media (max-width: 720px) {
   .golden-body {
     padding: 12px 12px 32px;

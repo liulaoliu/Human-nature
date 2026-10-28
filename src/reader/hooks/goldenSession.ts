@@ -1,4 +1,4 @@
-export const GOLDEN_VIEWS = ['home', 'plan', 'drill', 'recall', 'summary', 'bank'] as const
+export const GOLDEN_VIEWS = ['home', 'plan', 'drill', 'recall', 'summary', 'bank', 'exam'] as const
 export type GoldenView = (typeof GOLDEN_VIEWS)[number]
 
 export interface GoldenSession {

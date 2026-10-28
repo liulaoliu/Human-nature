@@ -172,6 +172,22 @@ export function useGoldenLesson({
     [lesson, persistLesson],
   )
 
+  const setSentenceFill = useCallback(
+    (sentenceFill: boolean) => {
+      if (!lesson) return
+      persistLesson({ ...lesson, options: { ...lesson.options, sentenceFill } })
+    },
+    [lesson, persistLesson],
+  )
+
+  const setExamAfter = useCallback(
+    (examAfter: 5 | 10) => {
+      if (!lesson) return
+      persistLesson({ ...lesson, options: { ...lesson.options, examAfter } })
+    },
+    [lesson, persistLesson],
+  )
+
   return {
     lesson,
     ordered,
@@ -184,5 +200,7 @@ export function useGoldenLesson({
     toggleSentence,
     setDedupe,
     setBlankUnit,
+    setSentenceFill,
+    setExamAfter,
   }
 }

@@ -54,6 +54,22 @@ export default function GoldenPlan({ api }: { api: GoldenPlanApi }) {
           />
           填空按词拆
         </label>
+        <label className="check-inline" title="语言点填空后追加「一个词 → 目标词 → 分句/整句」的复述轮；长句最后一轮只挖一个分句">
+          <input
+            type="checkbox"
+            checked={lesson?.options?.sentenceFill !== false}
+            onChange={(e) => api.setSentenceFill(e.target.checked)}
+          />
+          整句渐进
+        </label>
+        <label className="check-inline" title="完成 5 句即可考；勾上则完成 10 句再解锁仿写考试">
+          <input
+            type="checkbox"
+            checked={lesson?.options?.examAfter === 10}
+            onChange={(e) => api.setExamAfter(e.target.checked ? 10 : 5)}
+          />
+          10 句后再考
+        </label>
       </div>
       <div className="golden-cand-list">
         {api.candidates.map((c) => {

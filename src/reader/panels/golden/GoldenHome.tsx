@@ -1,14 +1,16 @@
-import type { GoldenBankActions, GoldenHomeApi } from './types'
+import type { GoldenBankActions, GoldenExamApi, GoldenHomeApi } from './types'
 
 export default function GoldenHome({
   api,
   onGenerate,
   bank,
+  exam,
   onOpenBank,
 }: {
   api: GoldenHomeApi
   onGenerate?: () => void
   bank?: GoldenBankActions
+  exam?: GoldenExamApi
   onOpenBank: () => void
 }) {
   const selected = api.lesson?.selected.length ?? 0
@@ -36,6 +38,28 @@ export default function GoldenHome({
           </span>
           <span className="golden-step-go">→</span>
         </button>
+        {exam && (
+          <button
+            className="golden-step"
+            onClick={() => {
+              exam.start()
+              api.setView('exam')
+            }}
+            disabled={!exam.unlocked}
+            title={exam.unlocked ? '用学过的句型仿写新句子，AI 批改' : `完成 ${exam.after} 句遣词造句后解锁`}
+          >
+            <span className="golden-step-no">🎓</span>
+            <span>
+              <b>仿写考试</b>
+              <small>
+                {exam.unlocked
+                  ? `中文提示 + 目标结构，写新句子（已完成 ${exam.completedCount} 句）`
+                  : `完成 ${exam.after} 句解锁（当前 ${exam.completedCount} 句）`}
+              </small>
+            </span>
+            <span className="golden-step-go">→</span>
+          </button>
+        )}
         <button
           className="golden-step"
           onClick={() => api.startRecall()}

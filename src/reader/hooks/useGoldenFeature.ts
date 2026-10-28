@@ -1,8 +1,12 @@
 import type { GoldenPanelActions } from '../panels/GoldenPanel'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import type { SavedArticle } from '../../types/document'
+import type { ActivityCat } from '../../core/activity'
+import type { WritingRecord } from '../../core/writing'
+import type { Dispatch, SetStateAction } from 'react'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
+import { useGoldenExam } from './useGoldenExam'
 import type { useGoldenDrill } from './useGoldenDrill'
 
 interface GoldenFeatureArgs {
@@ -14,6 +18,9 @@ interface GoldenFeatureArgs {
   savedId: string | null
   saved: SavedArticle[]
   records: GoldenDrillRecord[]
+  writingHistory: WritingRecord[]
+  setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  recordActivity: (cat: ActivityCat, n?: number) => void
   download: (name: string, data: string, mime: string) => void
   flash: (message: string) => void
   onGenerate: () => void
@@ -33,11 +40,27 @@ export function useGoldenFeature({
   savedId,
   saved,
   records,
+  writingHistory,
+  setWritingHistory,
+  recordActivity,
   download,
   flash,
   onGenerate,
   startWriting,
 }: GoldenFeatureArgs) {
+  const exam = useGoldenExam({
+    doc,
+    lesson: golden.lesson,
+    articleId: golden.articleId,
+    articleTitle,
+    records,
+    writingHistory,
+    setWritingHistory,
+    setDoc: golden.setDoc,
+    setPendingSave: golden.setPendingSave,
+    flash,
+    recordActivity,
+  })
   const bank = useGoldenBank({
     saved,
     savedId,
@@ -71,7 +94,8 @@ export function useGoldenFeature({
       onPrint: bank.printBank,
     },
     onPrintLesson: bank.printLesson,
+    exam,
   }
 
-  return { bank, actions }
+  return { bank, actions, exam }
 }

@@ -327,7 +327,7 @@ export default function SessionHost({
           onFeedback={() => void writing.copyFeedback()}
           onModelChange={writing.setModel}
           onTextChange={writing.setText}
-          onClearHistory={() => writing.setHistory([])}
+          onClearHistory={() => writing.setHistory((h) => h.filter((r) => r.source === 'goldenExam'))}
           onLoadRecord={writing.loadRecord}
         />
       )}
