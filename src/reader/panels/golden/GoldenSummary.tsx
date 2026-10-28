@@ -59,7 +59,7 @@ export default function GoldenSummary({
               <div className="golden-summary-head">
                 <b>{s.id}</b>
                 {isMastered(rec) ? <span className="golden-good">已掌握</span> : <span className="muted">待掌握</span>}
-                <button onClick={() => sentence && onSpeak(sentence.text)}>🔊</button>
+                <button onClick={() => sentence && onSpeak(sentence.text)} aria-label="播放本句">🔊</button>
               </div>
               <div className="golden-en">{sentence?.text ?? ''}</div>
               {(s.zh || sentence?.translation) && <div className="muted">{s.zh ?? sentence?.translation}</div>}

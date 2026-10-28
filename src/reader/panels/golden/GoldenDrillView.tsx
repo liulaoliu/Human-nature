@@ -71,7 +71,7 @@ export default function GoldenDrillView({
         {phase === 'fill' && api.fillRoundCount > 0 && (
           <span className="muted">第 {api.fillRound + 1}/{api.fillRoundCount} 组</span>
         )}
-        <button onClick={api.speakCurrent} title="播放整句">🔊</button>
+        <button onClick={api.speakCurrent} title="播放整句" aria-label="播放整句">🔊</button>
         <button onClick={api.restartSentence} title="重开本轮首次记录；已掌握不会降级">再练一次 <kbd>X</kbd></button>
       </div>
       {phase === 'preview' && (

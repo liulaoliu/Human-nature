@@ -140,6 +140,11 @@ describe('GoldenPanel', () => {
     expect(onExportMarkdown).toHaveBeenCalled()
   })
 
+  it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {
+    render(<GoldenPanel api={drillApi()} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
+    expect(screen.getByRole('button', { name: '播放整句' })).toBeTruthy()
+  })
+
   it('填空本组正确后检查按钮禁用，Enter 留给继续下一组', () => {
     const api = drillApi({ fillRoundPassed: true })
     render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)

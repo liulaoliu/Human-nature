@@ -13,7 +13,7 @@ export default function GoldenRecallView({ api, onSpeak }: { api: GoldenRecallAp
         <b>{api.reviewMode ? '待回顾' : '逆向回顾'}</b>
         <span className="muted">第 {api.recallIndex + 1} / {api.recallList.length} 句</span>
         {isMastered(rec) && <span className="golden-good">已掌握</span>}
-        <button onClick={() => onSpeak(sentence.text)}>🔊</button>
+        <button onClick={() => onSpeak(sentence.text)} aria-label="播放本句">🔊</button>
         <button onClick={api.restartRecallSentence} title="重开这一句的首次记录，回到填空/拼句/小结">再练一次本句 <kbd>X</kbd></button>
       </div>
       <div className="golden-recall-zh">{cur.zh || sentence.translation || '（这句没有中文提示，直接回忆原句）'}</div>
