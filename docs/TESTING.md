@@ -232,7 +232,7 @@
    SQLite v9 加 `golden_drill_records`；`v7` 迁移里 `saveDerivedBaseline` 会读整份学习记录，
    所以 v7 块必须先把 v8/v9 表建好，否则老库打开报 `no such table`。
    AI 目标必须逐字出现在原句；编造/重叠/重复的片段在 `normalizeGoldenTargets` 丢弃。
-   测试钉住：`core/golden` / `goldenProgress` / `goldenAi` / `useGoldenDrill` / `useExport` 的
+   测试钉住：`core/golden` / `goldenProgress` / `goldenAi` / `useGoldenDrill` / `exportApi` 的
    “旧备份不冲掉金句课”“AI 只返回部分句子”“去重开关可关”“首答错重练不降级已掌握”。
 36. **等元素出现 ≠ 等原生事件监听挂上**（2026-10-28）。`FishLayer` 的 `wheel` 监听挂在
    `url` 就绪后的 effect 里；测试只 `waitFor(img)` 时，并行门禁下偶尔第一次滚轮被吞
@@ -303,7 +303,7 @@
 `StudyDrill`（强制锤炼选词义键盘）、`SpeedReadSentence`（阅读/揭示/拷打三态）、`SpeedReadBasket`（清单增删与结算））。
 **会话 hook 已有**：`useQuizSession`（出题/判分/错题/卸载定时器）、`useDictation`（整句/判分/错题/卸载）、
 `useSpeaking`（服务端起播/回退/停声）、`useAiPack`（status 探测/空待办/导出/坏结果）、
-`useExport`（导入覆盖/坏文件/合并幂等/打印拦截）、`useBatchQueue`（坏数据守卫/按 lemma 去重/按文章持久化）、
+`exportApi`（导入覆盖/坏文件/合并幂等/打印拦截）、`useBatchQueue`（坏数据守卫/按 lemma 去重/按文章持久化）、
 `usePregenerate`（缓存命中/只补缺/取消/换音色失效）、`useArticleBootstrap`（迁移失败不挡列表/目录失败标记）、
 `useReaderDerived`（派生统计簇：会话/背词/到期/候选/待选过滤，固定 `now` 钉住输出）、
 `useVocabEdits`（批量直入 / 手动加词 / 词组入库 / 移出：坏输入、去重、连续写不覆盖）、

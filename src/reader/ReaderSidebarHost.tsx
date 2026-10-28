@@ -5,7 +5,7 @@ import type { useAiPack } from './hooks/useAiPack'
 import type { AiTasksApi } from './hooks/aiTasks'
 import type { useDictTools } from './hooks/useDictTools'
 import type { useDictation } from './hooks/useDictation'
-import type { useExport } from './hooks/useExport'
+import type { ExportApi } from './hooks/exportApi'
 import type { useQuickSession } from './hooks/useQuickSession'
 import type { useQuizSession } from './hooks/useQuizSession'
 import type { useStudySession } from './hooks/useStudySession'
@@ -89,7 +89,7 @@ export interface ReaderSidebarHostProps {
   // ---- AI / 工具 / 导出（整包传入） ----
   ai: ReturnType<typeof useAiPack>
   tasks: AiTasksApi
-  exporter: ReturnType<typeof useExport>
+  exporter: ExportApi
   dictTools: ReturnType<typeof useDictTools>
   dictReady: boolean
   tatoeba: { ready: boolean; enrichExamples: () => void }

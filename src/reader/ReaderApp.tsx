@@ -27,7 +27,7 @@ import { useBatchQueue } from './hooks/useBatchQueue'
 import { useReaderDerived } from './hooks/useReaderDerived'
 import { useReaderSpeech } from './hooks/useReaderSpeech'
 import { useArticleBootstrap } from './hooks/useArticleBootstrap'
-import { useExport } from './hooks/useExport'
+import { createExport } from './hooks/exportApi'
 import { useSelection } from './hooks/useSelection'
 import { useDictionary } from './hooks/useDictionary'
 import { useDictTools } from './hooks/useDictTools'
@@ -432,8 +432,8 @@ export default function ReaderApp() {
   })
   const { enrichExamplesFromTatoeba } = ui
 
-  /** 导出 / 打印 / 备份；逻辑在 hooks/useExport。 */
-  const exporter = useExport({
+  /** 导出 / 打印 / 备份；逻辑在 hooks/exportApi。 */
+  const exporter = createExport({
     articles,
     library,
     saved,

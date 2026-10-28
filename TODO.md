@@ -262,7 +262,7 @@
              `core/writing.countWritesOnDay` + 2 条 core 测试。`ReaderApp` 2424 → 2377 行，
              基线同步降到 2377；`npm run gates` 全绿）
       2. [x] **侧栏宿主**（约 -130 行）：新增 `ReaderSidebarHost`，接收 hook API 整包（`aiPack` / `aiTasks` /
-             `useExport` / `useDictTools` / learning 等）与少量状态 setter，在宿主里拼出
+             `exportApi` / `useDictTools` / learning 等）与少量状态 setter，在宿主里拼出
              `overview` / `mastery` / `stats` / `pick` / `vocab` 五组 props；`ReaderApp` 只传 `sideTab` + 宿主 props。
              先给宿主挂一个「假 API → 断言分组对象字段」的组件测试。验收：`ReaderApp` 掉 ~130 行。
              （已完成：`ReaderSidebarHost.tsx` + 10 条组件测试（假 API 映射 / 派生字段 / 会话按钮顺序）；
@@ -309,8 +309,8 @@
       `tool/check_god_file.mjs` 的 `BASELINE`。全部切完再回头核对 ≤1200 的目标，若仍不达标继续找新的宿主边界。
 - [x] **面板瘦身**：`SpeedReadPanel`（779 → 597）/ `StudyPanel`（746 → 512）拆「渲染块」与「会话状态机」
       （`StudyDrill` 抽出强制锤炼；速读拆出 `SpeedReadSentence` / `SpeedReadBasket` + `SpeedReadDone`；新增 12 条组件测试）
-- [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`useExport` 各补「初始/成功/失败/卸载」
-      （共 36 条：`useExport` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；
+- [x] **补 hook 测试**：`useQuizSession`、`useDictation`、`useSpeaking`、`useAiPack`、`exportApi` 各补「初始/成功/失败/卸载」
+      （共 36 条：`exportApi` 8、`useQuizSession` 8、`useDictation` 8、`useSpeaking` 6、`useAiPack` 6；
       定时器类 hook 用 `clearTimeout` 断言卸载清理，纯回调 hook 无卸载副作用）
 - [x] **ReaderApp 集成测试**：假仓储挂载，断言自动补全只写一次、导入 AI 结果不重不漏
       （`ReaderApp.integration.test.tsx`：mock 仓储/词典/例句加载，恢复上次文章 → 补全写一次；
