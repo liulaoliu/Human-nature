@@ -148,6 +148,8 @@ export interface MergeGoldenOptions {
   preferAI?: boolean
   /** 填空单位；用户本课设置优先。 */
   blankUnit?: 'word' | 'target'
+  /** 整句渐进开关；用户本课设置优先。 */
+  sentenceFill?: boolean
 }
 
 /**
@@ -185,6 +187,7 @@ export function mergeGoldenLessons(
   const valid = new Set(merged.map((s) => s.id))
   const preferred = opts.preferAI ? ai.selected : local.selected.length ? local.selected : ai.selected
   const selected = preferred.filter((id) => valid.has(id))
+  const exam = ai.exam?.length ? ai.exam : local.exam
   const lesson: GoldenLesson = {
     version: 1,
     source: 'merged',
@@ -193,10 +196,13 @@ export function mergeGoldenLessons(
     sentences: merged,
     selected: selected.length ? selected : merged.map((s) => s.id),
     aiSelected: ai.selected.filter((id) => valid.has(id)),
+    ...(exam?.length ? { exam } : {}),
     options: {
       dedupe: opts.dedupe ?? local.options?.dedupe ?? false,
       pick: opts.preferAI ? 'ai' : local.options?.pick ?? 'manual',
       blankUnit: opts.blankUnit ?? local.options?.blankUnit ?? 'word',
+      sentenceFill: opts.sentenceFill ?? local.options?.sentenceFill ?? true,
+      ...(local.options?.examAfter ? { examAfter: local.options.examAfter } : {}),
     },
     updatedAt: new Date().toISOString(),
   }

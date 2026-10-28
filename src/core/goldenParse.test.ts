@@ -48,6 +48,31 @@ describe('normalize / prune golden lesson', () => {
     expect(pruneGoldenLesson(lesson, [{ id: 's1', text: 'Completely different.' }])).toBeUndefined()
   })
 
+  it('仿写考试题随课程解析；改正文后对不上的题被 prune', () => {
+    const withExam = normalizeGoldenLesson(
+      {
+        ...raw,
+        options: { examAfter: 10 },
+        exam: [
+          {
+            sentenceId: 's1',
+            task: '用这个结构写一句新句子。',
+            model: sentences[0].text,
+            mustUse: ['in response to', 'invented phrase'],
+            rubric: [{ dimension: '结构运用', weight: 100 }],
+          },
+          { sentenceId: 's404', task: '坏题' },
+        ],
+      },
+      sentences,
+    )
+    expect(withExam?.options?.examAfter).toBe(10)
+    expect(withExam?.exam).toHaveLength(1)
+    expect(withExam?.exam?.[0].mustUse).toEqual(['in response to'])
+    expect(pruneGoldenLesson(withExam!, sentences)?.exam).toHaveLength(1)
+    expect(pruneGoldenLesson(withExam!, [{ id: 's1', text: 'Completely different.' }])).toBeUndefined()
+  })
+
   it('drillKey 对文本/目标敏感', () => {
     const a = goldenDrillKey('abc', [{ en: 'a', kind: 'word' }])
     const b = goldenDrillKey('abc', [{ en: 'a', kind: 'word' }])

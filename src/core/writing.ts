@@ -227,6 +227,10 @@ export interface WritingRecord {
   feedback: WritingFeedback
   /** 当时的仿写任务（题目 + rubric），可能没有 */
   task?: ImitationTask
+  /** 普通仿写缺省；金句课仿写考试单独标记，历史可分流 */
+  source?: 'writing' | 'goldenExam'
+  /** 金句课考试题 id（source = goldenExam 时） */
+  examId?: string
 }
 
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */

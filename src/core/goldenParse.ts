@@ -1,4 +1,5 @@
 import { isObject, normalizeGoldenTargets, str, strList, type GoldenTextMeta } from './golden'
+import { normalizeGoldenExam, pruneGoldenExam } from './goldenExam'
 import type { GoldenLesson, GoldenPickMode, GoldenSection, GoldenSentence } from '../types/document'
 
 /**
@@ -51,10 +52,16 @@ export function normalizeGoldenLesson(raw: unknown, sentences: GoldenTextMeta[])
   const rawBlankUnit = isObject(raw.options) ? raw.options.blankUnit : undefined
   const blankUnit: 'word' | 'target' | undefined =
     rawBlankUnit === 'target' ? 'target' : rawBlankUnit === 'word' ? 'word' : undefined
+  const rawSentenceFill = isObject(raw.options) ? raw.options.sentenceFill : undefined
+  const sentenceFill = rawSentenceFill === false ? false : rawSentenceFill === true ? true : undefined
+  const examAfter: 5 | 10 | undefined = isObject(raw.options) && raw.options.examAfter === 10 ? 10 : undefined
+  const exam = normalizeGoldenExam(raw.exam, sentences, 'ai')
   const options: GoldenLesson['options'] = {
     dedupe: isObject(raw.options) ? raw.options.dedupe === true : false,
     ...(pick ? { pick } : {}),
     ...(blankUnit ? { blankUnit } : {}),
+    ...(sentenceFill === undefined ? {} : { sentenceFill }),
+    ...(examAfter ? { examAfter } : {}),
   }
   return {
     version: 1,
@@ -64,6 +71,7 @@ export function normalizeGoldenLesson(raw: unknown, sentences: GoldenTextMeta[])
     sentences: out,
     selected: selected.length ? selected : out.map((s) => s.id),
     ...(aiSelected.length ? { aiSelected } : {}),
+    ...(exam.length ? { exam } : {}),
     options,
     ...(str(raw.updatedAt) ? { updatedAt: str(raw.updatedAt) } : {}),
   }
@@ -92,5 +100,11 @@ export function pruneGoldenLesson(lesson: GoldenLesson | undefined, sentences: G
   const kept = next.sentences.filter((s) => s.targets.length > 0)
   if (!kept.length) return undefined
   const ids = new Set(kept.map((s) => s.id))
-  return { ...next, sentences: kept, selected: next.selected.filter((id) => ids.has(id)) }
+  const exam = pruneGoldenExam(next.exam, sentences)
+  return {
+    ...next,
+    sentences: kept,
+    selected: next.selected.filter((id) => ids.has(id)),
+    ...(exam ? { exam } : { exam: undefined }),
+  }
 }

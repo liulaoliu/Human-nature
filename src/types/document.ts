@@ -389,6 +389,23 @@ export interface GoldenSentence {
   targets: GoldenTarget[]
 }
 
+/** 仿写考试里的一条题：用学过的句型，按中文提示写新句子。 */
+export interface GoldenExamItem {
+  /** 稳定 id（按文章 + 句子生成） */
+  id: string
+  sentenceId: string
+  /** 中文题干：换内容套结构，不要照抄范句 */
+  task: string
+  /** 范句（原句）；批改时作为参考，不直接给用户看 */
+  model: string
+  structure?: string
+  /** 必须用上的已学词块 */
+  mustUse: string[]
+  /** 评分维度与权重（总和 100） */
+  rubric: { dimension: string; weight: number; description?: string }[]
+  source: 'local' | 'ai'
+}
+
 /** 文章结构的一段（开头 / 主体 / 结尾），对应原文段落。 */
 export interface GoldenSection {
   paraId: string
@@ -410,8 +427,18 @@ export interface GoldenLesson {
   selected: string[]
   /** AI 首次挑中的句子 id；用户切“AI 推荐”时用 */
   aiSelected?: string[]
-  /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源；填空单位 */
-  options?: { dedupe?: boolean; pick?: GoldenPickMode; blankUnit?: 'word' | 'target' }
+  /** 完成若干句后解锁的仿写考试题；AI 生成，缺省时按已完成句子本地生成 */
+  exam?: GoldenExamItem[]
+  /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源；填空单位；整句渐进；考试门槛 */
+  options?: {
+    dedupe?: boolean
+    pick?: GoldenPickMode
+    blankUnit?: 'word' | 'target'
+    /** 是否在语言点填空后追加「一个词 → 目标词 → 分句/整句」的复述轮；旧数据默认开 */
+    sentenceFill?: boolean
+    /** 完成多少句「遣词造句」后解锁仿写考试；默认 5，可选 10 */
+    examAfter?: 5 | 10
+  }
   updatedAt?: string
 }
 
