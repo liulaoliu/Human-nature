@@ -683,3 +683,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `LearningSetters` 只承诺「用一份新数组替换」，不包含 `Dispatch` 的 updater；而
     `useLearningActions` 里大量 `setX(prev => ...)` 需要 `LearningCollectionSetters`。
     两层类型分开：内部用 `Dispatch<SetStateAction<T>>`，导出/合并仍用值替换签名。
+54. **整句填空的释义只挂在目标首词**（2026-10-28）。`buildClozeForWordIndexes` 里
+    `hitWordIndex = -1` 表示这个词不在任何目标里；用 `<= 0` 判断会把 `targets[0].zh`
+    贴到无关空，表现就是「填空含义漂移」。条件必须是 `hit && hitWordIndex === 0`，
+    且 `target` 不要 fallback 到 `targets[0]`；`goldenDrill.test` 已钉住多个目标的整句轮。

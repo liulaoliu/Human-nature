@@ -61,6 +61,22 @@ describe('golden cloze / assembly / recall', () => {
     expect(rounds.every((r) => r.scope === 'sentence')).toBe(true)
   })
 
+  it('整句渐进：释义只挂在目标首词，不把第一个语言点的释义贴到无关空', () => {
+    const rounds = buildGoldenSentenceFillRounds('We should keep up with the news.', [
+      { en: 'keep up with', zh: '跟上', kind: 'idiom' },
+      { en: 'the news', zh: '新闻', kind: 'collocation' },
+    ])
+    const last = rounds.at(-1)!.cloze
+    const hintOf = new Map(last.blanks.map((b) => [b.answer, b.hint]))
+    expect(hintOf.get('keep')).toBe('跟上')
+    expect(hintOf.get('the')).toBe('新闻')
+    expect(hintOf.get('We')).toBeUndefined()
+    expect(hintOf.get('should')).toBeUndefined()
+    expect(hintOf.get('up')).toBeUndefined()
+    expect(hintOf.get('with')).toBeUndefined()
+    expect(hintOf.get('news')).toBeUndefined()
+  })
+
   it('填空计划：target 模式 + 关闭整句只留语言点轮', () => {
     const rounds = buildGoldenFillPlan(text, targets, { blankUnit: 'target', sentenceFill: false })
     expect(rounds).toHaveLength(1)

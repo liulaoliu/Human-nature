@@ -238,7 +238,7 @@ function buildClozeForWordIndexes(
     const word = words[wordIndex]
     const hit = spans.find((sp) => word.start >= sp.start && word.end <= sp.end)
     const targetIndex = hit?.targetIndex ?? 0
-    const target = hit?.target ?? targets[0]
+    const target = hit?.target
     const blankIndex = blanks.length + 1
     const hitWordIndex = hit
       ? wordSpans(text.slice(hit.start, hit.end)).findIndex((w) => hit.start + w.start === word.start)
@@ -248,7 +248,7 @@ function buildClozeForWordIndexes(
       targetIndex,
       ...(hitWordIndex >= 0 ? { wordIndex: hitWordIndex } : {}),
       answer: word.text,
-      ...(hitWordIndex <= 0 && target?.zh ? { hint: target.zh } : {}),
+      ...(hit && hitWordIndex === 0 && target?.zh ? { hint: target.zh } : {}),
       kind: target?.kind ?? 'word',
     })
     pieces.push({ start: word.start, end: word.end, targetIndex, blankIndex })
