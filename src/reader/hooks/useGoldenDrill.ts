@@ -1,17 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { goldenDrillKey, goldenTargetsFor } from '../../core/golden'
-import {
-  buildGoldenAssembly,
-  buildGoldenCloze,
-  buildGoldenFillRounds,
-  buildGoldenSentenceFillRounds,
-  checkGoldenAssembly,
-  checkGoldenFill,
-  checkGoldenRecall,
-  goldenClozeKey,
-  goldenFillAllCorrect,
-  type GoldenRecallResult,
-} from '../../core/goldenDrill'
+import { checkGoldenRecall, type GoldenRecallResult } from '../../core/goldenDrill'
 import {
   emptyGoldenRecord,
   findGoldenRecord as findRecord,
@@ -26,12 +15,12 @@ import { dayKeyLocal, type ActivityCat } from '../../core/activity'
 import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import type { ReaderDoc } from './useReaderDoc'
-import { readGoldenSession, writeGoldenSession, type GoldenView } from './goldenSession'
+import { readGoldenSession, writeGoldenSession, type GoldenPhase, type GoldenView } from './goldenSession'
+import { useGoldenFillAssemble } from './useGoldenFillAssemble'
 import { useGoldenLesson } from './useGoldenLesson'
 import { useGoldenHotkeys } from './useGoldenHotkeys'
 
-export type { GoldenView } from './goldenSession'
-export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary' | 'imitation'
+export type { GoldenPhase, GoldenView } from './goldenSession'
 
 export interface UseGoldenDrillParams {
   doc: ReaderDoc | null
@@ -79,14 +68,6 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const [phase, setPhase] = useState<GoldenPhase>('preview')
   const [index, setIndex] = useState(0)
   const [recallIndex, setRecallIndex] = useState(0)
-  const [fillInputs, setFillInputs] = useState<string[]>([])
-  const [fillChecked, setFillChecked] = useState<boolean[] | null>(null)
-  const [fillCorrect, setFillCorrect] = useState<boolean | null>(null)
-  const [fillRound, setFillRound] = useState(0)
-  const [fillRoundPassed, setFillRoundPassed] = useState(false)
-  const fillEverWrongRef = useRef(false)
-  const [assembleOrder, setAssembleOrder] = useState<string[]>([])
-  const [assembleChecked, setAssembleChecked] = useState<boolean | null>(null)
   const [recallInput, setRecallInput] = useState('')
   const [recallChecked, setRecallChecked] = useState<GoldenRecallResult | null>(null)
   const [recallRevealed, setRecallRevealed] = useState(false)
@@ -120,41 +101,51 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   const current = ordered[index] ?? null
   const currentSentence = current ? bySentence.get(current.id) ?? null : null
   const targets = lesson && current ? goldenTargetsFor(lesson, current.id) : []
-  const blankUnit = lesson?.options?.blankUnit ?? 'word'
-  const sentenceFill = lesson?.options?.sentenceFill !== false
-  const fillRounds = useMemo(() => {
-    if (!currentSentence) return []
-    const targetRounds =
-      blankUnit === 'target'
-        ? (() => {
-            const c = buildGoldenCloze(currentSentence.text, targets)
-            return c ? [{ targetIndex: 0, wordFrom: 0, cloze: c, scope: 'target' as const }] : []
-          })()
-        : buildGoldenFillRounds(currentSentence.text, targets)
-    if (!sentenceFill) return targetRounds
-    // 整句渐进轮接在语言点轮后面；同一组空只练一次（例如目标词轮已经出现过）。
-    const seen = new Set(targetRounds.map((r) => goldenClozeKey(r.cloze)))
-    const extra = buildGoldenSentenceFillRounds(currentSentence.text, targets).filter((r) => {
-      const key = goldenClozeKey(r.cloze)
-      if (seen.has(key)) return false
-      seen.add(key)
-      return true
-    })
-    return [...targetRounds, ...extra]
-  }, [currentSentence, targets, blankUnit, sentenceFill])
-  const fillRoundCount = fillRounds.length
-  const currentFillRound = fillRounds[Math.min(fillRound, Math.max(0, fillRoundCount - 1))] ?? null
-  const cloze = currentFillRound?.cloze ?? null
-  const assembly = useMemo(
-    () => (currentSentence ? buildGoldenAssembly(currentSentence.text, targets) : null),
-    [currentSentence, targets],
-  )
   const drillKey = currentSentence ? goldenDrillKey(currentSentence.text, targets) : ''
   const currentRecord = useMemo(() => {
     if (!current || !drillKey) return null
     return findRecord(records, articleId, current.id, drillKey)
   }, [records, articleId, current, drillKey])
-  const progress = currentRecord ?? (current && drillKey ? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString()) : null)
+  const progress =
+    currentRecord ??
+    (current && drillKey
+      ? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
+      : null)
+
+  const fillAssemble = useGoldenFillAssemble({
+    lesson,
+    current,
+    currentSentence,
+    targets,
+    drillKey,
+    currentRecord,
+    articleId,
+    articleTitle,
+    recordGolden,
+    recordAnswer,
+    setPhase,
+  })
+  const {
+    blankUnit,
+    sentenceFill,
+    fillRoundCount,
+    cloze,
+    assembly,
+    fillInputs,
+    setFillInputs,
+    fillChecked,
+    fillCorrect,
+    fillRound,
+    fillRoundPassed,
+    beginFill,
+    checkFill,
+    nextFillRound,
+    assembleOrder,
+    setAssembleOrder,
+    assembleChecked,
+    beginAssemble,
+    checkAssemble,
+  } = fillAssemble
 
   /** 今天之前掌握、今天还没回顾过的句子（按记录里的 lastAt 逻辑日判断）。 */
   const todayKey = dayKeyLocal()
@@ -181,16 +172,12 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setIndex(saved?.index ?? 0)
     setRecallIndex(saved?.recallIndex ?? 0)
     setPhase('preview')
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-    setAssembleOrder([])
-    setAssembleChecked(null)
+    fillAssemble.resetFillAssemble()
     setRecallInput('')
     setRecallChecked(null)
     setRecallRevealed(false)
     practicedRef.current = false
-  }, [doc, sessionId, flash])
+  }, [doc, sessionId, flash, fillAssemble.resetFillAssemble])
 
   const close = useCallback(() => {
     setOpen(false)
@@ -212,17 +199,10 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
       setView('drill')
       setIndex(Math.max(0, Math.min(ordered.length - 1, from)))
       setPhase('preview')
-      setFillInputs([])
-      setFillChecked(null)
-      setFillCorrect(null)
-      setFillRound(0)
-      setFillRoundPassed(false)
-      fillEverWrongRef.current = false
-      setAssembleOrder([])
-      setAssembleChecked(null)
+      fillAssemble.resetFillAssemble()
       practicedRef.current = false
     },
-    [ordered.length, flash],
+    [ordered.length, flash, fillAssemble.resetFillAssemble],
   )
 
   const startReview = useCallback(() => {
@@ -258,121 +238,18 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
   }, [ordered, progressFor, flash])
 
   const nextSentence = useCallback(() => {
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-    setFillRound(0)
-    setFillRoundPassed(false)
-    fillEverWrongRef.current = false
-    setAssembleOrder([])
-    setAssembleChecked(null)
+    fillAssemble.resetFillAssemble()
     setPhase('preview')
     if (index + 1 < ordered.length) setIndex(index + 1)
     else startRecall()
-  }, [index, ordered.length, startRecall])
+  }, [index, ordered.length, startRecall, fillAssemble.resetFillAssemble])
 
   const prevSentence = useCallback(() => {
     if (index <= 0) return
     setIndex(index - 1)
     setPhase('preview')
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-    setFillRound(0)
-    setFillRoundPassed(false)
-    fillEverWrongRef.current = false
-    setAssembleOrder([])
-    setAssembleChecked(null)
-  }, [index])
-
-  const beginFill = useCallback(() => {
-    setPhase('fill')
-    setFillRound(0)
-    setFillRoundPassed(false)
-    fillEverWrongRef.current = false
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-  }, [])
-
-  const checkFill = useCallback(() => {
-    if (!cloze || !currentSentence || !current || !drillKey) return
-    // 本组已通过或已到最后一步时，Enter 属于「继续下一组 / 拼接整句」，不再重复检查。
-    if (fillRoundPassed || fillCorrect === true) return
-    const results = checkGoldenFill(cloze, fillInputs)
-    const ok = goldenFillAllCorrect(results)
-    setFillChecked(results)
-    recordAnswer?.({
-      articleId,
-      source: 'golden',
-      kind: 'fill',
-      cat: 'write',
-      correct: ok,
-      questionId: `${current.id}:fill:${fillRound}`,
-    })
-    if (!ok) {
-      fillEverWrongRef.current = true
-      setFillRoundPassed(false)
-      setFillCorrect(false)
-      return
-    }
-    if (fillRound + 1 < fillRoundCount) {
-      setFillRoundPassed(true)
-      setFillCorrect(null)
-      return
-    }
-    setFillRoundPassed(false)
-    setFillCorrect(true)
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
-    const next = recordGoldenStep(base, 'fill', !fillEverWrongRef.current, new Date().toISOString())
-    recordGolden(next)
-  }, [
-    cloze,
-    currentSentence,
-    current,
-    drillKey,
-    fillInputs,
-    fillRound,
-    fillRoundCount,
-    fillRoundPassed,
-    fillCorrect,
-    currentRecord,
-    articleId,
-    articleTitle,
-    recordGolden,
-    recordAnswer,
-  ])
-
-  const nextFillRound = useCallback(() => {
-    if (fillRound + 1 >= fillRoundCount) return
-    setFillRound((r) => r + 1)
-    setFillRoundPassed(false)
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-  }, [fillRound, fillRoundCount])
-
-  const beginAssemble = useCallback(() => {
-    setPhase('assemble')
-    setAssembleOrder([])
-    setAssembleChecked(null)
-  }, [])
-
-  const checkAssemble = useCallback(() => {
-    if (!assembly || !currentSentence || !current || !drillKey) return
-    const ok = checkGoldenAssembly(assembly.cloze.targets, assembleOrder)
-    setAssembleChecked(ok)
-    const base = currentRecord ?? emptyGoldenRecord(articleId, articleTitle, current.id, drillKey, new Date().toISOString())
-    recordGolden(recordGoldenStep(base, 'assemble', ok, new Date().toISOString()))
-    recordAnswer?.({
-      articleId,
-      source: 'golden',
-      kind: 'assemble',
-      cat: 'write',
-      correct: ok,
-      questionId: `${current.id}:assemble`,
-    })
-  }, [assembly, currentSentence, current, drillKey, assembleOrder, currentRecord, articleId, articleTitle, recordGolden, recordAnswer])
+    fillAssemble.resetFillAssemble()
+  }, [index, fillAssemble.resetFillAssemble])
 
   const markSummary = useCallback(() => {
     if (!current || !drillKey) return
@@ -390,15 +267,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     // 已掌握的不降级；没掌握的“再练一次”重开一轮首次记录，给用户掌握的机会。
     recordGolden(resetGoldenRecord(base, at))
     setPhase('preview')
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-    setFillRound(0)
-    setFillRoundPassed(false)
-    fillEverWrongRef.current = false
-    setAssembleOrder([])
-    setAssembleChecked(null)
-  }, [current, drillKey, currentRecord, articleId, articleTitle, recordGolden])
+    fillAssemble.resetFillAssemble()
+  }, [current, drillKey, currentRecord, articleId, articleTitle, recordGolden, fillAssemble.resetFillAssemble])
 
   const checkRecall = useCallback(() => {
     if (!currentSentence || !current || !drillKey) return
@@ -467,19 +337,22 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     recordGolden(resetGoldenRecord(base, at))
     setIndex(recallIndex)
     setPhase('preview')
-    setFillInputs([])
-    setFillChecked(null)
-    setFillCorrect(null)
-    setFillRound(0)
-    setFillRoundPassed(false)
-    fillEverWrongRef.current = false
-    setAssembleOrder([])
-    setAssembleChecked(null)
+    fillAssemble.resetFillAssemble()
     setRecallInput('')
     setRecallChecked(null)
     setRecallRevealed(false)
     setView('drill')
-  }, [recallList, recallIndex, bySentence, lesson, records, articleId, articleTitle, recordGolden])
+  }, [
+    recallList,
+    recallIndex,
+    bySentence,
+    lesson,
+    records,
+    articleId,
+    articleTitle,
+    recordGolden,
+    fillAssemble.resetFillAssemble,
+  ])
 
   const currentRecallSentence = recallList[recallIndex] ?? null
   const currentRecallText = currentRecallSentence ? bySentence.get(currentRecallSentence.id) ?? null : null

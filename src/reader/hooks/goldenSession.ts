@@ -1,6 +1,9 @@
 export const GOLDEN_VIEWS = ['home', 'plan', 'drill', 'recall', 'summary', 'bank', 'exam'] as const
 export type GoldenView = (typeof GOLDEN_VIEWS)[number]
 
+/** 单句练习阶段；放在这里给 useGoldenDrill / useGoldenFillAssemble 共用，避免循环 import。 */
+export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary' | 'imitation'
+
 export interface GoldenSession {
   view: GoldenView
   index: number

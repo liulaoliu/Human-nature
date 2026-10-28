@@ -333,6 +333,41 @@ export function buildGoldenSentenceFillRounds(text: string, targets: GoldenTarge
   return rounds
 }
 
+export interface GoldenFillPlanOptions {
+  /** `target` = 一个语言点一个空；`word` = 先按词细碎轮，默认 word */
+  blankUnit?: 'word' | 'target'
+  /** 是否在语言点轮后追加「单词 → 目标词 → 分句/整句」；默认开 */
+  sentenceFill?: boolean
+}
+
+/**
+ * 一句金句的完整填空计划：语言点轮 + 整句渐进轮，同一组空只出现一次。
+ *
+ * 轮次规则只在这里拼装；hook 不再自己组合两套 builder。
+ */
+export function buildGoldenFillPlan(
+  text: string,
+  targets: GoldenTarget[],
+  opts: GoldenFillPlanOptions = {},
+): GoldenFillRound[] {
+  const targetRounds =
+    opts.blankUnit === 'target'
+      ? (() => {
+          const cloze = buildGoldenCloze(text, targets)
+          return cloze ? [{ targetIndex: 0, wordFrom: 0, cloze, scope: 'target' as const }] : []
+        })()
+      : buildGoldenFillRounds(text, targets)
+  if (opts.sentenceFill === false) return targetRounds
+  const seen = new Set(targetRounds.map((r) => goldenClozeKey(r.cloze)))
+  const extra = buildGoldenSentenceFillRounds(text, targets).filter((r) => {
+    const key = goldenClozeKey(r.cloze)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+  return [...targetRounds, ...extra]
+}
+
 /** 一个空是否正确：忽略大小写/首尾标点/空白；连字符和撇号也宽容。 */
 export function isGoldenBlankCorrect(blank: GoldenClozeBlank, input: string): boolean {
   const n = normalizeAnswer(input)

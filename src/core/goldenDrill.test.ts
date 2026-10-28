@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 import {
   buildGoldenAssembly,
   buildGoldenCloze,
+  buildGoldenFillPlan,
   buildGoldenFillRounds,
   buildGoldenSentenceFillRounds,
   checkGoldenAssembly,
   checkGoldenFill,
   checkGoldenRecall,
+  goldenClozeKey,
 } from './goldenDrill'
 
 describe('golden cloze / assembly / recall', () => {
@@ -57,6 +59,21 @@ describe('golden cloze / assembly / recall', () => {
       'We should keep up with the news',
     ])
     expect(rounds.every((r) => r.scope === 'sentence')).toBe(true)
+  })
+
+  it('填空计划：target 模式 + 关闭整句只留语言点轮', () => {
+    const rounds = buildGoldenFillPlan(text, targets, { blankUnit: 'target', sentenceFill: false })
+    expect(rounds).toHaveLength(1)
+    expect(rounds[0].scope).toBe('target')
+    expect(rounds[0].cloze.blanks).toHaveLength(targets.length)
+  })
+
+  it('填空计划：开启整句时追加复述轮，且同一组空不重复', () => {
+    const rounds = buildGoldenFillPlan('We should keep up with the news.', [
+      { en: 'keep up with', zh: '跟上', kind: 'idiom' },
+    ])
+    expect(rounds.some((r) => r.scope === 'sentence')).toBe(true)
+    expect(new Set(rounds.map((r) => goldenClozeKey(r.cloze))).size).toBe(rounds.length)
   })
 
   it('长句最后一轮只挖目标所在的分句，避免一次填整段', () => {
