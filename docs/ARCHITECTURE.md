@@ -687,6 +687,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
   派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningActions`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/aiTasks`（普通 factory，不占 hook），粘贴应用在 `hooks/usePasteApply`，本机偏好（18 个小开关）在 `hooks/useReaderPrefs`，本篇生词口径在 `hooks/useArticleVocabView`，精读工作流的阶段→工具 / 拷打→题型两张表在 `hooks/useIntensiveActions`，修饰键与队列自动朗读在 `hooks/useModifierKeys` / `hooks/useQueueAutoSpeak`，
   考试设置（题型/范围/题量/鞭打）在 `hooks/useQuizSettings`（候选池与出题集在 `core/quizPool`），
   回译出题 / 导航在 `hooks/useBackTranslateSession`，批改与存档在 `hooks/useBackTranslateGrading`；
+  播放媒体与一次播放生命周期在 `hooks/useTtsMedia`，连播 / 点词 seek 在 `hooks/useTtsPlayback`；
   导出 / 打印 / 备份导入在 `hooks/exportApi`，内部按 `exportFiles` / `backupIO` / `printActions` 三块普通 factory 分开；
   AI 结果落地规则在 `core/aiApply`、服务端跑批客户端在 `adapters/aiRun`，
   软上限 800 行（上帝文件门禁的线）。

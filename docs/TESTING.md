@@ -340,7 +340,8 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
 **还差**（2026-10-20 盘点）：
 - **hooks 55 / 55 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
   `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
-  `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），facade 原有 8 条接线测试不动；
+  `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），
+  播放层再拆 `useTtsMedia`（媒体元素 / 一次播放）+ 普通函数 `browserSpeech`，连播与点词 seek 留在 facade；facade 原有 8 条接线测试不动；
   速读的选词/入库/本页清单抽到 `useSpeedReadWords`（8 条）、会话状态机抽到 `useSpeedReadSession`（12 条），
   面板 `SpeedReadPanel` 只留渲染（597 → 260 行）。
   背单词拆成 `useStudyPool`（设置/候选池，3 条）+ `useStudyTimers`（计时/落盘/暂停停表/暂停补记，5 条）+
