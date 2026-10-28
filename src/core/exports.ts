@@ -1,6 +1,7 @@
 import type { EconomistDocument, VocabItem, VocabLibrary } from '../types/document'
 import { SCHEMA_VERSION } from '../types/document'
 import { KIND_LABEL, kindOf } from './entryKind'
+import { migrateLibrary } from './migrations'
 import type { PrintRow } from './printPlan'
 import type { VocabGroup } from './vocab'
 
@@ -77,17 +78,29 @@ export function exportLibraryJSON(library: VocabLibrary): string {
   return JSON.stringify(library, null, 2)
 }
 
-/** 从 JSON 导入词库，校验结构并补 schemaVersion。 */
+function parseObject(raw: string, label: string): Record<string, unknown> {
+  let value: unknown
+  try {
+    value = JSON.parse(raw)
+  } catch {
+    throw new Error(`${label} JSON 不是合法 JSON`)
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error(`${label} JSON 顶层必须是对象`)
+  }
+  return value as Record<string, unknown>
+}
+
+/**
+ * 从 JSON 导入词库：先过 `migrateLibrary` 的运行时清洗（坏条目丢弃、字段归一），
+ * 再确认不是「一条都没剩下」的空库。外部 JSON 不能只靠类型断言。
+ */
 export function importLibraryJSON(raw: string): VocabLibrary {
-  const value = JSON.parse(raw) as Partial<VocabLibrary>
-  if (!value || typeof value !== 'object' || !Array.isArray(value.items)) {
-    throw new Error('词库 JSON 结构不对：缺少 items 数组')
-  }
-  return {
-    schemaVersion: value.schemaVersion ?? SCHEMA_VERSION,
-    items: value.items,
-    ...(Array.isArray(value.articleEntries) ? { articleEntries: value.articleEntries } : {}),
-  }
+  const value = parseObject(raw, '词库')
+  if (!Array.isArray(value.items)) throw new Error('词库 JSON 结构不对：缺少 items 数组')
+  const library = migrateLibrary(value)
+  if (!library.items.length) throw new Error('词库 JSON 没有有效词条')
+  return library
 }
 
 /** 导出文档 JSON，供外部音频模块直接消费。 */
@@ -95,13 +108,53 @@ export function exportDocumentJSON(doc: EconomistDocument): string {
   return JSON.stringify(doc, null, 2)
 }
 
-/** 从 JSON 导入文档。 */
+function isObject(v: unknown): v is Record<string, unknown> {
+  return !!v && typeof v === 'object' && !Array.isArray(v)
+}
+
+function isDocumentMeta(v: unknown): v is EconomistDocument['meta'] {
+  if (!isObject(v)) return false
+  return (
+    typeof v.id === 'string' &&
+    typeof v.title === 'string' &&
+    typeof v.issue === 'string' &&
+    typeof v.section === 'string' &&
+    typeof v.sourceFormat === 'string' &&
+    (v.audioFile === null || typeof v.audioFile === 'string') &&
+    typeof v.createdAt === 'string' &&
+    typeof v.updatedAt === 'string'
+  )
+}
+
+function isParagraph(v: unknown): boolean {
+  return (
+    isObject(v) &&
+    typeof v.id === 'string' &&
+    Array.isArray(v.sentenceIds) &&
+    v.sentenceIds.every((id) => typeof id === 'string')
+  )
+}
+
+function isSentence(v: unknown): boolean {
+  return isObject(v) && typeof v.id === 'string' && typeof v.paraId === 'string' && typeof v.text === 'string'
+}
+
+/** 从 JSON 导入文档：逐段校验，坏条目直接报错（文档是整篇单位，不做半篇导入）。 */
 export function importDocumentJSON(raw: string): EconomistDocument {
-  const value = JSON.parse(raw) as Partial<EconomistDocument>
-  if (!value || typeof value !== 'object' || !Array.isArray(value.sentences) || !Array.isArray(value.paragraphs)) {
-    throw new Error('文档 JSON 结构不对：缺少 paragraphs / sentences')
+  const value = parseObject(raw, '文档')
+  if (!isDocumentMeta(value.meta)) throw new Error('文档 JSON 结构不对：meta 缺字段')
+  if (!Array.isArray(value.paragraphs) || !value.paragraphs.every(isParagraph)) {
+    throw new Error('文档 JSON 结构不对：paragraphs 里有坏段落')
   }
-  return { schemaVersion: value.schemaVersion ?? SCHEMA_VERSION, meta: value.meta!, paragraphs: value.paragraphs, sentences: value.sentences }
+  if (!Array.isArray(value.sentences) || !value.sentences.every(isSentence)) {
+    throw new Error('文档 JSON 结构不对：sentences 里有坏句子')
+  }
+  return {
+    schemaVersion: typeof value.schemaVersion === 'number' ? value.schemaVersion : SCHEMA_VERSION,
+    meta: value.meta,
+    paragraphs: value.paragraphs as EconomistDocument['paragraphs'],
+    sentences: value.sentences as EconomistDocument['sentences'],
+  }
 }
 
 /**

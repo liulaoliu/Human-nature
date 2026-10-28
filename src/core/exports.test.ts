@@ -67,10 +67,19 @@ describe('toAnkiCSV', () => {
 describe('JSON 往返', () => {
   it('词库 export → import 不丢', () => {
     const lib: VocabLibrary = { schemaVersion: SCHEMA_VERSION, items: [vocab()] }
-    expect(importLibraryJSON(exportLibraryJSON(lib))).toEqual(lib)
+    const got = importLibraryJSON(exportLibraryJSON(lib))
+    expect(got.schemaVersion).toBe(lib.schemaVersion)
+    expect(got.items).toEqual(lib.items)
   })
   it('词库结构不对会抛错', () => {
     expect(() => importLibraryJSON('{"foo":1}')).toThrow()
+    expect(() => importLibraryJSON('not json')).toThrow('不是合法 JSON')
+  })
+  it('词库里坏条目被丢弃；一条有效都没有就拒绝', () => {
+    const got = importLibraryJSON(JSON.stringify({ items: [vocab(), { id: 'bad' }] }))
+    expect(got.items).toHaveLength(1)
+    expect(got.items[0].id).toBe('vocab:run')
+    expect(() => importLibraryJSON(JSON.stringify({ items: [{ id: 'bad' }] }))).toThrow('没有有效词条')
   })
   it('文档 export → import 不丢', () => {
     const doc: EconomistDocument = {
@@ -80,6 +89,16 @@ describe('JSON 往返', () => {
       sentences: [],
     }
     expect(importDocumentJSON(exportDocumentJSON(doc))).toEqual(doc)
+  })
+  it('文档坏段落 / 坏句子会抛错', () => {
+    const base = {
+      schemaVersion: SCHEMA_VERSION,
+      meta: { id: 'x', title: 'T', issue: 'i', section: 's', sourceFormat: 'pdf_extract', audioFile: null, createdAt: 'c', updatedAt: 'u' },
+      paragraphs: [{ id: 'p01', sentenceIds: ['s001'] }],
+      sentences: [],
+    }
+    expect(() => importDocumentJSON(JSON.stringify({ ...base, paragraphs: [{ id: 1 }] }))).toThrow('paragraphs')
+    expect(() => importDocumentJSON(JSON.stringify({ ...base, sentences: [{ id: 's1' }] }))).toThrow('sentences')
   })
 })
 
