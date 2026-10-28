@@ -741,7 +741,8 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `reader/quiz/createQuizCheck` factory、完成结算 / 反复鞭打进 `useQuizCompletion`、计时 / 快捷键进
 `useQuizTimer` / `useQuizHotkeys`；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
-开篇/片段/错题重练合并到 `beginRound`）。
+开篇/片段/错题重练合并到 `beginRound`），再 430 → 247（偏好进 `useDictationPrefs`、装题/游标进
+`useDictationRounds`、判分进 `useDictationChecking`）。
 `useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
 `useStudySession` 718 → 481：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
 `useStudyCardUi`，拼写判卷接线进 `useStudySpelling`，评分 / 学习四选项 / 复习三键 / 锤炼门禁进
