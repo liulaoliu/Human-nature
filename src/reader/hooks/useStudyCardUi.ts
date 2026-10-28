@@ -63,3 +63,5 @@ export function useStudyCardUi() {
     clearMeaningGate,
   }
 }
+
+export type StudyCardUi = ReturnType<typeof useStudyCardUi>

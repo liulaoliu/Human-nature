@@ -643,9 +643,10 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
 开篇/片段/错题重练合并到 `beginRound`）。
 `useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
-`useStudySession` 718 → 491：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
+`useStudySession` 718 → 481：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
 `useStudyCardUi`，拼写判卷接线进 `useStudySpelling`，评分 / 学习四选项 / 复习三键 / 锤炼门禁进
-`useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。
+`useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收 `ui` 卡面对象，
+不再逐个透传 `checked / pendingScore / setRevealed`。
 
 ### AI 结果应用：factory + 处理器，不包成 hook
 

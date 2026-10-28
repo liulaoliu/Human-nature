@@ -1,6 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { displayMeaning } from '../../core/vocab'
 import type { VocabItem } from '../../types/document'
+import type { StudyCardUi } from './useStudyCardUi'
 import type { useStudyGrading } from './useStudyGrading'
 import { useStudySpellGate } from './useStudySpellGate'
 
@@ -19,10 +20,8 @@ export interface UseStudySpellingParams {
   queue: VocabItem[] | null
   grading: SpellingGrading
   flash: (message: string) => void
-  input: string
-  checked: boolean
-  setChecked: Dispatch<SetStateAction<boolean>>
-  setRevealed: Dispatch<SetStateAction<boolean>>
+  /** 卡面开关（输入 / 已检查 / 翻面）与统一重置。 */
+  ui: StudyCardUi
   resetCardUi: () => void
   setIndex: Dispatch<SetStateAction<number>>
 }
@@ -33,13 +32,11 @@ export function useStudySpelling({
   queue,
   grading,
   flash,
-  input,
-  checked,
-  setChecked,
-  setRevealed,
+  ui,
   resetCardUi,
   setIndex,
 }: UseStudySpellingParams) {
+  const { input, checked, setChecked, setRevealed } = ui
   /**
    * 拼写判定：不做「再试一次」——允许反复输入等于把判断变成抄写。
    * 判错立刻按「忘记」写 SRS（relearn +1）并打「不认识」标签，本轮重排到队尾。

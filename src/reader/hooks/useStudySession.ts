@@ -94,6 +94,7 @@ export function useStudySession(params: UseStudySessionParams) {
   const [queue, setQueue] = useState<VocabItem[] | null>(null)
   const [index, setIndex] = useState(0)
   /** 一张卡的界面开关：翻面 / 输入 / 门禁 / 押后的评分。 */
+  const cardUi = useStudyCardUi()
   const {
     revealed,
     setRevealed,
@@ -102,13 +103,10 @@ export function useStudySession(params: UseStudySessionParams) {
     checked,
     setChecked,
     meaningCleared,
-    drillCleared,
-    pendingScore,
-    setPendingScore,
     resetFlags,
     clearDrill,
     clearMeaningGate,
-  } = useStudyCardUi()
+  } = cardUi
   /** 本轮加练 / 重练的出场账本（每卡最多出场 3 次，跨重练保留）。 */
   const [extraRound, setExtraRound] = useState<ExtraRound>(emptyExtraRound)
   /** 本轮总数（进度分母）——开始时冻结；忘记/模糊只加练，不撑大它。 */
@@ -257,10 +255,7 @@ export function useStudySession(params: UseStudySessionParams) {
     queue,
     grading,
     flash,
-    input,
-    checked,
-    setChecked,
-    setRevealed,
+    ui: cardUi,
     resetCardUi,
     setIndex,
   })
@@ -308,17 +303,12 @@ export function useStudySession(params: UseStudySessionParams) {
     spellMiss,
     spellingRoundActive: !!spellingRound.test,
     spelling,
-    checked,
     meaningGate,
     drillAfter,
     cardSeconds,
-    drillCleared,
-    pendingScore,
-    setPendingScore,
-    setRevealed,
+    ui: cardUi,
     setEditOpen,
     setDelArmed,
-    resetFlags,
     setIndex,
     advanceFrom,
     grading,

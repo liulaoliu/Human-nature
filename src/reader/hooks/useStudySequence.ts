@@ -73,6 +73,7 @@ export function useStudySequence({
     grading.resetLedger()
     setRetrying(false)
     groupCursorRef.current = 0
+    pendingGroupEndRef.current = null
     spellingRound.reset()
     resetCardUi()
   }, [resetCardUi, spellingRound, grading.resetLedger, setExtraRound, setRetrying])

@@ -6,8 +6,8 @@ import {
   type StudyMode,
 } from '../../core/vocab'
 import type { VocabItem } from '../../types/document'
+import type { StudyCardUi } from './useStudyCardUi'
 import type { useStudyGrading } from './useStudyGrading'
-import type { StudyPendingScore } from './useStudyCardUi'
 import { useStudyLearnStep } from './useStudyLearnStep'
 import { useStudyReviewStep } from './useStudyReviewStep'
 import type { SpellMissCard } from './useStudySpellGate'
@@ -33,17 +33,13 @@ export interface UseStudyAnsweringParams {
   /** 组末拼写测试进行中：此时不许评分。 */
   spellingRoundActive: boolean
   spelling: boolean
-  checked: boolean
   meaningGate: boolean
   drillAfter: number
   cardSeconds: number
-  drillCleared: boolean
-  pendingScore: StudyPendingScore | null
-  setPendingScore: Dispatch<SetStateAction<StudyPendingScore | null>>
-  setRevealed: Dispatch<SetStateAction<boolean>>
+  /** 卡面开关：押后的评分 / 已检查 / 翻面 / 统一重置。 */
+  ui: StudyCardUi
   setEditOpen: Dispatch<SetStateAction<boolean>>
   setDelArmed: Dispatch<SetStateAction<boolean>>
-  resetFlags: () => void
   setIndex: Dispatch<SetStateAction<number>>
   advanceFrom: (from: number) => void
   grading: AnsweringGrading
@@ -59,21 +55,17 @@ export function useStudyAnswering({
   spellMiss,
   spellingRoundActive,
   spelling,
-  checked,
   meaningGate,
   drillAfter,
   cardSeconds,
-  drillCleared,
-  pendingScore,
-  setPendingScore,
-  setRevealed,
+  ui,
   setEditOpen,
   setDelArmed,
-  resetFlags,
   setIndex,
   advanceFrom,
   grading,
 }: UseStudyAnsweringParams) {
+  const { checked, drillCleared, pendingScore, setPendingScore, setRevealed, resetFlags } = ui
   /**
    * 真正落库的评分。账本在 `grading.recordGrade`；这里只负责「清卡片 UI」和「要不要推进」。
    *

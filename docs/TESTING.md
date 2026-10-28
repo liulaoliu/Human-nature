@@ -667,3 +667,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `pruneGoldenLesson` 改正文后要同时清掉对不上的 `exam`，避免用户拿旧范句考新正文。
     每句末尾的单句仿写同理：题面不写回课程，成绩用 `source='goldenSentence'` + `sentenceId`；
     批改逻辑与整课考试共用 `useGoldenImitation`，不要再复制一份提示词/解析/存记录。
+51. **换轮/换模式要清组末待办 ref**（2026-10-28）。`useStudySequence.load` 里只清 `spellingRound`
+    不够：`pendingGroupEndRef` 留着上一组的组末下标，重置后一个迟到的 `finishGroup`
+    仍会把新一轮的指针推到旧组末。重开会话时 state、拼写状态机、`pendingGroupEndRef`
+    要一起清；`useStudySequence.test` 用「先进入组末 → load → finishGroup」锁住。
