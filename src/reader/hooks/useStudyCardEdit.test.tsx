@@ -100,6 +100,17 @@ describe('useStudyCardEdit：编辑', () => {
     expect(persist).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('没有改动')
   })
+
+  it('取消编辑同时关表单、丢草稿', () => {
+    const { result } = renderHook(() => useHarness())
+    act(() => result.current.openEdit())
+    expect(result.current.editOpen).toBe(true)
+    expect(result.current.draft?.word).toBe('run')
+
+    act(() => result.current.cancelEdit())
+    expect(result.current.editOpen).toBe(false)
+    expect(result.current.draft).toBeNull()
+  })
 })
 
 describe('useStudyCardEdit：两步删除', () => {

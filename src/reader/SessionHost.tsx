@@ -139,11 +139,7 @@ export default function SessionHost({
           onStartArticleAll={study.api.startArticleAll}
           onNewLimitChange={study.onNewLimitChange}
           onDrillAfterChange={study.api.setDrillAfter}
-          onSpellingChange={(on) => {
-            study.api.setSpelling(on)
-            study.api.setChecked(false)
-            study.api.setInput('')
-          }}
+          onSpellingChange={study.api.changeSpelling}
           onReveal={() => study.api.setRevealed(true)}
           onInputChange={study.api.setInput}
           onCheckSpelling={study.api.checkSpelling}
@@ -152,10 +148,7 @@ export default function SessionHost({
           onDelete={study.api.removeCard}
           onDraftChange={study.api.setDraft}
           onSaveEdit={study.api.saveEdit}
-          onCancelEdit={() => {
-            study.api.setEditOpen(false)
-            study.api.setDraft(null)
-          }}
+          onCancelEdit={study.api.cancelEdit}
           onGrade={study.api.grade}
           onBack={study.api.back}
           onNext={study.api.forward}
@@ -170,7 +163,7 @@ export default function SessionHost({
           onSpellMiss={study.api.applySpellingMiss}
           onAckSpellMiss={study.api.ackSpellMiss}
           onRetryForgot={study.api.retryForgot}
-          onRestart={() => study.api.start()}
+          onRestart={study.api.start}
         />
       )}
 

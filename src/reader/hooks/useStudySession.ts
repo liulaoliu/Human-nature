@@ -182,6 +182,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setDelArmed,
     openEdit,
     saveEdit,
+    cancelEdit,
     removeCard,
   } = useStudyCardEdit({
     card,
@@ -344,6 +345,16 @@ export function useStudySession(params: UseStudySessionParams) {
     setIndex((i) => i + 1)
   }, [queue, index, grading.recordUnknown, resetCardUi])
 
+  /** 切拼写模式要先清掉上一题的输入 / 判卷状态，这属于会话规则，不放视图里。 */
+  const changeSpelling = useCallback(
+    (on: boolean) => {
+      setSpelling(on)
+      setChecked(false)
+      setInput('')
+    },
+    [setSpelling, setChecked, setInput],
+  )
+
   /** 背单词的键盘映射集中在 `hooks/useStudyHotkeys`（面板按钮上的 kbd 与它一一对应）。 */
   useStudyHotkeys(
     {
@@ -386,6 +397,7 @@ export function useStudySession(params: UseStudySessionParams) {
     setScope,
     spelling,
     setSpelling,
+    changeSpelling,
     mode,
     setMode,
     deck,
@@ -475,6 +487,7 @@ export function useStudySession(params: UseStudySessionParams) {
     applySpellingMiss,
     openEdit,
     saveEdit,
+    cancelEdit,
     removeCard,
   }
 }

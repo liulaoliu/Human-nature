@@ -116,6 +116,12 @@ export function useStudyCardEdit({
     flash('已保存修改')
   }, [card, draft, library, persist, flash])
 
+  /** 取消编辑 = 关表单 + 丢草稿；两个状态一起收，避免只关一半。 */
+  const cancelEdit = useCallback(() => {
+    setEditOpen(false)
+    setDraft(null)
+  }, [])
+
   /** 卡内删除（两步确认），并从本轮队列里移除。 */
   const removeCard = useCallback(() => {
     if (!card) return
@@ -146,6 +152,7 @@ export function useStudyCardEdit({
     setDelArmed,
     openEdit,
     saveEdit,
+    cancelEdit,
     removeCard,
   }
 }

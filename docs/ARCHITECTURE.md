@@ -648,6 +648,19 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收 `ui` 卡面对象，
 不再逐个透传 `checked / pendingScore / setRevealed`。
 
+### 背单词会话为什么不上全局状态管理器（2026-10-28）
+
+现状看起来像 prop drilling：`StudyPanel` 有 79 个 props，`useStudySession` 返回 80 个字段。
+但调用深度只有 `SessionHost → StudyPanel` 一层，子 hook 的入参也只有一层；这不是「同一个 prop
+穿过四五层中间组件」，而是**一个宽视图模型**。全局 store 只能把显式 props 变成隐式订阅，
+不会减少 `useStudySession` 里的状态机、落库和规则，还会带来会话结束/换轮的 reset、测试隔离、
+与 `library` / URL 双事实来源，以及每次输入都重渲染整棵会话树的问题。React Context 同样是这个代价，
+除非再拆 selector，等于自己实现一个状态管理器。
+
+真要降复杂度，按域拆而不是上 store：设置 / 本轮队列 / 卡面 / 学习关 / 复习关 / 锤炼 / 组末拼写
+各自成组；`StudyPanel` 按现有分支拆成子视图，每块只收自己那 10–20 个 props。总规则不变，
+但每个组件的认知边界变小。纯展示面板继续收显式 props，测试不需要 Provider。
+
 ### AI 结果应用：factory + 处理器，不包成 hook
 
 `useApplyTaskResult` 原来把 10 个任务塞进一个 486 行 `useCallback`。它没有 React 状态，

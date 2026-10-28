@@ -103,6 +103,38 @@ describe('useStudySession：R 朗读当前单词', () => {
   })
 })
 
+describe('useStudySession：会话动作', () => {
+  it('切拼写模式会清掉上一题输入和判卷状态', () => {
+    const { unmount } = render(
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.setInput('on'))
+    act(() => api!.setChecked(true))
+
+    act(() => api!.changeSpelling(true))
+    expect(api!.spelling).toBe(true)
+    expect(api!.input).toBe('')
+    expect(api!.checked).toBe(false)
+    unmount()
+  })
+
+  it('取消编辑同时关表单、丢草稿', () => {
+    const { unmount } = render(
+      <Harness library={lib([vocabItem({ id: 'w1', word: 'one', lemma: 'one', meaning: '一' })])} />,
+    )
+    act(() => api!.start({ mode: 'learn', scope: 'all' }))
+    act(() => api!.openEdit())
+    expect(api!.editOpen).toBe(true)
+    expect(api!.draft?.word).toBe('one')
+
+    act(() => api!.cancelEdit())
+    expect(api!.editOpen).toBe(false)
+    expect(api!.draft).toBeNull()
+    unmount()
+  })
+})
+
 describe('useStudySession：卡内编辑暂停计时', () => {
   it('编辑 10 秒两只表都不动，关闭编辑后继续', () => {
     vi.useFakeTimers()
