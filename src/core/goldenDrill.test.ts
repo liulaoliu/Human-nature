@@ -3,6 +3,7 @@ import {
   buildGoldenAssembly,
   buildGoldenCloze,
   buildGoldenFillRounds,
+  buildGoldenSentenceFillRounds,
   checkGoldenAssembly,
   checkGoldenFill,
   checkGoldenRecall,
@@ -44,6 +45,31 @@ describe('golden cloze / assembly / recall', () => {
       'up with',
       'keep up with',
     ])
+  })
+
+  it('整句渐进：一个词 → 全部目标词 → 整句', () => {
+    const rounds = buildGoldenSentenceFillRounds('We should keep up with the news.', [
+      { en: 'keep up with', zh: '跟上', kind: 'idiom' },
+    ])
+    expect(rounds.map((r) => r.cloze.blanks.map((b) => b.answer).join(' '))).toEqual([
+      'with',
+      'keep up with',
+      'We should keep up with the news',
+    ])
+    expect(rounds.every((r) => r.scope === 'sentence')).toBe(true)
+  })
+
+  it('长句最后一轮只挖目标所在的分句，避免一次填整段', () => {
+    const text =
+      'The committee reviewed the draft, and the board considered the budget after the staff published the detailed report about the new plan for next year and the following season.'
+    const rounds = buildGoldenSentenceFillRounds(text, [
+      { en: 'considered the budget', zh: '审议预算', kind: 'collocation' },
+    ])
+    const last = rounds.at(-1)?.cloze
+    expect(last).toBeTruthy()
+    expect(last!.blanks.length).toBeGreaterThan(1)
+    expect(last!.blanks.length).toBeLessThan(text.split(/\s+/).length)
+    expect(last!.blanks.map((b) => b.answer).join(' ')).toContain('considered the budget')
   })
 
   it('按词拆时重复目标共用同一组空', () => {

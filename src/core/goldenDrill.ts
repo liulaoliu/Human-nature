@@ -140,12 +140,17 @@ export function buildGoldenCloze(text: string, targets: GoldenTarget[], opts: Go
 }
 
 export interface GoldenFillRound {
-  /** 对应原句里的第几个语言点 */
+  /** 对应原句里的第几个语言点；整句渐进轮没有单一目标，固定 0 */
   targetIndex: number
   /** 从该语言点的第几个词开始（0 起） */
   wordFrom: number
   cloze: GoldenCloze
+  /** target = 细碎语言点轮；sentence = 从单词到分句/整句的复述轮 */
+  scope?: 'target' | 'sentence'
 }
+
+/** 整句渐进最多挖到多少词；更长的句子退化成「挖一个分句」，避免一次填一整段。 */
+export const GOLDEN_SENTENCE_FILL_MAX_WORDS = 24
 
 /** 只挖某个语言点的一段（从 wordFrom 到末尾），用于「先填 with，再填 up with」的细碎轮次。 */
 function buildWordClozeForSpan(
@@ -198,9 +203,133 @@ export function buildGoldenFillRounds(text: string, targets: GoldenTarget[]): Go
     if (!words.length) return
     for (let wordFrom = words.length - 1; wordFrom >= 0; wordFrom--) {
       const cloze = buildWordClozeForSpan(text, target, span.start, span.end, wordFrom)
-      if (cloze) rounds.push({ targetIndex, wordFrom, cloze })
+      if (cloze) rounds.push({ targetIndex, wordFrom, cloze, scope: 'target' })
     }
   })
+  return rounds
+}
+
+interface IndexedSpan {
+  start: number
+  end: number
+  targetIndex: number
+  target: GoldenTarget
+}
+
+function targetSpans(text: string, targets: GoldenTarget[]): IndexedSpan[] {
+  return targets.flatMap((target, targetIndex) =>
+    findGoldenTargetSpans(text, target.en).map((span) => ({ ...span, targetIndex, target })),
+  )
+}
+
+/** 只挖指定词序号；用于「从单词到分句/整句」的复述轮。 */
+function buildClozeForWordIndexes(
+  text: string,
+  targets: GoldenTarget[],
+  words: { start: number; end: number; text: string }[],
+  indexes: number[],
+): GoldenCloze | null {
+  const picked = [...new Set(indexes)].filter((i) => i >= 0 && i < words.length).sort((a, b) => a - b)
+  if (!picked.length) return null
+  const spans = targetSpans(text, targets)
+  const blanks: GoldenClozeBlank[] = []
+  const pieces: { start: number; end: number; targetIndex: number; blankIndex: number }[] = []
+  for (const wordIndex of picked) {
+    const word = words[wordIndex]
+    const hit = spans.find((sp) => word.start >= sp.start && word.end <= sp.end)
+    const targetIndex = hit?.targetIndex ?? 0
+    const target = hit?.target ?? targets[0]
+    const blankIndex = blanks.length + 1
+    const hitWordIndex = hit
+      ? wordSpans(text.slice(hit.start, hit.end)).findIndex((w) => hit.start + w.start === word.start)
+      : -1
+    blanks.push({
+      index: blankIndex,
+      targetIndex,
+      ...(hitWordIndex >= 0 ? { wordIndex: hitWordIndex } : {}),
+      answer: word.text,
+      ...(hitWordIndex <= 0 && target?.zh ? { hint: target.zh } : {}),
+      kind: target?.kind ?? 'word',
+    })
+    pieces.push({ start: word.start, end: word.end, targetIndex, blankIndex })
+  }
+  const parts: GoldenClozePart[] = []
+  let pos = 0
+  for (const p of pieces) {
+    if (p.start > pos) parts.push({ text: text.slice(pos, p.start), blank: false })
+    parts.push({ text: text.slice(p.start, p.end), blank: true, targetIndex: p.targetIndex, blankIndex: p.blankIndex })
+    pos = p.end
+  }
+  if (pos < text.length) parts.push({ text: text.slice(pos), blank: false })
+  return { sentence: text, parts, blanks, targets }
+}
+
+/** 词序号 → 目标覆盖到的词；重复出现的目标各自算一次。 */
+function targetWordIndexes(text: string, targets: GoldenTarget[], words: { start: number; end: number }[]): number[] {
+  const at = new Map(words.map((w, i) => [w.start, i]))
+  const out = new Set<number>()
+  for (const sp of targetSpans(text, targets)) {
+    for (const w of wordSpans(text.slice(sp.start, sp.end))) {
+      const index = at.get(sp.start + w.start)
+      if (index !== undefined) out.add(index)
+    }
+  }
+  return [...out].sort((a, b) => a - b)
+}
+
+/** 用标点把句子切成词序号区间；长句的最后一轮只挖一个分句。 */
+function clauseIndexRanges(text: string, words: { start: number; end: number }[]): number[][] {
+  if (words.length <= 1) return words.length ? [[0]] : []
+  const ranges: number[][] = []
+  let from = 0
+  for (let i = 1; i < words.length; i++) {
+    const gap = text.slice(words[i - 1].end, words[i].start)
+    if (/[,;:—–]/.test(gap)) {
+      ranges.push(Array.from({ length: i - from }, (_, k) => from + k))
+      from = i
+    }
+  }
+  ranges.push(Array.from({ length: words.length - from }, (_, k) => from + k))
+  return ranges
+}
+
+/** 轮次去重指纹：空白位置 + 原文；只用于同一句内判重。 */
+export function goldenClozeKey(cloze: GoldenCloze): string {
+  return cloze.parts.map((p) => (p.blank ? `#${p.text}` : p.text)).join('')
+}
+
+/**
+ * 整句复述轮：一个词 → 本句所有目标词 → 分句/整句。
+ *
+ * 已有填空轮是按语言点练；这组轮次把视野扩大到整句，最后让用户把整个分句
+ * （长句）或整句（≤ 24 词）一次写出来。与前面的轮次重复时自动跳过。
+ */
+export function buildGoldenSentenceFillRounds(text: string, targets: GoldenTarget[]): GoldenFillRound[] {
+  const words = wordSpans(text)
+  if (!words.length) return []
+  const targetIndexes = targetWordIndexes(text, targets, words)
+  const focus = targetIndexes.length ? targetIndexes[targetIndexes.length - 1] : words.length - 1
+  const indexSets: number[][] = [[focus]]
+  if (targetIndexes.length > 1) indexSets.push(targetIndexes)
+  let finalIndexes = words.map((_, i) => i)
+  if (words.length > GOLDEN_SENTENCE_FILL_MAX_WORDS) {
+    const ranges = clauseIndexRanges(text, words)
+    const score = (range: number[]) => range.filter((i) => targetIndexes.includes(i)).length
+    const best = [...ranges].sort((a, b) => score(b) - score(a) || b.length - a.length)[0]
+    if (best?.length) finalIndexes = best
+  }
+  indexSets.push(finalIndexes)
+
+  const rounds: GoldenFillRound[] = []
+  const seen = new Set<string>()
+  for (const indexes of indexSets) {
+    const cloze = buildClozeForWordIndexes(text, targets, words, indexes)
+    if (!cloze) continue
+    const key = goldenClozeKey(cloze)
+    if (seen.has(key)) continue
+    seen.add(key)
+    rounds.push({ targetIndex: 0, wordFrom: 0, cloze, scope: 'sentence' })
+  }
   return rounds
 }
 
