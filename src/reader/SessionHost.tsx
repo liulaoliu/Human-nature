@@ -7,7 +7,7 @@ import type { useDictation } from './hooks/useDictation'
 import type { useListening } from './hooks/useListening'
 import type { useWriting } from './hooks/useWriting'
 import type { useBackTranslate } from './hooks/useBackTranslate'
-import StudyPanel from './panels/StudyPanel'
+import StudyPanelFromModel from './panels/StudyPanelFromModel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import DrillWarmup from './panels/DrillWarmup'
@@ -80,90 +80,15 @@ export default function SessionHost({
   return (
     <>
       {study.api.queue && (
-        <StudyPanel
-          card={study.api.card}
+        <StudyPanelFromModel
+          study={study}
           items={items}
-          queueLength={study.api.queue.length}
-          roundTotal={study.api.roundTotal}
-          extraCount={study.api.extraCount}
-          index={study.api.index}
-          mode={study.api.mode}
-          deck={study.api.deck}
-          scope={study.api.scope}
-          spelling={study.api.spelling}
-          revealed={study.api.revealed}
-          checked={study.api.checked}
-          input={study.api.input}
-          counts={study.api.counts}
-          cardSeconds={study.api.cardSeconds}
-          liveSeconds={study.api.liveSeconds}
-          grandSeconds={study.grandSeconds}
-          newCount={study.api.newCount}
-          dueCount={study.api.dueCount}
-          newLimit={study.newLimit}
-          newToday={study.newToday}
-          gradeInfo={study.api.gradeInfo}
-          editOpen={study.api.editOpen}
-          draft={study.api.draft}
-          delArmed={study.api.delArmed}
-          forgotCount={study.api.forgotCount}
-          canRetryForgot={study.api.canRetryForgot}
-          drillReason={study.api.drillReason}
-          meaningGate={study.api.meaningGate}
-          learnPhase={study.api.learnPhase}
-          learnReveal={study.api.learnReveal}
-          learnGraded={study.api.learnGraded}
-          reviewKeys={study.api.reviewKeys}
-          reviewFuzzy={study.api.reviewFuzzy}
-          reviewGraded={study.api.reviewGraded}
-          roundTest={study.api.roundTest}
-          roundMiss={study.api.roundMiss}
-          roundInput={study.api.roundInput}
-          onRoundInputChange={study.api.onRoundInputChange}
-          onRoundCheck={study.api.onRoundCheck}
-          groupSize={study.api.groupSize}
-          onGroupSizeChange={study.api.setGroupSize}
-          relearning={study.api.relearning}
-          spellMiss={study.api.spellMiss}
-          navLocked={study.api.navLocked}
-          drillAfter={study.api.drillAfter}
-          onClose={study.api.close}
+          speak={speak}
           onExam={() => {
             study.api.close()
             quiz.setResults([])
             quiz.setSetupOpen(true)
           }}
-          onSwitchMode={study.api.switchMode}
-          onSwitchDeck={study.api.switchDeck}
-          onSwitchScope={study.api.switchScope}
-          onStartArticleAll={study.api.startArticleAll}
-          onNewLimitChange={study.onNewLimitChange}
-          onDrillAfterChange={study.api.setDrillAfter}
-          onSpellingChange={study.api.changeSpelling}
-          onReveal={() => study.api.setRevealed(true)}
-          onInputChange={study.api.setInput}
-          onCheckSpelling={study.api.checkSpelling}
-          onSpeak={speak}
-          onOpenEdit={study.api.openEdit}
-          onDelete={study.api.removeCard}
-          onDraftChange={study.api.setDraft}
-          onSaveEdit={study.api.saveEdit}
-          onCancelEdit={study.api.cancelEdit}
-          onGrade={study.api.grade}
-          onBack={study.api.back}
-          onNext={study.api.forward}
-          onMarkUnknown={study.api.markUnknown}
-          onDrillCleared={study.api.clearDrill}
-          onMeaningCleared={study.api.clearMeaningGate}
-          onLearnReveal={study.api.revealLearnAnswer}
-          onLearnPick={study.api.answerLearn}
-          onLearnContinue={study.api.continueLearn}
-          onReviewAnswer={study.api.answerReview}
-          onReviewChoice={study.api.chooseReview}
-          onSpellMiss={study.api.applySpellingMiss}
-          onAckSpellMiss={study.api.ackSpellMiss}
-          onRetryForgot={study.api.retryForgot}
-          onRestart={study.api.start}
         />
       )}
 

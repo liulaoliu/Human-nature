@@ -2,7 +2,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { vocabItem } from '../../core/testFixtures'
-import StudyPanel, { type StudyPanelProps } from './StudyPanel'
+import StudyPanel from './StudyPanel'
+import type { StudyPanelFlat, StudyPanelModel } from './studyPanelModel'
 
 const card = vocabItem({
   id: 'v1',
@@ -15,9 +16,9 @@ const card = vocabItem({
   reviewState: { ease: 2.5, due: '2026-10-21T00:00:00.000Z', interval: 1, repetitions: 2, lapses: 1 },
 })
 
-function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
+function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
   const noop = vi.fn()
-  return {
+  const p: StudyPanelFlat = {
     card,
     items: [card],
     queueLength: 10,
@@ -99,6 +100,99 @@ function props(over: Partial<StudyPanelProps> = {}): StudyPanelProps {
     onRestart: noop,
     ...over,
   }
+  return {
+    round: {
+      card: p.card,
+      items: p.items,
+      queueLength: p.queueLength,
+      roundTotal: p.roundTotal,
+      extraCount: p.extraCount,
+      index: p.index,
+      mode: p.mode,
+      deck: p.deck,
+      scope: p.scope,
+      counts: p.counts,
+      cardSeconds: p.cardSeconds,
+      liveSeconds: p.liveSeconds,
+      grandSeconds: p.grandSeconds,
+      forgotCount: p.forgotCount,
+      canRetryForgot: p.canRetryForgot,
+    },
+    settings: {
+      spelling: p.spelling,
+      newCount: p.newCount,
+      dueCount: p.dueCount,
+      newLimit: p.newLimit,
+      newToday: p.newToday,
+      groupSize: p.groupSize,
+      drillAfter: p.drillAfter,
+    },
+    cardUi: {
+      revealed: p.revealed,
+      checked: p.checked,
+      input: p.input,
+    },
+    modes: {
+      drillReason: p.drillReason,
+      meaningGate: p.meaningGate,
+      learnPhase: p.learnPhase,
+      learnReveal: p.learnReveal,
+      learnGraded: p.learnGraded,
+      reviewKeys: p.reviewKeys,
+      reviewFuzzy: p.reviewFuzzy,
+      reviewGraded: p.reviewGraded,
+      relearning: p.relearning,
+      spellMiss: p.spellMiss,
+      roundTest: p.roundTest,
+      roundMiss: p.roundMiss,
+      roundInput: p.roundInput,
+      navLocked: p.navLocked,
+    },
+    edit: {
+      editOpen: p.editOpen,
+      draft: p.draft,
+      delArmed: p.delArmed,
+      gradeInfo: p.gradeInfo,
+    },
+    actions: {
+      onClose: p.onClose,
+      onExam: p.onExam,
+      onSwitchMode: p.onSwitchMode,
+      onSwitchDeck: p.onSwitchDeck,
+      onSwitchScope: p.onSwitchScope,
+      onStartArticleAll: p.onStartArticleAll,
+      onNewLimitChange: p.onNewLimitChange,
+      onDrillAfterChange: p.onDrillAfterChange,
+      onSpellingChange: p.onSpellingChange,
+      onGroupSizeChange: p.onGroupSizeChange,
+      onReveal: p.onReveal,
+      onInputChange: p.onInputChange,
+      onCheckSpelling: p.onCheckSpelling,
+      onSpeak: p.onSpeak,
+      onOpenEdit: p.onOpenEdit,
+      onDelete: p.onDelete,
+      onDraftChange: p.onDraftChange,
+      onSaveEdit: p.onSaveEdit,
+      onCancelEdit: p.onCancelEdit,
+      onGrade: p.onGrade,
+      onBack: p.onBack,
+      onNext: p.onNext,
+      onMarkUnknown: p.onMarkUnknown,
+      onDrillCleared: p.onDrillCleared,
+      onMeaningCleared: p.onMeaningCleared,
+      onRoundInputChange: p.onRoundInputChange,
+      onRoundCheck: p.onRoundCheck,
+      onLearnReveal: p.onLearnReveal,
+      onLearnPick: p.onLearnPick,
+      onLearnContinue: p.onLearnContinue,
+      onReviewAnswer: p.onReviewAnswer,
+      onReviewChoice: p.onReviewChoice,
+      onAckSpellMiss: p.onAckSpellMiss,
+      onSpellMiss: p.onSpellMiss,
+      onRetryForgot: p.onRetryForgot,
+      onRestart: p.onRestart,
+    },
+  }
 }
 
 afterEach(() => vi.restoreAllMocks())
@@ -106,28 +200,28 @@ afterEach(() => vi.restoreAllMocks())
 describe('StudyPanel：卡片与评分', () => {
   it('挂载时自动朗读一次；拼写模式不读（防剧透）', () => {
     const onSpeak = vi.fn()
-    const { rerender } = render(<StudyPanel {...props({ onSpeak })} />)
+    const { rerender } = render(<StudyPanel model={panelModel({ onSpeak })} />)
     expect(onSpeak).toHaveBeenCalledWith('run')
 
     onSpeak.mockClear()
-    rerender(<StudyPanel {...props({ onSpeak, spelling: true })} />)
+    rerender(<StudyPanel model={panelModel({ onSpeak, spelling: true })} />)
     expect(onSpeak).not.toHaveBeenCalled()
   })
 
   it('未揭示：只有「显示释义」；点了才出现评分', () => {
     const onReveal = vi.fn()
-    const { rerender } = render(<StudyPanel {...props({ onReveal })} />)
+    const { rerender } = render(<StudyPanel model={panelModel({ onReveal })} />)
     fireEvent.click(screen.getByRole('button', { name: '显示释义（空格）' }))
     expect(onReveal).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
 
-    rerender(<StudyPanel {...props({ revealed: true })} />)
+    rerender(<StudyPanel model={panelModel({ revealed: true })} />)
     expect(screen.getByText(/复习 2 次/)).toBeTruthy()
   })
 
   it('揭示后三个评分走 onGrade', () => {
     const onGrade = vi.fn()
-    render(<StudyPanel {...props({ revealed: true, onGrade })} />)
+    render(<StudyPanel model={panelModel({ revealed: true, onGrade })} />)
     fireEvent.click(screen.getByRole('button', { name: /^认识/ }))
     fireEvent.click(screen.getByRole('button', { name: /模糊/ }))
     fireEvent.click(screen.getByRole('button', { name: /忘记了/ }))
@@ -138,14 +232,14 @@ describe('StudyPanel：卡片与评分', () => {
     const onCheckSpelling = vi.fn()
     const onInputChange = vi.fn()
     const { rerender } = render(
-      <StudyPanel {...props({ spelling: true, onCheckSpelling, onInputChange })} />,
+      <StudyPanel model={panelModel({ spelling: true, onCheckSpelling, onInputChange })} />,
     )
     fireEvent.change(screen.getByPlaceholderText(/拼出这个英文单词/), { target: { value: 'run' } })
     expect(onInputChange).toHaveBeenCalledWith('run')
     fireEvent.keyDown(screen.getByPlaceholderText(/拼出这个英文单词/), { key: 'Enter' })
     expect(onCheckSpelling).toHaveBeenCalled()
 
-    rerender(<StudyPanel {...props({ spelling: true, checked: true, input: 'run', revealed: false })} />)
+    rerender(<StudyPanel model={panelModel({ spelling: true, checked: true, input: 'run', revealed: false })} />)
     expect(screen.getByText('✔ 正确')).toBeTruthy()
     expect(screen.getByRole('button', { name: /^认识/ })).toBeTruthy()
 
@@ -153,7 +247,7 @@ describe('StudyPanel：卡片与评分', () => {
     const onAckSpellMiss = vi.fn()
     rerender(
       <StudyPanel
-        {...props({
+        model={panelModel({
           spelling: true,
           checked: true,
           input: 'ran',
@@ -172,17 +266,17 @@ describe('StudyPanel：卡片与评分', () => {
   })
 
   it('重学卡不直接考拼写：先看词，揭示释义后强制锤炼', () => {
-    const { rerender } = render(<StudyPanel {...props({ spelling: true, relearning: true })} />)
+    const { rerender } = render(<StudyPanel model={panelModel({ spelling: true, relearning: true })} />)
     expect(screen.queryByPlaceholderText(/拼出这个英文单词/)).toBeNull()
     expect(screen.getByText('run')).toBeTruthy()
 
-    rerender(<StudyPanel {...props({ spelling: true, relearning: true, revealed: true, drillReason: 'relearn' })} />)
+    rerender(<StudyPanel model={panelModel({ spelling: true, relearning: true, revealed: true, drillReason: 'relearn' })} />)
     expect(screen.getByPlaceholderText('拼出这个英文单词')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
   })
 
   it('超时锤炼：隐藏评分按钮，交给 DrillBoard', () => {
-    render(<StudyPanel {...props({ revealed: true, drillReason: 'timeout' })} />)
+    render(<StudyPanel model={panelModel({ revealed: true, drillReason: 'timeout' })} />)
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
   })
 
@@ -196,7 +290,7 @@ describe('StudyPanel：卡片与评分', () => {
       vocabItem({ id: 'v4', word: 'see', lemma: 'see', meaning: '看' }),
     ]
     const { rerender } = render(
-      <StudyPanel {...props({ items, meaningGate: true, onReveal, onMeaningCleared })} />,
+      <StudyPanel model={panelModel({ items, meaningGate: true, onReveal, onMeaningCleared })} />,
     )
     expect(screen.getByText('🧠 选中文释义')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
@@ -209,7 +303,7 @@ describe('StudyPanel：卡片与评分', () => {
     expect(onMeaningCleared).toHaveBeenCalled()
     expect(onReveal).toHaveBeenCalled()
 
-    rerender(<StudyPanel {...props({ items, revealed: true, onReveal, onMeaningCleared })} />)
+    rerender(<StudyPanel model={panelModel({ items, revealed: true, onReveal, onMeaningCleared })} />)
     expect(screen.getByRole('button', { name: /^认识/ })).toBeTruthy()
   })
 })
@@ -218,31 +312,31 @@ describe('StudyPanel：维护与本轮小结', () => {
   it('编辑/删除入口；两步删除第二下变成确认', () => {
     const onOpenEdit = vi.fn()
     const onDelete = vi.fn()
-    const { rerender } = render(<StudyPanel {...props({ onOpenEdit, onDelete })} />)
+    const { rerender } = render(<StudyPanel model={panelModel({ onOpenEdit, onDelete })} />)
     fireEvent.click(screen.getByRole('button', { name: /编辑/ }))
     expect(onOpenEdit).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '删除' }))
     expect(onDelete).toHaveBeenCalled()
 
-    rerender(<StudyPanel {...props({ delArmed: true })} />)
+    rerender(<StudyPanel model={panelModel({ delArmed: true })} />)
     expect(screen.getByRole('button', { name: '确认删除' })).toBeTruthy()
   })
 
   it('判完停在卡上（学习等「下一词」/ 复习已判）也留着编辑入口', () => {
     const onOpenEdit = vi.fn()
-    const { rerender } = render(<StudyPanel {...props({ mode: 'learn', learnGraded: true, onOpenEdit })} />)
+    const { rerender } = render(<StudyPanel model={panelModel({ mode: 'learn', learnGraded: true, onOpenEdit })} />)
     fireEvent.click(screen.getByRole('button', { name: /编辑/ }))
     expect(onOpenEdit).toHaveBeenCalled()
 
     onOpenEdit.mockClear()
-    rerender(<StudyPanel {...props({ mode: 'review', revealed: true, reviewGraded: true, onOpenEdit })} />)
+    rerender(<StudyPanel model={panelModel({ mode: 'review', revealed: true, reviewGraded: true, onOpenEdit })} />)
     fireEvent.click(screen.getByRole('button', { name: /编辑/ }))
     expect(onOpenEdit).toHaveBeenCalled()
   })
 
   it('编辑表单打开时：根节点带 editing（右栏可滚），保存/取消都在', () => {
     const { container } = render(
-      <StudyPanel {...props({ editOpen: true, draft: { word: 'run', phonetic: '', partOfSpeech: '', meaning: '跑', definition: '', usage: '', phrases: '', idioms: '', grammarMarks: '' } })} />,
+      <StudyPanel model={panelModel({ editOpen: true, draft: { word: 'run', phonetic: '', partOfSpeech: '', meaning: '跑', definition: '', usage: '', phrases: '', idioms: '', grammarMarks: '' } })} />,
     )
     expect(container.querySelector('.study.editing')).not.toBeNull()
     expect(container.querySelector('.study-main > .study-edit')).not.toBeNull()
@@ -255,7 +349,7 @@ describe('StudyPanel：维护与本轮小结', () => {
     const onRestart = vi.fn()
     render(
       <StudyPanel
-        {...props({
+        model={panelModel({
           card: null,
           counts: { know: 6, fuzzy: 2, forgot: 1 },
           forgotCount: 1,
@@ -275,7 +369,7 @@ describe('StudyPanel：维护与本轮小结', () => {
 describe('StudyPanel：复习模式三键', () => {
   it('看见单词就能判：不用先翻面，也没有「显示释义」按钮', () => {
     const onReviewAnswer = vi.fn()
-    render(<StudyPanel {...props({ mode: 'review', reviewKeys: true, onReviewAnswer })} />)
+    render(<StudyPanel model={panelModel({ mode: 'review', reviewKeys: true, onReviewAnswer })} />)
 
     expect(screen.queryByRole('button', { name: '显示释义（空格）' })).toBeNull()
     expect(screen.queryByText(/复习 2 次/)).toBeNull() // 释义区没摊开
@@ -287,14 +381,14 @@ describe('StudyPanel：复习模式三键', () => {
 
   it('点卡片不翻面（不给偷看答案再点认识）', () => {
     const onReveal = vi.fn()
-    render(<StudyPanel {...props({ mode: 'review', reviewKeys: true, onReveal })} />)
+    render(<StudyPanel model={panelModel({ mode: 'review', reviewKeys: true, onReveal })} />)
     fireEvent.click(screen.getByText('run'))
     expect(onReveal).not.toHaveBeenCalled()
   })
 
   it('判「模糊」后摊开卡：给「下一词」和「记错了」两个出口', () => {
     const onReviewChoice = vi.fn()
-    render(<StudyPanel {...props({ mode: 'review', revealed: true, reviewFuzzy: true, onReviewChoice })} />)
+    render(<StudyPanel model={panelModel({ mode: 'review', revealed: true, reviewFuzzy: true, onReviewChoice })} />)
 
     expect(screen.getByText(/复习 2 次/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /记错了/ }))
@@ -304,7 +398,7 @@ describe('StudyPanel：复习模式三键', () => {
 
   it('判「忘记了」后只等「下一词」，不再显示三键（也不给「不认识」二次写库）', () => {
     const onNext = vi.fn()
-    render(<StudyPanel {...props({ mode: 'review', revealed: true, reviewGraded: true, onNext })} />)
+    render(<StudyPanel model={panelModel({ mode: 'review', revealed: true, reviewGraded: true, onNext })} />)
 
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
     expect(screen.queryByRole('button', { name: '不认识' })).toBeNull()
@@ -315,7 +409,7 @@ describe('StudyPanel：复习模式三键', () => {
 
 describe('StudyPanel：两列布局与拼写判错提示', () => {
   it('工具条独占左栏，卡片和评分按钮在右栏（不跟工具条挤一列）', () => {
-    const { container } = render(<StudyPanel {...props({ revealed: true })} />)
+    const { container } = render(<StudyPanel model={panelModel({ revealed: true })} />)
     const side = container.querySelector('.study > .study-side')
     const main = container.querySelector('.study > .study-main')
 
@@ -329,7 +423,7 @@ describe('StudyPanel：两列布局与拼写判错提示', () => {
     const onAckSpellMiss = vi.fn()
     render(
       <StudyPanel
-        {...props({ spellMiss: { input: 'rnu', word: 'run', meaning: '跑', requeued: true }, onAckSpellMiss })}
+        model={panelModel({ spellMiss: { input: 'rnu', word: 'run', meaning: '跑', requeued: true }, onAckSpellMiss })}
       />,
     )
 

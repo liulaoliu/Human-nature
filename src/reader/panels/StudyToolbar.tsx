@@ -1,7 +1,7 @@
 import type { StudyDeck } from '../../core/entryKind'
 import type { StudyMode } from '../../core/vocab'
 import { fmtDur } from '../format'
-import type { StudyScope } from './StudyPanel'
+import type { StudyScope } from '../hooks/useStudyPool'
 
 export interface StudyToolbarProps {
   index: number
