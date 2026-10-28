@@ -138,6 +138,9 @@ export default function BackTranslatePanel({ api }: { api: BackApi }) {
   const [historyOpen, setHistoryOpen] = useState(false)
   const [historyScope, setHistoryScope] = useState<'article' | 'all'>('article')
   const [viewing, setViewing] = useState<BackTranslationRecord | null>(null)
+  /** 「震你一下」按句记住；换句自动收起，避免下一句一进来就看到原文。 */
+  const [revealedFor, setRevealedFor] = useState<string | null>(null)
+  const originalOpen = !!api.current && revealedFor === api.current.id
 
   const listed = historyScope === 'article' ? api.articleHistory : api.history
   const showHistory = historyOpen || !api.current
@@ -172,8 +175,24 @@ export default function BackTranslatePanel({ api }: { api: BackApi }) {
           <div className="bt-prompt">
             {api.articleTitle && <div className="muted">{api.articleTitle}</div>}
             {api.contextZh && <div className="bt-context">上一句：{api.contextZh}</div>}
-            <div className="muted">把下面这句中文译回英文：</div>
+            <div className="bt-source-row">
+              <span className="muted">把下面这句中文译回英文：</span>
+              <button
+                type="button"
+                className={'bt-reveal' + (originalOpen ? ' on' : '')}
+                aria-pressed={originalOpen}
+                onClick={() => setRevealedFor(originalOpen ? null : (api.current?.id ?? null))}
+              >
+                震你一下
+              </button>
+            </div>
             <div className="bt-source">{api.sourceZh}</div>
+            {originalOpen && (
+              <div className="bt-original">
+                <span className="muted">原文：</span>
+                {api.reference}
+              </div>
+            )}
             <textarea
               className="study-input bt-answer"
               rows={4}

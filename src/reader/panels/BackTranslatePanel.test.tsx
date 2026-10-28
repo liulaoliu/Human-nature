@@ -85,6 +85,18 @@ describe('BackTranslatePanel', () => {
     expect(grade).toHaveBeenCalled()
   })
 
+  it('「震你一下」开关才显示原文，再点收起', () => {
+    const { container } = render(<BackTranslatePanel api={makeApi()} />)
+    const toggle = screen.getByRole('button', { name: '震你一下' })
+    expect(container.querySelector('.bt-original')).toBeNull()
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('true')
+    expect(container.querySelector('.bt-original')?.textContent).toContain('He went to school.')
+    fireEvent.click(toggle)
+    expect(toggle.getAttribute('aria-pressed')).toBe('false')
+    expect(container.querySelector('.bt-original')).toBeNull()
+  })
+
   it('批改后显示分数、原文对照、扣分问题与专名不计分提示', () => {
     render(<BackTranslatePanel api={makeApi({ feedback, gradedAnswer: 'He went to school.' })} />)
     expect(screen.getByText('86/100')).toBeTruthy()

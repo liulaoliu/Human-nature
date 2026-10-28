@@ -243,6 +243,25 @@
   background: var(--panel);
 }
 .bt-context { color: var(--dim); font-size: 13px; line-height: 1.7; margin-bottom: 6px; }
+.bt-source-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.bt-reveal {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.bt-reveal.on { border-color: var(--accent); color: var(--accent); }
+.bt-original {
+  margin: 2px 0 10px;
+  padding: 8px 10px;
+  border: 1px dashed var(--line);
+  border-radius: 7px;
+  color: var(--dim);
+  line-height: 1.7;
+}
 .bt-source {
   font-size: 20px;
   line-height: 1.8;
