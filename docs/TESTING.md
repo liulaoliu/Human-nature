@@ -678,3 +678,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `checkRecall` / `revealRecall` 若用 `current` / `currentRecord`，答案会记到另一句。
     `useGoldenRecall` 统一按 `recallList[recallIndex]` 取原文、`drillKey` 和记录；
     `useGoldenDrill.test` 覆盖「index=最后一句、recallIndex=第一句」和待回顾第二句。
+53. **导出/合并用的 setter 类型不要直接当内部写入口**（2026-10-28）。
+    `LearningSetters` 只承诺「用一份新数组替换」，不包含 `Dispatch` 的 updater；而
+    `useLearningActions` 里大量 `setX(prev => ...)` 需要 `LearningCollectionSetters`。
+    两层类型分开：内部用 `Dispatch<SetStateAction<T>>`，导出/合并仍用值替换签名。
