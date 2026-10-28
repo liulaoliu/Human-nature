@@ -232,6 +232,11 @@
    AI 目标必须逐字出现在原句；编造/重叠/重复的片段在 `normalizeGoldenTargets` 丢弃。
    测试钉住：`core/golden` / `goldenProgress` / `goldenAi` / `useGoldenDrill` / `useExport` 的
    “旧备份不冲掉金句课”“AI 只返回部分句子”“去重开关可关”“首答错重练不降级已掌握”。
+36. **等元素出现 ≠ 等原生事件监听挂上**（2026-10-28）。`FishLayer` 的 `wheel` 监听挂在
+   `url` 就绪后的 effect 里；测试只 `waitFor(img)` 时，并行门禁下偶尔第一次滚轮被吞
+   （单独跑必过，全量跑连续两次 `expected 76 to be greater than 76`）。
+   事件型断言要写成 `await waitFor(() => { fireEvent.wheel(...); expect(结果) })`，
+   别只等元素渲染出来就立刻派发原生事件。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

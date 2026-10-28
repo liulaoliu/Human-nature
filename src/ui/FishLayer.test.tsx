@@ -68,17 +68,27 @@ describe('FishLayer：滚轮缩放', () => {
   it('向上滚放大、向下滚缩小，并夹在 40–380', async () => {
     const { img } = await renderFish()
 
-    fireEvent.wheel(img, { deltaY: -200 })
+    // 图片渲染出来 ≠ 原生 wheel 监听已挂上：并行跑测试时 effect 可能晚一拍。
+    // 每次滚动都等结果出现，避免「第一次滚轮被吞掉」的偶发失败。
+    await waitFor(() => {
+      fireEvent.wheel(img, { deltaY: -200 })
+      expect(Number.parseInt(img.style.width, 10)).toBeGreaterThan(76)
+    })
     const enlarged = Number.parseInt(img.style.width, 10)
-    expect(enlarged).toBeGreaterThan(76)
 
-    fireEvent.wheel(img, { deltaY: 200 })
-    expect(Number.parseInt(img.style.width, 10)).toBeLessThan(enlarged)
+    await waitFor(() => {
+      fireEvent.wheel(img, { deltaY: 200 })
+      expect(Number.parseInt(img.style.width, 10)).toBeLessThan(enlarged)
+    })
 
-    fireEvent.wheel(img, { deltaY: 100000 })
-    expect(img.style.width).toBe('40px')
-    fireEvent.wheel(img, { deltaY: -100000 })
-    expect(img.style.width).toBe('380px')
+    await waitFor(() => {
+      fireEvent.wheel(img, { deltaY: 100000 })
+      expect(img.style.width).toBe('40px')
+    })
+    await waitFor(() => {
+      fireEvent.wheel(img, { deltaY: -100000 })
+      expect(img.style.width).toBe('380px')
+    })
   })
 
   it('滚完防抖落盘；还没落盘就卸载也会补写', async () => {
