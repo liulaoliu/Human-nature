@@ -12,6 +12,7 @@ src/core/        纯领域逻辑：不碰 React、不碰 DOM、不碰存储 —�
 src/adapters/    实现 core 端口（ports）的 IO 层：SQLite(HTTP) / IndexedDB / fetch / TTS / 备份
 src/reader/      React 视图层
   hooks/         有状态编排（会话状态机、与 IO 的接线），不含排版
+  apply/         无 React 状态的 AI 结果应用（factory + 按任务处理器，不放 JSX）
   panels/        展示组件（尽量薄：收 props、渲染）
   ReaderShell.tsx  页级布局外壳（工具栏 / 正文 / 右侧栏三个 slot、页级皮肤）
   ReaderArticle.tsx 正文区（标题 + 编辑态 + ReaderBody）
@@ -93,7 +94,7 @@ types ← core ← adapters ← reader
 | 速读「读到第几句」 | `src/core/speedRead.ts` 的 `speedCursorKey(articleKey)` | 只按标识存会串篇（空标题 / 同名 / 「未命名」共用一个标识）；读完最后一句退出即清零 |
 | 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势；R3 存量豁免只剩 `core/stateBackup` 一条 |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
-| AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` | 六个表格型任务；自动标词（要离线词典）与查词（要来源句）仍留在 `useApplyTaskResult` |
+| AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` + `src/reader/apply/*` | 六个表格型任务在 core；自动标词（要离线词典）在 `apply/autoVocab`，查词（要来源句）在 `apply/analysis`；`useApplyTaskResult` 只负责保住函数身份 |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` | 范围 × 题型 → 候选词与题量；设置持久化在 `hooks/useQuizSettings` |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
@@ -636,8 +637,19 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useQuizAdvance`）；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
 开篇/片段/错题重练合并到 `beginRound`）。
-`useApplyTaskResult` 这种没有 React 状态的「大 useCallback」，应该往普通 factory + 任务处理器收，
-不是继续拆成更多 hook。
+`useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
+
+### AI 结果应用：factory + 处理器，不包成 hook
+
+`useApplyTaskResult` 原来把 10 个任务塞进一个 486 行 `useCallback`。它没有 React 状态，
+所以按「Hook 是函数」的规矩拆成：
+
+- `reader/apply/createApplyTaskResult.ts`：普通 factory，只做空输入、取最新词库、表格任务/处理器分派；
+- `reader/apply/types.ts`：入参 / 回执 / 上下文，视图和处理器共用一份；
+- `reader/apply/{autoVocab,goldenLesson,listening,language,writing,analysis,tableTasks}.ts`：一个任务族一个处理器；
+- `reader/hooks/useApplyTaskResult.ts`：只剩 `useMemo`，负责保住函数身份。
+
+新增 AI 任务：`HANDLERS` 加一条 + 对应处理器 + 测试，不要在 hook 里继续加 if。
 
 ### 拆文件：拆**职责**，不是拆行数
 
