@@ -636,7 +636,7 @@ IO 接线），能单独测试就拆；只是把 props 搬来搬去的「拆」�
 | --- | --- |
 | 一堆**状态机 / 优先级判断**藏在 JSX 里（九种状态靠三元链排先后） | **拆**。拆出来能单独测「哪个状态下出现哪个按钮」，顺序错了就是二次写库 |
 | 只是把一个 hook 的结果**拍平**成另一个组件的 props | **别拆**。拆了就是搬运 props，两头都得改，还多一层文件 |
-| 编排器，子逻辑已经在子 hook 里（`grading` / `spellingRound` / `timers` / `spellGate`） | **别硬拆**。两个共享十几个 setter 的 hook 比一个 695 行的编排器更难读 |
+| 编排器，子逻辑已经在子 hook 里（`grading` / `spellingRound` / `timers` / `spellGate`） | **别硬拆**。两个共享十几个 setter 的 hook 比一个 718 行的编排器更难读；这类存量在 hook 基线里登记，只准不涨 |
 | 组合根（`ReaderApp`） | 只搬「成组的状态」出去（见 `useReaderPanels`），别为了行数把 `ReaderScreen` 的 props 改成嵌套对象 —— 那要让 4 个文件一起改 |
 
 例子（2026-10-23）：`panels/StudyPanel` 的动作区（锤炼 / 学习释义页 / 判完等下一词 / 复习三态 /
