@@ -4,7 +4,7 @@ import { buildArticleQuestions } from '../../core/articleQuiz'
 import { nextDayIso, prioritizeItems, reviewItem, markSpellingMiss } from '../../core/vocab'
 import { buildQuizSet, poolFor, poolSizes, studyableItems, type QuizScope } from '../../core/quizPool'
 import { isArticleKind } from '../../core/quiz'
-import type { Sentence, VocabItem, VocabLibrary } from '../../types/document'
+import type { Sentence, VocabLibrary } from '../../types/document'
 
 /** 「反复鞭打」最多自动重练几轮（防死循环）。 */
 const MAX_DRILL_ROUNDS = 5
@@ -15,28 +15,12 @@ import type { AnswerEventInput } from '../../core/answerEvents'
 import type { PracticeKind } from '../../core/practice'
 import { useQuizSettings } from './useQuizSettings'
 import { useHotkeys } from '../useHotkeys'
-import {
-  parseQuizSessionSnapshot,
-  type QuizResultRow,
-  type QuizSessionSnapshot,
-} from '../../core/sessionSnapshots'
+import { buildWarmupCards, type DrillWarmupCard } from '../../core/quizWarmup'
+import { useQuizAdvance } from './useQuizAdvance'
+import { useQuizSessionSnapshot } from './useQuizSessionSnapshot'
 
 export type { QuizResultRow } from '../../core/sessionSnapshots'
 export type { QuizScope } from '../../core/quizPool'
-
-const QUIZ_SESSION_KEY = 'reader:quizSession'
-
-/** 拷打前「先学一遍」的预习卡。 */
-export interface DrillWarmupCard {
-  id: string
-  word: string
-  phonetic?: string
-  meaning?: string
-  /** 词块拷打要看的：用法 / 词组 / 习语 */
-  chunks: string[]
-  /** 记忆拷打给一条例句当语境 */
-  example?: string
-}
 
 /** 预习态：题目已经出好，等人看完再开考。 */
 export interface DrillWarmupState {
@@ -47,43 +31,6 @@ export interface DrillWarmupState {
   /** 点「开始拷打」时才真正进队列 */
   questions: QuizQuestion[]
   article: boolean
-}
-
-/** 由题目反推「这轮会考到哪些词」，取词条内容做成预习卡（题目是唯一事实来源，不另写筛选）。 */
-export function buildWarmupCards(
-  items: VocabItem[],
-  questions: QuizQuestion[],
-  kind: 'memory' | 'chunk',
-): DrillWarmupCard[] {
-  const byId = new Map(items.map((it) => [it.id, it]))
-  const seen = new Set<string>()
-  const cards: DrillWarmupCard[] = []
-  for (const q of questions) {
-    if (seen.has(q.itemId)) continue
-    seen.add(q.itemId)
-    const it = byId.get(q.itemId)
-    if (!it) continue
-    cards.push({
-      id: it.id,
-      word: it.word,
-      phonetic: it.phonetic ?? undefined,
-      meaning: it.meaning ?? undefined,
-      chunks:
-        kind === 'chunk'
-          ? [...(it.phrases ?? []), ...(it.idioms ?? []), ...(it.usage ?? [])].filter(Boolean).slice(0, 6)
-          : [],
-      example: kind === 'memory' ? (it.examples.find((e) => e.text.trim())?.text ?? undefined) : undefined,
-    })
-  }
-  return cards
-}
-
-function loadQuizSession(): QuizSessionSnapshot | null {
-  try {
-    return parseQuizSessionSnapshot(localStorage.getItem(QUIZ_SESSION_KEY))
-  } catch {
-    return null
-  }
 }
 
 export interface UseQuizSessionParams {
@@ -148,41 +95,41 @@ export function useQuizSession(params: UseQuizSessionParams) {
   /** 鞭打轮的定时器（换轮/关闭时清掉）。 */
   const drillTimerRef = useRef<number | null>(null)
 
-  // ---- 会话（落盘：刷新可恢复，刷新也是解除 TTS 假死的办法） ----
-  const [restored] = useState<QuizSessionSnapshot | null>(loadQuizSession)
+  // ---- 会话（落盘/恢复在 useQuizSessionSnapshot；刷新也是解除 TTS 假死的办法） ----
+  const {
+    restored,
+    queue,
+    setQueue,
+    index,
+    setIndex,
+    input,
+    setInput,
+    checked,
+    setChecked,
+    result,
+    setResult,
+    results,
+    setResults,
+    autoRun,
+    setAutoRun,
+  } = useQuizSessionSnapshot()
   const [setupOpen, setSetupOpen] = useState(false)
-  const [queue, setQueue] = useState<QuizQuestion[] | null>(restored?.queue ?? null)
-  const [index, setIndex] = useState(restored?.index ?? 0)
-  const [input, setInput] = useState(restored?.input ?? '')
-  const [checked, setChecked] = useState(restored?.checked ?? false)
-  const [result, setResult] = useState<boolean | null>(restored?.result ?? null)
   /** 拼写题拼错：判定提示（非空时不许直接切题 / 退出）。 */
   const [spellMiss, setSpellMiss] = useState<{ itemId: string; word: string; input: string } | null>(null)
   /** 「先学一遍再考」的预习态（null = 直接考）。 */
   const [warmup, setWarmup] = useState<DrillWarmupState | null>(null)
-  const [results, setResults] = useState<QuizResultRow[]>(restored?.results ?? [])
   const [seconds, setSeconds] = useState(0)
-  /** 本轮是否自动切题（开始一轮时按设置快照）。 */
-  const [autoRun, setAutoRun] = useState(restored?.autoRun ?? false)
-  const advanceRef = useRef<number | null>(null)
   /** 本轮全部题目（重做错题按 id 从这里取，词/文章通用）。 */
   const allRef = useRef<QuizQuestion[]>([])
   // 恢复的会话若已完成，别在挂载时把成绩再记一遍
   const recordedRef = useRef(!!restored && restored.index >= restored.queue.length)
-
-  // 会话落盘：刷新页面后能接着考
-  useEffect(() => {
-    try {
-      if (queue && queue.length) {
-        const snap: QuizSessionSnapshot = { v: 1, queue, index, input, checked, result, results, autoRun }
-        localStorage.setItem(QUIZ_SESSION_KEY, JSON.stringify(snap))
-      } else {
-        localStorage.removeItem(QUIZ_SESSION_KEY)
-      }
-    } catch {
-      // 隐私模式 / 配额满：忽略
-    }
-  }, [queue, index, input, checked, result, results, autoRun])
+  const { clearAdvance, advance, next, scheduleAdvance } = useQuizAdvance({
+    spellMiss,
+    setInput,
+    setChecked,
+    setResult,
+    setIndex,
+  })
 
   // ---- 候选池与题量（规则在 core/quizPool） ----
   /** 可考的：用法笔记（中文说明）不出题 */
@@ -191,28 +138,6 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const pool = useMemo(() => poolFor(studyable, scope, poolCtx), [studyable, scope, poolCtx])
   const poolSizesNow = useMemo(() => poolSizes(studyable, kinds), [studyable, kinds])
   const availableCount = useMemo(() => countQuestions(pool, kinds), [pool, kinds])
-
-  const clearAdvance = useCallback(() => {
-    if (advanceRef.current) {
-      window.clearTimeout(advanceRef.current)
-      advanceRef.current = null
-    }
-  }, [])
-
-  /** 真正切到下一题（不再做「拼错必须先确认」的拦截）。 */
-  const advance = useCallback(() => {
-    clearAdvance()
-    setInput('')
-    setChecked(false)
-    setResult(null)
-    setIndex((i) => i + 1)
-  }, [clearAdvance])
-
-  /** 用户点「下一题」：拼错判定未确认时停在这一题。 */
-  const next = useCallback(() => {
-    if (spellMiss) return
-    advance()
-  }, [spellMiss, advance])
 
   /** 用一批题开一轮考试（内部复用）。 */
   const begin = useCallback(
@@ -378,18 +303,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
       // 答完朗读一下（看词选义读英文单词；其余读答案词形）
       if (speakAfter) speak(q.kind === 'meaning' ? q.word : q.answer)
       // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切；拼写错必须先确认
-      if (autoRun && !(!ok && spellingKind && !isArticle)) {
-        if (advanceRef.current) window.clearTimeout(advanceRef.current)
-        advanceRef.current = window.setTimeout(
-          () => {
-            advanceRef.current = null
-            next()
-          },
-          ok ? 650 : 1400,
-        )
-      }
+      if (autoRun && !(!ok && spellingKind && !isArticle)) scheduleAdvance(ok ? 650 : 1400)
     },
-    [queue, index, checked, input, library, persist, autoRun, next, markStudied, speakAfter, speak, recordActivity, recordAnswer, articleIdentity, addMistake, dropMistake],
+    [queue, index, checked, input, library, persist, autoRun, scheduleAdvance, markStudied, speakAfter, speak, recordActivity, recordAnswer, articleIdentity, addMistake, dropMistake],
   )
 
   /** 关闭考试并清掉待触发的自动切题（也顺手关掉设置面板）。 */
@@ -494,10 +410,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     }
   }, [queue, index, results, recordPractice, onKinds, loopWrong, retryWrong])
 
-  // 卸载时清掉待触发的自动切题
+  // 卸载时清掉待触发的鞭打定时器（自动切题由 useQuizAdvance 自己清理）
   useEffect(() => {
     return () => {
-      if (advanceRef.current) window.clearTimeout(advanceRef.current)
       if (drillTimerRef.current) window.clearTimeout(drillTimerRef.current)
     }
   }, [])

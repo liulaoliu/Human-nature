@@ -22,7 +22,6 @@ export const WARN_HOOK_LINES = 480
 /** 存量超限 hook：相对路径 → 允许的最高行数（只准下调）。 */
 export const BASELINE = {
   'src/reader/hooks/useStudySession.ts': 718,
-  'src/reader/hooks/useQuizSession.ts': 581,
   'src/reader/hooks/useAiPack.ts': 536,
 }
 

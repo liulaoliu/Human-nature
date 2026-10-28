@@ -1,4 +1,4 @@
-import type { DrillWarmupCard } from '../hooks/useQuizSession'
+import type { DrillWarmupCard } from '../../core/quizWarmup'
 
 export interface DrillWarmupProps {
   title: string

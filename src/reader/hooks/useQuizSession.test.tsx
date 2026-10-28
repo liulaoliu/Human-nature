@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, render } from '@testing-library/react'
-import { useQuizSession, buildWarmupCards } from './useQuizSession'
+import { useQuizSession } from './useQuizSession'
+import { buildWarmupCards } from '../../core/quizWarmup'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
