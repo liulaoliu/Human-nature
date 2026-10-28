@@ -1,6 +1,5 @@
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import {
-  buildGoldenExamFeedbackPrompt,
   buildGoldenExamPrompt,
   buildLocalGoldenExam,
   examToImitation,
@@ -12,11 +11,12 @@ import {
   parseGoldenExam,
 } from '../../core/goldenExam'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
-import { addWritingRecord, parseWritingFeedback, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import type { WritingRecord } from '../../core/writing'
 import type { GoldenExamItem, GoldenLesson } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import type { ReaderDoc } from './useReaderDoc'
 import { fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
+import { useGoldenImitation } from './useGoldenImitation'
 
 export interface UseGoldenExamParams {
   doc: ReaderDoc | null
@@ -59,12 +59,8 @@ export function useGoldenExam({
   now = () => new Date(),
 }: UseGoldenExamParams) {
   const [index, setIndex] = useState(0)
-  const [answer, setAnswer] = useState('')
-  const [feedback, setFeedback] = useState<WritingFeedback | null>(null)
-  const [grading, setGrading] = useState(false)
   const [generating, setGenerating] = useState(false)
-  const [error, setError] = useState('')
-  const [configured, setConfigured] = useState<boolean | null>(null)
+  const [taskError, setTaskError] = useState('')
 
   const metas = useMemo(
     () =>
@@ -93,6 +89,19 @@ export function useGoldenExam({
   const items = savedItems.length ? savedItems : localItems
   const current = items[index] ?? null
   const task = current ? examToImitation(current) : null
+  const attempt = useGoldenImitation({
+    current,
+    articleId,
+    articleTitle,
+    source: 'goldenExam',
+    setWritingHistory,
+    flash,
+    recordActivity,
+    runAi,
+    aiStatus,
+    now,
+  })
+  const error = taskError || attempt.error
   const history = useMemo(
     () => writingHistory.filter((r) => isGoldenExamRecord(r) && r.articleId === articleId),
     [writingHistory, articleId],
@@ -112,10 +121,9 @@ export function useGoldenExam({
   )
 
   const reset = useCallback(() => {
-    setAnswer('')
-    setFeedback(null)
-    setError('')
-  }, [])
+    attempt.reset()
+    setTaskError('')
+  }, [attempt.reset])
 
   const start = useCallback(() => {
     if (!lesson) {
@@ -135,12 +143,13 @@ export function useGoldenExam({
     (raw: string) => {
       const next = parseGoldenExam(raw, metas)
       if (!next.length) {
-        setError('没解析出考试题：需要 JSON：{"items":[{sentenceId,task,structure,mustUse,rubric}]}')
+        setTaskError('没解析出考试题：需要 JSON：{"items":[{sentenceId,task,structure,mustUse,rubric}]}')
         return false
       }
       persist(next)
       setIndex(0)
       reset()
+      setTaskError('')
       flash(`已应用 ${next.length} 道仿写考试题`)
       return true
     },
@@ -158,22 +167,17 @@ export function useGoldenExam({
       return
     }
     const prompt = buildGoldenExamPrompt({ title: articleTitle, sentences: promptSentences })
-    let ready = configured
-    if (ready === null) {
-      ready = await aiStatus()
-      setConfigured(ready)
-    }
-    if (!ready) {
+    if (!(await attempt.ensureAi())) {
       try {
         await navigator.clipboard.writeText(prompt)
         flash('已复制 AI 出题提示词；把返回的 JSON 粘到下面「应用 AI 结果」')
       } catch {
-        setError('复制失败：浏览器需要 localhost 或 https')
+        setTaskError('复制失败：浏览器需要 localhost 或 https')
       }
       return
     }
     setGenerating(true)
-    setError('')
+    setTaskError('')
     try {
       const out = await runAi(
         [{ id: `golden-exam-${Date.now().toString(36)}`, task: 'golden_exam', prompt }],
@@ -181,16 +185,16 @@ export function useGoldenExam({
       )
       const raw = out.results[0]?.raw
       if (!raw) {
-        setError(out.failed[0]?.error ?? 'AI 没有返回考试题')
+        setTaskError(out.failed[0]?.error ?? 'AI 没有返回考试题')
         return
       }
       applyTasks(raw)
     } catch (e) {
-      setError(String((e as Error)?.message || e))
+      setTaskError(String((e as Error)?.message || e))
     } finally {
       setGenerating(false)
     }
-  }, [lesson, unlocked, after, metas, records, articleId, articleTitle, configured, aiStatus, runAi, applyTasks, flash])
+  }, [lesson, unlocked, after, metas, records, articleId, articleTitle, attempt.ensureAi, runAi, applyTasks, flash])
 
   const copyTaskPrompt = useCallback(async () => {
     if (!lesson || !unlocked) return
@@ -205,93 +209,9 @@ export function useGoldenExam({
       )
       flash('已复制 AI 出题提示词')
     } catch {
-      setError('复制失败：浏览器需要 localhost 或 https')
+      setTaskError('复制失败：浏览器需要 localhost 或 https')
     }
   }, [lesson, unlocked, metas, records, articleId, articleTitle, flash])
-
-  const saveAttempt = useCallback(
-    (fb: WritingFeedback) => {
-      if (!current) return
-      const rec: WritingRecord = {
-        at: now().toISOString(),
-        articleId,
-        ...(articleTitle ? { articleTitle } : {}),
-        model: current.model,
-        text: answer.trim(),
-        feedback: fb,
-        task: examToImitation(current),
-        source: 'goldenExam',
-        examId: current.id,
-      }
-      setWritingHistory((h) => addWritingRecord(h, rec))
-      recordActivity('write', 1)
-    },
-    [current, articleId, articleTitle, answer, setWritingHistory, recordActivity, now],
-  )
-
-  const applyGrade = useCallback(
-    (raw: string) => {
-      const fb = parseWritingFeedback(raw)
-      if (!fb) {
-        setError('没解析出批改结果：需要 JSON：{scores, issues, polished}')
-        return false
-      }
-      setFeedback(fb)
-      saveAttempt(fb)
-      return true
-    },
-    [saveAttempt],
-  )
-
-  const copyGradePrompt = useCallback(async () => {
-    if (!current) return
-    if (!answer.trim()) {
-      flash('先写一句英文再批改')
-      return
-    }
-    try {
-      await navigator.clipboard.writeText(buildGoldenExamFeedbackPrompt(current, answer))
-      flash('已复制批改提示词；把返回的 JSON 粘到下面「应用 AI 结果」')
-    } catch {
-      setError('复制失败：浏览器需要 localhost 或 https')
-    }
-  }, [current, answer, flash])
-
-  const grade = useCallback(async () => {
-    if (!current) return
-    if (!answer.trim()) {
-      flash('先写一句英文再批改')
-      return
-    }
-    const prompt = buildGoldenExamFeedbackPrompt(current, answer)
-    let ready = configured
-    if (ready === null) {
-      ready = await aiStatus()
-      setConfigured(ready)
-    }
-    if (!ready) {
-      await copyGradePrompt()
-      return
-    }
-    setGrading(true)
-    setError('')
-    try {
-      const out = await runAi(
-        [{ id: `golden-exam-grade-${Date.now().toString(36)}`, task: 'feedback', prompt }],
-        { signal: new AbortController().signal },
-      )
-      const raw = out.results[0]?.raw
-      if (!raw) {
-        setError(out.failed[0]?.error ?? 'AI 没有返回批改结果')
-        return
-      }
-      applyGrade(raw)
-    } catch (e) {
-      setError(String((e as Error)?.message || e))
-    } finally {
-      setGrading(false)
-    }
-  }, [current, answer, configured, aiStatus, copyGradePrompt, runAi, applyGrade, flash])
 
   const next = useCallback(() => {
     setIndex((i) => Math.min(items.length, i + 1))
@@ -312,10 +232,10 @@ export function useGoldenExam({
     current,
     task,
     index,
-    answer,
-    setAnswer,
-    feedback,
-    grading,
+    answer: attempt.answer,
+    setAnswer: attempt.setAnswer,
+    feedback: attempt.feedback,
+    grading: attempt.grading,
     generating,
     error,
     history,
@@ -325,8 +245,8 @@ export function useGoldenExam({
     generateTasks,
     copyTaskPrompt,
     applyTasks,
-    grade,
-    copyGradePrompt,
-    applyGrade,
+    grade: attempt.grade,
+    copyGradePrompt: attempt.copyGradePrompt,
+    applyGrade: attempt.applyGrade,
   }
 }

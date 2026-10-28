@@ -34,7 +34,7 @@ export default function GoldenHome({
           <span className="golden-step-no">2</span>
           <span>
             <b>遣词造句</b>
-            <small>预览整句 → 填空 → 拼句 → 本句小结</small>
+            <small>预览整句 → 填空 → 拼句 → 本句小结 → 本句仿写</small>
           </span>
           <span className="golden-step-go">→</span>
         </button>
@@ -64,7 +64,7 @@ export default function GoldenHome({
           className="golden-step"
           onClick={() => api.startRecall()}
           disabled={!selected || !step2Done}
-          title={step2Done ? undefined : '先完成全部句子的遣词造句（预览 → 填空 → 拼句 → 小结）'}
+          title={step2Done ? undefined : '先完成全部句子的遣词造句（预览 → 填空 → 拼句 → 小结 → 仿写）'}
         >
           <span className="golden-step-no">3</span>
           <span>

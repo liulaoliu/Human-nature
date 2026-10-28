@@ -5,7 +5,7 @@ import GoldenHome from './golden/GoldenHome'
 import GoldenPlan from './golden/GoldenPlan'
 import GoldenRecallView from './golden/GoldenRecallView'
 import GoldenSummary from './golden/GoldenSummary'
-import type { GoldenApi, GoldenBankActions, GoldenExamApi } from './golden/types'
+import type { GoldenApi, GoldenBankActions, GoldenExamApi, GoldenImitationApi } from './golden/types'
 
 export interface GoldenPanelActions {
   /** 导出本课素材 Markdown */
@@ -20,6 +20,8 @@ export interface GoldenPanelActions {
   onPrintLesson?: () => void
   /** 仿写考试：完成 5/10 句后解锁，题目/批改/历史都在这一个 API 里 */
   exam?: GoldenExamApi
+  /** 每句流程末尾的单句仿写；题目跟随当前句 */
+  sentenceImitation?: GoldenImitationApi
 }
 
 export interface GoldenPanelProps {
@@ -65,7 +67,9 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
         />
       )}
       {api.view === 'plan' && <GoldenPlan api={api} />}
-      {api.view === 'drill' && <GoldenDrillView api={api} onSpeak={onSpeak} />}
+      {api.view === 'drill' && (
+        <GoldenDrillView api={api} onSpeak={onSpeak} imitation={actions.sentenceImitation} />
+      )}
       {api.view === 'recall' && <GoldenRecallView api={api} onSpeak={onSpeak} />}
       {api.view === 'exam' && actions.exam && (
         <GoldenExamView exam={actions.exam} onBack={() => api.setView('home')} />

@@ -31,7 +31,7 @@ import { useGoldenLesson } from './useGoldenLesson'
 import { useGoldenHotkeys } from './useGoldenHotkeys'
 
 export type { GoldenView } from './goldenSession'
-export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary'
+export type GoldenPhase = 'preview' | 'fill' | 'assemble' | 'summary' | 'imitation'
 
 export interface UseGoldenDrillParams {
   doc: ReaderDoc | null

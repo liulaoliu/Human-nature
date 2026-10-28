@@ -3,6 +3,7 @@ import {
   addWritingRecord,
   buildImitationTaskPrompt,
   countWritesOnDay,
+  isGoldenWritingRecord,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
@@ -89,6 +90,23 @@ describe('countWritesOnDay', () => {
   })
   it('坏时间戳忽略，不抛错', () => {
     expect(countWritesOnDay([rec('不是时间')], '2026-10-20')).toBe(0)
+  })
+})
+
+describe('isGoldenWritingRecord', () => {
+  const rec = (source?: WritingRecord['source']): WritingRecord => ({
+    at: '2026-10-28T00:00:00.000Z',
+    articleId: 'a',
+    model: 'M',
+    text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 },
+    ...(source ? { source } : {}),
+  })
+  it('单句仿写和整课考试都算金句课记录', () => {
+    expect(isGoldenWritingRecord(rec('goldenSentence'))).toBe(true)
+    expect(isGoldenWritingRecord(rec('goldenExam'))).toBe(true)
+    expect(isGoldenWritingRecord(rec())).toBe(false)
+    expect(isGoldenWritingRecord(rec('writing'))).toBe(false)
   })
 })
 

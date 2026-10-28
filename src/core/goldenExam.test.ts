@@ -4,6 +4,7 @@ import {
   buildGoldenExamPrompt,
   buildGoldenExamFeedbackPrompt,
   buildLocalGoldenExam,
+  buildLocalGoldenExamItem,
   examToImitation,
   goldenExamAfter,
   goldenExamCompletedIds,
@@ -77,6 +78,14 @@ describe('goldenExam', () => {
     expect(items[0].mustUse).toEqual(['in response to', 'has become'])
     expect(items[0].source).toBe('local')
     expect(items[0].rubric.reduce((n, r) => n + r.weight, 0)).toBe(100)
+  })
+
+  it('单句仿写不依赖整课完成：当前句有内容就能出题', () => {
+    const item = buildLocalGoldenExamItem(lesson, [meta], 's1')
+    expect(item?.sentenceId).toBe('s1')
+    expect(item?.model).toBe(meta.text)
+    expect(item?.task).toContain('仿写')
+    expect(buildLocalGoldenExamItem(lesson, [meta], 'missing')).toBeNull()
   })
 
   it('AI 题：只保留原句里真实出现的 mustUse；坏句子 id 丢弃', () => {

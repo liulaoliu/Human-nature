@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import GoldenFeedback from './GoldenFeedback'
+import GoldenPasteBox from './GoldenPasteBox'
 import type { GoldenExamApi } from './types'
 
 /**
@@ -49,7 +51,7 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
             <button onClick={exam.copyTaskPrompt}>复制出题提示词</button>
           </div>
         </div>
-        <PasteBox
+        <GoldenPasteBox
           label="应用 AI 出题结果（JSON）"
           value={taskPaste}
           onChange={setTaskPaste}
@@ -106,37 +108,9 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
 
       {exam.error && <div className="golden-bad">{exam.error}</div>}
 
-      {exam.feedback && (
-        <div className="write-feedback">
-          <div className="muted">得分：{exam.feedback.total}/{exam.feedback.max}</div>
-          {exam.feedback.scores.map((s) => (
-            <div key={s.dimension}>
-              {s.dimension}：{s.score}/{s.max}
-              {s.comment ? ` — ${s.comment}` : ''}
-            </div>
-          ))}
-          {exam.feedback.issues.length > 0 && (
-            <ul className="write-issues">
-              {exam.feedback.issues.map((is, i) => (
-                <li key={i}>
-                  <span className="bad">{is.original}</span> → <span className="ok">{is.suggestion}</span>
-                  {is.reason ? `（${is.reason}）` : ''}
-                </li>
-              ))}
-            </ul>
-          )}
-          {exam.feedback.polished && (
-            <div className="write-polished">
-              <b>改写示范：</b>
-              {exam.feedback.polished}
-            </div>
-          )}
-          {exam.feedback.summary && <div className="muted">{exam.feedback.summary}</div>}
-          <div className="golden-note">范句：{current.model}</div>
-        </div>
-      )}
+      {exam.feedback && <GoldenFeedback feedback={exam.feedback} model={current.model} />}
 
-      <PasteBox
+      <GoldenPasteBox
         label="应用 AI 批改结果（JSON）"
         value={gradePaste}
         onChange={setGradePaste}
@@ -146,7 +120,7 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
         placeholder='{"scores":[{"dimension":"结构运用","score":30,"max":35}],"issues":[],"polished":"...","summary":"..."}'
       />
 
-      <PasteBox
+      <GoldenPasteBox
         label="应用 AI 出题结果（JSON）"
         value={taskPaste}
         onChange={setTaskPaste}
@@ -162,34 +136,5 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
         </div>
       )}
     </div>
-  )
-}
-
-function PasteBox({
-  label,
-  value,
-  onChange,
-  onApply,
-  placeholder,
-}: {
-  label: string
-  value: string
-  onChange: (v: string) => void
-  onApply: () => void
-  placeholder: string
-}) {
-  return (
-    <details className="golden-exam-paste">
-      <summary>{label}</summary>
-      <textarea
-        className="study-input"
-        rows={4}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        spellCheck={false}
-      />
-      <button onClick={onApply} disabled={!value.trim()}>应用</button>
-    </details>
   )
 }

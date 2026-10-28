@@ -82,6 +82,14 @@ describe('useGoldenHotkeys', () => {
     expect(a.beginAssemble).toHaveBeenCalledTimes(1)
   })
 
+  it('本句小结 Enter 进单句仿写，不直接跳下一句', () => {
+    const a = actions()
+    renderHook(() => useGoldenHotkeys(ctx({ phase: 'summary' }), a))
+    press('Enter')
+    expect(a.setPhase).toHaveBeenCalledWith('imitation')
+    expect(a.nextSentence).not.toHaveBeenCalled()
+  })
+
   it('逆向默写 Ctrl+Enter 提交；输入框里普通 Enter 不抢；H 看答案', () => {
     const a = actions()
     renderHook(() => useGoldenHotkeys(ctx({ view: 'recall' }), a))

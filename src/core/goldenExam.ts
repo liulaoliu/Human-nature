@@ -119,6 +119,17 @@ export function goldenExamUnlocked(
   return goldenExamCompletedIds(lesson, sentences, records, articleId).length >= goldenExamAfter(lesson)
 }
 
+/** 单句仿写：当前句刚走完流程就能练，不要求它已经出现在整课考试里。 */
+export function buildLocalGoldenExamItem(
+  lesson: GoldenLesson,
+  sentences: GoldenTextMeta[],
+  sentenceId: string,
+): GoldenExamItem | null {
+  const content = lesson.sentences.find((s) => s.id === sentenceId)
+  const sentence = sentences.find((s) => s.id === sentenceId)
+  return content && sentence ? makeLocalItem(content, sentence) : null
+}
+
 /** 本地出题：只取已完成句子，按课程顺序，最多 10 题。 */
 export function buildLocalGoldenExam(
   lesson: GoldenLesson,

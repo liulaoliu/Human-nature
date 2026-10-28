@@ -145,8 +145,15 @@ export function useGoldenHotkeys(ctx: GoldenHotkeyContext, actions: GoldenHotkey
         if (ctx.phase === 'summary') {
           if (main && !inField) {
             e.preventDefault()
-            actions.nextSentence()
+            actions.setPhase('imitation')
           } else if (key === 'r' && !inField) {
+            e.preventDefault()
+            actions.speakCurrent()
+          }
+          return
+        }
+        if (ctx.phase === 'imitation') {
+          if (key === 'r' && !inField) {
             e.preventDefault()
             actions.speakCurrent()
           }

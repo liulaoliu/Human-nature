@@ -1,12 +1,14 @@
+import { useEffect, useMemo, type Dispatch, type SetStateAction } from 'react'
 import type { GoldenPanelActions } from '../panels/GoldenPanel'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
+import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import type { WritingRecord } from '../../core/writing'
-import type { Dispatch, SetStateAction } from 'react'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
 import { useGoldenExam } from './useGoldenExam'
+import { useGoldenImitation } from './useGoldenImitation'
 import type { useGoldenDrill } from './useGoldenDrill'
 
 interface GoldenFeatureArgs {
@@ -61,6 +63,26 @@ export function useGoldenFeature({
     flash,
     recordActivity,
   })
+  const sentenceItem = useMemo(
+    () =>
+      golden.lesson && golden.currentSentence
+        ? buildLocalGoldenExamItem(golden.lesson, doc?.sentences ?? [], golden.currentSentence.id)
+        : null,
+    [golden.lesson, golden.currentSentence, doc?.sentences],
+  )
+  const sentenceImitation = useGoldenImitation({
+    current: sentenceItem,
+    articleId: golden.articleId,
+    articleTitle,
+    source: 'goldenSentence',
+    setWritingHistory,
+    flash,
+    recordActivity,
+  })
+  // 每次进「本句仿写」都从空白开始；同一句重练也不带上一轮答案。
+  useEffect(() => {
+    if (golden.phase === 'imitation') sentenceImitation.reset()
+  }, [golden.phase, golden.current?.id, sentenceImitation.reset])
   const bank = useGoldenBank({
     saved,
     savedId,
@@ -95,7 +117,8 @@ export function useGoldenFeature({
     },
     onPrintLesson: bank.printLesson,
     exam,
+    sentenceImitation,
   }
 
-  return { bank, actions, exam }
+  return { bank, actions, exam, sentenceImitation }
 }

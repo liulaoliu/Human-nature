@@ -72,4 +72,37 @@ describe('useGoldenFeature', () => {
     act(() => result.current.actions.onGenerate?.())
     expect(onGenerate).toHaveBeenCalled()
   })
+
+  it('单句仿写题跟随当前句，不依赖整课考试解锁', () => {
+    const golden = {
+      lesson: doc.golden,
+      currentSentence: sentence,
+      articleId: 'a1',
+      phase: 'imitation',
+      close: vi.fn(),
+      setDoc: vi.fn(),
+      setPendingSave: vi.fn(),
+    } as unknown as ReturnType<typeof useGoldenDrill>
+    const { result } = renderHook(() =>
+      useGoldenFeature({
+        golden,
+        doc,
+        articleTitle: 'A',
+        articleKey: 'a1@x',
+        articleIdentity: 'a1@x',
+        savedId: 'a1',
+        saved: [saved],
+        records: [],
+        writingHistory: [],
+        setWritingHistory: vi.fn(),
+        recordActivity: vi.fn(),
+        download: vi.fn(),
+        flash: vi.fn(),
+        onGenerate: vi.fn(),
+        startWriting: vi.fn(),
+      }),
+    )
+    expect(result.current.sentenceImitation.current?.sentenceId).toBe('s1')
+    expect(result.current.sentenceImitation.current?.model).toBe(sentence.text)
+  })
 })

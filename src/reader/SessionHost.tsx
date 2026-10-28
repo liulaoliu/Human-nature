@@ -1,3 +1,4 @@
+import { isGoldenWritingRecord } from '../core/writing'
 import type { VocabItem } from '../types/document'
 import type { useStudySession } from './hooks/useStudySession'
 import type { useQuizSession } from './hooks/useQuizSession'
@@ -327,7 +328,7 @@ export default function SessionHost({
           onFeedback={() => void writing.copyFeedback()}
           onModelChange={writing.setModel}
           onTextChange={writing.setText}
-          onClearHistory={() => writing.setHistory((h) => h.filter((r) => r.source === 'goldenExam'))}
+          onClearHistory={() => writing.setHistory((h) => h.filter(isGoldenWritingRecord))}
           onLoadRecord={writing.loadRecord}
         />
       )}

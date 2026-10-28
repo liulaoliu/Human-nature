@@ -227,10 +227,17 @@ export interface WritingRecord {
   feedback: WritingFeedback
   /** 当时的仿写任务（题目 + rubric），可能没有 */
   task?: ImitationTask
-  /** 普通仿写缺省；金句课仿写考试单独标记，历史可分流 */
-  source?: 'writing' | 'goldenExam'
+  /** 普通仿写缺省；金句课单句仿写 / 整课考试分开标记，历史可分流 */
+  source?: 'writing' | 'goldenExam' | 'goldenSentence'
   /** 金句课考试题 id（source = goldenExam 时） */
   examId?: string
+  /** 金句课单句 id（source = goldenSentence 时） */
+  sentenceId?: string
+}
+
+/** 金句课产生的记录（单句仿写 / 整课考试），普通仿写历史不混入。 */
+export function isGoldenWritingRecord(rec: WritingRecord): boolean {
+  return rec.source === 'goldenExam' || rec.source === 'goldenSentence'
 }
 
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */

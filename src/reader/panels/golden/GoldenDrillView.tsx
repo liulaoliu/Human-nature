@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react'
 import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
 import type { GoldenCloze } from '../../../core/goldenDrill'
-import type { GoldenDrillApi, GoldenSentenceLineApi } from './types'
+import GoldenSentenceImitation from './GoldenSentenceImitation'
+import type { GoldenDrillApi, GoldenImitationApi, GoldenSentenceLineApi } from './types'
 
 function SentenceLine({ cloze, mode, api }: {
   cloze: GoldenCloze
@@ -35,7 +36,15 @@ function SentenceLine({ cloze, mode, api }: {
   )
 }
 
-export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi; onSpeak: (s: string) => void }) {
+export default function GoldenDrillView({
+  api,
+  onSpeak,
+  imitation,
+}: {
+  api: GoldenDrillApi
+  onSpeak: (s: string) => void
+  imitation?: GoldenImitationApi
+}) {
   const cur = api.current
   const sentence = api.currentSentence
   const phase = api.phase
@@ -58,6 +67,7 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
         <span className={'golden-chip' + (phase === 'fill' ? ' on' : '')}>句子填空</span>
         <span className={'golden-chip' + (phase === 'assemble' ? ' on' : '')}>拼接整句</span>
         <span className={'golden-chip' + (phase === 'summary' ? ' on' : '')}>本句小结</span>
+        <span className={'golden-chip' + (phase === 'imitation' ? ' on' : '')}>本句仿写</span>
         {phase === 'fill' && api.fillRoundCount > 0 && (
           <span className="muted">第 {api.fillRound + 1}/{api.fillRoundCount} 组</span>
         )}
@@ -173,12 +183,25 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
             ))}
           </div>
           <div className="bar">
-            <button className="primary" onClick={api.nextSentence}>
-              {api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'} <kbd>Enter</kbd>
-            </button>
+            {imitation ? (
+              <button className="primary" onClick={() => api.setPhase('imitation')}>
+                开始本句仿写 <kbd>Enter</kbd>
+              </button>
+            ) : (
+              <button className="primary" onClick={api.nextSentence}>
+                {api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'} <kbd>Enter</kbd>
+              </button>
+            )}
             <button onClick={api.speakCurrent}>🔊 听整句 <kbd>R</kbd></button>
           </div>
         </>
+      )}
+      {phase === 'imitation' && imitation && (
+        <GoldenSentenceImitation
+          imitation={imitation}
+          nextLabel={api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'}
+          onNext={api.nextSentence}
+        />
       )}
     </div>
   )

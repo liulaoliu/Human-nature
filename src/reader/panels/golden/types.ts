@@ -1,9 +1,11 @@
 import type { useGoldenDrill } from '../../hooks/useGoldenDrill'
 import type { useGoldenExam } from '../../hooks/useGoldenExam'
+import type { useGoldenImitation } from '../../hooks/useGoldenImitation'
 import type { GoldenBankRow } from '../../../core/goldenBank'
 import type { GoldenDrillRecord } from '../../../core/goldenProgress'
 
 export type GoldenExamApi = ReturnType<typeof useGoldenExam>
+export type GoldenImitationApi = ReturnType<typeof useGoldenImitation>
 
 /** 金句课总控；面板壳只拿这个类型，子视图各自再收窄。 */
 export type GoldenApi = ReturnType<typeof useGoldenDrill>

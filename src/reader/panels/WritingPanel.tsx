@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import type { ImitationTask, WritingFeedback, WritingRecord } from '../../core/writing'
+import { isGoldenWritingRecord, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
 
 export interface WritingPanelProps {
   model: string
@@ -33,7 +33,7 @@ export default function WritingPanel({
 }: WritingPanelProps) {
   const [historyOpen, setHistoryOpen] = useState(false)
   // 仿写考试的记录由金句课自己回看；这里只列普通仿写，避免两套题目混在一起。
-  const rows = history.filter((rec) => rec.source !== 'goldenExam')
+  const rows = history.filter((rec) => !isGoldenWritingRecord(rec))
 
   return (
     <div className="study writing">

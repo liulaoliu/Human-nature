@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import GoldenPanel from './GoldenPanel'
 import type { useGoldenDrill } from '../hooks/useGoldenDrill'
+import type { GoldenImitationApi } from './golden/types'
 import type { GoldenBankRow } from '../../core/goldenBank'
 
 function fakeApi(over: Record<string, unknown> = {}) {
@@ -74,6 +75,22 @@ function drillApi(over: Record<string, unknown> = {}) {
     setView: vi.fn(),
     ...over,
   })
+}
+
+function fakeImitation(over: Record<string, unknown> = {}) {
+  return {
+    current: null,
+    answer: '',
+    setAnswer: vi.fn(),
+    grade: vi.fn(),
+    grading: false,
+    error: '',
+    feedback: null,
+    copyGradePrompt: vi.fn(),
+    applyGrade: vi.fn(),
+    reset: vi.fn(),
+    ...over,
+  } as unknown as GoldenImitationApi
 }
 
 describe('GoldenPanel', () => {
@@ -157,5 +174,45 @@ describe('GoldenPanel', () => {
       <GoldenPanel api={next} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />,
     )
     await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('textbox')[0]))
+  })
+
+  it('本句小结后先进入单句仿写', () => {
+    const setPhase = vi.fn()
+    const api = drillApi({ phase: 'summary', setPhase })
+    render(
+      <GoldenPanel
+        api={api}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), sentenceImitation: fakeImitation() }}
+      />,
+    )
+    fireEvent.click(screen.getByText('开始本句仿写'))
+    expect(setPhase).toHaveBeenCalledWith('imitation')
+  })
+
+  it('单句仿写没写答案不能进入下一句', () => {
+    const api = drillApi({ phase: 'imitation' })
+    const imitation = fakeImitation({
+      current: {
+        id: 'exam:s1',
+        sentenceId: 's1',
+        task: '换一个场景，用 In response to 写一句。',
+        model: 'We keep up with the news.',
+        mustUse: ['in response to'],
+        rubric: [],
+        source: 'local',
+      },
+    })
+    render(
+      <GoldenPanel
+        api={api}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), sentenceImitation: imitation }}
+      />,
+    )
+    expect(screen.getByText('换一个场景，用 In response to 写一句。')).toBeTruthy()
+    expect((screen.getByRole('button', { name: '进入逆向回顾' }) as HTMLButtonElement).disabled).toBe(true)
   })
 })

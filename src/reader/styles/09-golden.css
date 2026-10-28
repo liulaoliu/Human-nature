@@ -424,6 +424,12 @@
   margin: 10px 0;
 }
 
+.golden-imitation {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .golden-exam-paste {
   margin-top: 12px;
   padding: 10px 12px;
