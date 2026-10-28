@@ -103,6 +103,11 @@ export function useSessionServices({
   const quickApiRef = useRef<ReturnType<typeof useQuickSession> | null>(null)
   const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
   const listenApiRef = useRef<ReturnType<typeof useListening> | null>(null)
+  /** 各会话的关闭动作；开始一个会话时按组关闭，避免每个 closeOthers 手抄一遍。 */
+  const closers = useRef<Partial<Record<'study' | 'quiz' | 'listen' | 'quick' | 'dictation' | 'writing' | 'back', () => void>>>({})
+  const closeSessions = useCallback((...keys: ('study' | 'quiz' | 'listen' | 'quick' | 'dictation' | 'writing' | 'back')[]) => {
+    for (const key of keys) closers.current[key]?.()
+  }, [])
 
   const studyApi = useStudySession({
     library,
@@ -126,13 +131,14 @@ export function useSessionServices({
     start: startStudy,
     close: closeStudy,
   } = studyApi
+  closers.current.study = closeStudy
 
   const quizApi = useQuizSession({
     library,
     articleIdentity,
     docLemmas,
     doc,
-    closeOthers: () => closeStudy(),
+    closeOthers: () => closeSessions('study'),
     speak,
     flash,
     persist,
@@ -160,6 +166,10 @@ export function useSessionServices({
     startDrill: startQuizDrill,
     startArticleDrill: startQuizArticleDrill,
   } = quizApi
+  closers.current.quiz = () => {
+    setQuizSetupOpen(false)
+    setQuizQueue(null)
+  }
 
   const listenApi = useListening({
     doc,
@@ -173,13 +183,7 @@ export function useSessionServices({
     recordAnswer,
     addMistake,
     dropMistake,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      quickApiRef.current?.close()
-      dictApiRef.current?.close()
-    },
+    closeOthers: () => closeSessions('study', 'quiz', 'quick', 'dictation'),
   })
   listenApiRef.current = listenApi
   const {
@@ -192,6 +196,7 @@ export function useSessionServices({
     start: openListening,
     startQuestions: startListenQuestions,
   } = listenApi
+  closers.current.listen = () => setListenOpen(false)
 
   /** 理解题面板：听力模式 / 阅读理解（文本）模式。 */
   const [listenReadMode, setListenReadMode] = useState(false)
@@ -208,13 +213,9 @@ export function useSessionServices({
       flash('先打开一篇文章')
       return
     }
-    closeStudy()
-    setQuizSetupOpen(false)
-    setQuizQueue(null)
-    setQuickQueue(null)
-    setListenOpen(false)
+    closeSessions('study', 'quiz', 'quick', 'listen')
     setSpeedReadOpen(true)
-  }, [doc, closeStudy, flash, setQuizSetupOpen, setListenOpen, setSpeedReadOpen])
+  }, [doc, closeSessions, flash, setSpeedReadOpen])
 
   /** 用指定片段开一轮听写（错题本「重练听写」用）。 */
   const startDictItems = useCallback((items: { id: string; text: string }[]) => {
@@ -228,14 +229,14 @@ export function useSessionServices({
     markStudied,
     recordActivity,
     flash,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-    },
+    closeOthers: () => closeSessions('study', 'quiz'),
   })
   quickApiRef.current = quickApi
   const { queue: quickQueue, setQueue: setQuickQueue } = quickApi
+  closers.current.quick = () => {
+    quickApiRef.current?.close()
+    setQuickQueue(null)
+  }
 
   const writingApi = useWriting({
     doc,
@@ -244,14 +245,7 @@ export function useSessionServices({
     setLastTask,
     askedWordsRef,
     askedIdsRef,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      quickApiRef.current?.close()
-      dictApiRef.current?.close()
-      setListenOpen(false)
-    },
+    closeOthers: () => closeSessions('study', 'quiz', 'quick', 'dictation', 'listen'),
   })
   const {
     open: writingOpen,
@@ -265,6 +259,7 @@ export function useSessionServices({
     setHistory: setWritingHistory,
     start: openWriting,
   } = writingApi
+  closers.current.writing = () => setWritingOpen(false)
 
   const backApi = useBackTranslate({
     doc,
@@ -275,25 +270,16 @@ export function useSessionServices({
     saveRecord: saveBackTranslation,
     recordActivity,
     flash,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      quickApiRef.current?.close()
-      dictApiRef.current?.close()
-      setListenOpen(false)
-      setWritingOpen(false)
-    },
+    closeOthers: () => closeSessions('study', 'quiz', 'quick', 'dictation', 'listen', 'writing'),
   })
   const { open: backOpen, start: openBack } = backApi
+  closers.current.back = () => backApi.close()
 
   // 听力理解题 / 仿写 / 回译：Esc 退出
   useHotkeys(
     (e) => {
       if (e.key === 'Escape') {
-        setListenOpen(false)
-        setWritingOpen(false)
-        backApi.close()
+        closeSessions('listen', 'writing', 'back')
       }
     },
     listenOpen || writingOpen || backOpen,
@@ -329,14 +315,10 @@ export function useSessionServices({
     recordAnswer,
     addMistake,
     dropMistake,
-    closeOthers: () => {
-      closeStudy()
-      setQuizSetupOpen(false)
-      setQuizQueue(null)
-      setQuickQueue(null)
-    },
+    closeOthers: () => closeSessions('study', 'quiz', 'quick'),
   })
   dictApiRef.current = dictApi
+  closers.current.dictation = () => dictApiRef.current?.close()
 
   return {
     studyApi,
