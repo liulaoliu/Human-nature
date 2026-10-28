@@ -132,3 +132,21 @@ export function wordsAtIndex(spans: WordSpan[], indices: number[]): string[] {
     .map((i) => spans[i]?.text)
     .filter((t): t is string => !!t)
 }
+
+/**
+ * 字符区间 [start, end) 覆盖了这句话的第几到第几个词（下标区间，end 开）。
+ * 起点不在任何词上、或整句没词时返回 null。
+ */
+export function wordIndexRange(text: string, start: number, end: number): { start: number; end: number } | null {
+  const spans = wordSpans(text)
+  const first = spans.findIndex((w) => w.end > start)
+  if (first < 0) return null
+  let last = first
+  for (let i = spans.length - 1; i >= 0; i--) {
+    if (spans[i].start < end) {
+      last = i
+      break
+    }
+  }
+  return { start: first, end: last + 1 }
+}

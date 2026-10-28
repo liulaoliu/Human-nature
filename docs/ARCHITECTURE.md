@@ -86,6 +86,7 @@ types ← core ← adapters ← reader
 | D老师小课堂：AI 提示词 / 解析 / 与本地合并 | `src/core/goldenAi.ts` | AI 只挑句/加注释，不写原句；目标必须逐字出现；AI 与本地目标取并集，本地语言点不被 AI 覆盖 |
 | 金句课 → 仿写 | `src/reader/hooks/useWriting.ts` 的 `start({ model, mustUse })` | 总结页「去仿写」把本课目标带进 mustUse；不另写一套仿写提示词 |
 | 全库金句本 / Markdown / Anki / A4 | `src/core/goldenBank.ts` | 只读摊平 `SavedArticle.golden` + `goldenDrills`；搜索/状态筛选/导出，不写库 |
+| 正文划词 / 选区 | `src/reader/hooks/useSelection.ts` 组合 `useSelectionNavigate` / `useSelectionDrag` / `useSelectionBatchActions`；DOM 小工具在 `selectionDom.ts` | 组合根只连接；正文定位、拖选判词、加待选各自一个状态边界；字符区间 → 词下标在 `core/wordSelect.ts` |
 | D老师小课堂整页面板 | `src/reader/panels/GoldenPanel.tsx` + `panels/golden/*` | 壳只做标题栏 + 视图路由；每个视图用 `Pick<GoldenApi, ...>` 收窄接口；金句本的行 + 导出/打印动作打包成 `bank`，别再逐个 prop 穿三层 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |

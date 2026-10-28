@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { snapSelection, toggleIndex, wordSpans, wordsAtIndex } from './wordSelect'
+import { snapSelection, toggleIndex, wordIndexRange, wordSpans, wordsAtIndex } from './wordSelect'
 
 const S = 'abandon back check deaf ear fish'
 //          0      7    12    18   22  26
@@ -59,6 +59,23 @@ describe('snapSelection 连字符复合词', () => {
     expect(snapSelection(t, 3, 3)?.text).toBe('bad-tempered')
     expect(snapSelection(t, 10, 10)?.text).toBe('bad-tempered')
     expect(snapSelection(t, 2, 13)?.text).toBe('bad-tempered')
+  })
+})
+
+describe('wordIndexRange（字符区间 → 词下标区间）', () => {
+  it('覆盖单个词 → 那个词的下标', () => {
+    expect(wordIndexRange(S, 8, 12)).toEqual({ start: 1, end: 2 })
+  })
+  it('跨多个词 → 首词到末词（中间全包）', () => {
+    expect(wordIndexRange(S, 0, 12)).toEqual({ start: 0, end: 2 })
+    expect(wordIndexRange(S, 8, 21)).toEqual({ start: 1, end: 4 })
+  })
+  it('终点正好停在词边界 → 不多包下一个词', () => {
+    expect(wordIndexRange(S, 0, 7)).toEqual({ start: 0, end: 1 })
+  })
+  it('起点在最后一个词之后 / 整句没词 → null', () => {
+    expect(wordIndexRange(S, 100, 120)).toBeNull()
+    expect(wordIndexRange('  , . !  ', 2, 4)).toBeNull()
   })
 })
 
