@@ -280,6 +280,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
 
   const checkFill = useCallback(() => {
     if (!cloze || !currentSentence || !current || !drillKey) return
+    // 本组已通过或已到最后一步时，Enter 属于「继续下一组 / 拼接整句」，不再重复检查。
+    if (fillRoundPassed || fillCorrect === true) return
     const results = checkGoldenFill(cloze, fillInputs)
     const ok = goldenFillAllCorrect(results)
     setFillChecked(results)
@@ -315,6 +317,8 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     fillInputs,
     fillRound,
     fillRoundCount,
+    fillRoundPassed,
+    fillCorrect,
     currentRecord,
     articleId,
     articleTitle,

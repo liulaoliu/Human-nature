@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react'
 import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
 import type { GoldenCloze } from '../../../core/goldenDrill'
 import type { GoldenDrillApi, GoldenSentenceLineApi } from './types'
@@ -37,8 +38,17 @@ function SentenceLine({ cloze, mode, api }: {
 export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi; onSpeak: (s: string) => void }) {
   const cur = api.current
   const sentence = api.currentSentence
-  if (!cur || !sentence) return <div className="golden-body muted">没有可练的句子。</div>
   const phase = api.phase
+  const firstInputRef = useRef<HTMLInputElement>(null)
+
+  // 每组填空开始时回到第一个空；不能靠 autoFocus，输入框会被 React 复用。
+  useEffect(() => {
+    if (phase !== 'fill') return
+    firstInputRef.current?.focus()
+  }, [phase, api.current?.id, api.fillRound, api.fillRoundCount])
+
+  if (!cur || !sentence) return <div className="golden-body muted">没有可练的句子。</div>
+  const fillDone = api.fillRoundPassed || api.fillCorrect === true
   return (
     <div className="golden-body">
       <div className="bar golden-drill-bar">
@@ -86,6 +96,7 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
               <label key={b.index}>
                 <span>[{b.index}] {b.hint ?? GOLDEN_TARGET_KIND_LABEL[b.kind]}</span>
                 <input
+                  ref={b.index === 1 ? firstInputRef : undefined}
                   value={api.fillInputs[b.index - 1] ?? ''}
                   onChange={(e) => {
                     const next = [...api.fillInputs]
@@ -101,7 +112,9 @@ export default function GoldenDrillView({ api, onSpeak }: { api: GoldenDrillApi;
             ))}
           </div>
           <div className="bar">
-            <button className="primary" onClick={api.checkFill}>检查 <kbd>Enter</kbd></button>
+            <button className="primary" onClick={api.checkFill} disabled={fillDone}>
+              检查 {!fillDone && <kbd>Enter</kbd>}
+            </button>
             <button onClick={() => api.setPhase('preview')}>看整句 <kbd>H</kbd></button>
             {api.fillCorrect === false && <span className="golden-bad">还有空不对，改一下再检查</span>}
             {api.fillRoundPassed && <button className="primary" onClick={api.nextFillRound}>本组正确，继续下一组 <kbd>Enter</kbd></button>}

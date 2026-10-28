@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import GoldenPanel from './GoldenPanel'
 import type { useGoldenDrill } from '../hooks/useGoldenDrill'
@@ -28,6 +28,52 @@ function fakeApi(over: Record<string, unknown> = {}) {
     startRecall: vi.fn(),
     ...over,
   } as unknown as ReturnType<typeof useGoldenDrill>
+}
+
+function drillApi(over: Record<string, unknown> = {}) {
+  const target = { en: 'keep up with', zh: '跟上', kind: 'idiom' as const }
+  const current = { id: 's1', zh: '我们要跟上新闻。', targets: [target] }
+  const one = {
+    sentence: 'We keep up with the news.',
+    parts: [
+      { text: 'We keep up ', blank: false },
+      { text: 'with', blank: true, targetIndex: 0, blankIndex: 1 },
+      { text: ' the news.', blank: false },
+    ],
+    blanks: [{ index: 1, targetIndex: 0, wordIndex: 2, answer: 'with', hint: '跟上', kind: 'idiom' }],
+    targets: [target],
+  }
+  return fakeApi({
+    view: 'drill',
+    phase: 'fill',
+    current,
+    currentSentence: { id: 's1', text: 'We keep up with the news.' },
+    ordered: [current],
+    index: 0,
+    cloze: one,
+    fillInputs: [],
+    setFillInputs: vi.fn(),
+    checkFill: vi.fn(),
+    fillCorrect: null,
+    fillChecked: null,
+    fillRound: 0,
+    fillRoundCount: 2,
+    fillRoundPassed: false,
+    nextFillRound: vi.fn(),
+    setPhase: vi.fn(),
+    beginAssemble: vi.fn(),
+    assembly: null,
+    assembleOrder: [],
+    setAssembleOrder: vi.fn(),
+    checkAssemble: vi.fn(),
+    assembleChecked: null,
+    speakCurrent: vi.fn(),
+    restartSentence: vi.fn(),
+    nextSentence: vi.fn(),
+    markSummary: vi.fn(),
+    setView: vi.fn(),
+    ...over,
+  })
 }
 
 describe('GoldenPanel', () => {
@@ -75,5 +121,41 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('Team spirit is one of the main factors.')).toBeTruthy()
     fireEvent.click(screen.getByText('导出 Markdown'))
     expect(onExportMarkdown).toHaveBeenCalled()
+  })
+
+  it('填空本组正确后检查按钮禁用，Enter 留给继续下一组', () => {
+    const api = drillApi({ fillRoundPassed: true })
+    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
+    const check = screen.getByRole('button', { name: /检查/ }) as HTMLButtonElement
+    expect(check.disabled).toBe(true)
+    expect(screen.getByRole('button', { name: /本组正确/ })).toBeTruthy()
+  })
+
+  it('每组填空开始时自动聚焦第一个空', async () => {
+    const api = drillApi()
+    const { rerender } = render(
+      <GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />,
+    )
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('textbox')[0]))
+
+    const next = { ...api, cloze: {
+      sentence: 'We keep up with the news.',
+      parts: [
+        { text: 'We keep ', blank: false },
+        { text: 'up', blank: true, targetIndex: 0, blankIndex: 1 },
+        { text: ' ', blank: false },
+        { text: 'with', blank: true, targetIndex: 0, blankIndex: 2 },
+        { text: ' the news.', blank: false },
+      ],
+      blanks: [
+        { index: 1, targetIndex: 0, wordIndex: 1, answer: 'up', hint: '跟上', kind: 'idiom' },
+        { index: 2, targetIndex: 0, wordIndex: 2, answer: 'with', kind: 'idiom' },
+      ],
+      targets: [{ en: 'keep up with', zh: '跟上', kind: 'idiom' }],
+    }, fillRound: 1 } as unknown as ReturnType<typeof useGoldenDrill>
+    rerender(
+      <GoldenPanel api={next} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />,
+    )
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('textbox')[0]))
   })
 })
