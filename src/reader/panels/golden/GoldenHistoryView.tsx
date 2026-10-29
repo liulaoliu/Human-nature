@@ -1,12 +1,6 @@
 import { useState } from 'react'
 import GoldenFeedback from './GoldenFeedback'
-import type { WritingRecord } from '../../../core/writing'
-
-const SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string> = {
-  writing: '仿写',
-  goldenSentence: '单句仿写',
-  goldenExam: '整课考试',
-}
+import { writingRecordLabel, type WritingRecord } from '../../../core/writing'
 
 type Scope = 'article' | 'all'
 
@@ -39,7 +33,7 @@ export default function GoldenHistoryView({
       <div className="golden-body">
         <div className="bar golden-plan-bar">
           <button onClick={() => setPicked(null)}>← 历史列表</button>
-          <b>{SOURCE_LABEL[picked.source ?? 'writing']}</b>
+          <b>{writingRecordLabel(picked)}</b>
           <span className="muted">{new Date(picked.at).toLocaleString()}</span>
           {picked.articleTitle && <span className="muted">{picked.articleTitle}</span>}
           <button onClick={onBack}>课程页</button>
@@ -83,7 +77,7 @@ export default function GoldenHistoryView({
               title="点开看当时的完整批改"
             >
               <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-              <span className="ellipsis">{SOURCE_LABEL[rec.source ?? 'writing']}</span>
+              <span className="ellipsis">{writingRecordLabel(rec)}</span>
               <span className="muted ellipsis">
                 {scope === 'all' ? rec.articleTitle || rec.articleId : rec.task?.task || rec.model}
               </span>

@@ -1,8 +1,10 @@
 import { useEffect, useRef } from 'react'
 import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
 import type { GoldenCloze } from '../../../core/goldenDrill'
+import GoldenLangPointImitation from './GoldenLangPointImitation'
 import GoldenSentenceImitation from './GoldenSentenceImitation'
 import type { GoldenDrillApi, GoldenImitationApi, GoldenSentenceLineApi } from './types'
+import type { GoldenLangPointApi } from '../../hooks/useGoldenLangPoint'
 
 function SentenceLine({ cloze, mode, api }: {
   cloze: GoldenCloze
@@ -40,10 +42,12 @@ export default function GoldenDrillView({
   api,
   onSpeak,
   imitation,
+  langPoint,
 }: {
   api: GoldenDrillApi
   onSpeak: (s: string) => void
   imitation?: GoldenImitationApi
+  langPoint?: GoldenLangPointApi
 }) {
   const cur = api.current
   const sentence = api.currentSentence
@@ -208,11 +212,14 @@ export default function GoldenDrillView({
         </>
       )}
       {phase === 'imitation' && imitation && (
+        <>
         <GoldenSentenceImitation
           imitation={imitation}
           nextLabel={api.index + 1 >= api.ordered.length ? '进入逆向回顾' : '下一句'}
           onNext={api.nextSentence}
         />
+        {langPoint && <GoldenLangPointImitation langPoint={langPoint} />}
+        </>
       )}
     </div>
   )

@@ -23,6 +23,8 @@ export interface ImitationTask {
   structure?: string
   mustUse: string[]
   rubric: RubricItem[]
+  /** 「语言点造句」：必须用上的那个词块；普通仿写没有这个字段 */
+  focus?: string
 }
 
 export interface WritingScore {
@@ -242,8 +244,23 @@ export function isGoldenWritingRecord(rec: WritingRecord): boolean {
 
 const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string> = {
   writing: '仿写',
-  goldenSentence: '金句课 · 单句仿写',
-  goldenExam: '金句课 · 整课考试',
+  goldenSentence: '单句仿写',
+  goldenExam: '整课考试',
+}
+
+/**
+ * 一条批改记录叫什么（历史列表 / 导出 / 打印共用这一处口径）。
+ *
+ * 金句课的「语言点造句」和「单句仿写」都属于 `source='goldenSentence'`，
+ * 靠 `task.focus` 区分：有 focus 就是只练一个词块的那道题。
+ */
+export function writingRecordLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
+  if (rec.source === 'goldenExam') return WRITING_SOURCE_LABEL.goldenExam
+  if (rec.source === 'goldenSentence') {
+    const focus = rec.task?.focus?.trim()
+    return focus ? `语言点造句 · ${focus}` : WRITING_SOURCE_LABEL.goldenSentence
+  }
+  return WRITING_SOURCE_LABEL.writing
 }
 
 function mdText(s: string): string {
@@ -263,7 +280,7 @@ export function writingHistoryToPrintHTML(records: WritingRecord[], title = '仿
   const body = list
     .map((r) => {
       const when = r.at.replace('T', ' ').slice(0, 16)
-      const src = r.source ? WRITING_SOURCE_LABEL[r.source] : WRITING_SOURCE_LABEL.writing
+      const src = writingRecordLabel(r)
       const fb = r.feedback
       const scores = (fb.scores ?? [])
         .map((s) => `${esc(mdText(s.dimension))} ${s.score}/${s.max}${s.comment ? `（${esc(mdText(s.comment))}）` : ''}`)
@@ -324,7 +341,7 @@ export function writingHistoryToMarkdown(records: WritingRecord[], title = '仿�
   const lines: string[] = [`# ${title}`, '', `共 ${list.length} 条`]
   for (const r of list) {
     const when = r.at.replace('T', ' ').slice(0, 16)
-    const src = r.source ? WRITING_SOURCE_LABEL[r.source] : WRITING_SOURCE_LABEL.writing
+    const src = writingRecordLabel(r)
     lines.push('', `## ${when} · ${mdText(r.articleTitle || r.articleId) || '未命名'}（${src}）`)
     if (r.task?.model || r.model) lines.push('', `**范句**：${mdText(r.task?.model || r.model)}`)
     if (r.task?.task) lines.push('', `**题目**：${mdText(r.task.task)}`)

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { installFakeStorage } from '../testStorage'
 import GoldenPanel from './GoldenPanel'
 import type { useGoldenDrill } from '../hooks/useGoldenDrill'
 import type { GoldenImitationApi } from './golden/types'
@@ -93,6 +94,14 @@ function fakeImitation(over: Record<string, unknown> = {}) {
   } as unknown as GoldenImitationApi
 }
 
+let restoreStorage = () => {}
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+})
+afterEach(() => {
+  restoreStorage()
+})
+
 describe('GoldenPanel', () => {
   it('课程页展示三个 STEP 和素材总结；点梳理思路切到选金句', () => {
     const api = fakeApi()
@@ -179,7 +188,7 @@ describe('GoldenPanel', () => {
     expect(screen.getByRole('button', { name: '本篇（1）' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '全部（1）' })).toBeTruthy()
     fireEvent.click(screen.getByTitle('点开看当时的完整批改'))
-    expect(screen.getByText('单句仿写')).toBeTruthy()
+    expect(screen.getByText(/单句仿写/)).toBeTruthy()
     expect(screen.getByText('得分：4/5')).toBeTruthy()
     expect(screen.getByText('不错')).toBeTruthy()
   })
@@ -253,6 +262,67 @@ describe('GoldenPanel', () => {
       />,
     )
     expect(screen.getByText(/本篇还没有记录/)).toBeTruthy()
+  })
+
+  it('本句仿写下方有「语言点造句」：选块、中英开关、批改框默认展开', () => {
+    const api = drillApi({ phase: 'imitation', currentSentence: { id: 's1', text: 'We keep up with the news.' } })
+    const sentenceImitation = fakeImitation({
+      current: {
+        id: 'exam:s1',
+        sentenceId: 's1',
+        task: '用学过的句型仿写一句英文',
+        model: 'We keep up with the news.',
+        mustUse: ['keep up with'],
+        rubric: [],
+        source: 'local',
+      },
+    })
+    const select = vi.fn()
+    const langPoint = {
+      choices: [
+        { en: 'keep up with', zh: '跟上', done: false },
+        { en: 'the news', zh: '新闻', done: true },
+      ],
+      active: 'keep up with',
+      select,
+      imitation: fakeImitation({
+        current: {
+          id: 'exam:s1:lp:keep-up-with',
+          sentenceId: 's1',
+          task: '用「keep up with」写一句英文',
+          model: 'We keep up with the news.',
+          mustUse: ['keep up with'],
+          rubric: [],
+          source: 'local',
+          focus: 'keep up with',
+        },
+      }),
+    }
+    render(
+      <GoldenPanel
+        api={api}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), sentenceImitation, langPoint }}
+      />,
+    )
+    expect(screen.getByText('还是单独练一个语言点？')).toBeTruthy()
+    // 默认显示中文释义，并且标出练过的
+    expect(screen.getByRole('button', { name: /keep up with — 跟上/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /the news — 新闻 ✓/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /the news/ }))
+    expect(select).toHaveBeenCalledWith('the news')
+
+    // 中 / EN 开关：关掉后不再显示释义，并写进 localStorage
+    fireEvent.click(screen.getByRole('button', { name: '中 / EN' }))
+    expect(screen.queryByRole('button', { name: /keep up with — 跟上/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'keep up with' })).toBeTruthy()
+    expect(localStorage.getItem('reader:goldenLangZh')).toBe('false')
+
+    // 两个 AI 结果框都默认展开（单句仿写 + 语言点造句）
+    const boxes = document.querySelectorAll('details.golden-exam-paste')
+    expect(boxes.length).toBe(2)
+    for (const box of boxes) expect((box as HTMLDetailsElement).open).toBe(true)
   })
 
   it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {

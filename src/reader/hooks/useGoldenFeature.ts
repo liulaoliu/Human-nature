@@ -10,6 +10,7 @@ import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
 import { useGoldenExam } from './useGoldenExam'
 import { useGoldenImitation } from './useGoldenImitation'
+import { useGoldenLangPoint } from './useGoldenLangPoint'
 import type { useGoldenDrill } from './useGoldenDrill'
 
 interface GoldenFeatureArgs {
@@ -97,6 +98,17 @@ export function useGoldenFeature({
     flash,
   })
 
+  // 语言点造句：同一句的额外练习，记录同样进 writingHistory（带 task.focus）
+  const langPoint = useGoldenLangPoint({
+    sentence: golden.currentSentence ?? null,
+    articleId: golden.articleId,
+    articleTitle,
+    writingHistory,
+    setWritingHistory,
+    flash,
+    recordActivity,
+  })
+
   // 本科的仿写 / 考试批改历史：单句仿写 + 整课考试都算，按文章归属
   const history = useMemo(() => {
     const all = writingHistory.filter(isGoldenWritingRecord)
@@ -136,6 +148,7 @@ export function useGoldenFeature({
     onPrintLesson: bank.printLesson,
     exam,
     sentenceImitation,
+    langPoint,
   }
 
   return { bank, actions, exam, sentenceImitation }

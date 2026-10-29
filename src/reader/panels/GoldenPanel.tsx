@@ -7,6 +7,7 @@ import GoldenPlan from './golden/GoldenPlan'
 import GoldenRecallView from './golden/GoldenRecallView'
 import GoldenSummary from './golden/GoldenSummary'
 import type { WritingRecord } from '../../core/writing'
+import type { GoldenLangPointApi } from '../hooks/useGoldenLangPoint'
 import type { GoldenApi, GoldenBankActions, GoldenExamApi, GoldenImitationApi } from './golden/types'
 
 export interface GoldenPanelActions {
@@ -28,6 +29,8 @@ export interface GoldenPanelActions {
   exam?: GoldenExamApi
   /** 每句流程末尾的单句仿写；题目跟随当前句 */
   sentenceImitation?: GoldenImitationApi
+  /** 每句可选的「语言点造句」；不影响句子进度 */
+  langPoint?: GoldenLangPointApi
 }
 
 export interface GoldenPanelProps {
@@ -84,7 +87,12 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
       )}
       {api.view === 'plan' && <GoldenPlan api={api} />}
       {api.view === 'drill' && (
-        <GoldenDrillView api={api} onSpeak={onSpeak} imitation={actions.sentenceImitation} />
+        <GoldenDrillView
+          api={api}
+          onSpeak={onSpeak}
+          imitation={actions.sentenceImitation}
+          langPoint={actions.langPoint}
+        />
       )}
       {api.view === 'recall' && <GoldenRecallView api={api} onSpeak={onSpeak} />}
       {api.view === 'exam' && actions.exam && (

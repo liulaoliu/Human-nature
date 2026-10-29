@@ -4,6 +4,7 @@ import {
   buildGoldenExamPrompt,
   buildGoldenExamFeedbackPrompt,
   buildLocalGoldenExam,
+  buildLangPointItem,
   buildLocalGoldenExamItem,
   examToImitation,
   goldenExamAfter,
@@ -132,5 +133,28 @@ describe('goldenExam', () => {
     expect(pruneGoldenExam(items, [{ ...meta, text: 'Changed.' }])).toBeUndefined()
     expect(pruneGoldenExam(items, [meta])).toHaveLength(1)
     expect(normalizeGoldenExam({ items: [] }, [meta])).toEqual([])
+  })
+})
+
+describe('buildLangPointItem：单点造句题', () => {
+  const meta = { id: 's1', text: 'The iPhone will come with a better camera.' }
+
+  it('只要求用上一个词块，题干带上中文，rubric 合计 100', () => {
+    const item = buildLangPointItem(meta, { en: 'come with', zh: '配备，附带' })
+    expect(item.sentenceId).toBe('s1')
+    expect(item.mustUse).toEqual(['come with'])
+    expect(item.focus).toBe('come with')
+    expect(item.task).toContain('come with')
+    expect(item.task).toContain('配备，附带')
+    expect(item.task).toContain('不要照抄原句')
+    expect(item.rubric.reduce((n, r) => n + r.weight, 0)).toBe(100)
+  })
+
+  it('同一句不同词块生成不同 id；转成仿写任务时带上 focus', () => {
+    const a = buildLangPointItem(meta, { en: 'come with' })
+    const b = buildLangPointItem(meta, { en: 'a better camera' })
+    expect(a.id).not.toBe(b.id)
+    expect(examToImitation(a)).toMatchObject({ mustUse: ['come with'], focus: 'come with' })
+    expect(examToImitation(a).task).not.toContain('配备')
   })
 })

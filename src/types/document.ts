@@ -404,6 +404,8 @@ export interface GoldenExamItem {
   /** 评分维度与权重（总和 100） */
   rubric: { dimension: string; weight: number; description?: string }[]
   source: 'local' | 'ai'
+  /** 语言点造句：必须用上的那个词块；整句仿写没有这个字段 */
+  focus?: string
 }
 
 /** 文章结构的一段（开头 / 主体 / 结尾），对应原文段落。 */

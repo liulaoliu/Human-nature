@@ -9,6 +9,7 @@ import {
   parseWritingFeedback,
   writingHistoryToMarkdown,
   writingHistoryToPrintHTML,
+  writingRecordLabel,
   type ImitationTask,
   type WritingRecord,
 } from './writing'
@@ -159,8 +160,8 @@ describe('writingHistoryToMarkdown（批改成册）', () => {
     expect(md.startsWith('# 仿写批改记录')).toBe(true)
     expect(md).toContain('共 2 条')
     expect(md.indexOf('2026-10-29')).toBeLessThan(md.indexOf('2026-10-28'))
-    expect(md).toContain('金句课 · 单句仿写')
-    expect(md).toContain('金句课 · 整课考试')
+    expect(md).toContain('单句仿写')
+    expect(md).toContain('整课考试')
     expect(md).toContain('**评分**：4/5')
     expect(md).toContain('结构 4/5 — 对称没问题')
     expect(md).toContain('「less I fear」→「the less afraid I am」 — 结构一致')
@@ -200,5 +201,28 @@ describe('writingHistoryToMarkdown（批改成册）', () => {
     const html = writingHistoryToPrintHTML([])
     expect(html).toContain('共 0 条')
     expect(html).toContain('</html>')
+  })
+})
+
+describe('writingRecordLabel：一条记录叫什么', () => {
+  const base = { at: '2026-10-29T00:00:00.000Z', articleId: 'a1', model: 'M', text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 } }
+  it('普通仿写 / 整课考试 / 单句仿写 / 语言点造句各叫各的', () => {
+    expect(writingRecordLabel({ source: 'writing', task: undefined })).toBe('仿写')
+    expect(writingRecordLabel({ source: 'goldenExam', task: undefined })).toBe('整课考试')
+    expect(writingRecordLabel({ source: 'goldenSentence', task: { task: 'x', model: 'm', mustUse: [], rubric: [] } })).toBe('单句仿写')
+    expect(
+      writingRecordLabel({
+        source: 'goldenSentence',
+        task: { task: 'x', model: 'm', mustUse: ['come with'], rubric: [], focus: 'come with' },
+      }),
+    ).toBe('语言点造句 · come with')
+  })
+  it('语言点造句在 Markdown / A4 打印里也标出来', () => {
+    const rec = { ...base, at: '2026-10-29T06:00:00.000Z',
+      source: 'goldenSentence' as const,
+      task: { task: '用 come with 造句', model: 'M', mustUse: ['come with'], rubric: [], focus: 'come with' } }
+    expect(writingHistoryToMarkdown([rec])).toContain('语言点造句 · come with')
+    expect(writingHistoryToPrintHTML([rec])).toContain('语言点造句 · come with')
   })
 })

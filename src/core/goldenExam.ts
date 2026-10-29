@@ -50,6 +50,41 @@ const DEFAULT_RUBRIC: GoldenExamItem['rubric'] = [
   { dimension: '意思与连贯', weight: 15, description: '中文提示是否写清楚，句子是否连贯' },
 ]
 
+/** 语言点造句的评分口径：只考「这个词块会不会用」，不跟着整句难度走。 */
+const LANG_POINT_RUBRIC: GoldenExamItem['rubric'] = [
+  { dimension: '词块使用', weight: 50, description: '必须用上的词块是否用对、搭配是否成立' },
+  { dimension: '语法准确', weight: 30, description: '主谓一致、冠词、介词、时态等硬错误' },
+  { dimension: '自然与语境', weight: 20, description: '整句是否自然，使用者自己的场景是否讲得通' },
+]
+
+/**
+ * 单点造句题：只要求用上一个词块，其余自由。
+ *
+ * 和整句仿写互补：整句题用 `structure + targets` 复现原句的骨架，
+ * 这道题只盯一个语言点，考的是「换个场景还能不能想起来用它」。
+ */
+export function buildLangPointItem(
+  sentence: Pick<GoldenTextMeta, 'id' | 'text'>,
+  point: { en: string; zh?: string },
+): GoldenExamItem {
+  const en = point.en.trim()
+  return {
+    id: `${goldenExamItemId(sentence.id)}:lp:${en.toLowerCase().replace(/\s+/g, '-')}`,
+    sentenceId: sentence.id,
+    task: [
+      `用「${en}」写一句英文：必须自然用上它，可以换主语或场景，不要照抄原句。`,
+      point.zh ? `中文：${point.zh}。` : '',
+    ]
+      .filter(Boolean)
+      .join(' '),
+    model: sentence.text,
+    mustUse: [en],
+    rubric: LANG_POINT_RUBRIC,
+    source: 'local',
+    focus: en,
+  }
+}
+
 function localTask(content: GoldenLesson['sentences'][number], sentence: GoldenTextMeta): string {
   const zh = content.zh || sentence.translation || ''
   const structure = content.pattern || content.tense || ''
@@ -294,6 +329,7 @@ export function examToImitation(item: GoldenExamItem): ImitationTask {
     ...(item.structure ? { structure: item.structure } : {}),
     mustUse: [...item.mustUse],
     rubric: item.rubric.map((r) => ({ ...r })),
+    ...(item.focus ? { focus: item.focus } : {}),
   }
 }
 
