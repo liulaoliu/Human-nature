@@ -1,8 +1,48 @@
-# 交接记录（2026-10-20）
+# 交接记录
+
+最近一次：**2026-10-29** · 上一次：2026-10-20
+
+## 2026-10-29
+
+### 当前状态
+
+- 分支 `main`，工作树干净，已 push
+- schema：`PRAGMA user_version = 10`（v10 = `writing_records` 补 `source/sentence_id/exam_id`）
+- 门禁：`npm run gates` 全绿（316 文件 / 2803 passed / 1 skipped + tsc + 三道静态门禁 + ESLint 0 error）
+- 实时库：44 篇（book 全是 `economist20160910`）· 词条 9625 · 按篇条目 12108 · 金句批改 3 条
+
+### 这轮做了什么
+
+1. **数据**：文章包「Still ringing bells」合并导入；45 篇 book 统一；「Profits overboard」重复篇合并并删除；
+   3 条中文「习语」垃圾词条清掉；旧 3 条金句课批改回填 `source/sentence_id`。
+2. **修掉的坑**（详见 `docs/TESTING.md` §3 #55–#57）：
+   合并导入覆盖本机句子原文；删保存后文章身份掉回标题；词库 409 冲突后自动保存覆盖服务端新版。
+3. **新功能**：金句课学习历史（本篇/全部/按语言点筛、A4 打印、悬浮摘要、详情翻页）；
+   每句「语言点造句」（多选、默认全选、可再写一稿、批改翻页）；顶栏「上一句/下一句」回看；
+   `GoldenPasteBox` 默认展开；批改历史不截断（>5000 条只提示导出）。
+4. **收口**：打印窗口统一 `hooks/printWindow.openPrintWindow`；写作记录标签统一 `writingRecordLabel`。
+
+### 下一轮优先
+
+1. 第二稿把上一轮 `feedback.issues` 喂给批改提示词（专查「上轮问题改了没」）。
+2. `A long road` 两篇重复（`saved:1791421783707` / `saved:1791119917875`）：正文 94% 重合但分句不同，
+   按句 id 合并会指错句，用户决定**先不管**。
+3. 学习记录没有版本快照（`learning_snapshots` 已退役），备份与主库同盘 → 提醒把 `data/xueba.db`
+   或导出 JSON 拷一份到别处。
+
+### 回滚点
+
+- `data/backups/xueba-before-book-2026-10-29.db`（改 book 前，44 篇）
+- `data/backups/xueba-before-merge-2026-10-29.db`（合并重复篇前，45 篇）
+- `data/backups/xueba-before-cleanup-2026-10-29.db`（删垃圾词条前）
+
+---
+
+## 2026-10-20（历史）
 
 给明天 / 换电脑继续用。**多标签页冲突仍然明确不做**，用户只开一个标签页。
 
-## 当前状态
+### 当前状态
 
 - 分支：`main`
 - 本轮最后提交：`6a13c8d fix: 答题事件同步保持 append-only（去重且不删除）`
@@ -11,7 +51,7 @@
 - 门禁：`npm run gates` 全绿（173 个测试文件，**1555 passed / 5 skipped** + tsc + 上帝文件 + 架构 R1–R7）
 - 实时库：`data/xueba.db`（本地，不进 git）
 
-## 这轮补了什么
+### 这轮补了什么
 
 1. **词库逻辑拆分**：`core/vocab.ts` 1122 行 → 20 行 facade，实现拆到
    `core/vocab/{word,merge,analysis,library,review}.ts`；102 条原测试按子模块搬走，基线销账。
@@ -28,7 +68,7 @@
 4. **文档同步**：`docs/ARCHITECTURE.md`、`docs/TESTING.md`、`docs/STORAGE.md`、
    `docs/reviews/2026-10-20-all.md`、`TODO.md` 已更新到当前状态。
 
-## 下次优先做
+### 下次优先做
 
 1. **答题事件收尾（P1 可选）**
    - 统计 / 设置面板加「重建并核对」按钮，调用 `POST /api/store/learning/rebuild-derived`；
@@ -73,7 +113,7 @@
    - 速读游标键 = 文章标识 + 正文签名（`core/speedRead.speedCursorKey`）：同标识的不同文章不再串进度；
      停在/读完最后一句再退出会清零，读到中间退出仍保留。
 
-## 换电脑怎么把数据带走
+### 换电脑怎么把数据带走
 
 `data/`、`public/articles.json`、`public/shadowing-state.json` 都被 gitignore，**不会随 git 过去**。
 
@@ -87,14 +127,14 @@
 
 不要同时保留旧机器的服务在跑同一个 `data/`（本项目不做多标签 / 多进程冲突处理）。
 
-## 实时检查
+### 实时检查
 
 ```bash
 curl http://127.0.0.1:5173/api/store/health
 curl http://127.0.0.1:5173/api/store/learning
 ```
 
-## 别再踩的约束
+### 别再踩的约束
 
 - 学习记录写库只有 `src/reader/hooks/useLearningSync.ts` 一个入口；不要新增第二个写 `LearningData` 的 effect。
 - 每次学习记录写入前必须先快照；恢复前也快照；答题事件是 append-only，恢复旧快照时保留当前事件。
@@ -105,7 +145,7 @@ curl http://127.0.0.1:5173/api/store/learning
   接近 800 行门禁，新增存储逻辑优先拆 `server/sqlite*.js`。
 - 提交前跑 `npm run gates`；上帝文件基线只准往下调。
 
-## 最近提交
+### 最近提交
 
 ```text
 6a13c8d fix: 答题事件同步保持 append-only（去重且不删除）
