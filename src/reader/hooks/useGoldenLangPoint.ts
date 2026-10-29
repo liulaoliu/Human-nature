@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { Sentence } from '../../types/document'
 import {
   defaultLangPoint,
@@ -6,42 +6,46 @@ import {
   langPointChoices,
   type LangPointChoice,
 } from '../../core/goldenLangPoint'
-import { buildLangPointItem } from '../../core/goldenExam'
-import { useGoldenImitation, type GoldenImitationApi } from './useGoldenImitation'
 import type { WritingRecord } from '../../core/writing'
 import type { ActivityCat } from '../../core/activity'
 
 export interface UseGoldenLangPointParams {
-  /** 当前句（D老师小课堂走到哪句就是哪句）；没有就不出题 */
+  /** 当前句；没有就不出题 */
   sentence: Sentence | null
   articleId: string
   articleTitle: string
-  /** 已练过的记录：用来给选项打 ✓，也用来默认挑第一个没练过的 */
+  /** 已练过的记录：给选项打 ✓，也用来默认挑第一个没练过的 */
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
   flash: (message: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
 }
 
+/**
+ * 「语言点造句」的题面 API：本句有哪些词块、勾了哪几个。
+ *
+ * 多选：勾几个就出几个编号输入框；每个框由 `GoldenLangPointAnswer` 自己建一份
+ * 批改实例（每框一条 `writingHistory`，`task.focus` 不同）。
+ * **不写** `golden_drill_records`：句子掌握进度只认原有的整句仿写。
+ */
 export interface GoldenLangPointApi {
   /** 本句可单练的词块（phrases / idioms） */
   choices: LangPointChoice[]
-  /** 当前选中的词块英文（可能为 null：本句没有语言点） */
-  active: string | null
-  select: (en: string) => void
-  /** 批改链路（和单句仿写同一个 hook，记录 source 也是 goldenSentence） */
-  imitation: GoldenImitationApi
+  /** 已勾选的词块英文（顺序 = 勾选顺序，编号按这个来） */
+  selected: string[]
+  /** 勾 / 取消勾一个词块 */
+  toggle: (en: string) => void
+  /** 每框都需要的上下文（子组件用它建自己的批改实例） */
+  sentence: { id: string; text: string } | null
+  articleId: string
+  articleTitle: string
+  setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  flash: (message: string) => void
+  recordActivity: (cat: ActivityCat, n?: number) => void
 }
 
 const EMPTY = new Set<string>()
 
-/**
- * 「语言点造句」：在整句仿写之外，单独练本句的一个词块。
- *
- * 与整句仿写的区别只在题面：这里 `mustUse` 只有一个 focus，评分也更看重词块用得对不对。
- * 记录仍然进 `writingHistory`（source = goldenSentence + sentenceId + task.focus），
- * **不写** `golden_drill_records`：句子的掌握进度只认原有的仿写，语言点练不练不影响流程。
- */
 export function useGoldenLangPoint({
   sentence,
   articleId,
@@ -57,32 +61,35 @@ export function useGoldenLangPoint({
   )
   const choices = useMemo(() => langPointChoices(sentence, done), [sentence, done])
 
-  const [picked, setPicked] = useState<string | null>(null)
-  // 换句就回到默认（第一个没练过的）
-  useEffect(() => {
-    setPicked(null)
-  }, [sentence?.id])
+  const [picked, setPicked] = useState<string[]>([])
+  const [pickedFor, setPickedFor] = useState<string | null>(null)
+  // 换句就回到默认：只勾第一个没练过的（用户再自己加）。
+  // 渲染期重置是 React 推荐的「派生状态跟随 props」写法，比 effect 少一帧、也不会打断练完后的勾选。
+  const sentenceId = sentence?.id ?? null
+  if (pickedFor !== sentenceId) {
+    setPickedFor(sentenceId)
+    const first = defaultLangPoint(choices)
+    setPicked(first ? [first] : [])
+  }
 
-  const fallback = defaultLangPoint(choices)
-  const active = picked && choices.some((c) => c.en === picked) ? picked : fallback
+  const selected = useMemo(
+    () => picked.filter((en) => choices.some((c) => c.en === en)),
+    [picked, choices],
+  )
 
-  const item = useMemo(() => {
-    if (!sentence || !active) return null
-    const point = choices.find((c) => c.en === active) ?? { en: active }
-    return buildLangPointItem({ id: sentence.id, text: sentence.text }, point)
-  }, [sentence, active, choices])
+  const toggle = useCallback((en: string) => {
+    setPicked((prev) => (prev.includes(en) ? prev.filter((x) => x !== en) : [...prev, en]))
+  }, [])
 
-  const imitation = useGoldenImitation({
-    current: item,
+  return {
+    choices,
+    selected,
+    toggle,
+    sentence: sentence ? { id: sentence.id, text: sentence.text } : null,
     articleId,
     articleTitle,
-    source: 'goldenSentence',
     setWritingHistory,
     flash,
     recordActivity,
-  })
-
-  const select = useCallback((en: string) => setPicked(en), [])
-
-  return { choices, active, select, imitation }
+  }
 }

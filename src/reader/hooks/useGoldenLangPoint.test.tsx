@@ -47,8 +47,8 @@ function setup(over: { sentence?: Sentence | null; history?: unknown[] } = {}) {
   return { ...hook, flash, recordActivity, setWritingHistory }
 }
 
-describe('useGoldenLangPoint：单点造句', () => {
-  it('默认选第一个没练过的；题面只要求用这一个词块', () => {
+describe('useGoldenLangPoint：语言点多选', () => {
+  it('默认只勾第一个没练过的', () => {
     const { result } = setup({
       history: [
         { articleId: 'a1', sentenceId: 's1', task: { focus: 'come with' }, text: 'x', at: '', feedback: {} },
@@ -59,25 +59,37 @@ describe('useGoldenLangPoint：单点造句', () => {
       'much of an improvement',
       'not much of a',
     ])
-    expect(result.current.active).toBe('much of an improvement')
-    expect(result.current.imitation.current?.mustUse).toEqual(['much of an improvement'])
-    expect(result.current.imitation.current?.task).toContain('much of an improvement')
+    expect(result.current.selected).toEqual(['much of an improvement'])
   })
 
-  it('点别的语言点会切换题目，答案随之清空', () => {
+  it('可以再勾一个 / 再点取消，顺序按勾选先后', () => {
     const { result } = setup()
-    act(() => result.current.imitation.setAnswer('my sentence'))
-    expect(result.current.imitation.answer).toBe('my sentence')
-    act(() => result.current.select('not much of a'))
-    expect(result.current.active).toBe('not much of a')
-    expect(result.current.imitation.current?.mustUse).toEqual(['not much of a'])
-    expect(result.current.imitation.answer).toBe('')
+    expect(result.current.selected).toEqual(['come with'])
+    act(() => result.current.toggle('not much of a'))
+    expect(result.current.selected).toEqual(['come with', 'not much of a'])
+    act(() => result.current.toggle('much of an improvement'))
+    expect(result.current.selected).toEqual(['come with', 'not much of a', 'much of an improvement'])
+    act(() => result.current.toggle('come with'))
+    expect(result.current.selected).toEqual(['not much of a', 'much of an improvement'])
   })
 
-  it('本句没有语言点：不给题，也不炸', () => {
+  it('换句：清空回到新句的默认（不残留上一句的勾选）', () => {
+    const { result, rerender } = setup()
+    act(() => result.current.toggle('not much of a'))
+    expect(result.current.selected).toHaveLength(2)
+    const other = S({
+      id: 's2',
+      text: 'The news is grim.',
+      languages: [{ phrases: ['be grim — 严峻'] }],
+    })
+    rerender({ s: other })
+    expect(result.current.selected).toEqual(['be grim'])
+  })
+
+  it('本句没有语言点：空选择', () => {
     const { result } = setup({ sentence: S({ languages: [] }) })
     expect(result.current.choices).toEqual([])
-    expect(result.current.active).toBeNull()
-    expect(result.current.imitation.current).toBeNull()
+    expect(result.current.selected).toEqual([])
+    expect(result.current.sentence).toEqual({ id: 's1', text: 'The iPhone will come with a better camera.' })
   })
 })
