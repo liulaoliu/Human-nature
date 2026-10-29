@@ -16,7 +16,7 @@
     "ecdict:build": "node tools/build-ecdict.mjs",
     "mwld:build": "node tools/build-mwld.mjs",
     "tatoeba:build": "node tools/build-tatoeba.mjs",
-    "gates": "tsc -b && npm run typecheck:server && vitest run && npm run gates:static",
+    "gates": "tsc -b && npm run typecheck:server && vitest run --pool=forks --maxWorkers=4 --minWorkers=1 && npm run gates:static",
     "gates:full": "npm run gates",
     "gates:fast": "tsc -b && npm run typecheck:server && node tool/test_changed.mjs && npm run gates:static",
     "gates:static": "node tool/check_god_file.mjs && node tool/check_hook_size.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs",
