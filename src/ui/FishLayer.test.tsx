@@ -93,7 +93,12 @@ describe('FishLayer：滚轮缩放', () => {
 
   it('滚完防抖落盘；还没落盘就卸载也会补写', async () => {
     const { img, unmount } = await renderFish()
-    fireEvent.wheel(img, { deltaY: -200 })
+    // 图片渲染出来 ≠ 原生 wheel 监听已挂上（TESTING §3-36）：先在 waitFor 里确认滚动已经生效，
+    // 否则并行跑门禁时第一次滚轮被吞掉，宽度没变、卸载时自然没有可落盘的值。
+    await waitFor(() => {
+      fireEvent.wheel(img, { deltaY: -200 })
+      expect(img.style.width).not.toBe('76px')
+    })
     const width = img.style.width
     expect(localStorage.getItem(SIZE_KEY)).toBeNull()
 
