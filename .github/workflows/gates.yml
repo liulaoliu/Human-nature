@@ -1,0 +1,31 @@
+name: gates
+
+# 仓库一直靠本地 `npm run gates` 收尾；这条流水线只是把它搬到 CI 上跑一遍，
+# 免得「本机能过、合进去才发现红」——2026-10-29 就有一条用例在 HEAD 上红了 4 小时。
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: gates-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - run: npm ci
+
+      # 与本地完全同一条命令：tsc + 服务端类型 + 全量测试 + 上帝文件 / hook / 架构 / 词义门禁。
+      # CI 里没有 data/xueba.db，词义门禁会自动跳过（见 tool/check_vocab_sense.mjs）。
+      - run: npm run gates
