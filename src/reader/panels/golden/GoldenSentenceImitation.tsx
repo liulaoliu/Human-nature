@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { GoldenImitationApi } from '../../hooks/useGoldenImitation'
+import GoldenAttemptsPager from './GoldenAttemptsPager'
 import GoldenFeedback from './GoldenFeedback'
 import GoldenPasteBox from './GoldenPasteBox'
 
@@ -71,7 +72,11 @@ export default function GoldenSentenceImitation({
       </div>
 
       {imitation.error && <div className="golden-bad">{imitation.error}</div>}
-      {imitation.feedback && <GoldenFeedback feedback={imitation.feedback} model={current.model} />}
+      <GoldenAttemptsPager imitation={imitation} />
+      {imitation.viewing && <div className="golden-note">当时的作答：{imitation.viewing.text}</div>}
+      {(imitation.viewing?.feedback ?? imitation.feedback) && (
+        <GoldenFeedback feedback={imitation.viewing?.feedback ?? imitation.feedback!} model={current.model} />
+      )}
 
       <GoldenPasteBox
         label="应用 AI 批改结果（JSON）"

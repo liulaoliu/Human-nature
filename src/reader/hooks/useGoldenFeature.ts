@@ -83,6 +83,7 @@ export function useGoldenFeature({
     articleTitle,
     source: 'goldenSentence',
     setWritingHistory,
+    writingHistory,
     flash,
     recordActivity,
   })

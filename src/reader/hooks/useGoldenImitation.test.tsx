@@ -26,7 +26,7 @@ const feedback = {
   summary: '结构用对了。',
 }
 
-function setup(runAi = vi.fn(), aiStatus = vi.fn().mockResolvedValue(true)) {
+function setup(runAi = vi.fn(), aiStatus = vi.fn().mockResolvedValue(true), now = () => new Date('2026-10-28T00:00:00.000Z')) {
   const recordActivity = vi.fn()
   const hook = renderHook(() => {
     const [history, setWritingHistory] = useState<WritingRecord[]>([])
@@ -36,11 +36,12 @@ function setup(runAi = vi.fn(), aiStatus = vi.fn().mockResolvedValue(true)) {
       articleTitle: 'A',
       source: 'goldenSentence',
       setWritingHistory,
+      writingHistory: history,
       flash: vi.fn(),
       recordActivity,
       runAi,
       aiStatus,
-      now: () => new Date('2026-10-28T00:00:00.000Z'),
+      now,
     })
     return { imitation, history }
   })
@@ -107,6 +108,38 @@ describe('useGoldenImitation', () => {
     })
     await waitFor(() => expect(h.result.current.imitation.feedback).not.toBeNull())
     expect(h.result.current.history).toHaveLength(1)
+  })
+
+  it('同一题多次批改可以翻页看：◀ 上一次 → 历史，▶ 下一次 → 回到最新', async () => {
+    const raw = JSON.stringify(feedback)
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })
+    // 每次批改往后走 1 分钟：历史按 at 排序，固定时钟会让两条同时刻
+    let t = 0
+    const h = setup(runAi, vi.fn().mockResolvedValue(true), () => new Date(Date.parse('2026-10-28T00:00:00.000Z') + t++ * 60_000))
+    const write = async (text: string) => {
+      act(() => h.result.current.imitation.setAnswer(text))
+      await act(async () => {
+        await h.result.current.imitation.grade()
+      })
+      await waitFor(() => expect(h.result.current.imitation.feedback).not.toBeNull())
+    }
+    await write('First try.')
+    await write('Second try, improved.')
+    await waitFor(() => expect(h.result.current.imitation.attempts).toHaveLength(2))
+    expect(h.result.current.imitation.viewing).toBeNull()
+
+    act(() => h.result.current.imitation.earlier())
+    expect(h.result.current.imitation.viewing?.text).toBe('First try.')
+    act(() => h.result.current.imitation.earlier())
+    expect(h.result.current.imitation.viewing?.text).toBe('First try.')
+
+    // ▶ 先走到最新那一条，再点一次才回到实时视图
+    act(() => h.result.current.imitation.later())
+    expect(h.result.current.imitation.viewing?.text).toBe('Second try, improved.')
+    act(() => h.result.current.imitation.later())
+    expect(h.result.current.imitation.viewing).toBeNull()
+    act(() => h.result.current.imitation.backToLive())
+    expect(h.result.current.imitation.viewing).toBeNull()
   })
 
   it('坏批改 JSON 只报错，不写历史', () => {

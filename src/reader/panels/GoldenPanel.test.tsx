@@ -90,6 +90,14 @@ function fakeImitation(over: Record<string, unknown> = {}) {
     copyGradePrompt: vi.fn(),
     applyGrade: vi.fn(),
     reset: vi.fn(),
+    attempts: [],
+    viewing: null,
+    earlier: vi.fn(),
+    later: vi.fn(),
+    backToLive: vi.fn(),
+    round: 1,
+    canRewrite: false,
+    rewrite: vi.fn(),
     ...over,
   } as unknown as GoldenImitationApi
 }
@@ -219,6 +227,52 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('B 篇')).toBeTruthy()
   })
 
+  it('同一题多次批改：批改结果上方有翻页，能看上一次 / 回到最新', () => {
+    const fb = (total: number) => ({ scores: [], issues: [], polished: '', summary: '', total, max: 5 })
+    const attempts = [
+      { at: '2026-10-29T06:00:00.000Z', articleId: 'a1', sentenceId: 's1', text: 'First try.', model: 'M', feedback: fb(3) },
+      { at: '2026-10-29T06:10:00.000Z', articleId: 'a1', sentenceId: 's1', text: 'Second try.', model: 'M', feedback: fb(4) },
+    ]
+    const earlier = vi.fn()
+    const backToLive = vi.fn()
+    const imitation = fakeImitation({
+      current: { id: 'exam:s1', sentenceId: 's1', task: '仿写', model: 'M', mustUse: [], rubric: [], source: 'local' },
+      attempts,
+      viewing: null,
+      earlier,
+      later: vi.fn(),
+      backToLive,
+      feedback: fb(4),
+    })
+    const { unmount } = render(
+      <GoldenPanel
+        api={drillApi({ phase: 'imitation' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), sentenceImitation: imitation }}
+      />,
+    )
+    expect(screen.getByText(/第 2\/2 次批改/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /上一次/ }))
+    expect(earlier).toHaveBeenCalled()
+    unmount()
+
+    // 翻到历史：只读、显示当时的作答，并且能回到最新
+    render(
+      <GoldenPanel
+        api={drillApi({ phase: 'imitation' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{
+          onExportMarkdown: vi.fn(),
+          sentenceImitation: fakeImitation({ ...imitation, viewing: attempts[0] }),
+        }}
+      />,
+    )
+    expect(screen.getByText(/当时的作答：First try\./)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '回到最新' })).toBeTruthy()
+  })
+
   it('学习历史可打印：按当前范围（本篇 / 全部）传对应记录', () => {
     const rec = (at: string, articleId: string, articleTitle: string) => ({
       at,
@@ -290,6 +344,7 @@ describe('GoldenPanel', () => {
       articleId: 'a1',
       articleTitle: 'A',
       setWritingHistory: vi.fn(),
+      writingHistory: [],
       flash: vi.fn(),
       recordActivity: vi.fn(),
     }

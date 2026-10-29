@@ -10,6 +10,7 @@ import {
   writingHistoryToMarkdown,
   writingHistoryToPrintHTML,
   writingRecordLabel,
+  writingAttemptsFor,
   WRITING_HISTORY_WARN_AT,
   type ImitationTask,
   type WritingRecord,
@@ -246,5 +247,31 @@ describe('writingRecordLabel：一条记录叫什么', () => {
       task: { task: '用 come with 造句', model: 'M', mustUse: ['come with'], rubric: [], focus: 'come with' } }
     expect(writingHistoryToMarkdown([rec])).toContain('语言点造句 · come with')
     expect(writingHistoryToPrintHTML([rec])).toContain('语言点造句 · come with')
+  })
+})
+
+describe('writingAttemptsFor：同一题的历史批改', () => {
+  const r = (at: string, over: Record<string, unknown> = {}) => ({
+    at,
+    articleId: 'a1',
+    sentenceId: 's1',
+    model: 'M',
+    text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 },
+    ...over,
+  })
+  it('只取同篇同句同 focus，按时间正序（最后一条是最新）', () => {
+    const list = [
+      r('2026-10-29T02:00:00.000Z', { text: 'second', task: { task: 'x', model: 'M', mustUse: [], rubric: [], focus: 'come with' } }),
+      r('2026-10-29T01:00:00.000Z', { text: 'first', task: { task: 'x', model: 'M', mustUse: [], rubric: [], focus: 'come with' } }),
+      r('2026-10-29T03:00:00.000Z', { text: 'other focus', task: { task: 'x', model: 'M', mustUse: [], rubric: [], focus: 'served' } }),
+      r('2026-10-29T04:00:00.000Z', { articleId: 'a2', text: 'other article' }),
+      r('2026-10-29T05:00:00.000Z', { sentenceId: 's2', text: 'other sentence' }),
+    ]
+    expect(writingAttemptsFor(list, { articleId: 'a1', sentenceId: 's1', focus: 'come with' }).map((x) => x.text)).toEqual(['first', 'second'])
+  })
+  it('整课考试按 examId 取', () => {
+    const list = [r('2026-10-29T01:00:00.000Z', { examId: 'e1' }), r('2026-10-29T02:00:00.000Z', { examId: 'e2' })]
+    expect(writingAttemptsFor(list, { articleId: 'a1', examId: 'e1' })).toHaveLength(1)
   })
 })

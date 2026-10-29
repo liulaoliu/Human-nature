@@ -404,3 +404,26 @@ export function countWritesOnDay(list: WritingRecord[], todayKey: string): numbe
 }
 
 
+
+/** 一道题的历史批改：按题身份筛出来，按时间正序（最早在前，最后一条就是最新一稿）。 */
+export interface WritingAttemptIdentity {
+  articleId: string
+  /** 单句仿写 / 语言点造句用句子 id */
+  sentenceId?: string | null
+  /** 整课考试用题目 id */
+  examId?: string | null
+  /** 语言点造句用 focus；普通仿写为空 */
+  focus?: string | null
+}
+
+export function writingAttemptsFor(list: WritingRecord[], id: WritingAttemptIdentity): WritingRecord[] {
+  const focus = id.focus?.trim() ?? ''
+  return list
+    .filter((r) => {
+      if (r.articleId !== id.articleId) return false
+      if (id.examId) return (r.examId ?? '') === id.examId
+      if ((r.sentenceId ?? '') !== (id.sentenceId ?? '')) return false
+      return (r.task?.focus?.trim() ?? '') === focus
+    })
+    .sort((a, b) => a.at.localeCompare(b.at))
+}

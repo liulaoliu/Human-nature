@@ -9,7 +9,7 @@ export interface UseGoldenLangPointParams {
   sentence: Sentence | null
   articleId: string
   articleTitle: string
-  /** 已练过的记录：给选项打 ✓，也用来默认挑第一个没练过的 */
+  /** 全库写作历史：给选项打 ✓，也让每个作答框翻同一题的历史批改 */
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
   flash: (message: string) => void
@@ -35,6 +35,7 @@ export interface GoldenLangPointApi {
   articleId: string
   articleTitle: string
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  writingHistory: WritingRecord[]
   flash: (message: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
 }
@@ -83,6 +84,7 @@ export function useGoldenLangPoint({
     articleId,
     articleTitle,
     setWritingHistory,
+    writingHistory,
     flash,
     recordActivity,
   }

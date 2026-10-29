@@ -3,6 +3,7 @@ import { buildLangPointItem } from '../../../core/goldenExam'
 import type { LangPointChoice } from '../../../core/goldenLangPoint'
 import { useGoldenImitation } from '../../hooks/useGoldenImitation'
 import type { GoldenLangPointApi } from '../../hooks/useGoldenLangPoint'
+import GoldenAttemptsPager from './GoldenAttemptsPager'
 import GoldenFeedback from './GoldenFeedback'
 import GoldenPasteBox from './GoldenPasteBox'
 
@@ -77,7 +78,16 @@ export default function GoldenLangPointAnswer({
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
       </div>
       {imitation.error && <div className="golden-bad">{imitation.error}</div>}
-      {imitation.feedback && <GoldenFeedback feedback={imitation.feedback} model={imitation.current.model} />}
+      <GoldenAttemptsPager imitation={imitation} />
+      {imitation.viewing && (
+        <div className="golden-note">当时的作答：{imitation.viewing.text}</div>
+      )}
+      {(imitation.viewing?.feedback ?? imitation.feedback) && (
+        <GoldenFeedback
+          feedback={imitation.viewing?.feedback ?? imitation.feedback!}
+          model={imitation.current.model}
+        />
+      )}
       <GoldenPasteBox
         label={`应用 AI 批改结果（${no} ${point.en}）`}
         defaultOpen={defaultOpen}
