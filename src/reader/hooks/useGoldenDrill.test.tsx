@@ -155,6 +155,37 @@ describe('useGoldenDrill', () => {
     expect(h.result.current.records[0].summarySeen).toBeFalsy()
   })
 
+  it('回看上一句：练过的句子直接落在小结，没练过的从预览开始', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [{ id: 'p01', sentenceIds: ['s1', 's2'] }],
+      sentences: [sentence, sentence2],
+    }
+    const lesson = buildLocalGoldenLesson(doc.sentences, doc.paragraphs, { selected: ['s1', 's2'] })
+    const at = new Date().toISOString()
+    let rec = emptyGoldenRecord('a1', '文章', 's1', goldenDrillKey(sentence.text, goldenTargetsFor(lesson, 's1')), at)
+    for (const step of ['fill', 'assemble', 'recall', 'summary'] as const) rec = recordGoldenStep(rec, step, true, at)
+    const h = setup(doc, [rec])
+    act(() => h.result.current.api.openGolden())
+    act(() => h.result.current.api.startDrill(1))
+    expect(h.result.current.api.index).toBe(1)
+    expect(h.result.current.api.phase).toBe('preview')
+
+    // 第 1 句已练过 → 回看直接看小结
+    act(() => h.result.current.api.prevSentence())
+    expect(h.result.current.api.index).toBe(0)
+    expect(h.result.current.api.phase).toBe('summary')
+
+    // 再回到第 2 句（没练过）→ 预览
+    act(() => h.result.current.api.nextSentence())
+    expect(h.result.current.api.index).toBe(1)
+    expect(h.result.current.api.phase).toBe('preview')
+
+    // 第一句再往前：不动
+    act(() => h.result.current.api.startDrill(0))
+    act(() => h.result.current.api.prevSentence())
+    expect(h.result.current.api.index).toBe(0)
+  })
+
   it('细碎填空中途首答错，后面全对也不给 fillFirst', () => {
     const h = setup()
     act(() => h.result.current.api.openGolden())

@@ -65,7 +65,17 @@ export default function GoldenDrillView({
   const drillBar = (
     <div className="bar golden-drill-bar">
       <button onClick={() => api.setView('home')}>← 课程页</button>
+      <button
+        onClick={api.prevSentence}
+        disabled={api.index <= 0}
+        title="上一句（Q）：练过的句子会直接落在小结，可以回看"
+      >
+        ◀ 上一句
+      </button>
       <span className="muted">第 {api.index + 1} / {api.ordered.length} 句</span>
+      <button onClick={api.nextSentence} title="下一句（E）">
+        下一句 ▶
+      </button>
       <span className={'golden-chip' + (phase === 'preview' ? ' on' : '')}>预览</span>
       <span className={'golden-chip' + (phase === 'fill' ? ' on' : '')}>句子填空</span>
       <span className={'golden-chip' + (phase === 'assemble' ? ' on' : '')}>拼接整句</span>

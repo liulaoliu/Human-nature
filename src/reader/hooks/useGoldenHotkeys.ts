@@ -153,9 +153,16 @@ export function useGoldenHotkeys(ctx: GoldenHotkeyContext, actions: GoldenHotkey
           return
         }
         if (ctx.phase === 'imitation') {
-          if (key === 'r' && !inField) {
+          if (inField || hasModifier(e)) return
+          if (key === 'r') {
             e.preventDefault()
             actions.speakCurrent()
+          } else if (key === 'q') {
+            e.preventDefault()
+            actions.prevSentence()
+          } else if (key === 'e') {
+            e.preventDefault()
+            actions.nextSentence()
           }
           return
         }

@@ -51,6 +51,7 @@ export type GoldenDrillApi = Pick<
   | 'restartSentence'
   | 'beginFill'
   | 'nextSentence'
+  | 'prevSentence'
   | 'markSummary'
   | 'cloze'
   | 'fillInputs'

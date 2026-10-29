@@ -28,6 +28,8 @@ function fakeApi(over: Record<string, unknown> = {}) {
     progressFor: () => null,
     startDrill: vi.fn(),
     startRecall: vi.fn(),
+    prevSentence: vi.fn(),
+    nextSentence: vi.fn(),
     ...over,
   } as unknown as ReturnType<typeof useGoldenDrill>
 }
@@ -421,6 +423,19 @@ describe('GoldenPanel', () => {
     expect((boxes[0] as HTMLDetailsElement).open).toBe(true)
     expect((boxes[1] as HTMLDetailsElement).open).toBe(false)
     expect((boxes[2] as HTMLDetailsElement).open).toBe(false)
+  })
+
+  it('顶栏「上一句 / 下一句」箭头：能回看已完成的句子', () => {
+    const api = drillApi({
+      phase: 'preview',
+      index: 1,
+      ordered: [{ id: 's1' }, { id: 's2' }],
+    })
+    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
+    fireEvent.click(screen.getByRole('button', { name: /上一句/ }))
+    expect(api.prevSentence).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: /下一句/ }))
+    expect(api.nextSentence).toHaveBeenCalled()
   })
 
   it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {

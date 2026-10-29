@@ -184,19 +184,32 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     [startSessionDrill, resetFillAssemble, resetRecall],
   )
 
-  const nextSentence = useCallback(() => {
-    resetFillAssemble()
-    setPhase('preview')
-    if (index + 1 < ordered.length) setIndex(index + 1)
-    else startRecall()
-  }, [index, ordered.length, startRecall, resetFillAssemble, setIndex, setPhase])
+/**
+   * 跳到第 i 句：练过的句子直接落在**小结**（回看学过的点），没练过的从预览开始。
+   * 回看不改进度；想重练用顶栏的「再练一次」。
+   */
+  const goToSentence = useCallback(
+    (i: number) => {
+      if (i < 0 || i >= ordered.length) return
+      resetFillAssemble()
+      const target = ordered[i]
+      const rec = target ? progressFor(target.id) : null
+      setIndex(i)
+      setPhase(rec?.summarySeen ? 'summary' : 'preview')
+    },
+    [ordered, progressFor, resetFillAssemble, setIndex, setPhase],
+  )
 
-  const prevSentence = useCallback(() => {
-    if (index <= 0) return
-    setIndex(index - 1)
-    setPhase('preview')
-    resetFillAssemble()
-  }, [index, resetFillAssemble, setIndex, setPhase])
+  const nextSentence = useCallback(() => {
+    if (index + 1 < ordered.length) goToSentence(index + 1)
+    else {
+      resetFillAssemble()
+      setPhase('preview')
+      startRecall()
+    }
+  }, [index, ordered.length, goToSentence, startRecall, resetFillAssemble, setPhase])
+
+  const prevSentence = useCallback(() => goToSentence(index - 1), [goToSentence, index])
 
   useGoldenHotkeys(
     {
