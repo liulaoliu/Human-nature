@@ -85,6 +85,39 @@ describe('mergeLibraries', () => {
     expect(merged.articleEntries?.[0].origin).toBe('manual')
     expect(merged.articleEntries?.[1].articleId).toBe('B')
   })
+
+  it('句子原文共享表：同键不同文保留本机，新键照常补进来', () => {
+    const current = {
+      schemaVersion: 1,
+      items: [libItem({ id: 'vocab:a', lemma: 'a' })],
+      sentenceTexts: { 'A\u0000s1': '本机的第一句', 'A\u0000s2': '本机的第二句' },
+    }
+    const incoming = {
+      schemaVersion: 1,
+      items: [libItem({ id: 'vocab:b', lemma: 'b' })],
+      sentenceTexts: { 'A\u0000s1': '另一台机器的第一句', 'B\u0000s9': '新文章的一句' },
+    }
+    const merged = mergeLibraries(current, incoming)
+    expect(merged.sentenceTexts).toEqual({
+      'A\u0000s1': '本机的第一句',
+      'A\u0000s2': '本机的第二句',
+      'B\u0000s9': '新文章的一句',
+    })
+  })
+
+  it('句子原文共享表：本机没有时整表照收，两边都空时不凭空造字段', () => {
+    const onlyIncoming = mergeLibraries(
+      { schemaVersion: 1, items: [libItem({ id: 'a', lemma: 'a' })] },
+      { schemaVersion: 1, items: [], sentenceTexts: { 'A\u0000s1': 'x' } },
+    )
+    expect(onlyIncoming.sentenceTexts).toEqual({ 'A\u0000s1': 'x' })
+
+    const empty = mergeLibraries(
+      { schemaVersion: 1, items: [libItem({ id: 'a', lemma: 'a' })] },
+      { schemaVersion: 1, items: [] },
+    )
+    expect(empty.sentenceTexts).toBeUndefined()
+  })
 })
 
 describe('mergeSessions', () => {

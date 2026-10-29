@@ -700,3 +700,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `hitWordIndex = -1` 表示这个词不在任何目标里；用 `<= 0` 判断会把 `targets[0].zh`
     贴到无关空，表现就是「填空含义漂移」。条件必须是 `hit && hitWordIndex === 0`，
     且 `target` 不要 fallback 到 `targets[0]`；`goldenDrill.test` 已钉住多个目标的整句轮。
+55. **合并导入的句子原文共享表不能整表覆盖**（2026-10-29）。`library.sentenceTexts` 的键是
+    `articleId\0sentenceId`，引用它的 `source` / `contexts` / `articleEntries` 里原文已被清空
+    （见 `core/vocab/sentenceTexts.ts`）。两台机器上的同名文章被改过时，同一个键会指向不同句子：
+    `mergeLibraries` 若按 `{...current, ...incoming}` 合并，本机那几个词条会突然显示另一台机器的句子
+    （实测本机「Slavery's legacies」的 s034 / s051 会被换掉，影响 anomalous / conception / exemplar 三张卡）。
+    规矩：同键不同文**本机优先**，新键照收；`mergeBackup.test` 已钉住这两条。

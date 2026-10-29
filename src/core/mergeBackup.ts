@@ -25,9 +25,26 @@ import type { AnswerEvent } from './answerEvents'
 
 export { mergeGoldenDrills } from './goldenProgress'
 
+/**
+ * 句子原文共享表：同键不同文时**本机优先**。
+ *
+ * 键是 `articleId\0sentenceId`，两台机器上的同名文章可能已经被改过（换过句子、删过段），
+ * 同一个键会指向不同原文。这里不能整表覆盖：覆盖了，本机那些引用该键的词条
+ * （`source` / `contexts` 的原文已收进共享表、自身是空串）会突然显示另一台机器的句子。
+ * 合并导入的承诺是「不覆盖本机」，所以旧值留着，新键照常补进来。
+ */
+function mergeSentenceTexts(
+  current: VocabLibrary['sentenceTexts'],
+  incoming: VocabLibrary['sentenceTexts'],
+): VocabLibrary['sentenceTexts'] {
+  if (!incoming || !Object.keys(incoming).length) return current
+  if (!current || !Object.keys(current).length) return incoming
+  return { ...incoming, ...current }
+}
+
 /** 合并两套词库：按 lemma 去重互补，保留任一方已有的字段；按篇条目取并集。 */
 export function mergeLibraries(current: VocabLibrary, incoming: VocabLibrary): VocabLibrary {
-  const sentenceTexts = { ...(current.sentenceTexts ?? {}), ...(incoming.sentenceTexts ?? {}) }
+  const sentenceTexts = mergeSentenceTexts(current.sentenceTexts, incoming.sentenceTexts) ?? {}
   const tombstones = mergeTombstones(current.tombstones, incoming.tombstones)
   return applyTombstones(
     dedupeLibrary({
