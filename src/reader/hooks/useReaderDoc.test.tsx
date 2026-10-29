@@ -211,6 +211,22 @@ describe('useReaderDoc：保存 / 删除 / 改名', () => {
     expect(p.setArticleTitle).toHaveBeenCalledWith('Keep')
   })
 
+  it('删掉保存后再存回去：复用 reuseId，不新建一个 id', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_800_000_000_000)
+    vi.spyOn(window, 'prompt')
+    const { repo, result } = setup({
+      doc: seg,
+      savedId: null,
+      reuseId: 'saved:9',
+      articleTitle: 'Profits overboard',
+      sourceText: 'x',
+    })
+    await act(async () => result.current.saveCurrent())
+    // 正文没变 → 用回原来的 id，词库里按篇收录 / 语境不会换成第二个键
+    expect(vi.mocked(repo.save).mock.calls[0][0]).toMatchObject({ id: 'saved:9' })
+    expect(window.prompt).not.toHaveBeenCalled()
+  })
+
   it('保存失败：提示且不进入已保存态', async () => {
     const { p, repo, result } = setup({
       doc: seg,

@@ -9,6 +9,11 @@ export interface UseArticleSaveParams {
   doc: ReaderDoc | null
   savedId: string | null
   setSavedId: (v: string | null) => void
+  /**
+   * 「删掉保存后又存回去」要复用的 id（来自 useArticleIdentity）。
+   * 同一篇正文复用原 id，词库里按篇收录 / 语境不会突然换成第二个键。
+   */
+  reuseId?: string | null
   articleKey: string | null
   articleTitle: string
   setArticleTitle: (v: string) => void
@@ -33,6 +38,7 @@ export function useArticleSave({
   doc,
   savedId,
   setSavedId,
+  reuseId,
   articleKey,
   articleTitle,
   setArticleTitle,
@@ -58,7 +64,8 @@ export function useArticleSave({
       flash('先打开或粘一篇文章')
       return
     }
-    const id = savedId ?? (articleKey ? `saved:${articleKey}` : `saved:${Date.now()}`)
+    // 删掉保存再存回去：正文没变就用回原来的 id（见 useArticleIdentity）。
+    const id = savedId ?? (articleKey ? `saved:${articleKey}` : reuseId ?? `saved:${Date.now()}`)
     let title = articleTitle
     if (!savedId && !title) {
       title = window.prompt('给这篇文章起个名字', articleKey ?? '未命名') || '未命名'
@@ -102,6 +109,7 @@ export function useArticleSave({
   }, [
     doc,
     savedId,
+    reuseId,
     articleKey,
     articleTitle,
     articleBook,

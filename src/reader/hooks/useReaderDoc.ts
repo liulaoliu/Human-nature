@@ -36,6 +36,8 @@ export interface UseReaderDocParams {
   savedLoaded: boolean
   savedId: string | null
   setSavedId: (v: string | null) => void
+  /** 「删掉保存后又存回去」时复用的 id（见 useArticleIdentity） */
+  reuseId?: string | null
   pendingSave: boolean
   setPendingSave: (v: boolean) => void
   sourceText: string
@@ -78,6 +80,7 @@ export function useReaderDoc({
   savedLoaded,
   savedId,
   setSavedId,
+  reuseId,
   pendingSave,
   setPendingSave,
   sourceText,
@@ -131,6 +134,7 @@ export function useReaderDoc({
     doc,
     savedId,
     setSavedId,
+    reuseId,
     articleKey,
     articleTitle,
     setArticleTitle,

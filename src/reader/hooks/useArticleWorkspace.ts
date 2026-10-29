@@ -21,6 +21,8 @@ export interface UseArticleWorkspaceParams {
   setArticleTitle: (v: string) => void
   savedId: string | null
   setSavedId: (v: string | null) => void
+  /** 「删掉保存后又存回去」时复用的 id（见 useArticleIdentity） */
+  reuseId?: string | null
   confirmDelSave: boolean
   setConfirmDelSave: (v: boolean) => void
   doc: ReaderDoc | null
@@ -49,6 +51,7 @@ export function useArticleWorkspace({
   setArticleTitle,
   savedId,
   setSavedId,
+  reuseId,
   confirmDelSave,
   setConfirmDelSave,
   doc,
@@ -98,6 +101,7 @@ export function useArticleWorkspace({
     savedLoaded,
     savedId,
     setSavedId,
+    reuseId,
     pendingSave,
     setPendingSave,
     sourceText,

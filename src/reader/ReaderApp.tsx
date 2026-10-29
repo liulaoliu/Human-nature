@@ -3,6 +3,7 @@ import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 
 import { useReaderArticleIdentity, useReaderPanelRouting } from './hooks/useReaderRouting'
+import { useArticleIdentity } from './hooks/useArticleIdentity'
 import { useReaderArticleNavigation } from './hooks/useReaderArticleNavigation'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useBrowseFilters } from './hooks/useBrowseFilters'
@@ -123,8 +124,15 @@ export default function ReaderApp() {
    * 最后那个兜底必须有：手动粘贴、还没保存的文章三者全空，`articleIdentity` 会变成空串，
    * 于是**所有未保存文章的「本篇词表 / 精读工作流 / 待选清单」共用同一个键**，
    * 切文章时看起来就像「数据串了 / 精读面板不认词」。
+   *
+   * 但**不能一删保存就掉回标题**：同一篇正文换了身份，语言点会被收两遍（见 useArticleIdentity）。
    */
-  const articleIdentity = articleKey || savedId || articleTitle || '手动粘贴'
+  const { identity: articleIdentity, reuseId: saveReuseId } = useArticleIdentity({
+    articleKey,
+    savedId,
+    articleTitle,
+    sentences: doc?.sentences ?? null,
+  })
   // 「待选」清单：状态 + 按文章持久化 + 去重（IO 收口在 useBatchQueue）
   const batchQueue = useBatchQueue({ articleIdentity, sentences: doc?.sentences ?? null })
   const {
@@ -317,6 +325,7 @@ export default function ReaderApp() {
     setArticleTitle,
     savedId,
     setSavedId,
+    reuseId: saveReuseId,
     confirmDelSave,
     setConfirmDelSave,
     doc,

@@ -706,3 +706,10 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `mergeLibraries` 若按 `{...current, ...incoming}` 合并，本机那几个词条会突然显示另一台机器的句子
     （实测本机「Slavery's legacies」的 s034 / s051 会被换掉，影响 anomalous / conception / exemplar 三张卡）。
     规矩：同键不同文**本机优先**，新键照收；`mergeBackup.test` 已钉住这两条。
+56. **文章身份不能因为「删掉保存」掉回标题**（2026-10-29）。`ReaderApp` 原来直接算
+    `articleKey || savedId || articleTitle || '手动粘贴'`：点「确认删除保存」后 `savedId` 变 null，
+    **同一篇正文**的身份立刻变成标题，自动收录（`useLibraryAutoFill`）就把这篇的语言点按标题又收了一遍
+    ——实测 374 条孤儿按篇条目 + 445 条语境；再存回去时 `saved:${Date.now()}` 又会造出第三个 id。
+    现在收口在 `hooks/useArticleIdentity`：按「正文签名 → 上次身份」记住，签名没变就沿用原 id
+    （`reuseId` 让 `useArticleSave` 用同一个 id 存回），正文换了才允许回退标题；
+    `useArticleIdentity.test` 钉住「删保存后同一篇不变身份 / 换正文才回退」。
