@@ -1,12 +1,26 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { act, renderHook } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { installFakeStorage } from '../testStorage'
 import { useGoldenDrill } from './useGoldenDrill'
 import type { ReaderDoc } from './useReaderDoc'
 import { buildLocalGoldenLesson, goldenDrillKey, goldenTargetsFor } from '../../core/golden'
 import { emptyGoldenRecord, recordGoldenStep, type GoldenDrillRecord } from '../../core/goldenProgress'
 import type { Sentence } from '../../types/document'
+
+// useGoldenSession 会把「走到哪一步」写进本机会话快照，openGolden() 再读回来恢复视图。
+// 不隔离 storage 就会跨用例污染：上一条停在 drill / summary，下一条 openGolden() 一开就
+// 不是 home，用例按声明顺序红在第四条（2026-10-28 引入会话恢复时踩过）。
+let restoreStorage: () => void = () => {}
+
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+})
+
+afterEach(() => {
+  restoreStorage()
+})
 
 const sentence: Sentence = {
   id: 's1',
