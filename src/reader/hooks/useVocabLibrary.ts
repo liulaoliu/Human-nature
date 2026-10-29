@@ -73,6 +73,14 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
    * 说明用户/导入已经用更新的整库覆盖，绝不能再把老版本放回待写队列。
    */
   const writeGenRef = useRef(0)
+  /**
+   * 撞过版本冲突：本页词库只读。
+   *
+   * 冲突代表服务器上已经有别处写的新版本，本页这份是旧的；再写就等于替用户决定
+   * 「用旧版覆盖新版」。自动补全每改一次都会 persist，所以必须在这里整页停写，
+   * 只更新界面、不再落盘，等用户刷新。仓储层（HybridVocabRepo.conflict）也会拒绝写入。
+   */
+  const conflictBlockRef = useRef(false)
   /** 组件是否还挂着：卸载后不再起重试定时器。 */
   const aliveRef = useRef(true)
   /** flash 的最新引用：保存回来时组件可能已经重渲染过。 */
@@ -162,6 +170,8 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       }
       libraryRef.current = lib
       setLibrary(lib)
+      // 撞过冲突：界面照常更新，但不再落盘（落盘会用旧版覆盖服务端新版）。
+      if (conflictBlockRef.current) return
       pendingRef.current = lib
 
       const now = Date.now()
@@ -195,6 +205,10 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
       if (!repoNow) {
         flash('词库还没准备好，请稍后再试')
         throw new Error('词库还没准备好')
+      }
+      if (conflictBlockRef.current) {
+        flash('词库已被别处更新，本页停止写入；请刷新页面后再导入/保存')
+        throw new Error('词库冲突未解决')
       }
       // 导入的是合并后的最新版：取消还没落盘的旧版本，别让它随后把新版盖回去。
       writeGenRef.current += 1
@@ -241,9 +255,11 @@ export function useVocabLibrary({ flash, createRepo = createVocabRepo }: UseVoca
         // 必须让用户知道（否则他以为保存成功了，实际刷新就没了）。
         if (e instanceof StoreConflictError) {
           // 不自动重试：重试就等于替用户决定「用本页覆盖服务器」。
+          // 而且要把本页整页停写 —— 否则下一次自动保存会带着刚更新的版本号把旧词库写上去。
+          conflictBlockRef.current = true
           retryCountRef.current = 0
           flashRef.current(
-            `词库在别的页面被改过（服务器现有 ${e.count} 条），这次改动没保存；刷新后再改，或再存一次用本页覆盖`,
+            `词库在别的页面被改过（服务器现有 ${e.count} 条），本页已停止写入以免覆盖新版；请刷新页面后再改`,
           )
           return
         }

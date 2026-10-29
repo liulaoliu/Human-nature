@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act, waitFor } from '@testing-library/react'
 import { PERSIST_DELAY_MS, useVocabLibrary } from './useVocabLibrary'
 import { MemoryVocabRepo } from '../../adapters/vocabRepo'
+import { StoreConflictError } from '../../adapters/storeApi'
 import { createLibrary } from '../../core/vocab'
 import { vocabItem } from '../../core/testFixtures'
 import type { VocabLibrary } from '../../types/document'
@@ -114,6 +115,37 @@ describe('useVocabLibrary：写失败必须可见', () => {
     act(() => result.current.persist(lib(2)))
     await waitFor(() => expect(flash).toHaveBeenCalledWith(expect.stringContaining('保存失败')))
     expect(result.current.library.items).toHaveLength(2)
+  })
+
+  it('撞上版本冲突：整页停写，后面的自动保存不再覆盖服务端新版', async () => {
+    let attempts = 0
+    const saved: VocabLibrary[] = []
+    const base = fakeRepo({ load: async () => lib(1) }).repo
+    const repo: VocabRepoPort = {
+      ...base,
+      save: async (l) => {
+        attempts++
+        if (attempts === 1) throw new StoreConflictError('conflict', { updatedAt: 'srv-2', count: 5 })
+        saved.push(l)
+      },
+    }
+    const { result, flash } = setup(() => repo)
+    await waitFor(() => expect(result.current.libraryLoad).toBe('ok'))
+
+    act(() => result.current.persist(lib(2)))
+    await waitFor(() => expect(flash).toHaveBeenCalledWith(expect.stringContaining('本页已停止写入')))
+
+    // 界面还能继续用（本地 state 更新），但一次都不许再落盘
+    act(() => result.current.persist(lib(3)))
+    act(() => result.current.persist(lib(4)))
+    await new Promise((r) => setTimeout(r, PERSIST_DELAY_MS + 100))
+    expect(attempts).toBe(1)
+    expect(saved).toHaveLength(0)
+    expect(result.current.library.items).toHaveLength(4)
+    // 导入这类显式写入也要被挡住，而不是悄悄覆盖
+    await act(async () => {
+      await expect(result.current.persistNow(lib(5))).rejects.toThrow('冲突')
+    })
   })
 })
 

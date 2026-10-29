@@ -713,3 +713,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     现在收口在 `hooks/useArticleIdentity`：按「正文签名 → 上次身份」记住，签名没变就沿用原 id
     （`reuseId` 让 `useArticleSave` 用同一个 id 存回），正文换了才允许回退标题；
     `useArticleIdentity.test` 钉住「删保存后同一篇不变身份 / 换正文才回退」。
+57. **版本冲突后必须整页停写，不能“再存一次就覆盖”**（2026-10-29）。`HybridVocabRepo.save` 撞 409 时
+    原来只把 `revision` 换成服务端的新版本号再抛错；可自动补全每改一次都会保存，**下一次**就带着新版本号
+    把本页那份旧词库整库写上去（实测 13:22:18 撞冲突、13:22:21 覆盖成功，合并好的词库被退回导入前状态）。
+    现在冲突后仓储置 `conflict`、宿主置 `conflictBlockRef`：本页只更新界面、不再落盘，提示用户刷新；
+    只有重新 `load()` 才解除。`vocabRepo.hybrid.test`（冲突后第二次 save 不许发 PUT）与
+    `useVocabLibrary.test`（整页停写、`persistNow` 也拒绝）已钉住。

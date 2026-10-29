@@ -81,6 +81,41 @@ describe('HybridVocabRepo：读失败后不许强制覆盖', () => {
   })
 })
 
+describe('HybridVocabRepo：冲突后本页只读', () => {
+  it('撞过 409 后，下一次自动保存不许拿新版本号把旧词库写上去', async () => {
+    storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-1' })
+    const repo = new HybridVocabRepo(new MemoryVocabRepo())
+    await repo.load()
+
+    // 第一次写：别处已经写过 → 409，并带回服务端的最新版本号
+    storeRequest.mockRejectedValueOnce(
+      new StoreConflictError('词库已被其它页面改过', { updatedAt: 'srv-2', count: 5 }),
+    )
+    await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
+
+    // 第二次（自动补全触发的保存）：绝不能带着 srv-2 去 PUT
+    storeRequest.mockClear()
+    await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
+    expect(storeRequest).not.toHaveBeenCalled()
+  })
+
+  it('重新 load 之后解除封锁（刷新页面才继续写）', async () => {
+    storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-1' })
+    const repo = new HybridVocabRepo(new MemoryVocabRepo())
+    await repo.load()
+    storeRequest.mockRejectedValueOnce(new StoreConflictError('conflict', { updatedAt: 'srv-2', count: 5 }))
+    await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
+
+    storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-2' })
+    await repo.load()
+    storeRequest.mockClear()
+    storeRequest.mockResolvedValueOnce({ updatedAt: 'srv-3' })
+    await repo.save(lib(4))
+    const put = storeRequest.mock.calls.find((c) => c[1]?.method === 'PUT')
+    expect((put?.[1]?.headers as Record<string, string>)?.['X-Vocab-Base']).toBe('srv-2')
+  })
+})
+
 describe('HybridVocabRepo：本地镜像比服务端新', () => {
   it('离线期间写进 IndexedDB 的改动不被服务端旧版顶掉', async () => {
     const local = new MemoryVocabRepo()

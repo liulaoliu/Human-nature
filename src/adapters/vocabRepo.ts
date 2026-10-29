@@ -292,6 +292,15 @@ export class HybridVocabRepo implements VocabRepoPort {
    * 服务端空库才允许写，已有数据就按冲突处理，让用户刷新。
    */
   private revisionKnown = false
+  /**
+   * 本页撞过版本冲突后就不再写。
+   *
+   * 冲突说明服务器上已经有别处写的新版本；如果只是把 `revision` 换成新版本继续写，
+   * **下一次自动保存**（自动补全每改一次都会存）就会拿新版本号把本页那份旧词库覆盖上去——
+   * 用户的改动就白做了（2026-10-29 真实踩过：合并好的词库被旧标签页整库盖回）。
+   * 冲突后本页只读：等刷新拿到服务端版本再继续。
+   */
+  private conflict: StoreConflictError | null = null
   /** 加载时需要提示用户的一次性消息（例如“本机有未同步改动”）。 */
   private notice: { message: string; needsSave?: boolean } | null = null
 
@@ -349,6 +358,8 @@ export class HybridVocabRepo implements VocabRepoPort {
   }
 
   async load(): Promise<VocabLibrary> {
+    // 重新读一次 = 拿到服务端的版本，之前的冲突封锁解除
+    this.conflict = null
     if (await this.useSqlite()) {
       try {
         const r = await this.loadServerRevision()
@@ -432,6 +443,8 @@ export class HybridVocabRepo implements VocabRepoPort {
   }
 
   async save(library: VocabLibrary): Promise<void> {
+    // 撞过冲突就只读到底：见 conflict 字段的说明。
+    if (this.conflict) throw this.conflict
     // 落盘前把重复的句子原文收进共享表（UI/业务仍然拿 hydrated 的 library）。
     const next = compactSentenceTexts(library)
     if (await this.useSqlite()) {
@@ -465,10 +478,11 @@ export class HybridVocabRepo implements VocabRepoPort {
       } catch (e) {
         if (e instanceof StoreConflictError) {
           // 别的地方先写了一版。**不能**当成"服务挂了"降级到 IndexedDB（那才是真丢数据），
-          // 也不能悄悄重试——先把服务器版本记下来（用户若坚持再存一次会覆盖，另有历史快照兜底），
-          // 把冲突抛上去让界面明确告诉他发生了什么。
+          // 也不能悄悄重试、更不能下次自动保存硬写——先把服务器版本记下来，
+          // 然后本页进入只读（conflict），让界面明确告诉用户刷新。
           this.revision = e.updatedAt
           this.revisionKnown = true
+          this.conflict = e
           throw e
         }
         this.revisionKnown = false

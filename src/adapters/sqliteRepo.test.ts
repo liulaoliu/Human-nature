@@ -119,7 +119,7 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
     expect(new Headers(second?.init?.headers as HeadersInit).get('X-Vocab-Base')).toBe('v2')
   })
 
-  it('别处先写过：409 就报错，不当成服务挂掉、也不镜像本地', async () => {
+  it('别处先写过：409 就报错、不镜像本地；之后本页只读，重新 load 才放行', async () => {
     const local = new MemoryVocabRepo()
     await local.save(lib(9))
     let rejected = 0
@@ -128,7 +128,7 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
       '/api/store/vocab': (init) => {
         if (init?.method === 'PUT') {
           rejected++
-          // 第一次冲突，第二次（版本号已对齐）放行
+          // 第一次冲突；对齐版本号之后（刷新页面重新 load）才放行
           return rejected === 1
             ? jsonResponse({ ok: false, error: '词库已被其它页面改过', updatedAt: 'v2', count: 12 }, 409)
             : jsonResponse({ ok: true, updatedAt: 'v3' })
@@ -143,7 +143,12 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
     // 关键：冲突不能把词库镜像到 IndexedDB（那才是真丢数据）
     expect((await local.load()).items).toHaveLength(9)
 
-    // 版本号已经对齐服务器，用户再存一次就放行（此时 prev/快照里有被覆盖的那一版）
+    // 再存一次也不再发 PUT：本页这份是旧版本，继续写就等于用旧版覆盖服务端新版
+    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
+    expect(rejected).toBe(1)
+
+    // 只有重新读一次（用户刷新页面）才解除只读
+    await repo.load()
     await repo.save(lib(4))
     expect(rejected).toBe(2)
   })
