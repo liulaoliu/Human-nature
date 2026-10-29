@@ -10,6 +10,7 @@ import {
   writingHistoryToMarkdown,
   writingHistoryToPrintHTML,
   writingRecordLabel,
+  WRITING_HISTORY_CAP,
   type ImitationTask,
   type WritingRecord,
 } from './writing'
@@ -124,6 +125,15 @@ describe('addWritingRecord', () => {
   it('新记录插到最前', () => {
     expect(addWritingRecord([rec('1')], rec('2')).map((r) => r.at)).toEqual(['2', '1'])
   })
+  it('默认上限是 2000：金句课多练几篇也不会把旧批改挤掉', () => {
+    let list: WritingRecord[] = []
+    for (let i = 0; i < 300; i++) list = addWritingRecord(list, rec(String(i)))
+    expect(list).toHaveLength(300)
+    expect(WRITING_HISTORY_CAP).toBe(2000)
+    for (let i = 300; i < WRITING_HISTORY_CAP + 5; i++) list = addWritingRecord(list, rec(String(i)))
+    expect(list).toHaveLength(WRITING_HISTORY_CAP)
+  })
+
   it('超过上限截断', () => {
     let list: WritingRecord[] = []
     for (let i = 0; i < 5; i++) list = addWritingRecord(list, rec(String(i)), 3)

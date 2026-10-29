@@ -371,11 +371,20 @@ export function writingHistoryToMarkdown(records: WritingRecord[], title = '仿�
   return lines.join('\n').trim() + '\n'
 }
 
+/**
+ * 仿写 / 语言点造句的历史上限。
+ *
+ * 这些记录是学习资产（AI 批改原文只有这一份），200 条时几篇文章就满了，旧记录会被静默截掉
+ * （2026-10-29 发现：金句课每句可练 1 + N 个语言点，还会写第二稿，200 条一周就能用完）。
+ * 客户端和合并备份共用这一个上限；SQLite 本身不截断。
+ */
+export const WRITING_HISTORY_CAP = 2000
+
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */
 export function addWritingRecord(
   list: WritingRecord[],
   rec: WritingRecord,
-  cap = 200,
+  cap = WRITING_HISTORY_CAP,
 ): WritingRecord[] {
   return [rec, ...list].slice(0, Math.max(0, cap))
 }

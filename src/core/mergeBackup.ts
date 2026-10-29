@@ -16,7 +16,7 @@ import { mergeArticleEntries } from './articleVocab'
 import { applyTombstones, mergeTombstones } from './vocab/tombstones'
 import type { PickSession, StudyDay } from './vocabStats'
 import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
-import type { WritingRecord } from './writing'
+import { WRITING_HISTORY_CAP, type WritingRecord } from './writing'
 import type { BackTranslationRecord } from './backTranslate'
 import type { PracticeRecord } from './practice'
 import type { MistakeEntry } from './mistakes'
@@ -100,13 +100,11 @@ export function mergeActivity(current: DayActivity[], incoming: DayActivity[], c
   return out
 }
 
-const WRITING_CAP = 200
-
 /** 合并仿写记录：按「时间 + 文章 + 范句 + 作答」去重，按时间倒序，保留最近 cap 条。 */
 export function mergeWritingHistory(
   current: WritingRecord[],
   incoming: WritingRecord[],
-  cap = WRITING_CAP,
+  cap = WRITING_HISTORY_CAP,
 ): WritingRecord[] {
   const key = (w: WritingRecord) => `${w.at}|${w.articleId}|${w.model}|${w.text}`
   const seen = new Set(current.map(key))
