@@ -1,134 +1,59 @@
 import { useCallback, useRef, useState } from 'react'
-import type { MutableRefObject } from 'react'
-import type { ActivityCat } from '../../core/activity'
-import type { AnswerEventInput } from '../../core/answerEvents'
-import type { PracticeKind } from '../../core/practice'
 import type { MistakeEntry } from '../../core/mistakes'
-import type { VocabLibrary } from '../../types/document'
-import type { ReaderDoc } from './useReaderDoc'
-import type { AiTaskKey } from './aiTasks'
-import { useDictation } from './useDictation'
-import type { BackTranslationRecord } from '../../core/backTranslate'
-import { useVocabMode } from './useVocabMode'
-import { useMistakeActions } from './useMistakeActions'
-import { useHotkeys } from '../useHotkeys'
 import type { PickSession } from '../../core/vocabStats'
 import type { BatchItemLike } from '../batchItem'
-import { useStudyQuizListen } from './useStudyQuizListen'
-import { useQuickWritingBack } from './useQuickWritingBack'
-import type { SessionKey } from './sessionKeys'
+import { useDictation } from './useDictation'
+import { useMistakeActions } from './useMistakeActions'
+import { useQuickWritingBack, type UseQuickWritingBackParams } from './useQuickWritingBack'
+import { useSessionClosers } from './useSessionClosers'
+import { useStudyQuizListen, type UseStudyQuizListenParams } from './useStudyQuizListen'
+import { useVocabMode } from './useVocabMode'
+import { useHotkeys } from '../useHotkeys'
 
-export interface UseSessionServicesParams {
-  library: VocabLibrary
-  articleIdentity: string
-  articleTitle: string
-  docLemmas: Set<string>
-  doc: ReaderDoc | null
-  selectedId: string | null
-  speak: (text: string) => void
-  flash: (message: string) => void
-  persist: (library: VocabLibrary) => void
-  markStudied: (itemId: string) => void
-  recordActivity: (cat: ActivityCat, n?: number) => void
-  recordPractice: (kind: PracticeKind, total: number, correct: number) => void
-  recordAnswer: (event: AnswerEventInput) => void
-  addMistake: (entry: MistakeEntry) => void
-  dropMistake: (id: string) => void
-  studyFlush: (seconds: number, cards: number) => void
-  newLimit: number
-  newToday: number
-  bumpNewToday: () => void
-  mergeKindStats: (rows: { kind: string; total: number; correct: number }[]) => void
-  setLastTask: (task: AiTaskKey) => void
-  askedWordsRef: MutableRefObject<string[]>
-  askedIdsRef: MutableRefObject<string[]>
-  setSessions: (updater: (prev: PickSession[]) => PickSession[]) => void
+/** 学习组（背词 / 考试 / 听力）：`closeTransient` 由本 hook 注入。 */
+type StudyParams = Omit<UseStudyQuizListenParams, 'closeTransient'>
+/** 输出组（快刷 / 仿写 / 回译）：`studyPool` 与 `closeSessions` 由本 hook 注入。 */
+type OutputParams = Omit<UseQuickWritingBackParams, 'studyPool' | 'closeSessions'>
+
+/**
+ * 本 hook 自己要用、但要由 ReaderApp 提供的四项。
+ * 其余入参直接沿用两个子组 hook 的签名，不再手抄一遍（抄漏一处就是两份类型）。
+ */
+export interface UseSessionServicesParams extends StudyParams, OutputParams {
   mistakes: MistakeEntry[]
   setIntensiveOpen: (open: boolean) => void
   setSpeedReadOpen: (open: boolean) => void
+  setSessions: (updater: (prev: PickSession[]) => PickSession[]) => void
+  /** 听写要的音频预热与待选合并（其余听写入参直接从上面两组沿用）。 */
   warmTexts: (texts: string[]) => void
   warmTimings: (texts: string[]) => void
   mergeBatch: (items: BatchItemLike[]) => void
   batchItemsFromWords: (words: string[]) => BatchItemLike[]
-  /** 回译存档（useLearningData）与追加动作 */
-  backTranslations: BackTranslationRecord[]
-  saveBackTranslation: (rec: BackTranslationRecord) => void
 }
 
 /**
  * 所有「会话」服务的组装：学习组（背词/考试/听力）+ 快刷/听写 + 仿写/回译，
  * 外加选词计时与错题重练。
  *
- * 各会话的 close 动作统一注册在 closers；开始一个会话只按组关闭，不再每个 closeOthers
- * 手抄一遍。学习组内部的顺序与互斥在 useStudyQuizListen。
+ * 这一层只做装配：子状态机分别在学习组 / 输出组 hook 里；关闭注册表在
+ * `useSessionClosers`（按组关闭的唯一规则）。开始一个会话只按组关闭，
+ * 不再每个 closeOthers 手抄一遍。
  */
-export function useSessionServices({
-  library,
-  articleIdentity,
-  articleTitle,
-  docLemmas,
-  doc,
-  selectedId,
-  speak,
-  flash,
-  persist,
-  markStudied,
-  recordActivity,
-  recordPractice,
-  recordAnswer,
-  addMistake,
-  dropMistake,
-  studyFlush,
-  newLimit,
-  newToday,
-  bumpNewToday,
-  mergeKindStats,
-  setLastTask,
-  askedWordsRef,
-  askedIdsRef,
-  setSessions,
-  mistakes,
-  setIntensiveOpen,
-  setSpeedReadOpen,
-  warmTexts,
-  warmTimings,
-  mergeBatch,
-  batchItemsFromWords,
-  backTranslations,
-  saveBackTranslation,
-}: UseSessionServicesParams) {
-  const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
-  /** 各会话的关闭动作；开始一个会话时按组关闭，避免每个 closeOthers 手抄一遍。 */
-  const closers = useRef<Partial<Record<SessionKey, () => void>>>({})
-  const closeSessions = useCallback((...keys: SessionKey[]) => {
-    for (const key of keys) closers.current[key]?.()
-  }, [])
-  const closeTransient = useCallback(() => closeSessions('quick', 'dictation'), [closeSessions])
-
-  const studyGroup = useStudyQuizListen({
-    library,
-    articleIdentity,
-    docLemmas,
+export function useSessionServices(params: UseSessionServicesParams) {
+  const {
     doc,
-    speak,
+    library,
     flash,
-    persist,
-    markStudied,
-    recordActivity,
-    recordPractice,
-    recordAnswer,
-    addMistake,
-    dropMistake,
-    studyFlush,
-    newLimit,
-    newToday,
-    bumpNewToday,
-    mergeKindStats,
-    setLastTask,
-    askedWordsRef,
-    askedIdsRef,
-    closeTransient,
-  })
+    setIntensiveOpen,
+    setSpeedReadOpen,
+    setSessions,
+    mistakes,
+  } = params
+
+  const dictApiRef = useRef<ReturnType<typeof useDictation> | null>(null)
+  const { closers, closeSessions, closeTransient } = useSessionClosers()
+
+  const studyGroup = useStudyQuizListen({ ...params, closeTransient })
   const {
     studyApi,
     studyQueue,
@@ -192,24 +117,7 @@ export function useSessionServices({
     dictApiRef.current?.startItems(items)
   }, [])
 
-  const outputGroup = useQuickWritingBack({
-    studyPool,
-    library,
-    persist,
-    markStudied,
-    recordActivity,
-    flash,
-    doc,
-    selectedId,
-    articleIdentity,
-    articleTitle,
-    setLastTask,
-    askedWordsRef,
-    askedIdsRef,
-    backTranslations,
-    saveBackTranslation,
-    closeSessions,
-  })
+  const outputGroup = useQuickWritingBack({ ...params, studyPool, closeSessions })
   const {
     quickApi,
     quickQueue,
@@ -263,20 +171,8 @@ export function useSessionServices({
   })
 
   const dictApi = useDictation({
-    doc,
-    articleIdentity,
-    libraryLemmas: docLemmas,
-    speak,
-    warmTexts,
-    warmTimings,
-    flash,
-    mergeBatch,
-    batchItemsFromWords,
-    recordActivity,
-    recordPractice,
-    recordAnswer,
-    addMistake,
-    dropMistake,
+    ...params,
+    libraryLemmas: params.docLemmas,
     closeOthers: () => closeSessions('study', 'quiz', 'quick'),
   })
   dictApiRef.current = dictApi
