@@ -1,10 +1,15 @@
-import { useEffect, useMemo, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useMemo, useRef, type Dispatch, type SetStateAction } from 'react'
 import type { GoldenPanelActions } from '../panels/GoldenPanel'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import { isGoldenWritingRecord, writingHistoryToPrintHTML, type WritingRecord } from '../../core/writing'
+import {
+  isGoldenWritingRecord,
+  WRITING_HISTORY_WARN_AT,
+  writingHistoryToPrintHTML,
+  type WritingRecord,
+} from '../../core/writing'
 import { openPrintWindow } from './printWindow'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
@@ -97,6 +102,16 @@ export function useGoldenFeature({
     download,
     flash,
   })
+
+  // 批改记录只增不删：超过提醒线时提示一次导出归档（别静默丢，也别悄悄变慢）
+  const warnedHistoryRef = useRef(false)
+  useEffect(() => {
+    if (warnedHistoryRef.current || writingHistory.length < WRITING_HISTORY_WARN_AT) return
+    warnedHistoryRef.current = true
+    flash(
+      `批改记录已超过 ${WRITING_HISTORY_WARN_AT} 条：建议「导出批改」归档，页面会随记录变多而变慢`,
+    )
+  }, [writingHistory.length, flash])
 
   // 语言点造句：同一句的额外练习，记录同样进 writingHistory（带 task.focus）
   const langPoint = useGoldenLangPoint({

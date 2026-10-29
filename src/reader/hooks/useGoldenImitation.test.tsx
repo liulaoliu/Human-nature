@@ -93,6 +93,22 @@ describe('useGoldenImitation', () => {
     expect(h.result.current.imitation.round).toBe(2)
   })
 
+  it('同一题同一稿、文字没改，重复点批改不重复记', async () => {
+    const raw = JSON.stringify(feedback)
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })
+    const h = setup(runAi)
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    await act(async () => {
+      await h.result.current.imitation.grade()
+    })
+    await waitFor(() => expect(h.result.current.history).toHaveLength(1))
+    await act(async () => {
+      await h.result.current.imitation.grade()
+    })
+    await waitFor(() => expect(h.result.current.imitation.feedback).not.toBeNull())
+    expect(h.result.current.history).toHaveLength(1)
+  })
+
   it('坏批改 JSON 只报错，不写历史', () => {
     const h = setup()
     act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))

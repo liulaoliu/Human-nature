@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { defaultLangPoint, doneLangPoints, langPointChoices, langPointKey } from './goldenLangPoint'
+import { doneLangPoints, langPointChoices, langPointKey } from './goldenLangPoint'
 import type { Sentence } from '../types/document'
 
 const S = (over: Partial<Sentence> = {}): Sentence => ({
@@ -45,18 +45,7 @@ describe('langPointChoices：本句可单练的词块', () => {
   })
 })
 
-describe('defaultLangPoint / doneLangPoints', () => {
-  it('默认第一个没练过的；都练过就第一个；没有就 null', () => {
-    expect(
-      defaultLangPoint([
-        { en: 'a', done: true },
-        { en: 'b', done: false },
-      ]),
-    ).toBe('b')
-    expect(defaultLangPoint([{ en: 'a', done: true }])).toBe('a')
-    expect(defaultLangPoint([])).toBeNull()
-  })
-
+describe('doneLangPoints / langPointKey', () => {
   it('只认同篇同句的 focus（别的篇 / 别的句不算）', () => {
     const set = doneLangPoints(
       [

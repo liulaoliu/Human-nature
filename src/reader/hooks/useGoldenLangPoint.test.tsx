@@ -48,7 +48,7 @@ function setup(over: { sentence?: Sentence | null; history?: unknown[] } = {}) {
 }
 
 describe('useGoldenLangPoint：语言点多选', () => {
-  it('默认只勾第一个没练过的', () => {
+  it('默认全选（练过的也勾上，想少练自己取消）', () => {
     const { result } = setup({
       history: [
         { articleId: 'a1', sentenceId: 's1', task: { focus: 'come with' }, text: 'x', at: '', feedback: {} },
@@ -59,18 +59,16 @@ describe('useGoldenLangPoint：语言点多选', () => {
       'much of an improvement',
       'not much of a',
     ])
-    expect(result.current.selected).toEqual(['much of an improvement'])
+    expect(result.current.selected).toEqual(['come with', 'much of an improvement', 'not much of a'])
   })
 
-  it('可以再勾一个 / 再点取消，顺序按勾选先后', () => {
+  it('点一下取消 / 再点加回来，顺序按勾选先后', () => {
     const { result } = setup()
-    expect(result.current.selected).toEqual(['come with'])
-    act(() => result.current.toggle('not much of a'))
-    expect(result.current.selected).toEqual(['come with', 'not much of a'])
-    act(() => result.current.toggle('much of an improvement'))
-    expect(result.current.selected).toEqual(['come with', 'not much of a', 'much of an improvement'])
+    expect(result.current.selected).toHaveLength(3)
     act(() => result.current.toggle('come with'))
-    expect(result.current.selected).toEqual(['not much of a', 'much of an improvement'])
+    expect(result.current.selected).toEqual(['much of an improvement', 'not much of a'])
+    act(() => result.current.toggle('come with'))
+    expect(result.current.selected).toEqual(['much of an improvement', 'not much of a', 'come with'])
   })
 
   it('换句：清空回到新句的默认（不残留上一句的勾选）', () => {

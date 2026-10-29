@@ -1,11 +1,6 @@
 import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { Sentence } from '../../types/document'
-import {
-  defaultLangPoint,
-  doneLangPoints,
-  langPointChoices,
-  type LangPointChoice,
-} from '../../core/goldenLangPoint'
+import { doneLangPoints, langPointChoices, type LangPointChoice } from '../../core/goldenLangPoint'
 import type { WritingRecord } from '../../core/writing'
 import type { ActivityCat } from '../../core/activity'
 
@@ -63,13 +58,12 @@ export function useGoldenLangPoint({
 
   const [picked, setPicked] = useState<string[]>([])
   const [pickedFor, setPickedFor] = useState<string | null>(null)
-  // 换句就回到默认：只勾第一个没练过的（用户再自己加）。
+  // 换句就回到默认：**全选**（想少练就取消勾选）。
   // 渲染期重置是 React 推荐的「派生状态跟随 props」写法，比 effect 少一帧、也不会打断练完后的勾选。
   const sentenceId = sentence?.id ?? null
   if (pickedFor !== sentenceId) {
     setPickedFor(sentenceId)
-    const first = defaultLangPoint(choices)
-    setPicked(first ? [first] : [])
+    setPicked(choices.map((c) => c.en))
   }
 
   const selected = useMemo(

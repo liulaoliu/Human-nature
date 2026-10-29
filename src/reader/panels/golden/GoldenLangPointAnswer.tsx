@@ -19,11 +19,14 @@ export default function GoldenLangPointAnswer({
   index,
   api,
   showZh,
+  defaultOpen,
 }: {
   point: LangPointChoice
   index: number
   api: GoldenLangPointApi
   showZh: boolean
+  /** 只有一道题时 AI 结果框默认展开；多题时收起，避免一屏全是粘贴框 */
+  defaultOpen?: boolean
 }) {
   const [paste, setPaste] = useState('')
   const item = useMemo(
@@ -43,8 +46,8 @@ export default function GoldenLangPointAnswer({
   const no = CIRCLED[index] ?? `${index + 1}.`
   const hasAnswer = !!imitation.answer.trim()
   return (
-    <div className="golden-imitation">
-      <div className="bar golden-plan-bar">
+    <div className="golden-imitation golden-lp-item">
+      <div className="golden-lp-head">
         <b>{no}</b>
         <span className="muted">
           用「{point.en}」{showZh && point.zh ? `（${point.zh}）` : ''}写一句英文
@@ -77,6 +80,7 @@ export default function GoldenLangPointAnswer({
       {imitation.feedback && <GoldenFeedback feedback={imitation.feedback} model={imitation.current.model} />}
       <GoldenPasteBox
         label={`应用 AI 批改结果（${no} ${point.en}）`}
+        defaultOpen={defaultOpen}
         value={paste}
         onChange={setPaste}
         onApply={() => {

@@ -322,10 +322,12 @@ describe('GoldenPanel', () => {
     expect(screen.getByRole('button', { name: 'keep up with' })).toBeTruthy()
     expect(localStorage.getItem('reader:goldenLangZh')).toBe('false')
 
-    // AI 结果框默认展开：单句仿写 1 个 + 两个语言点框
+    // AI 结果框：单句仿写默认展开；语言点多题时收起，避免一屏全是粘贴框
     const boxes = document.querySelectorAll('details.golden-exam-paste')
     expect(boxes.length).toBe(3)
-    for (const box of boxes) expect((box as HTMLDetailsElement).open).toBe(true)
+    expect((boxes[0] as HTMLDetailsElement).open).toBe(true)
+    expect((boxes[1] as HTMLDetailsElement).open).toBe(false)
+    expect((boxes[2] as HTMLDetailsElement).open).toBe(false)
   })
 
   it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {

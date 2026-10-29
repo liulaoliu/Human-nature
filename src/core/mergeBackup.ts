@@ -16,7 +16,7 @@ import { mergeArticleEntries } from './articleVocab'
 import { applyTombstones, mergeTombstones } from './vocab/tombstones'
 import type { PickSession, StudyDay } from './vocabStats'
 import { ACTIVITY_CATS, addActivity, type DayActivity } from './activity'
-import { WRITING_HISTORY_CAP, type WritingRecord } from './writing'
+import type { WritingRecord } from './writing'
 import type { BackTranslationRecord } from './backTranslate'
 import type { PracticeRecord } from './practice'
 import type { MistakeEntry } from './mistakes'
@@ -104,7 +104,7 @@ export function mergeActivity(current: DayActivity[], incoming: DayActivity[], c
 export function mergeWritingHistory(
   current: WritingRecord[],
   incoming: WritingRecord[],
-  cap = WRITING_HISTORY_CAP,
+  cap = Number.POSITIVE_INFINITY,
 ): WritingRecord[] {
   const key = (w: WritingRecord) => `${w.at}|${w.articleId}|${w.model}|${w.text}`
   const seen = new Set(current.map(key))

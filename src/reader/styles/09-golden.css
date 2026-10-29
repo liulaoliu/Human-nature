@@ -461,6 +461,19 @@
   gap: 10px;
 }
 
+/* 语言点造句：每题一块，用虚线分隔，避免 N 张卡片叠在一起 */
+.golden-lp-item {
+  border-top: 1px dashed var(--line);
+  padding-top: 10px;
+}
+
+.golden-lp-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+
 .golden-exam-paste {
   margin-top: 12px;
   padding: 10px 12px;

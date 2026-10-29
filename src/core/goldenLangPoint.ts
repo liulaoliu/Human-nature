@@ -45,11 +45,6 @@ export function langPointChoices(
   return out
 }
 
-/** 默认选第一个没练过的；全都练过就选第一个；一个都没有就是 null。 */
-export function defaultLangPoint(choices: LangPointChoice[]): string | null {
-  return (choices.find((c) => !c.done) ?? choices[0])?.en ?? null
-}
-
 /** 从记录里捞出「同篇同句、已经练过的 focus」。 */
 export function doneLangPoints(
   records: ReadonlyArray<{ articleId: string; sentenceId?: string; task?: { focus?: string } | null }>,

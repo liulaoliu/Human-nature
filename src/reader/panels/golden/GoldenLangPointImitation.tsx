@@ -51,9 +51,16 @@ export default function GoldenLangPointImitation({ langPoint }: { langPoint: Gol
       </div>
       {chosen.length ? (
         <>
-          <div className="muted">勾了几个就练几个，每句独立批改；不练也能直接下一句。</div>
+          <div className="muted">默认全选；勾几个就练几个，每句独立批改。不想练的取消勾选即可，也能直接下一句。</div>
           {chosen.map((c, i) => (
-            <GoldenLangPointAnswer key={c.en} point={c} index={i} api={langPoint} showZh={showZh} />
+            <GoldenLangPointAnswer
+              key={c.en}
+              point={c}
+              index={i}
+              api={langPoint}
+              showZh={showZh}
+              defaultOpen={chosen.length === 1}
+            />
           ))}
         </>
       ) : (
