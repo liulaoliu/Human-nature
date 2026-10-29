@@ -669,7 +669,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 679 行（800 行硬门禁内，余量 121 行）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
+- **`ReaderApp.tsx` 682 行（800 行硬门禁内，余量 118 行）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
   路由/面板接线已经抽到 `hooks/useReaderRouting.ts`（`useReaderPanelRouting` / `useReaderArticleRouting`），
   本机临时状态（粘回框 / 高亮气泡 / 文章正文选区）抽到 `hooks/useReaderLocalState.ts`，
   分组模型 → 平铺 `ReaderScreen` props 的翻译层在 `ReaderScreenFromModel.tsx`。

@@ -28,7 +28,7 @@
 □ 新增/修改整页界面 → 路由四件套齐全：可寻址、返回层级、深链失败回落、URL hook 测试
   （按 docs/ARCHITECTURE.md §三·八「新增整页界面 checklist」逐条做）
 □ 新增视图模型 / 翻译层 → 纯函数测试「字段落到哪一组、动作是否保持原身份」
-□ 新 hook 先按 ≤ 400 行规划；超过 500 行先拆职责（`check_hook_size`）
+□ 新 hook 按 ≤ 200 行目标规划；300 行起提醒、500 行硬线，超 300 先拆职责（`check_hook_size`）
 □ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁
 □ 结构/分层/新增目录变化 → docs/ARCHITECTURE.md 同步
 □ 新增踩坑 → 本文档 §3 补一条（编号 +1）
@@ -239,6 +239,13 @@
    （单独跑必过，全量跑连续两次 `expected 76 to be greater than 76`）。
    事件型断言要写成 `await waitFor(() => { fireEvent.wheel(...); expect(结果) })`，
    别只等元素渲染出来就立刻派发原生事件。
+37. **会话快照写 localStorage 会把「用例之间」串起来**（2026-10-29）。`useGoldenSession` 把
+   「人走到哪一步」写进本机快照，`openGolden()` 再读回来恢复视图。`useGoldenDrill.test.tsx`
+   没装假 storage，上一条用例停在 `drill` / `summary`，下一条 `openGolden()` 一开就不是 `home`，
+   于是「没完成遣词造句不让进逆向回顾」按声明顺序必红——**单跑那一条又是绿的，看起来像 flaky**。
+   规矩：**只要被测代码会读写 localStorage，就在文件里 `installFakeStorage()`**（`beforeEach` 装、
+   `afterEach` 还原，见 `src/reader/testStorage.ts`）；只写 `// @vitest-environment jsdom` 不够，
+   jsdom 的 storage 在同一文件的所有用例之间是共享的。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
@@ -338,6 +345,12 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
    别真的调 TTS/打印。
 
 **还差**（2026-10-20 盘点）：
+
+> **2026-10-29 复核**：hook 已拆到 117 个（`src/reader/hooks/use*.ts*`），其中 **39 个没有同名测试**，
+> 多数靠父 hook 的集成测试兜底（`useQuizSession` / `useStudySession` / `useGoldenDrill` / `useDictation` 等）。
+> 拆新 hook 时先问一句「这条规则能不能先在 `core/` 写单测」，别只靠父层覆盖；
+> 下面的 55/55 是 2026-10-20 的口径，已经不是现状。
+
 - **hooks 55 / 55 有测试**：本轮补齐 `useDictionary` / `useTtsEngines` / `useDocVocabSets` / `useDictTools` /
   `useArticleImport` / `useReaderDoc` / `useListening` / `useWriting` / `useQuickSession` / `useSelection`；
   `useSpeaking` 拆成「播放」`useTtsPlayback`（5 条）+「预热」`useTtsPrefetch`（5 条），
