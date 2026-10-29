@@ -29,7 +29,7 @@
   （按 docs/ARCHITECTURE.md §三·八「新增整页界面 checklist」逐条做）
 □ 新增视图模型 / 翻译层 → 纯函数测试「字段落到哪一组、动作是否保持原身份」
 □ 新 hook 按 ≤ 200 行目标规划；300 行起提醒、500 行硬线，超 300 先拆职责（`check_hook_size`）
-□ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁
+□ npm run gates 全绿：tsc + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁 + ESLint
 □ 结构/分层/新增目录变化 → docs/ARCHITECTURE.md 同步
 □ 新增踩坑 → 本文档 §3 补一条（编号 +1）
 □ 影响面跨模块 / 动了共享层（type、core 通用函数）→ 跑全量 npm test

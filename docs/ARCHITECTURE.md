@@ -803,7 +803,8 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 ## 五、命令
 
 ```bash
-npm run gates        # 收尾门禁：tsc + 全部测试 + 上帝文件 + hook 体量 + 架构
+npm run gates        # 收尾门禁：tsc + 全部测试 + 上帝文件 + hook 体量 + 架构 + ESLint
+npm run lint         # 只跑 ESLint（hook 规则 / 禁 any / 空 catch；风格类不进来）
 npm run check:arch   # 只跑架构门禁（含存量豁免清单）
 npm run check:size   # 只跑上帝文件门禁（含基线）
 npm run check:hooks  # 只跑 hook 体量门禁（目标 200 / 300 提醒 / 500 硬线）

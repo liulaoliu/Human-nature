@@ -117,7 +117,7 @@ export default function ListeningPanel({
               {submitted && (
                 <div className={'listen-feedback ' + (ok ? 'ok' : 'bad')}>
                   {ok ? '✔ 正确' : `✘ 正确答案：${q.answer}`}
-                  {q.explanation ? `　${q.explanation}` : ''}
+                  {q.explanation ? `\u3000${q.explanation}` : ''}
                 </div>
               )}
             </div>

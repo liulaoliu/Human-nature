@@ -128,7 +128,6 @@ export function ChunkSplitter({
     setProgress(null)
     cbs.current.onStop()
     // cbs 是 ref，不需要进依赖
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [samples, sampleRate, chunk.start, chunk.end])
 
   // 容器宽度。注意：canvas 的显示尺寸完全由 CSS 决定（width:100% / 固定高），

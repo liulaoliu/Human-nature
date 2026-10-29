@@ -2,9 +2,9 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, act, fireEvent } from '@testing-library/react'
 import { vocabItem } from '../../core/testFixtures'
-import { Harness, api, lib, useFakeStorage } from './studySessionHarness'
+import { Harness, api, lib, fakeStorageHarness } from './studySessionHarness'
 
-const storage = useFakeStorage()
+const storage = fakeStorageHarness()
 beforeEach(storage.setup)
 afterEach(storage.teardown)
 

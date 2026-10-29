@@ -133,18 +133,18 @@ export function useTtsMedia({ voice, onFallback }: UseTtsMediaOptions) {
       setNowPlaying({ text: t, wordTimings: cachedTimings ?? [], ms: effSeek })
       const token = tokenRef.current
 
-      const useBrowser = () => playBrowserSpeech({ utterRef, setState: setTtsState, text: t, onEnd, rate })
+      const speakInBrowser = () => playBrowserSpeech({ utterRef, setState: setTtsState, text: t, onEnd, rate })
       // 离线引擎也走服务端，但不能被 Edge 的临时降级连坐。
       const offline = isOfflineTtsVoice(voiceRef.current)
 
       if (!offline && !canUseServer()) {
-        useBrowser()
+        speakInBrowser()
         return
       }
 
       const a = getAudio()
       if (!a) {
-        useBrowser()
+        speakInBrowser()
         return
       }
       const setMs = (ms: number) => {
@@ -216,7 +216,7 @@ export function useTtsMedia({ voice, onFallback }: UseTtsMediaOptions) {
           serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
           if (wasUp) fallbackRef.current?.('server')
         }
-        useBrowser()
+        speakInBrowser()
       }
       // 逐词时间戳（服务端随音频一起生成）：有缓存直接用；没有才请求。离线引擎无时间戳，跳过。
       if (!cachedTimings && !isOfflineTtsVoice(voiceRef.current)) {
@@ -237,15 +237,15 @@ export function useTtsMedia({ voice, onFallback }: UseTtsMediaOptions) {
             if (name === 'NotAllowedError') {
               // 自动播放被拦：本次退回浏览器语音，但服务端仍可用（下次照旧试 Edge）
               fallbackRef.current?.('autoplay')
-              useBrowser()
+              speakInBrowser()
             } else if (isOfflineTtsVoice(voiceRef.current)) {
               fallbackRef.current?.('local')
-              useBrowser()
+              speakInBrowser()
             } else {
               const wasUp = canUseServer()
               serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
               if (wasUp) fallbackRef.current?.('server')
-              useBrowser()
+              speakInBrowser()
             }
           })
         }
@@ -257,7 +257,7 @@ export function useTtsMedia({ voice, onFallback }: UseTtsMediaOptions) {
           serverDownUntilRef.current = Date.now() + SERVER_RETRY_MS
           if (wasUp) fallbackRef.current?.('server')
         }
-        useBrowser()
+        speakInBrowser()
       }
     },
     [stopMedia, getAudio, canUseServer],

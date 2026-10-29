@@ -19,7 +19,7 @@
     "gates": "tsc -b && npm run typecheck:server && vitest run --pool=forks --maxWorkers=4 --minWorkers=1 && npm run gates:static",
     "gates:full": "npm run gates",
     "gates:fast": "tsc -b && npm run typecheck:server && node tool/test_changed.mjs && npm run gates:static",
-    "gates:static": "node tool/check_god_file.mjs && node tool/check_hook_size.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs",
+    "gates:static": "node tool/check_god_file.mjs && node tool/check_hook_size.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs && npm run lint",
     "gates:core": "tsc -b && vitest run src/core src/adapters --pool=forks --maxWorkers=4 --minWorkers=1",
     "gates:ui": "tsc -b && vitest run src/reader src/ui src/state src/AppRoutes.test.tsx --pool=forks --maxWorkers=4 --minWorkers=1",
     "gates:server": "npm run typecheck:server && vitest run server tools --pool=forks --maxWorkers=4 --minWorkers=1",
@@ -29,7 +29,8 @@
     "check:vocab": "node tool/check_vocab_sense.mjs",
     "check:dev": "node tool/check_dev_modules.mjs",
     "app": "npm run build && node server/appServer.ts",
-    "typecheck:server": "tsc -p tsconfig.server.json"
+    "typecheck:server": "tsc -p tsconfig.server.json",
+    "lint": "eslint src"
   },
   "dependencies": {
     "jszip": "^3.10.2",
@@ -46,9 +47,12 @@
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^9.39.4",
+    "eslint-plugin-react-hooks": "^5.2.0",
     "fake-indexeddb": "^6.2.6",
     "jsdom": "^25.0.1",
     "typescript": "^5.6.3",
+    "typescript-eslint": "^8.72.1",
     "vite": "^5.4.11",
     "vitest": "^2.1.8"
   },

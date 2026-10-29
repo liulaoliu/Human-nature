@@ -73,7 +73,7 @@
      与 URL / 仓库谁是事实来源；这四条答不上来就不加。
 - **收尾门禁**（提交前必跑，别把不绿的留给我）：
   ```bash
-  npm run gates    # tsc -b + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁
+  npm run gates    # tsc -b + 全部测试 + 上帝文件门禁 + hook 体量门禁 + 架构门禁 + ESLint
   ```
   - 上帝文件门禁：**新文件超 800 行直接失败**；存量超限登记在
     `tool/check_god_file.mjs` 的 `BASELINE`，**只准变小**（拆分后同步下调）。

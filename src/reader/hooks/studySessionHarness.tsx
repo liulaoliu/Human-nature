@@ -54,7 +54,7 @@ export function Harness({
 export const lib = (items: VocabLibrary['items']): VocabLibrary => ({ ...createLibrary(), items })
 
 /** 每个测试前装假 localStorage，测试后还原（并清掉 fake timers）。 */
-export function useFakeStorage() {
+export function fakeStorageHarness() {
   let restore: () => void = () => {}
   return {
     setup: () => {
