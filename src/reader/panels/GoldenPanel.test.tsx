@@ -195,10 +195,48 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('学习历史')).toBeTruthy()
     expect(screen.getByRole('button', { name: '本篇（1）' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '全部（1）' })).toBeTruthy()
-    fireEvent.click(screen.getByTitle('点开看当时的完整批改'))
+    fireEvent.click(screen.getByTitle(/作答：The more I read/))
     expect(screen.getByText(/单句仿写/)).toBeTruthy()
     expect(screen.getByText('得分：4/5')).toBeTruthy()
     expect(screen.getByText('不错')).toBeTruthy()
+  })
+
+  it('学习历史：按语言点筛、详情翻上下一条、悬浮看摘要', () => {
+    const mk = (at: string, focus: string, text: string, total: number) => ({
+      at,
+      articleId: 'a1',
+      articleTitle: 'A',
+      model: 'M',
+      text,
+      task: { task: 'x', model: 'M', mustUse: [focus], rubric: [], focus },
+      feedback: { scores: [], issues: [], polished: '', summary: '总评', total, max: 5 },
+      source: 'goldenSentence' as const,
+    })
+    const rows = [mk('2026-10-29T01:00:00.000Z', 'come with', 'first answer', 3), mk('2026-10-29T02:00:00.000Z', 'come with', 'second answer', 4), mk('2026-10-29T03:00:00.000Z', 'served', 'other answer', 5)]
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'history' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: rows, all: rows } }}
+      />,
+    )
+    // 悬浮摘要：带作答和评分
+    expect(screen.getByTitle(/作答：second answer/)).toBeTruthy()
+
+    // 按语言点筛：只剩 2 条
+    fireEvent.change(screen.getByLabelText('按语言点筛选'), { target: { value: 'come with' } })
+    expect(screen.getByText(/语言点「come with」· 2 条/)).toBeTruthy()
+    expect(screen.queryByTitle(/作答：other answer/)).toBeNull()
+
+    // 点开最新一条（列表按时间倒序，第一条是 second answer）
+    fireEvent.click(screen.getByTitle(/作答：second answer/))
+    expect(screen.getByText(/第 1\/2 条/)).toBeTruthy()
+    const older = screen.getByRole('button', { name: /上一条/ }) as HTMLButtonElement
+    expect(older.disabled).toBe(true) // 已是最新一条
+    fireEvent.click(screen.getByRole('button', { name: /下一条/ }))
+    expect(screen.getByText(/第 2\/2 条/)).toBeTruthy()
+    expect(screen.getByText('first answer')).toBeTruthy()
   })
 
   it('切「全部」能看别的篇，默认不给', () => {
