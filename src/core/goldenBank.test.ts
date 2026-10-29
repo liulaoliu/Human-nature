@@ -55,6 +55,20 @@ describe('全库金句本', () => {
     expect(filterGoldenBank(rows, { status: 'mastered' })).toHaveLength(0)
   })
 
+  it('按学习点类型筛：句子里有该类型才命中', () => {
+    const rows = buildGoldenBank(sources, [], new Date('2026-01-02T00:00:00.000Z'))
+    const kinds = new Set(rows[0].targets.map((t) => t.kind))
+    expect(kinds.size).toBeGreaterThan(0)
+    const hit = [...kinds][0]
+    expect(filterGoldenBank(rows, { kind: hit })).toHaveLength(1)
+    // 不存在的类型（或这句没有的类型）→ 0 条
+    expect(filterGoldenBank(rows, { kind: 'tense' })).toHaveLength(kinds.has('tense') ? 1 : 0)
+    expect(filterGoldenBank(rows, { kind: 'all' })).toHaveLength(1)
+    // 类型和状态/搜索一起用：取交集
+    expect(filterGoldenBank(rows, { kind: hit, query: '远程' })).toHaveLength(1)
+    expect(filterGoldenBank(rows, { kind: hit, query: '不存在的词' })).toHaveLength(0)
+  })
+
   it('Markdown / Anki 导出', () => {
     const rows = buildGoldenBank(sources, [], new Date('2026-01-02T00:00:00.000Z'))
     const md = goldenBankToMarkdown(rows)

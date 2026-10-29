@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
-import { filterGoldenBank, type GoldenBankStatus } from '../../../core/goldenBank'
+import { filterGoldenBank, type GoldenBankKind, type GoldenBankStatus } from '../../../core/goldenBank'
 import type { GoldenBankViewProps } from './types'
 
 export default function GoldenBankView({
@@ -12,7 +12,19 @@ export default function GoldenBankView({
 }: GoldenBankViewProps) {
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState<GoldenBankStatus>('all')
-  const filtered = useMemo(() => filterGoldenBank(rows, { query, status }), [rows, query, status])
+  const [kind, setKind] = useState<GoldenBankKind>('all')
+  const filtered = useMemo(() => filterGoldenBank(rows, { query, status, kind }), [rows, query, status, kind])
+  /** 类型按钮上的计数：按当前搜索/状态算，避免点了没结果 */
+  const kindCounts = useMemo(() => {
+    const base = filterGoldenBank(rows, { query, status })
+    const out = new Map<GoldenBankKind, number>()
+    out.set('all', base.length)
+    for (const r of base) {
+      const kinds = new Set(r.targets.map((t) => t.kind))
+      for (const k of kinds) out.set(k, (out.get(k) ?? 0) + 1)
+    }
+    return out
+  }, [rows, query, status])
   return (
     <div className="golden-body">
       <div className="bar golden-plan-bar">
@@ -33,6 +45,20 @@ export default function GoldenBankView({
         {(['all', 'todo', 'mastered', 'due'] as const).map((k) => (
           <button key={k} className={status === k ? 'primary' : ''} onClick={() => setStatus(k)}>
             {k === 'all' ? '全部' : k === 'todo' ? '待掌握' : k === 'mastered' ? '已掌握' : '待回顾'}
+          </button>
+        ))}
+      </div>
+      <div className="bar golden-modes">
+        <span className="muted">类型</span>
+        {(['all', 'pattern', 'tense', 'collocation', 'idiom', 'usage', 'word'] as const).map((k) => (
+          <button
+            key={k}
+            className={kind === k ? 'primary' : ''}
+            onClick={() => setKind(k)}
+            title={k === 'all' ? '不按学习点类型筛' : `只看含「${GOLDEN_TARGET_KIND_LABEL[k]}」学习点的金句`}
+          >
+            {k === 'all' ? '全部类型' : GOLDEN_TARGET_KIND_LABEL[k]}
+            <span className="muted"> {kindCounts.get(k) ?? 0}</span>
           </button>
         ))}
       </div>

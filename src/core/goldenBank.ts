@@ -1,7 +1,7 @@
 import { dayKeyLocal } from './activity'
 import { GOLDEN_TARGET_KIND_LABEL, goldenDrillKey, goldenTargetsFor } from './golden'
 import { findGoldenRecord, goldenReviewDue, type GoldenDrillRecord } from './goldenProgress'
-import type { GoldenLesson, GoldenTarget } from '../types/document'
+import type { GoldenLesson, GoldenTarget, GoldenTargetKind } from '../types/document'
 
 /**
  * 全库金句本：把每篇的 `SavedArticle.golden` 摊平成可搜索、可筛选、可导出的行。
@@ -36,6 +36,12 @@ export interface GoldenBankRow {
 }
 
 export type GoldenBankStatus = 'all' | 'todo' | 'mastered' | 'due'
+
+/**
+ * 按「学习点类型」筛：一句里只要有一个该类型的学习点就算命中。
+ * 金句页的主要噪音来源是「这句我要找的是搭配/句型」，按状态筛不解决问题。
+ */
+export type GoldenBankKind = 'all' | GoldenTargetKind
 
 /** 摊平所有文章的金句；没有 golden 的文章不出现。 */
 export function buildGoldenBank(
@@ -85,14 +91,16 @@ export function buildGoldenBank(
 /** 金句本搜索 / 状态筛选；不改变原数组。 */
 export function filterGoldenBank(
   rows: GoldenBankRow[],
-  opts: { query?: string; status?: GoldenBankStatus } = {},
+  opts: { query?: string; status?: GoldenBankStatus; kind?: GoldenBankKind } = {},
 ): GoldenBankRow[] {
   const q = (opts.query ?? '').trim().toLowerCase()
   const status = opts.status ?? 'all'
+  const kind = opts.kind ?? 'all'
   return rows.filter((r) => {
     if (status === 'mastered' && !r.mastered) return false
     if (status === 'todo' && r.mastered) return false
     if (status === 'due' && !r.due) return false
+    if (kind !== 'all' && !r.targets.some((t) => t.kind === kind)) return false
     if (!q) return true
     const hay = [r.text, r.zh, r.pattern, r.tense, r.note, ...r.targets.map((t) => `${t.en} ${t.zh ?? ''}`)]
       .filter(Boolean)
