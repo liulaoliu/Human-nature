@@ -140,6 +140,55 @@ describe('GoldenPanel', () => {
     expect(onExportMarkdown).toHaveBeenCalled()
   })
 
+  it('课程页有「学习历史」入口，点开能看到本科的批改记录与详情', () => {
+    const api = fakeApi({ view: 'home' })
+    const setView = api.setView as unknown as ReturnType<typeof vi.fn>
+    const rec = {
+      at: '2026-10-29T06:12:30.000Z',
+      articleId: 'a1',
+      articleTitle: 'A',
+      model: 'The more we learn…',
+      text: 'The more I read…',
+      task: { task: '仿写 the more…', model: 'The more we learn…', mustUse: [], rubric: [] },
+      feedback: { scores: [{ dimension: '结构', score: 4, max: 5 }], issues: [], polished: '', summary: '不错', total: 4, max: 5 },
+      source: 'goldenSentence' as const,
+    }
+    const { unmount } = render(
+      <GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn(), history: [rec] }} />,
+    )
+    const entry = screen.getByRole('button', { name: /学习历史（1）/ })
+    fireEvent.click(entry)
+    expect(setView).toHaveBeenCalledWith('history')
+    unmount()
+
+    // 历史视图：列表 → 点开详情
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'history' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: [rec] }}
+      />,
+    )
+    expect(screen.getByText('本科学习历史')).toBeTruthy()
+    fireEvent.click(screen.getByTitle('点开看当时的完整批改'))
+    expect(screen.getByText('单句仿写')).toBeTruthy()
+    expect(screen.getByText('得分：4/5')).toBeTruthy()
+    expect(screen.getByText('不错')).toBeTruthy()
+  })
+
+  it('没有历史时给出说明，不是空白', () => {
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'history' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: [] }}
+      />,
+    )
+    expect(screen.getByText(/还没有记录/)).toBeTruthy()
+  })
+
   it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {
     render(<GoldenPanel api={drillApi()} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
     expect(screen.getByRole('button', { name: '播放整句' })).toBeTruthy()

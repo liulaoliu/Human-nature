@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readdirSync, statSync, unlinkSync, writeFileSy
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { closeAllStores, openStore } from './sqliteStore.ts'
+import { closeAllStores, openStore, SCHEMA_VERSION } from './sqliteStore.ts'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')
@@ -106,7 +106,7 @@ describe('sqliteStore：词库', () => {
 
     const second = openStore(path)
     expect(second.loadVocab().items).toHaveLength(2)
-    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(9)
+    expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(SCHEMA_VERSION)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -507,6 +507,31 @@ describe('sqliteStore：学习记录', () => {
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_records').get().n).toBe(1)
   })
 
+  it('仿写记录保留来源（金句课单句 / 整课考试），坏值当普通仿写', async () => {
+    const store = openStore(tempDb())
+    const base = {
+      articleId: 'a1',
+      articleTitle: 'A',
+      model: 'I run.',
+      text: 'I run every day.',
+      feedback: { total: 8, max: 10, scores: [], issues: [] },
+      task: { task: 'write', model: 'I run.', mustUse: [], rubric: [] },
+    }
+    store.saveLearning({
+      ...learning,
+      writingHistory: [
+        { ...base, at: '2026-01-03T00:00:00.000Z', source: 'goldenSentence', sentenceId: 's1' },
+        { ...base, at: '2026-01-04T00:00:00.000Z', source: 'goldenExam', examId: 'e1' },
+        { ...base, at: '2026-01-05T00:00:00.000Z', source: 'bogus' },
+      ],
+    })
+    const got = store.loadLearning().writingHistory
+    // 按 at 倒序：01-05 的坏值 → 普通仿写（undefined），01-04 考试，01-03 单句
+    expect(got.map((r) => r.source)).toEqual([undefined, 'goldenExam', 'goldenSentence'])
+    expect(got[1].examId).toBe('e1')
+    expect(got[2].sentenceId).toBe('s1')
+  })
+
   it('答题事件增量同步幂等：重复 section 不翻倍，也不会被空数组删除', async () => {
     const store = openStore(tempDb())
     store.saveLearningPartial({ answerEvents: learning.answerEvents })
@@ -677,7 +702,7 @@ describe('sqliteStore：v1 → v7 迁移', () => {
     old.close()
 
     const store = openStore(path)
-    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(9)
+    expect(Number(store.db.prepare('PRAGMA user_version').get().user_version)).toBe(SCHEMA_VERSION)
     // 迁移前整库备份，出事能回到 v1。
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))

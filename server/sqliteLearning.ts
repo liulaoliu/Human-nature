@@ -75,6 +75,10 @@ export interface LearningWriting {
   feedback: unknown
   articleTitle?: string
   task?: unknown
+  /** 普通仿写 / 金句课单句 / 金句课考试；老记录没有 = 普通仿写 */
+  source?: string
+  sentenceId?: string
+  examId?: string
 }
 
 export interface LearningRetell {
@@ -359,7 +363,7 @@ export function loadLearning(db: DatabaseSync): LearningOut {
 
   out.writingHistory = db
     .prepare(
-      'SELECT at, article_id, article_title, model, text, feedback_json, task_json FROM writing_records ORDER BY at DESC, id DESC',
+      'SELECT at, article_id, article_title, model, text, feedback_json, task_json, source, sentence_id, exam_id FROM writing_records ORDER BY at DESC, id DESC',
     )
     .all()
     .map((r): LearningWriting => {
@@ -373,6 +377,12 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       if (r.article_title !== null) rec.articleTitle = String(r.article_title)
       const task = parseJson(r.task_json)
       if (task !== undefined) rec.task = task
+      // 来源只认白名单：坏值当普通仿写，别让金句课历史被一条脏数据带歪
+      if (r.source === 'writing' || r.source === 'goldenSentence' || r.source === 'goldenExam') {
+        rec.source = r.source
+      }
+      if (r.sentence_id !== null && r.sentence_id !== undefined) rec.sentenceId = String(r.sentence_id)
+      if (r.exam_id !== null && r.exam_id !== undefined) rec.examId = String(r.exam_id)
       return rec
     })
 

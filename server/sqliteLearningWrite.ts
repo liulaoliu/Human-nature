@@ -77,9 +77,11 @@ function writeReadDone(db: DatabaseSync, data: LearningData): void {
 
 function writeWriting(db: DatabaseSync, data: LearningData): void {
   const insert = db.prepare(`
-    INSERT INTO writing_records (at, article_id, article_title, model, text, feedback_json, task_json)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO writing_records (at, article_id, article_title, model, text, feedback_json, task_json, source, sentence_id, exam_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
+  const source = (v: unknown): string | null =>
+    v === 'writing' || v === 'goldenSentence' || v === 'goldenExam' ? v : null
   for (const r of list<unknown>(data.writingHistory)) {
     if (!isRecord(r)) continue
     insert.run(
@@ -90,6 +92,9 @@ function writeWriting(db: DatabaseSync, data: LearningData): void {
       text(r.text) ?? '',
       jsonText(r.feedback) ?? '{}',
       jsonText(r.task),
+      source(r.source),
+      text(r.sentenceId),
+      text(r.examId),
     )
   }
 }

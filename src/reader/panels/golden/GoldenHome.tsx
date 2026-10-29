@@ -1,3 +1,4 @@
+import type { WritingRecord } from '../../../core/writing'
 import type { GoldenBankActions, GoldenExamApi, GoldenHomeApi } from './types'
 
 export default function GoldenHome({
@@ -5,13 +6,18 @@ export default function GoldenHome({
   onGenerate,
   bank,
   exam,
+  history,
   onOpenBank,
+  onOpenHistory,
 }: {
   api: GoldenHomeApi
   onGenerate?: () => void
   bank?: GoldenBankActions
   exam?: GoldenExamApi
+  /** 本科的仿写 / 考试批改历史 */
+  history?: WritingRecord[]
   onOpenBank: () => void
+  onOpenHistory: () => void
 }) {
   const selected = api.lesson?.selected.length ?? 0
   const summary = api.summary
@@ -88,6 +94,12 @@ export default function GoldenHome({
           <span className="muted">跨文章搜索、筛选、导出 Markdown / Anki</span>
         </div>
       )}
+      <div className="bar golden-plan-bar">
+        <button onClick={onOpenHistory} title="看本科做过的单句仿写 / 整课考试，以及当时的 AI 批改">
+          🕘 学习历史（{history?.length ?? 0}）
+        </button>
+        <span className="muted">本科的仿写 / 考试批改，点开看原文</span>
+      </div>
       <div className="golden-kpis">
         <span>学习句子 <b>{summary?.selectedSentences ?? 0}</b></span>
         <span>掌握句子 <b>{summary?.masteredSentences ?? 0}</b></span>

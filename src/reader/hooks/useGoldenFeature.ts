@@ -4,7 +4,7 @@ import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import type { WritingRecord } from '../../core/writing'
+import { isGoldenWritingRecord, type WritingRecord } from '../../core/writing'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
 import { useGoldenExam } from './useGoldenExam'
@@ -96,9 +96,16 @@ export function useGoldenFeature({
     flash,
   })
 
+  // 本科的仿写 / 考试批改历史：单句仿写 + 整课考试都算，按文章归属
+  const history = useMemo(
+    () => writingHistory.filter((r) => isGoldenWritingRecord(r) && r.articleId === golden.articleId),
+    [writingHistory, golden.articleId],
+  )
+
   const actions: GoldenPanelActions = {
     onExportMarkdown: bank.exportLesson,
     onGenerate,
+    history,
     onOpenWriting: (mustUse) => {
       const firstId = golden.lesson?.selected[0] ?? golden.lesson?.sentences[0]?.id
       const sentence = firstId ? doc?.sentences.find((s) => s.id === firstId) : null

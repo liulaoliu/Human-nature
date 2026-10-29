@@ -9,6 +9,7 @@ import { contentType, safeJoin, stripLeadingSlashes } from './util.ts'
 import { restartDecision } from './watchdog.ts'
 import { getPort } from './status.ts'
 import { createRequestHandler } from './httpApp.ts'
+import { SCHEMA_VERSION } from './sqliteSchema.ts'
 import { resolveChild, loadMode } from './mode.ts'
 import { closeAllStores } from './sqliteStore.ts'
 import { allowLocalRequest } from './sameOrigin.ts'
@@ -297,7 +298,7 @@ describe('httpApp 请求处理', () => {
       writeFileSync(downloaded, bytes)
       const copy = new DatabaseSync(downloaded, { readOnly: true })
       expect(copy.prepare('SELECT COUNT(*) AS n FROM words').get().n).toBe(1)
-      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(9)
+      expect(copy.prepare('PRAGMA user_version').get().user_version).toBe(SCHEMA_VERSION)
       copy.close()
 
       const evil = await fetch(`${base}/api/store/vocab`, {

@@ -181,9 +181,29 @@ function addArticleColumns(db: DatabaseSync): void {
   add('word_count', 'word_count INTEGER NOT NULL DEFAULT 0')
 }
 
+/**
+ * v10：`writing_records` 补 `source` / `sentence_id` / `exam_id`。
+ *
+ * 必须在 v7 的 baseline 之前补：迁移过程里会 `loadLearning()`（读这三列），
+ * 等到 v10 才 ALTER 就会 `no such column: source`（2026-10-29 踩过）。
+ * 幂等：列已存在就跳过。
+ */
+function addWritingColumns(db: DatabaseSync): void {
+  const exists = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'writing_records'")
+    .get()
+  if (!exists) return
+  const cols = new Set(db.prepare('PRAGMA table_info(writing_records)').all().map((r) => String(r.name)))
+  const add = (name: string, ddl: string) => {
+    if (!cols.has(name)) db.exec(`ALTER TABLE writing_records ADD COLUMN ${ddl}`)
+  }
+  add('source', 'source TEXT')
+  add('sentence_id', 'sentence_id TEXT')
+  add('exam_id', 'exam_id TEXT')
+}
+
 /** 从 JSON payload 回填 articles 的查询列；只在迁移时做一次。 */
-function backfillArticleColumns(db: DatabaseSync): void {
-  const rows = db.prepare('SELECT id, payload FROM articles').all()
+function backfillArticleColumns(db: DatabaseSync): void {  const rows = db.prepare('SELECT id, payload FROM articles').all()
   const upd = db.prepare(
     'UPDATE articles SET title = ?, book = ?, source_key = ?, created_at = ?, sentence_count = ?, word_count = ? WHERE id = ?',
   )
@@ -235,6 +255,8 @@ function ensureSchema(db: DatabaseSync): number {
     tx(db, () => { db.exec(SCHEMA_V3); db.exec('PRAGMA user_version = 3') })
     version = 3
   }
+  // v10 的列要在 v7 baseline 之前就位（迁移会读 writing_records）
+  addWritingColumns(db)
   if (version < 4) {
     tx(db, () => { normalizeLegacySourceIds(db); db.exec('PRAGMA user_version = 4') })
     version = 4
@@ -268,6 +290,10 @@ function ensureSchema(db: DatabaseSync): number {
   if (version < 9) {
     tx(db, () => { db.exec(SCHEMA_V9); db.exec('PRAGMA user_version = 9') })
     version = 9
+  }
+  if (version < 10) {
+    tx(db, () => { addWritingColumns(db); db.exec('PRAGMA user_version = 10') })
+    version = 10
   }
   return version
 }

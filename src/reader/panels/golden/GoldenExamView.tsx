@@ -132,7 +132,7 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
 
       {exam.history.length > 0 && (
         <div className="golden-note">
-          本科已存 {exam.history.length} 次考试记录（在「仿写训练 → 历史」也能回看）。
+          本科已存 {exam.history.length} 次考试记录（回课程页点「🕘 学习历史」可看完整批改）。
         </div>
       )}
     </div>

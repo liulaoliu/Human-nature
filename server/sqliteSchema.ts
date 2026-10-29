@@ -7,7 +7,7 @@
  * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号、不再建表。
  */
 
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 10
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -385,6 +385,18 @@ CREATE TABLE IF NOT EXISTS golden_drill_records (
 );
 CREATE INDEX IF NOT EXISTS idx_golden_drill_records_article ON golden_drill_records(article_id, at DESC);
 `
+
+/**
+ * v10：仿写记录补上「来源」。
+ *
+ * `writing_records` 原来只存作答和批改，不存 `source`（普通仿写 / 金句课单句 / 整课考试），
+ * 重新加载后三个人为区分不开 —— 金句课的「学习历史」和考试记录会凭空消失
+ * （2026-10-29 实测：本科 3 条金句课批改 reload 后全变成普通仿写）。
+ * 补 `source` / `sentence_id` / `exam_id` 三列；老记录 source 为空 = 普通仿写。
+ *
+ * 实际补列在 `sqliteStore.migrate` 里用 `addWritingColumns` 做（放在 v7 baseline 之前：
+ * 迁移过程中就会读 `writing_records`，不能等到 v10 才补）。
+ */
 
 export const SCHEMA_V8 = `
 CREATE TABLE IF NOT EXISTS back_translation_records (
