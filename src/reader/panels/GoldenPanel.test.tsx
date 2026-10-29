@@ -154,27 +154,60 @@ describe('GoldenPanel', () => {
       source: 'goldenSentence' as const,
     }
     const { unmount } = render(
-      <GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn(), history: [rec] }} />,
+      <GoldenPanel
+        api={api}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [rec], all: [rec] } }}
+      />,
     )
     const entry = screen.getByRole('button', { name: /学习历史（1）/ })
     fireEvent.click(entry)
     expect(setView).toHaveBeenCalledWith('history')
     unmount()
 
-    // 历史视图：列表 → 点开详情
+    // 历史视图：默认本篇，列表 → 点开详情
     render(
       <GoldenPanel
         api={fakeApi({ view: 'history' })}
         articleTitle="A"
         onSpeak={vi.fn()}
-        actions={{ onExportMarkdown: vi.fn(), history: [rec] }}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [rec], all: [rec] } }}
       />,
     )
-    expect(screen.getByText('本科学习历史')).toBeTruthy()
+    expect(screen.getByText('学习历史')).toBeTruthy()
+    expect(screen.getByRole('button', { name: '本篇（1）' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '全部（1）' })).toBeTruthy()
     fireEvent.click(screen.getByTitle('点开看当时的完整批改'))
     expect(screen.getByText('单句仿写')).toBeTruthy()
     expect(screen.getByText('得分：4/5')).toBeTruthy()
     expect(screen.getByText('不错')).toBeTruthy()
+  })
+
+  it('切「全部」能看别的篇，默认不给', () => {
+    const rec = {
+      at: '2026-10-29T06:12:30.000Z',
+      articleId: 'other',
+      articleTitle: 'B 篇',
+      model: 'M',
+      text: 'T',
+      feedback: { scores: [], issues: [], polished: '', summary: '别的篇', total: 3, max: 5 },
+      source: 'goldenExam' as const,
+    }
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'history' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [], all: [rec] } }}
+      />,
+    )
+    // 默认本篇：空
+    expect(screen.getByText(/本篇还没有记录/)).toBeTruthy()
+    expect(screen.queryByText('B 篇')).toBeNull()
+    // 切全部：出现，并显示文章标题
+    fireEvent.click(screen.getByRole('button', { name: '全部（1）' }))
+    expect(screen.getByText('B 篇')).toBeTruthy()
   })
 
   it('没有历史时给出说明，不是空白', () => {
@@ -183,10 +216,10 @@ describe('GoldenPanel', () => {
         api={fakeApi({ view: 'history' })}
         articleTitle="A"
         onSpeak={vi.fn()}
-        actions={{ onExportMarkdown: vi.fn(), history: [] }}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [], all: [] } }}
       />,
     )
-    expect(screen.getByText(/还没有记录/)).toBeTruthy()
+    expect(screen.getByText(/本篇还没有记录/)).toBeTruthy()
   })
 
   it('纯图标播放按钮有可访问名，不靠 emoji 当标签', () => {

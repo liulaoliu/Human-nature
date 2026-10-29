@@ -97,10 +97,13 @@ export function useGoldenFeature({
   })
 
   // 本科的仿写 / 考试批改历史：单句仿写 + 整课考试都算，按文章归属
-  const history = useMemo(
-    () => writingHistory.filter((r) => isGoldenWritingRecord(r) && r.articleId === golden.articleId),
-    [writingHistory, golden.articleId],
-  )
+  const history = useMemo(() => {
+    const all = writingHistory.filter(isGoldenWritingRecord)
+    return {
+      all,
+      article: all.filter((r) => r.articleId === golden.articleId),
+    }
+  }, [writingHistory, golden.articleId])
 
   const actions: GoldenPanelActions = {
     onExportMarkdown: bank.exportLesson,

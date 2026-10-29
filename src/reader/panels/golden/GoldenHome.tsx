@@ -14,8 +14,8 @@ export default function GoldenHome({
   onGenerate?: () => void
   bank?: GoldenBankActions
   exam?: GoldenExamApi
-  /** 本科的仿写 / 考试批改历史 */
-  history?: WritingRecord[]
+  /** 本科的仿写 / 考试批改历史（article = 本篇，all = 全库） */
+  history?: { article: WritingRecord[]; all: WritingRecord[] }
   onOpenBank: () => void
   onOpenHistory: () => void
 }) {
@@ -96,9 +96,9 @@ export default function GoldenHome({
       )}
       <div className="bar golden-plan-bar">
         <button onClick={onOpenHistory} title="看本科做过的单句仿写 / 整课考试，以及当时的 AI 批改">
-          🕘 学习历史（{history?.length ?? 0}）
+          🕘 学习历史（{history?.article.length ?? 0}）
         </button>
-        <span className="muted">本科的仿写 / 考试批改，点开看原文</span>
+        <span className="muted">本篇的仿写 / 考试批改，点开看原文；也可切到全部</span>
       </div>
       <div className="golden-kpis">
         <span>学习句子 <b>{summary?.selectedSentences ?? 0}</b></span>
