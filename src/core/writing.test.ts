@@ -218,6 +218,18 @@ describe('writingRecordLabel：一条记录叫什么', () => {
       }),
     ).toBe('语言点造句 · come with')
   })
+  it('第二稿在名字里标出来（第 2 稿）', () => {
+    expect(
+      writingRecordLabel({
+        source: 'goldenSentence',
+        task: { task: 'x', model: 'm', mustUse: ['come with'], rubric: [], focus: 'come with', round: 2 },
+      }),
+    ).toBe('语言点造句 · come with（第 2 稿）')
+    expect(writingRecordLabel({ source: 'goldenSentence', task: { task: 'x', model: 'm', mustUse: [], rubric: [], round: 2 } })).toBe(
+      '单句仿写（第 2 稿）',
+    )
+  })
+
   it('语言点造句在 Markdown / A4 打印里也标出来', () => {
     const rec = { ...base, at: '2026-10-29T06:00:00.000Z',
       source: 'goldenSentence' as const,

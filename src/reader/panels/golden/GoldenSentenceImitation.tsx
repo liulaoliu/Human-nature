@@ -49,17 +49,22 @@ export default function GoldenSentenceImitation({
         rows={4}
         value={imitation.answer}
         onChange={(e) => imitation.setAnswer(e.target.value)}
-        placeholder="写一句新的英文句子…"
+        placeholder={imitation.round > 1 ? '第 2 稿：照着上面的批改意见改…' : '写一句新的英文句子…'}
         spellCheck={false}
         autoCapitalize="off"
         autoCorrect="off"
       />
+
+      {imitation.round > 1 && (
+        <div className="golden-note">第 2 稿：改完再提交一次批改，会和首稿分开记一条。</div>
+      )}
 
       <div className="bar">
         <button className="primary" onClick={imitation.grade} disabled={!hasAnswer || imitation.grading}>
           {imitation.grading ? '批改中…' : '提交 AI 批改'}
         </button>
         <button onClick={imitation.copyGradePrompt} disabled={!hasAnswer}>复制批改提示词</button>
+        {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
         <button className="primary" onClick={onNext} disabled={!hasAnswer}>
           {nextLabel}
         </button>

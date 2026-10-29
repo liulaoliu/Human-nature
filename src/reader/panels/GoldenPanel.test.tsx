@@ -282,6 +282,7 @@ describe('GoldenPanel', () => {
       choices: [
         { en: 'keep up with', zh: '跟上', done: false },
         { en: 'the news', zh: '新闻', done: true },
+        { en: 'the economy', zh: '经济', done: false },
       ],
       selected: ['keep up with', 'the news'],
       toggle,
@@ -301,7 +302,9 @@ describe('GoldenPanel', () => {
       />,
     )
     expect(screen.getByText('还是单独练语言点？')).toBeTruthy()
-    // 多选块：默认显示中文释义，练过的带 ✓
+    // 多选块：选中态带 on 类（有底色），没选的不带；练过的带 ✓
+    expect(screen.getByRole('button', { name: /keep up with — 跟上/ }).className).toContain('on')
+    expect(screen.getByRole('button', { name: /the economy — 经济/ }).className).not.toContain('on')
     expect(screen.getByRole('button', { name: /keep up with — 跟上/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /the news — 新闻 ✓/ })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /the news/ }))

@@ -51,11 +51,14 @@ export function useGoldenImitation({
   const [grading, setGrading] = useState(false)
   const [error, setError] = useState('')
   const [configured, setConfigured] = useState<boolean | null>(null)
+  /** 第几稿：1 = 首稿；改写过就是 2（最多两稿，避免变成无限重写） */
+  const [round, setRound] = useState(1)
 
   const reset = useCallback(() => {
     setAnswer('')
     setFeedback(null)
     setError('')
+    setRound(1)
   }, [])
 
   // 换题就清空上一题的作答；同一题重进由调用方再 reset 一次。
@@ -64,6 +67,7 @@ export function useGoldenImitation({
     setAnswer('')
     setFeedback(null)
     setError('')
+    setRound(1)
   }, [itemId])
 
   const ensureAi = useCallback(async () => {
@@ -83,14 +87,14 @@ export function useGoldenImitation({
         model: current.model,
         text: answer.trim(),
         feedback: fb,
-        task: examToImitation(current),
+        task: { ...examToImitation(current), ...(round > 1 ? { round } : {}) },
         source,
         ...(source === 'goldenExam' ? { examId: current.id } : { sentenceId: current.sentenceId }),
       }
       setWritingHistory((h) => addWritingRecord(h, rec))
       recordActivity('write', 1)
     },
-    [current, articleId, articleTitle, answer, source, setWritingHistory, recordActivity, now],
+    [current, articleId, articleTitle, answer, source, round, setWritingHistory, recordActivity, now],
   )
 
   const applyGrade = useCallback(
@@ -128,8 +132,7 @@ export function useGoldenImitation({
     }
   }, [current, answer, flash])
 
-  const grade = useCallback(async () => {
-    if (!current) {
+  const grade = useCallback(async () => {    if (!current) {
       flash('这一题还没有题面')
       return
     }
@@ -162,6 +165,18 @@ export function useGoldenImitation({
     }
   }, [current, answer, ensureAi, copyGradePrompt, runAi, applyGrade, flash])
 
+  /**
+   * 按上一稿的批改意见再写一稿。
+   *
+   * 只允许一次（1 → 2）：作答保留在输入框里，用户照着意见改；交之前不自动批改，
+   * 批改记录会带 `task.round = 2`，历史/导出里能看出是第几稿。
+   */
+  const rewrite = useCallback(() => {
+    if (!feedback || round >= 2) return
+    setError('')
+    setRound(2)
+  }, [feedback, round])
+
   return {
     current,
     answer,
@@ -175,6 +190,11 @@ export function useGoldenImitation({
     grade,
     copyGradePrompt,
     applyGrade,
+    /** 第几稿（1 = 首稿，2 = 按意见改写后的稿） */
+    round,
+    /** 还能不能再改一稿（有批改、且还没到第 2 稿） */
+    canRewrite: !!feedback && round < 2,
+    rewrite,
   }
 }
 

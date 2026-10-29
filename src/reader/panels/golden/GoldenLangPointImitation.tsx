@@ -38,7 +38,7 @@ export default function GoldenLangPointImitation({ langPoint }: { langPoint: Gol
           return (
             <button
               key={c.en}
-              className={on ? 'primary' : ''}
+              className={on ? 'on' : ''}
               onClick={() => toggle(c.en)}
               aria-pressed={on}
               title={showZh && c.zh ? c.zh : c.en}

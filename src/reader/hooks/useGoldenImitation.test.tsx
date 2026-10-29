@@ -64,6 +64,35 @@ describe('useGoldenImitation', () => {
     expect(h.recordActivity).toHaveBeenCalledWith('write', 1)
   })
 
+  it('按批改意见再写一稿：第二次批改记成第 2 稿，且只能改一次', async () => {
+    const raw = JSON.stringify(feedback)
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })
+    const h = setup(runAi)
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    await act(async () => {
+      await h.result.current.imitation.grade()
+    })
+    await waitFor(() => expect(h.result.current.imitation.feedback).not.toBeNull())
+    expect(h.result.current.imitation.canRewrite).toBe(true)
+
+    act(() => h.result.current.imitation.rewrite())
+    expect(h.result.current.imitation.round).toBe(2)
+    expect(h.result.current.imitation.canRewrite).toBe(false)
+    // 作答保留，用户照着意见改
+    expect(h.result.current.imitation.answer).toContain('In response')
+
+    await act(async () => {
+      await h.result.current.imitation.grade()
+    })
+    await waitFor(() => expect(h.result.current.history).toHaveLength(2))
+    expect(h.result.current.history[0].task?.round).toBe(2)
+    expect(h.result.current.history[1].task?.round).toBeUndefined()
+
+    // 已经第 2 稿：不再允许继续改
+    act(() => h.result.current.imitation.rewrite())
+    expect(h.result.current.imitation.round).toBe(2)
+  })
+
   it('坏批改 JSON 只报错，不写历史', () => {
     const h = setup()
     act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))

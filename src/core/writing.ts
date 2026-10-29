@@ -25,6 +25,8 @@ export interface ImitationTask {
   rubric: RubricItem[]
   /** 「语言点造句」：必须用上的那个词块；普通仿写没有这个字段 */
   focus?: string
+  /** 第几稿：按批改意见改写后是 2；首稿不写 */
+  round?: number
 }
 
 export interface WritingScore {
@@ -255,6 +257,12 @@ const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string>
  * 靠 `task.focus` 区分：有 focus 就是只练一个词块的那道题。
  */
 export function writingRecordLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
+  const base = baseLabel(rec)
+  const round = rec.task?.round ?? 1
+  return round > 1 ? `${base}（第 ${round} 稿）` : base
+}
+
+function baseLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
   if (rec.source === 'goldenExam') return WRITING_SOURCE_LABEL.goldenExam
   if (rec.source === 'goldenSentence') {
     const focus = rec.task?.focus?.trim()

@@ -311,6 +311,14 @@
   cursor: pointer;
 }
 
+/* 多选/选中态：要压过下面 .golden-bank button 的底色（同优先级更靠后） */
+.golden-bank button.on {
+  background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
 .golden-bank button:disabled {
   opacity: 0.35;
   cursor: default;
