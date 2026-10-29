@@ -393,6 +393,7 @@ export default function ReaderSidebarHost({
         onToggleStats: vocab.onToggleStats,
         onExportWrong: exporter.doExportWrong,
         onExportAll: exporter.exportAll,
+        onExportWriting: exporter.exportWriting,
         onImportBackup: exporter.onImportBackup,
         onMergeBackup: exporter.onMergeBackup,
         statsOpen: vocab.statsOpen,

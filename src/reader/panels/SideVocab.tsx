@@ -83,6 +83,8 @@ export interface SideVocabProps {
   onToggleStats: () => void
   onExportWrong: (items: VocabItem[]) => void
   onExportAll: () => void
+  /** 导出仿写 / 金句课考试的 AI 批改（Markdown 成册） */
+  onExportWriting?: () => void
   onImportBackup: (file: File | undefined) => void
   onMergeBackup: (file: File | undefined) => void
 
@@ -158,6 +160,7 @@ export default function SideVocab({
   onToggleStats,
   onExportWrong,
   onExportAll,
+  onExportWriting,
   onImportBackup,
   onMergeBackup,
   statsOpen,
@@ -414,6 +417,11 @@ export default function SideVocab({
         <button onClick={onExportAll} title="词库 + 已保存的文章打包成一个 JSON，换电脑时带走">
           导出全部（备份）
         </button>
+        {onExportWriting && (
+          <button onClick={onExportWriting} title="把仿写 / 金句课考试的 AI 批改导出成 Markdown（分数、逐条问题、润色、总评）">
+            导出批改
+          </button>
+        )}
         <label className="filebtn" title="导入备份并覆盖本机数据（还原用：词库整库替换、统计整段替换）">
           导入备份
           <input

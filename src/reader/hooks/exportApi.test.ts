@@ -238,6 +238,42 @@ describe('exportApi：文章包', () => {
   })
 })
 
+describe('exportApi：仿写批改成册', () => {
+  it('没有记录：只提示，不生成文件', () => {
+    const { api, flash } = setup({ writingHistory: [] })
+    const create = vi.spyOn(URL, 'createObjectURL')
+    api.exportWriting()
+    expect(flash).toHaveBeenCalledWith(expect.stringContaining('还没有仿写'))
+    expect(create).not.toHaveBeenCalled()
+    create.mockRestore()
+  })
+
+  it('有记录：生成 Markdown，内容是批改原文', () => {
+    const rec = {
+      at: '2026-10-29T06:12:30.000Z',
+      articleId: 'a1',
+      articleTitle: 'A',
+      model: 'The more we learn…',
+      text: 'The more I read…',
+      feedback: { scores: [], issues: [], polished: '润色版', summary: '总评', total: 4, max: 5 },
+    }
+    const { api, flash } = setup({ writingHistory: [rec as never] })
+    const blobs: Blob[] = []
+    const create = vi.spyOn(URL, 'createObjectURL').mockImplementation((b) => {
+      blobs.push(b as Blob)
+      return 'blob:x'
+    })
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    api.exportWriting()
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(click).toHaveBeenCalledTimes(1)
+    expect(flash).toHaveBeenCalledWith('已导出 1 条批改记录')
+    expect(blobs[0].type).toContain('markdown')
+    click.mockRestore()
+    create.mockRestore()
+  })
+})
+
 describe('exportApi：打印', () => {
   it('没有词时只提示，不弹窗', () => {
     const open = vi.spyOn(window, 'open')

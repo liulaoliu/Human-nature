@@ -240,6 +240,50 @@ export function isGoldenWritingRecord(rec: WritingRecord): boolean {
   return rec.source === 'goldenExam' || rec.source === 'goldenSentence'
 }
 
+const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string> = {
+  writing: '仿写',
+  goldenSentence: '金句课 · 单句仿写',
+  goldenExam: '金句课 · 整课考试',
+}
+
+function mdText(s: string): string {
+  return s.replace(/\r/g, '').trim()
+}
+
+/**
+ * 仿写批改记录 → Markdown（**成册**用）。
+ *
+ * AI 批改（分数 / 逐条问题 / 润色 / 总评）只存在 `writing_records.feedback` 里，
+ * 界面上只在交卷那一刻显示；这里按时间倒序摊平成一份可直接存档 / 打印的稿子。
+ * 纯函数：不读 DOM、不看当前文章，导出的是全库记录。
+ */
+export function writingHistoryToMarkdown(records: WritingRecord[], title = '仿写批改记录'): string {
+  const list = [...records].sort((a, b) => b.at.localeCompare(a.at))
+  const lines: string[] = [`# ${title}`, '', `共 ${list.length} 条`]
+  for (const r of list) {
+    const when = r.at.replace('T', ' ').slice(0, 16)
+    const src = r.source ? WRITING_SOURCE_LABEL[r.source] : WRITING_SOURCE_LABEL.writing
+    lines.push('', `## ${when} · ${mdText(r.articleTitle || r.articleId) || '未命名'}（${src}）`)
+    if (r.task?.model || r.model) lines.push('', `**范句**：${mdText(r.task?.model || r.model)}`)
+    if (r.task?.task) lines.push('', `**题目**：${mdText(r.task.task)}`)
+    if (r.text) lines.push('', `**我的作答**：${mdText(r.text)}`)
+    const fb = r.feedback
+    if (fb.max > 0) lines.push('', `**评分**：${fb.total}/${fb.max}`)
+    for (const s of fb.scores ?? []) {
+      lines.push(`- ${mdText(s.dimension)} ${s.score}/${s.max}${s.comment ? ` — ${mdText(s.comment)}` : ''}`)
+    }
+    if (fb.issues?.length) {
+      lines.push('', '**问题**')
+      for (const i of fb.issues) {
+        lines.push(`- 「${mdText(i.original)}」→「${mdText(i.suggestion)}」${i.reason ? ` — ${mdText(i.reason)}` : ''}`)
+      }
+    }
+    if (fb.polished) lines.push('', `**润色版**：${mdText(fb.polished)}`)
+    if (fb.summary) lines.push('', `**总评**：${mdText(fb.summary)}`)
+  }
+  return lines.join('\n').trim() + '\n'
+}
+
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */
 export function addWritingRecord(
   list: WritingRecord[],

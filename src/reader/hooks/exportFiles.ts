@@ -3,6 +3,7 @@ import { sortItems } from '../../core/vocab'
 import type { VocabItem } from '../../types/document'
 import { dayKeyLocal } from '../../core/activity'
 import { buildArticlePackage } from '../../core/articlePackage'
+import { writingHistoryToMarkdown } from '../../core/writing'
 import type { ExportParams } from './exportTypes'
 
 /** 下载 / 词表 / 文章包等“生成文件”动作；不读写应用状态。 */
@@ -41,6 +42,22 @@ export function createExportFiles({ library, saved, learning, writingHistory, vi
 
   const doExportWrong = (items: VocabItem[]) =>
     download('wrong-words.csv', toWrongWordsCSV(items), 'text/csv;charset=utf-8')
+
+  /**
+   * 导出仿写 / 金句课考试的 AI 批改（Markdown）。
+   *
+   * 这些批改只存在 `writingHistory.feedback` 里，界面只在交卷时显示；导出来才能存档 / 打印。
+   * 没有记录时只提示，不生成空文件。
+   */
+  const exportWriting = () => {
+    if (!writingHistory.length) {
+      flash('还没有仿写 / 金句课考试的批改记录')
+      return
+    }
+    const day = dayKeyLocal()
+    download(`writing-feedback-${day}.md`, writingHistoryToMarkdown(writingHistory), 'text/markdown;charset=utf-8')
+    flash(`已导出 ${writingHistory.length} 条批改记录`)
+  }
 
   /** 导出全部：词库 + 已保存的文章 + 统计，一个 JSON 换电脑用。 */
   const exportAll = () => {
@@ -94,5 +111,5 @@ export function createExportFiles({ library, saved, learning, writingHistory, vi
     flash(`已导出文章包：${picked.length} 篇（含生词 / 语言点 / 相关记录）；另一台电脑用「合并导入」`)
   }
 
-  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, doExportArticlePackage }
+  return { download, doExportAnki, exportJson, exportWordList, exportBatch, doExportWrong, exportAll, exportWriting, doExportArticlePackage }
 }
