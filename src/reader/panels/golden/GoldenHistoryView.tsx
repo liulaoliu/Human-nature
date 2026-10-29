@@ -21,11 +21,14 @@ export default function GoldenHistoryView({
   rows,
   articleTitle,
   onBack,
+  onPrint,
 }: {
   /** `article` = 本篇，`all` = 全库（已按来源筛过，都是金句课记录） */
   rows: { article: WritingRecord[]; all: WritingRecord[] }
   articleTitle?: string
   onBack: () => void
+  /** 打印当前范围（A4）；没注入就不显示按钮 */
+  onPrint?: (rows: WritingRecord[], title: string) => void
 }) {
   const [scope, setScope] = useState<Scope>('article')
   const [picked, setPicked] = useState<WritingRecord | null>(null)
@@ -58,6 +61,16 @@ export default function GoldenHistoryView({
         <button onClick={() => setScope('all')} className={scope === 'all' ? 'primary' : ''}>
           全部（{rows.all.length}）
         </button>
+        {onPrint && list.length > 0 && (
+          <button
+            onClick={() =>
+              onPrint(list, scope === 'article' ? `${articleTitle || '本篇'} · 学习历史` : '金句课学习历史')
+            }
+            title="打印当前范围的学习历史（A4）"
+          >
+            打印
+          </button>
+        )}
         <span className="muted">{scope === 'article' ? articleTitle : '所有做过的金句课仿写 / 考试'}</span>
       </div>
       {list.length ? (

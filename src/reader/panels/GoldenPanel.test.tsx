@@ -210,6 +210,39 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('B 篇')).toBeTruthy()
   })
 
+  it('学习历史可打印：按当前范围（本篇 / 全部）传对应记录', () => {
+    const rec = (at: string, articleId: string, articleTitle: string) => ({
+      at,
+      articleId,
+      articleTitle,
+      model: 'M',
+      text: 'T',
+      feedback: { scores: [], issues: [], polished: '', summary: '', total: 3, max: 5 },
+      source: 'goldenSentence' as const,
+    })
+    const mine = rec('2026-10-29T06:00:00.000Z', 'a1', 'A')
+    const other = rec('2026-10-28T06:00:00.000Z', 'a2', 'B 篇')
+    const onPrintHistory = vi.fn()
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'history' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{
+          onExportMarkdown: vi.fn(),
+          history: { article: [mine], all: [mine, other] },
+          onPrintHistory,
+        }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '打印' }))
+    expect(onPrintHistory).toHaveBeenLastCalledWith([mine], 'A · 学习历史')
+
+    fireEvent.click(screen.getByRole('button', { name: '全部（2）' }))
+    fireEvent.click(screen.getByRole('button', { name: '打印' }))
+    expect(onPrintHistory).toHaveBeenLastCalledWith([mine, other], '金句课学习历史')
+  })
+
   it('没有历史时给出说明，不是空白', () => {
     render(
       <GoldenPanel

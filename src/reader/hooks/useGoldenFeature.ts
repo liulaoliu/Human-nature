@@ -4,7 +4,8 @@ import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import { isGoldenWritingRecord, type WritingRecord } from '../../core/writing'
+import { isGoldenWritingRecord, writingHistoryToPrintHTML, type WritingRecord } from '../../core/writing'
+import { openPrintWindow } from './printWindow'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'
 import { useGoldenExam } from './useGoldenExam'
@@ -109,6 +110,13 @@ export function useGoldenFeature({
     onExportMarkdown: bank.exportLesson,
     onGenerate,
     history,
+    onPrintHistory: (rows, title) => {
+      if (!rows.length) {
+        flash('没有可打印的学习历史')
+        return
+      }
+      if (!openPrintWindow(writingHistoryToPrintHTML(rows, title), title)) flash('弹窗被拦截，允许后重试')
+    },
     onOpenWriting: (mustUse) => {
       const firstId = golden.lesson?.selected[0] ?? golden.lesson?.sentences[0]?.id
       const sentence = firstId ? doc?.sentences.find((s) => s.id === firstId) : null

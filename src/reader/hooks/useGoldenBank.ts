@@ -10,6 +10,7 @@ import { goldenToMarkdown } from '../../core/goldenMarkdown'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import type { GoldenLesson, SavedArticle } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
+import { openPrintWindow } from './printWindow'
 
 interface GoldenBankArgs {
   saved: SavedArticle[]
@@ -72,14 +73,7 @@ export function useGoldenBank({
   }, [saved, savedId, articleKey, articleTitle, articleIdentity, doc, lesson, records])
 
   const printHTML = (title: string, html: string) => {
-    const win = window.open('', '_blank')
-    if (!win) {
-      flash('弹窗被拦截，允许后重试')
-      return
-    }
-    win.document.write(html)
-    win.document.close()
-    win.document.title = title
+    if (!openPrintWindow(html, title)) flash('弹窗被拦截，允许后重试')
   }
 
   return {

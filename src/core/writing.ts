@@ -251,6 +251,68 @@ function mdText(s: string): string {
 }
 
 /**
+ * 仿写批改记录 → A4 打印 HTML（**成册**用，和「全库金句本」一个路子）。
+ *
+ * 单栏密排：每条记录 = 日期 · 来源 · 文章，下面是范句 / 我的作答 / 分数 /
+ * 逐条问题 / 润色 / 总评。`break-inside: avoid` 保证一条不会被撕成两页。
+ */
+export function writingHistoryToPrintHTML(records: WritingRecord[], title = '仿写批改记录'): string {
+  const list = [...records].sort((a, b) => b.at.localeCompare(a.at))
+  const esc = (s: string) =>
+    s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  const body = list
+    .map((r) => {
+      const when = r.at.replace('T', ' ').slice(0, 16)
+      const src = r.source ? WRITING_SOURCE_LABEL[r.source] : WRITING_SOURCE_LABEL.writing
+      const fb = r.feedback
+      const scores = (fb.scores ?? [])
+        .map((s) => `${esc(mdText(s.dimension))} ${s.score}/${s.max}${s.comment ? `（${esc(mdText(s.comment))}）` : ''}`)
+        .join('；')
+      const issues = (fb.issues ?? [])
+        .map((i) => `${esc(mdText(i.original))} → ${esc(mdText(i.suggestion))}${i.reason ? `（${esc(mdText(i.reason))}）` : ''}`)
+        .map((t) => `<li>${t}</li>`)
+        .join('')
+      return `<div class="item">
+        <div class="head">${esc(when)} · ${esc(src)}${r.articleTitle ? ` · ${esc(r.articleTitle)}` : ''}${
+          fb.max > 0 ? ` · ${fb.total}/${fb.max}` : ''
+        }</div>
+        ${r.task?.model || r.model ? `<div class="model">范句：${esc(mdText(r.task?.model || r.model))}</div>` : ''}
+        ${r.task?.task ? `<div class="task">题目：${esc(mdText(r.task.task))}</div>` : ''}
+        ${r.text ? `<div class="answer">作答：${esc(mdText(r.text))}</div>` : ''}
+        ${scores ? `<div class="scores">评分：${scores}</div>` : ''}
+        ${issues ? `<ul class="issues">${issues}</ul>` : ''}
+        ${fb.polished ? `<div class="polished">润色：${esc(mdText(fb.polished))}</div>` : ''}
+        ${fb.summary ? `<div class="summary">总评：${esc(mdText(fb.summary))}</div>` : ''}
+      </div>`
+    })
+    .join('')
+
+  return `<!doctype html>
+<html lang="zh"><head><meta charset="utf-8"><title>${esc(title)}</title>
+<style>
+@page { size: A4; margin: 12mm; }
+html, body { margin: 0; }
+body { font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; font-size: 9.5pt; line-height: 1.45; }
+h1 { font-size: 14pt; margin: 0 0 2mm; }
+.meta { color: #666; font-size: 8pt; margin: 0 0 4mm; }
+.item { break-inside: avoid; padding: 0 0 3mm; margin: 0 0 3mm; border-bottom: .3pt solid #ddd; }
+.head { color: #555; font-size: 8pt; margin-bottom: .8mm; }
+.model { color: #333; }
+.model, .task, .answer, .scores, .polished, .summary { margin-top: .6mm; }
+.model { font-style: italic; }
+.answer { font-weight: 600; }
+.scores, .polished { color: #333; }
+.issues { margin: 1mm 0 0 4mm; padding: 0; font-size: 8.5pt; }
+.issues li { margin: 0 0 .5mm; }
+.summary { color: #444; font-size: 8.5pt; }
+</style></head><body>
+<h1>${esc(title)}</h1>
+<div class="meta">共 ${list.length} 条 · ${list.filter((r) => r.feedback.max > 0).length} 条有评分</div>
+${body}
+</body></html>`
+}
+
+/**
  * 仿写批改记录 → Markdown（**成册**用）。
  *
  * AI 批改（分数 / 逐条问题 / 润色 / 总评）只存在 `writing_records.feedback` 里，

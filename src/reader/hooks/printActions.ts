@@ -5,6 +5,7 @@ import type { VocabItem } from '../../types/document'
 import type { PrintRow } from '../../core/printPlan'
 import { dayKeyLocal } from '../../core/activity'
 import type { ExportParams } from './exportTypes'
+import { openPrintWindow } from './printWindow'
 
 /** A4 打印（普通词表 / 按行词表）；成功后可回写打印时间。 */
 export function createPrintActions({ library, persist, flash }: ExportParams) {
@@ -30,13 +31,10 @@ export function createPrintActions({ library, persist, flash }: ExportParams) {
       subtitle: `${day} · ${items.length} 词`,
       numberOf,
     })
-    const win = window.open('', '_blank')
-    if (!win) {
+    if (!openPrintWindow(html, title)) {
       flash('弹窗被拦截，允许后重试')
       return
     }
-    win.document.write(html)
-    win.document.close()
     // 打印成功即记录时间，下次「只打未打印」可据此跳过。
     if (opts?.mark !== false) {
       persist(markPrinted(library, items.map((it) => it.id)))
@@ -77,13 +75,10 @@ export function createPrintActions({ library, persist, flash }: ExportParams) {
       rowGroups,
       subtitle: `${day} · ${rows.length} 词`,
     })
-    const win = window.open('', '_blank')
-    if (!win) {
+    if (!openPrintWindow(html, title)) {
       flash('弹窗被拦截，允许后重试')
       return
     }
-    win.document.write(html)
-    win.document.close()
     if (opts?.mark !== false) {
       let lib = library
       const globalIds: string[] = []

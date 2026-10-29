@@ -20,6 +20,8 @@ export interface GoldenPanelActions {
   bank?: GoldenBankActions
   /** 本科的仿写 / 考试批改历史；`all` 是全库（含别的篇），默认只看 `article` */
   history?: { article: WritingRecord[]; all: WritingRecord[] }
+  /** 打印当前范围的学习历史（A4） */
+  onPrintHistory?: (rows: WritingRecord[], title: string) => void
   /** 打印本课 A4 */
   onPrintLesson?: () => void
   /** 仿写考试：完成 5/10 句后解锁，题目/批改/历史都在这一个 API 里 */
@@ -68,6 +70,7 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           rows={actions.history ?? { article: [], all: [] }}
           articleTitle={articleTitle}
           onBack={() => api.setView('home')}
+          onPrint={actions.onPrintHistory}
         />
       )}
       {api.view === 'bank' && (

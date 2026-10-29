@@ -8,6 +8,7 @@ import {
   parseImitationTask,
   parseWritingFeedback,
   writingHistoryToMarkdown,
+  writingHistoryToPrintHTML,
   type ImitationTask,
   type WritingRecord,
 } from './writing'
@@ -175,5 +176,29 @@ describe('writingHistoryToMarkdown（批改成册）', () => {
     expect(md).not.toContain('**评分**')
     expect(md).not.toContain('**我的作答**')
     expect(md).toContain('A long road')
+  })
+
+  it('A4 打印 HTML：含样式、分数、逐条问题，且转义尖括号', () => {
+    const html = writingHistoryToPrintHTML([
+      record({ text: 'a < b & c', feedback: {
+        scores: [{ dimension: '结构', score: 4, max: 5 }],
+        issues: [{ original: '<x>', suggestion: 'y', reason: 'z' }],
+        polished: 'p', summary: 's', total: 4, max: 5,
+      } }),
+    ])
+    expect(html).toContain('@page { size: A4')
+    expect(html).toContain('共 1 条')
+    expect(html).toContain('4/5')
+    expect(html).toContain('结构 4/5')
+    expect(html).toContain('&lt;x&gt; → y（z）')
+    expect(html).toContain('a &lt; b &amp; c')
+    expect(html).toContain('润色：p')
+    expect(html).toContain('总评：s')
+  })
+
+  it('A4 打印空记录也不崩', () => {
+    const html = writingHistoryToPrintHTML([])
+    expect(html).toContain('共 0 条')
+    expect(html).toContain('</html>')
   })
 })
