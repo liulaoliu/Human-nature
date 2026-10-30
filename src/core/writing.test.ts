@@ -5,6 +5,7 @@ import {
   countWritesOnDay,
   historyPage,
   isGoldenWritingRecord,
+  normalizeWritingRecord,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
@@ -167,6 +168,33 @@ describe('writingRecordLabel：一条记录叫什么', () => {
     )
   })
 
+})
+
+describe('normalizeWritingRecord：外部数据里的来源只认白名单', () => {
+  const base: WritingRecord = {
+    at: '2026-10-30T00:00:00.000Z',
+    articleId: 'a1',
+    model: 'M',
+    text: 'T',
+    feedback: { scores: [], issues: [], total: 0, max: 0 },
+  }
+  it('合法来源原样保留（金句课历史才会出现在 D老师小课堂）', () => {
+    expect(normalizeWritingRecord({ ...base, source: 'goldenExam', examId: 'e1' }).source).toBe('goldenExam')
+    expect(normalizeWritingRecord({ ...base, source: 'goldenSentence', sentenceId: 's1' }).sentenceId).toBe('s1')
+    expect(normalizeWritingRecord({ ...base, source: 'writing' }).source).toBe('writing')
+  })
+
+  it('坏来源当普通仿写；id 不是字符串就丢掉（和服务端 sqliteLearning 同一口径）', () => {
+    const bad = normalizeWritingRecord({
+      ...base,
+      source: 'bogus' as WritingRecord['source'],
+      sentenceId: 42 as unknown as string,
+      examId: { x: 1 } as unknown as string,
+    })
+    expect(bad.source).toBeUndefined()
+    expect(bad.sentenceId).toBeUndefined()
+    expect(bad.examId).toBeUndefined()
+  })
 })
 
 describe('historyPage：学习历史只分页显示，不删记录', () => {

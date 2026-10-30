@@ -86,6 +86,27 @@ describe('learning 记录', () => {
     expect(hasLearningData({ ...emptyLearning(), backTranslations: data.backTranslations })).toBe(true)
   })
 
+  it('仿写记录的来源走白名单：坏值当普通仿写，金句课记录不丢', () => {
+    const rec = {
+      at: '2026-01-01T00:00:00.000Z',
+      articleId: 'a1',
+      model: 'M',
+      text: 'T',
+      feedback: { scores: [], issues: [], total: 0, max: 0 },
+    }
+    const data = normalizeLearning({
+      writingHistory: [
+        { ...rec, source: 'goldenSentence', sentenceId: 's1' },
+        { ...rec, source: 'bogus', sentenceId: 3 },
+      ],
+    })
+    expect(data.writingHistory).toHaveLength(2)
+    expect(data.writingHistory[0].source).toBe('goldenSentence')
+    expect(data.writingHistory[0].sentenceId).toBe('s1')
+    expect(data.writingHistory[1].source).toBeUndefined()
+    expect(data.writingHistory[1].sentenceId).toBeUndefined()
+  })
+
   it('只有事件也算有学习数据', () => {
     const data = normalizeLearning({
       answerEvents: [

@@ -244,6 +244,30 @@ export function isGoldenWritingRecord(rec: WritingRecord): boolean {
   return rec.source === 'goldenExam' || rec.source === 'goldenSentence'
 }
 
+const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam'] as const
+
+/**
+ * 一条批改记录的**外部数据守卫**（localStorage / 服务端 / 备份都可能带脏值）。
+ *
+ * 只做两件事：来源按白名单（坏值当普通仿写，别让一条脏数据把金句课历史带歪），
+ * 关联 id 必须是字符串（数字 / 对象一律丢掉）。服务端 `sqliteLearning` 写读两侧
+ * 也是同一套白名单，两侧口径必须一致，否则「刷新前有、刷新后没了」。
+ */
+export function normalizeWritingRecord(rec: WritingRecord): WritingRecord {
+  const source = (WRITING_SOURCES as readonly string[]).includes(rec.source as string)
+    ? (rec.source as WritingRecord['source'])
+    : undefined
+  const id = (v: unknown) => (typeof v === 'string' && v ? v : undefined)
+  const sentenceId = id(rec.sentenceId)
+  const examId = id(rec.examId)
+  return {
+    ...rec,
+    ...(source ? { source } : { source: undefined }),
+    ...(sentenceId ? { sentenceId } : { sentenceId: undefined }),
+    ...(examId ? { examId } : { examId: undefined }),
+  }
+}
+
 const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string> = {
   writing: '仿写',
   goldenSentence: '单句仿写',

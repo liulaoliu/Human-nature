@@ -22,6 +22,7 @@ import type { MistakeEntry } from './mistakes'
 import type { PracticeRecord } from './practice'
 import type { PickSession, StudyDay } from './vocabStats'
 import type { WritingRecord } from './writing'
+import { normalizeWritingRecord } from './writing'
 
 /** 复述打卡：用自己的话复述的留档（按篇）。 */
 export interface RetellRecord {
@@ -148,9 +149,9 @@ export function normalizeLearning(raw: unknown): LearningData {
   out.readDone = asArray<ReadDone>(raw.readDone).filter(
     (r) => isObject(r) && typeof r.articleId === 'string' && typeof r.day === 'string' && typeof r.at === 'string',
   )
-  out.writingHistory = asArray<WritingRecord>(raw.writingHistory).filter(
-    (r) => isObject(r) && typeof r.at === 'string' && typeof r.text === 'string',
-  )
+  out.writingHistory = asArray<WritingRecord>(raw.writingHistory)
+    .filter((r) => isObject(r) && typeof r.at === 'string' && typeof r.text === 'string')
+    .map(normalizeWritingRecord)
   out.backTranslations = normalizeBackTranslationRecords(raw.backTranslations)
   out.retells = asArray<RetellRecord>(raw.retells).filter(
     (r) =>
