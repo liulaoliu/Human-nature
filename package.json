@@ -19,7 +19,7 @@
     "gates": "tsc -b && npm run typecheck:server && vitest run --pool=forks --maxWorkers=4 --minWorkers=1 && npm run gates:static",
     "gates:full": "npm run gates",
     "gates:fast": "tsc -b && npm run typecheck:server && node tool/test_changed.mjs && npm run gates:static",
-    "gates:static": "node tool/check_god_file.mjs && node tool/check_hook_size.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs && npm run lint",
+    "gates:static": "node tool/check_text_files.mjs && node tool/check_god_file.mjs && node tool/check_hook_size.mjs && node tool/check_architecture.mjs && node tool/check_vocab_sense.mjs && npm run lint",
     "gates:core": "tsc -b && vitest run src/core src/adapters --pool=forks --maxWorkers=4 --minWorkers=1",
     "gates:ui": "tsc -b && vitest run src/reader src/ui src/state src/AppRoutes.test.tsx --pool=forks --maxWorkers=4 --minWorkers=1",
     "gates:server": "npm run typecheck:server && vitest run server tools --pool=forks --maxWorkers=4 --minWorkers=1",
@@ -30,7 +30,8 @@
     "check:dev": "node tool/check_dev_modules.mjs",
     "app": "npm run build && node server/appServer.ts",
     "typecheck:server": "tsc -p tsconfig.server.json",
-    "lint": "eslint src"
+    "lint": "eslint src",
+    "check:text": "node tool/check_text_files.mjs"
   },
   "dependencies": {
     "jszip": "^3.10.2",

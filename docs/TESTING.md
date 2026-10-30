@@ -544,7 +544,7 @@ npm run gates:fast            # 改动相关测试 + tsc + 静态门禁（开发
 npm run gates:core            # 只跑 core / adapters
 npm run gates:ui              # 只跑 reader / ui / state
 npm run gates:server          # 只跑 server / tools
-npm run gates:static          # 只跑上帝文件 / hook 体量 / 架构 / 词汇义项
+npm run gates:static          # 只跑纯文本 / 上帝文件 / hook 体量 / 架构 / 词汇义项
 npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
 ```
 
@@ -719,3 +719,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     现在冲突后仓储置 `conflict`、宿主置 `conflictBlockRef`：本页只更新界面、不再落盘，提示用户刷新；
     只有重新 `load()` 才解除。`vocabRepo.hybrid.test`（冲突后第二次 save 不许发 PUT）与
     `useVocabLibrary.test`（整页停写、`persistNow` 也拒绝）已钉住。
+58. **源码里别写字面量 NUL 字节，否则 git 把整个文件当二进制**（2026-10-30）。
+    `useGoldenImitation.ts` 里拼去重键写成 `[a, b, c].join('^@')`（`^@` = 真的 NUL），
+    运行时没问题，但 git 从此只显示 `Bin 5275 -> 8478 bytes`：**这个文件的 diff / blame 全部失效**，
+    审查时看不见改了哪行（本轮是事后才发现的）。分隔符要写成转义串 `'\u0000'`。
+    现在 `tool/check_text_files.mjs` 会扫 `src` / `server` / `tools` / `tool` / `docs`：
+    命中 NUL 或非法 UTF-8（GBK 存盘）直接失败并给出 `文件:行号`，已进 `gates:static`。
