@@ -40,6 +40,8 @@ export default function GoldenLangPointAnswer({
     articleTitle: api.articleTitle,
     source: 'goldenSentence',
     setWritingHistory: api.setWritingHistory,
+    // 交给批改实例定位「同一题」的历史批改（翻页 + 只读回看）；漏传就是永远只有当前这一条。
+    writingHistory: api.writingHistory,
     flash: api.flash,
     recordActivity: api.recordActivity,
   })
