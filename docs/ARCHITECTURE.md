@@ -63,6 +63,7 @@ types ← core ← adapters ← reader
 | 单词的词形 / 合并 / 排期规则 | `src/core/vocab.ts`（对外出口）+ `src/core/vocab/*` | 子模块按职责分：`word` / `merge` / `analysis` / `library` / `review`；新规则放进对应子模块，别把 facade 再撑大 |
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 仿写批改记录成册（A4 / Markdown） | `src/core/writingExport.ts` | 只做「记录 → 文本」；来源 / 稿次叫什么仍走 `writing.ts` 的 `writingRecordLabel`，别在导出里再写一份 |
+| 统计面板的区间汇总 / 当天明细 | `src/core/statsSummary.ts` | 本周 / 本月 / 累计与「点开某天」共用一套区间判定（逻辑日 04:00 结算）；背词 / 写作 / 复述 / 读完 / 金句 / 练习六份记录只在这里合计，面板只画数字。活动量仍走 `activity.sumCats`，写作字数仍走 `speedRead.wordCount` |
 | A4 打印页的外壳与转义 | `src/core/printHtml.ts` | `escapeHtml` + `a4Document`（页边距 / 字号 / 行高参数化，样式顺序「基础 → 调用方」）；各导出器只写自己的布局样式，别再各抄一份 `<!doctype html>` 和 `@page` |
 | 日期热力图选择器（导出 / 生词浏览共用） | `src/reader/panels/DayHeatmap.tsx` | 日历分档仍走 `core/activity.buildHeatmap`；点格子只回调日期 |
 | 生词浏览页筛选 ↔ URL query | `src/reader/browseQuery.ts` | 默认值不写；坏值回落；日期 / 选篇排序去重；`picked=all` / 空串语义分明 |

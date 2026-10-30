@@ -84,6 +84,63 @@
 .stat-note { margin-top: 4px; font-size: 12px; line-height: 1.5; color: var(--dim); }
 .stat-note.bad { color: #d9a12b; }
 
+/* 汇总表：行 = 指标（可点跳转），列 = 本周 / 本月 / 累计 */
+.stat-summary { width: 100%; border-collapse: collapse; font-size: 12px; margin: 2px 0 4px; }
+.stat-summary th,
+.stat-summary td { padding: 2px 0; font-weight: 400; }
+.stat-summary thead .stat-head { color: var(--dim); font-size: 11px; text-align: right; padding-bottom: 3px; }
+.stat-summary tbody th { text-align: left; }
+.stat-summary td { text-align: right; font-variant-numeric: tabular-nums; }
+.stat-summary td.zero { color: var(--dim); }
+.stat-jump {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.stat-jump:hover { color: var(--accent); text-decoration: underline; }
+.stat-jump:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* 热力图周数切换（13 / 26 / 52） */
+.heat-weeks { display: inline-flex; gap: 4px; margin-left: 8px; }
+.heat-week {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--panel);
+  color: var(--dim);
+  cursor: pointer;
+}
+.heat-week.on { border-color: var(--accent); color: var(--fg); background: var(--panel-2); }
+
+/* 点热力图格子后展开的「当天明细」 */
+.stat-day {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 6px 0;
+  padding: 6px 8px;
+  border-left: 2px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  background: var(--panel-2);
+  font-size: 12px;
+}
+.stat-day-head { display: flex; justify-content: space-between; align-items: baseline; }
+.stat-day-close {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  font-size: 11px;
+  color: var(--dim);
+  cursor: pointer;
+}
+.stat-day-close:hover { color: var(--accent); }
+
 /* 仪表盘 */
 .board { display: flex; flex-direction: column; gap: 12px; }
 .board-group { display: flex; flex-direction: column; gap: 6px; }

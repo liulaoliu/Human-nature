@@ -96,6 +96,33 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
         activity,
         practice,
         onClearMistakes: () => setMistakes([]),
+        stats: {
+          studyDays: learning.studyDays,
+          writingHistory: services.writingHistory,
+          retells: learning.retells,
+          readDone: learning.readDone,
+          goldenDrills: learning.goldenDrills,
+          /** 汇总行跳转：面板只给语义，落点在这里定（路由 / 面板开关都在这层）。 */
+          onJump: (t) => {
+            switch (t) {
+              case 'vocab':
+                onSideTabChange('vocab')
+                break
+              case 'writing':
+                openWriting()
+                break
+              case 'retell':
+                props.setIntensiveOpen(true)
+                break
+              case 'readDone':
+                props.setGoalOpen(true)
+                break
+              case 'golden':
+                props.golden.openGolden()
+                break
+            }
+          },
+        },
         rebuild: {
           run: () => void learning.rebuild.run(),
           busy: learning.rebuild.busy,

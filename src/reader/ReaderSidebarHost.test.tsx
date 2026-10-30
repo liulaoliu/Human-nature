@@ -86,6 +86,14 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
       activity: [],
       practice: [],
       onClearMistakes: fn(),
+      stats: {
+        studyDays: [],
+        writingHistory: [],
+        retells: [],
+        readDone: [],
+        goldenDrills: [],
+        onJump: fn(),
+      },
       rebuild: { run: fn(), busy: false, note: null, matched: false },
     },
     overview: {

@@ -8,7 +8,7 @@
 
 | 功能性质 | 必须补的测试层 | 本仓库放哪 |
 |---|---|---|
-| 纯逻辑（计算 / 规则 / 解析 / 键规则） | **单测**（`src/core/*.test.ts`） | 已有 122 个测试文件（`src/core` 124 个模块，除 `ports` / 夹具外都有同名测试） |
+| 纯逻辑（计算 / 规则 / 解析 / 键规则） | **单测**（`src/core/*.test.ts`） | 已有 123 个测试文件（`src/core` 125 个模块，除 `ports` / 夹具外都有同名测试） |
 | 数据层（IndexedDB / fetch / 备份） | 单测（内存兜底实现 / 假端口） | `adapters/` 的 Memory* 实现 |
 | 有状态编排（effect / 会话状态机 / 写入策略） | **钩子测试 + 把判断抽成纯函数** | `hooks/useLibraryAutoFill.test.tsx`、`hooks/useReadDone.test.tsx`、`core/libraryAutoFill.ts` |
 | 路由 / 历史 / 深链接 | **纯函数单测 + 钩子测试（`MemoryRouter`）** | `reader/route.test.ts`、`hooks/useRoutedFlows.test.tsx`；用 `Link` 的组件测试包 `MemoryRouter` |

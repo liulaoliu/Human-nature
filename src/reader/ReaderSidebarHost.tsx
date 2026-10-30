@@ -36,6 +36,15 @@ export interface ReaderSidebarHostProps {
     activity: ComponentProps<typeof StatsPanel>['activity']
     practice: ComponentProps<typeof StatsPanel>['practice']
     onClearMistakes: () => void
+    /** 统计页汇总：背词 / 写作 / 复述 / 读完 / 金句 + 点指标跳转 */
+    stats: {
+      studyDays: ComponentProps<typeof StatsPanel>['studyDays']
+      writingHistory: ComponentProps<typeof StatsPanel>['writingHistory']
+      retells: ComponentProps<typeof StatsPanel>['retells']
+      readDone: ComponentProps<typeof StatsPanel>['readDone']
+      goldenDrills: ComponentProps<typeof StatsPanel>['goldenDrills']
+      onJump: NonNullable<ComponentProps<typeof StatsPanel>['onJump']>
+    }
     /** 统计页底部「重建并核对」：服务端重算 + 与本地对账 */
     rebuild: {
       run: () => void
@@ -250,6 +259,7 @@ export default function ReaderSidebarHost({
       stats={{
         activity: learning.activity,
         practice: learning.practice,
+        ...learning.stats,
         onRebuild: learning.rebuild.run,
         rebuildBusy: learning.rebuild.busy,
         rebuildNote: learning.rebuild.note,

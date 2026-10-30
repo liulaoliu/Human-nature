@@ -150,7 +150,7 @@ describe('ExportPanel：范围与动作', () => {
     const { onPrint } = setup()
     pick('按日期（可多选）')
     fireEvent.click(screen.getByRole('button', { name: '清空' }))
-    fireEvent.click(screen.getByLabelText(/2026-10-01/))
+    fireEvent.click(screen.getByRole('checkbox', { name: /2026-10-01/ }))
     fireEvent.click(screen.getByRole('button', { name: /A4 打印/ }))
     const [items, title] = onPrint.mock.calls[0]
     expect(items.map((it: { word: string }) => it.word)).toEqual(['run'])
@@ -160,7 +160,7 @@ describe('ExportPanel：范围与动作', () => {
   it('按日期：多选几天时同一条只算一次（默认今天已勾上）', () => {
     const { onPrint } = setup()
     pick('按日期（可多选）')
-    fireEvent.click(screen.getByLabelText(/2026-10-01/)) // 加上 10-01（10-02 默认已勾）
+    fireEvent.click(screen.getByRole('checkbox', { name: /2026-10-01/ })) // 加上 10-01（10-02 默认已勾）
     fireEvent.click(screen.getByRole('button', { name: /A4 打印/ }))
     const [items, title] = onPrint.mock.calls[0]
     expect(items.map((it: { word: string }) => it.word)).toEqual(['run', 'fall back on'])

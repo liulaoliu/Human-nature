@@ -67,4 +67,37 @@ describe('DayHeatmap', () => {
     )
     expect((container.querySelector('.heat-grid') as HTMLElement).style.gridTemplateColumns).toBe('repeat(26, 1fr)')
   })
+
+  it('有内容的格子可 Tab 聚焦，回车 / 空格都能触发（不只鼠标）', () => {
+    const onToggle = vi.fn()
+    render(<DayHeatmap dates={[['2026-10-01', 2]]} picked={new Set()} onToggle={onToggle} today={today} />)
+    const el = cell('2026-10-01')!
+    expect(el.getAttribute('role')).toBe('button')
+    expect(el.getAttribute('tabindex')).toBe('0')
+    expect(el.getAttribute('aria-label')).toContain('2026-10-01')
+    fireEvent.keyDown(el, { key: 'Enter' })
+    fireEvent.keyDown(el, { key: ' ' })
+    expect(onToggle).toHaveBeenCalledTimes(2)
+    expect(onToggle).toHaveBeenCalledWith('2026-10-01')
+
+    // 未来 / 空白天不可聚焦
+    expect(document.querySelector('.heat-cell.future')?.getAttribute('tabindex')).toBeNull()
+    expect(cell('2026-10-02')?.getAttribute('tabindex')).toBeNull()
+  })
+
+  it('titleFor / hint 可换文案（统计面板看明细，不是筛选）', () => {
+    render(
+      <DayHeatmap
+        dates={[['2026-10-01', 2]]}
+        picked={new Set()}
+        onToggle={() => {}}
+        today={today}
+        titleFor={(d, n, on) => `${d}：${n} 次（点击${on ? '收起' : '查看'}当天明细）`}
+        hint="（点格子看当天明细）"
+      />,
+    )
+    expect(cell('2026-10-01')?.getAttribute('title')).toBe('2026-10-01：2 次（点击查看当天明细）')
+    expect(document.body.textContent).toContain('（点格子看当天明细）')
+    expect(document.body.textContent).not.toContain('（点格子选日期）')
+  })
 })
