@@ -134,7 +134,8 @@ export function journalSummary(i: JournalInput): JournalSummaryRow[] {
 }
 
 /** 某一天的明细。 */
-export function buildJournalDay(i: JournalInput, day: string): JournalDay {  const byId = new Map(i.items.map((it) => [it.id, it]))
+export function buildJournalDay(i: JournalInput, day: string): JournalDay {
+  const byId = new Map(i.items.map((it) => [it.id, it]))
 
   // 当天背过的词（按记录顺序，去重）
   const studied: VocabItem[] = []

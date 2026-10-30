@@ -184,7 +184,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     [startSessionDrill, resetFillAssemble, resetRecall],
   )
 
-/**
+  /**
    * 跳到第 i 句：练过的句子直接落在**小结**（回看学过的点），没练过的从预览开始。
    * 回看不改进度；想重练用顶栏的「再练一次」。
    */

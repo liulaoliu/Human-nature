@@ -168,7 +168,8 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     }
   }, [current, answer, flash])
 
-  const grade = useCallback(async () => {    if (!current) {
+  const grade = useCallback(async () => {
+    if (!current) {
       flash('这一题还没有题面')
       return
     }

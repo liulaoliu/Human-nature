@@ -414,7 +414,8 @@ export function makeQuestion(it: VocabItem, kind: QuizKind, pool: VocabItem[] = 
 }
 
 /** 根据选中的题型，为一组词条出题（每个词条每种题型最多一题）。 */
-export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQuestion[] {  const out: QuizQuestion[] = []
+export function buildQuizQuestions(items: VocabItem[], kinds: QuizKind[]): QuizQuestion[] {
+  const out: QuizQuestion[] = []
   for (const it of items) {
     for (const kind of kinds) {
       const q = makeQuestion(it, kind, items)

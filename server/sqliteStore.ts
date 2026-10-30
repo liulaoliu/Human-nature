@@ -203,7 +203,8 @@ function addWritingColumns(db: DatabaseSync): void {
 }
 
 /** 从 JSON payload 回填 articles 的查询列；只在迁移时做一次。 */
-function backfillArticleColumns(db: DatabaseSync): void {  const rows = db.prepare('SELECT id, payload FROM articles').all()
+function backfillArticleColumns(db: DatabaseSync): void {
+  const rows = db.prepare('SELECT id, payload FROM articles').all()
   const upd = db.prepare(
     'UPDATE articles SET title = ?, book = ?, source_key = ?, created_at = ?, sentence_count = ?, word_count = ? WHERE id = ?',
   )
