@@ -671,7 +671,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。
   取舍：打印/导出的「按篇 / 按日期 / 未打印 / 分组」整套选项可以零成本复用；
   代价是显示层要按类型分开渲染（侧栏「生词 / 语言点」两个页签，`LangPointList`）。
-- **`ReaderApp.tsx` 682 行（800 行硬门禁内，余量 118 行）；视图在 `ReaderScreen.tsx`（189 行）+ `screen/` 三个槽位**：
+- **`ReaderApp.tsx` 693 行（800 行硬门禁内，余量 107 行）；视图在 `ReaderScreen.tsx`（208 行）+ `screen/` 三个槽位**：
   路由/面板接线已经抽到 `hooks/useReaderRouting.ts`（`useReaderPanelRouting` / `useReaderArticleRouting`），
   本机临时状态（粘回框 / 高亮气泡 / 文章正文选区）抽到 `hooks/useReaderLocalState.ts`，
   分组模型 → 平铺 `ReaderScreen` props 的翻译层在 `ReaderScreenFromModel.tsx`。
@@ -746,12 +746,15 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useQuizSession` 581 → 496（预习卡进 `core/quizWarmup`、恢复进 `useQuizSessionSnapshot`、自动切题进
 `useQuizAdvance`），再 496 → 294：进行中状态进 `useQuizRunState`、出卷进 `useQuizStarts`、判分改成
 `reader/quiz/createQuizCheck` factory、完成结算 / 反复鞭打进 `useQuizCompletion`、计时 / 快捷键进
-`useQuizTimer` / `useQuizHotkeys`；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` / `core/aiApplyResult`）。
+`useQuizTimer` / `useQuizHotkeys`（现在 **302** 行）；`useAiPack` 536 → 471（进度/提示/结果应用进 `core/aiProgress` /
+`core/aiApplyResult`），再 471 → **189**：本地 / agent / 网页三路各自成 hook（`useAiLocalBatch` 210、
+`useAiAgentPack` 98、`useAiWebPack` 146），主 hook 只留编排。
 `useDictation` 498 → 430（自动下一句与考试共用 `useDelayedAction`；恢复/落盘抽 `useDictationSnapshot`；
 开篇/片段/错题重练合并到 `beginRound`），再 430 → 247（偏好进 `useDictationPrefs`、装题/游标进
 `useDictationRounds`、判分进 `useDictationChecking`）。
-`useApplyTaskResult` 486 → 74：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份。
-`useStudySession` 718 → 481：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
+`useApplyTaskResult` 486 → 77：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份
+（依赖里逐个列出 `ApplyTaskParams` 的字段，见文件内注释：类型加字段必须同步加）。
+`useStudySession` 718 → 699 → 497（已回到 500 行硬线下）：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
 `useStudyCardUi`，拼写判卷接线进 `useStudySpelling`，评分 / 学习四选项 / 复习三键 / 锤炼门禁进
 `useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收 `ui` 卡面对象，
 不再逐个透传 `checked / pendingScore / setRevealed`。
