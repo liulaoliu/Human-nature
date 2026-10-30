@@ -4,12 +4,8 @@ import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
-import {
-  isGoldenWritingRecord,
-  WRITING_HISTORY_WARN_AT,
-  writingHistoryToPrintHTML,
-  type WritingRecord,
-} from '../../core/writing'
+import { isGoldenWritingRecord, WRITING_HISTORY_WARN_AT, type WritingRecord } from '../../core/writing'
+import { writingHistoryToPrintHTML } from '../../core/writingExport'
 import { openPrintWindow } from './printWindow'
 import type { ReaderDoc } from './useReaderDoc'
 import { useGoldenBank } from './useGoldenBank'

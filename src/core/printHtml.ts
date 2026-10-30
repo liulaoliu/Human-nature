@@ -2,7 +2,7 @@
  * A4 打印页的**公共外壳**：转义 + `<!doctype html>` 骨架 + 基础排版。
  *
  * 为什么收口：词表（`exports.renderPrintHTML`）、金句本（`goldenBank.goldenBankToPrintHTML`）、
- * 仿写批改（`writing.writingHistoryToPrintHTML`）各自抄了一遍转义函数和同一段
+ * 仿写批改（`writingExport.writingHistoryToPrintHTML`）各自抄了一遍转义函数和同一段
  * `@page / font-family / .meta` 样式。三份实现必然漂：修一处（比如换成安全字体、
  * 加 `-webkit-print-color-adjust`）另外两处不会跟着改，打出来就是三种版面。
  *

@@ -3,7 +3,7 @@ import { sortItems } from '../../core/vocab'
 import type { VocabItem } from '../../types/document'
 import { dayKeyLocal } from '../../core/activity'
 import { buildArticlePackage } from '../../core/articlePackage'
-import { writingHistoryToMarkdown } from '../../core/writing'
+import { writingHistoryToMarkdown } from '../../core/writingExport'
 import type { ExportParams } from './exportTypes'
 
 /** 下载 / 词表 / 文章包等“生成文件”动作；不读写应用状态。 */
