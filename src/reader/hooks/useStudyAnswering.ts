@@ -95,6 +95,8 @@ export function useStudyAnswering({
         else setIndex((i) => i + 1)
       }
     },
+    // `grading` 只用到 `recordGrade`（下面逐个列了）；整包对象每次渲染都是新的。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       queue,
       index,
@@ -170,6 +172,8 @@ export function useStudyAnswering({
   /** 面板「认识 / 模糊 / 忘记了」：复习模式走三键状态机，其它模式走评分。 */
   const pressGrade = useCallback(
     (g: ReviewGrade) => (mode === 'review' ? reviewStep.answer(g) : grade(g)),
+    // 只用到 `reviewStep.answer`（已列出），不是整个 reviewStep 状态机。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [mode, reviewStep.answer, grade],
   )
 

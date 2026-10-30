@@ -86,6 +86,8 @@ export function useGoldenFeature({
   // 每次进「本句仿写」都从空白开始；同一句重练也不带上一轮答案。
   useEffect(() => {
     if (golden.phase === 'imitation') sentenceImitation.reset()
+    // 只用到 `sentenceImitation.reset`（已列出），不是整个仿写状态机。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [golden.phase, golden.current?.id, sentenceImitation.reset])
   const bank = useGoldenBank({
     saved,

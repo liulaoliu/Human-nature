@@ -189,6 +189,9 @@ export default function VocabBrowsePanel({
     const avail = new Set(result.days.map(([d]) => d))
     const next = filters.days.filter((d) => avail.has(d))
     if (next.length !== filters.days.length) onFiltersChange({ ...filters, query: queryDraft, days: next })
+    // 故意不跟 `queryDraft` 重跑：每敲一个字就清一次日期筛选是错的。
+    // effect 触发时用的是当帧闭包，所以 `queryDraft` 仍是最新值。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filters, result.days, onFiltersChange])
 
   const title =

@@ -219,6 +219,8 @@ export function useStudySession(params: UseStudySessionParams) {
     spellGateResetRef.current()
     learnResetRef.current()
     reviewResetRef.current()
+    // `setEditOpen` / `setDraft` / `setDelArmed` 都是 useState 的 setter，引用恒定。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetFlags])
 
   /** 队列推进 / 组末拼写 / 装轮 / 收尾重练：规则集中在 `useStudySequence`。 */
@@ -343,6 +345,8 @@ export function useStudySession(params: UseStudySessionParams) {
     grading.recordUnknown(queued)
     resetCardUi()
     setIndex((i) => i + 1)
+    // `grading` 只用到 `recordUnknown`（已列出）；整包对象每次渲染都是新的。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [queue, index, grading.recordUnknown, resetCardUi])
 
   /** 切拼写模式要先清掉上一题的输入 / 判卷状态，这属于会话规则，不放视图里。 */

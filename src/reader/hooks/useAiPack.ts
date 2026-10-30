@@ -127,6 +127,8 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   const resetWebProgress = useCallback(() => {
     web.resetWebProgress()
     agent.clearMissing()
+    // 只用到两个成员方法（已列出）；`web` / `agent` 整包每次渲染都是新对象。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [web.resetWebProgress, agent.clearMissing])
 
   const nextHint = aiNextHint({

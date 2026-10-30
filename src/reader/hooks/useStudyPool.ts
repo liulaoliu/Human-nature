@@ -60,7 +60,9 @@ export function useStudyPool({ library, articleIdentity, docLemmas }: UseStudyPo
       // 本篇：来源是本文，或词形出现在正文里（用预计算好的 lemma 集合，O(N)）
       return base.filter((it) => it.source?.fileName === articleIdentity || docLemmas.has(it.lemma))
     },
-    [studyable, deck, articleIdentity, docLemmas],
+    // `library.items` 是 `d !== deck` 那条分支的数据源；它变了 `studyable` 也一定跟着变，
+    // 但显式列出来 lint 才能验证，别让「靠派生值间接兜住」当隐式契约。
+    [studyable, library.items, deck, articleIdentity, docLemmas],
   )
   const pool: VocabItem[] = useMemo(() => poolFor(scope), [poolFor, scope])
   const dueCount = useMemo(() => pool.filter((it) => hasReviewHistory(it) && isDue(it)).length, [pool])

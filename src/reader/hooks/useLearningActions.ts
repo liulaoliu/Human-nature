@@ -72,6 +72,8 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
       setActivity((prev) => addActivity(prev, dayKeyLocal(now ? now() : new Date()), 'write', 1))
       params.flash('已记录复述 ✅')
     },
+    // 只读 `params` 的两个字段（都已列出），不把整个 params 对象放进依赖。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [params.articleIdentity, params.flash, now, setRetells, setActivity],
   )
 

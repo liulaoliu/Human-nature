@@ -76,7 +76,10 @@ export function useStudySequence({
     pendingGroupEndRef.current = null
     spellingRound.reset()
     resetCardUi()
-  }, [resetCardUi, spellingRound, grading.resetLedger, setExtraRound, setRetrying])
+    // `spellingRound` 是 hook 返回的整包对象，只用到 `.reset()`（已在上面逐个列出）；
+    // 把整包放进依赖会让它在每次渲染时换身份，这个回调就白做 memo 了。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetCardUi, spellingRound.reset, grading.resetLedger, setExtraRound, setRetrying])
 
   /**
    * 推进到下一张卡：到了「每组 N 词」的组末先停下把本组全部词拼一遍，
@@ -160,6 +163,8 @@ export function useStudySequence({
     setRetrying(true)
     setIndex(0)
     resetCardUi()
+    // `grading` 只用它的两个方法（已逐个列在下面）；整包放进来等于每次渲染都重算。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     library.items,
     extraRound,

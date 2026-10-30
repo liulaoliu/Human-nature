@@ -41,6 +41,10 @@ export function useApplyTaskResult(params: UseApplyTaskResultParams): ApplyTaskF
 
   return useMemo(
     () => createApplyTaskResult(params),
+    // 下面把 `ApplyTaskParams` 的每个字段逐个列出（不能直接依赖 `params`：调用方每次渲染
+    // 都新建对象，会让这个回调每次换身份）。**给类型加字段时必须同步加到这里**，
+    // 否则新字段改了不会重建，等于拿旧闭包跑。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       library,
       libraryRef,

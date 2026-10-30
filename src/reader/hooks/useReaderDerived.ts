@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useCallback, useMemo } from 'react'
 import type { SavedArticle, VocabItem } from '../../types/document'
 import {
   dueForecast,
@@ -63,8 +63,12 @@ export function useReaderDerived(input: ReaderDerivedInput) {
     now,
   } = input
   const nowMs = now?.getTime()
-  // `now` 只取时间戳进依赖：调用方每次新建 Date 也不会白重算。
-  const at = () => (nowMs === undefined ? new Date() : new Date(nowMs))
+  /**
+   * `now` 只取时间戳进依赖：调用方每次新建 Date 也不会白重算。
+   * 用 useCallback 而不是裸箭头函数 —— 裸函数每次渲染都是新身份，
+   * 下面三个 memo 就只能把 `nowMs` 抄进依赖来兜，lint 也没法验证。
+   */
+  const at = useCallback(() => (nowMs === undefined ? new Date() : new Date(nowMs)), [nowMs])
 
   const totals = useMemo(() => sessionTotals(sessions), [sessions])
 
@@ -78,19 +82,19 @@ export function useReaderDerived(input: ReaderDerivedInput) {
   /** 按天统计：今天选了多少 + 连续打卡天数。 */
   const dayStats = useMemo(
     () => pickDayStats(sessions, at()),
-    [sessions, nowMs],
+    [sessions, at],
   )
 
   /** 最近 7 天每天选了多少词（统计面板用）。 */
   const last7 = useMemo(
     () => last7Days(sessions, at()),
-    [sessions, nowMs],
+    [sessions, at],
   )
 
   /** 未来 30 天每天的到期词数（到期日历热力图用）。 */
   const dueForecastRows = useMemo(
     () => dueForecast(items, at()),
-    [items, nowMs],
+    [items, at],
   )
 
   /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */

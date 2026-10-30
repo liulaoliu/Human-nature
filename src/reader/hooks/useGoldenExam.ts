@@ -123,6 +123,8 @@ export function useGoldenExam({
   const reset = useCallback(() => {
     attempt.reset()
     setTaskError('')
+    // 只用到 `attempt.reset`（已列出），不是整个 attempt 状态机。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt.reset])
 
   const start = useCallback(() => {
@@ -194,6 +196,8 @@ export function useGoldenExam({
     } finally {
       setGenerating(false)
     }
+    // 只用到 `attempt.ensureAi`（已列出），不是整个 attempt 状态机。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lesson, unlocked, after, metas, records, articleId, articleTitle, attempt.ensureAi, runAi, applyTasks, flash])
 
   const copyTaskPrompt = useCallback(async () => {
