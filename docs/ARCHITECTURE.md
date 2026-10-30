@@ -62,6 +62,7 @@ types ← core ← adapters ← reader
 | 语言点手动编辑（表单 ↔ 数据、多行拆条、列表摘要、旧数据归一） | `src/core/language.ts` | `getSentenceLanguages` 负责兼容老数据（单条 `language`、列表字段是字符串）；结构 / 语法的换行与缩进原样保留。阅读 / 速读共用 `panels/LanguageEditor`；正文 / 速读 / 日志共用 `panels/LanguageLines`。**点遮罩不关闭**，只有「保存 / 取消」能关；点输入框展开、点框外收回 |
 | 单词的词形 / 合并 / 排期规则 | `src/core/vocab.ts`（对外出口）+ `src/core/vocab/*` | 子模块按职责分：`word` / `merge` / `analysis` / `library` / `review`；新规则放进对应子模块，别把 facade 再撑大 |
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
+| A4 打印页的外壳与转义 | `src/core/printHtml.ts` | `escapeHtml` + `a4Document`（页边距 / 字号 / 行高参数化，样式顺序「基础 → 调用方」）；各导出器只写自己的布局样式，别再各抄一份 `<!doctype html>` 和 `@page` |
 | 日期热力图选择器（导出 / 生词浏览共用） | `src/reader/panels/DayHeatmap.tsx` | 日历分档仍走 `core/activity.buildHeatmap`；点格子只回调日期 |
 | 生词浏览页筛选 ↔ URL query | `src/reader/browseQuery.ts` | 默认值不写；坏值回落；日期 / 选篇排序去重；`picked=all` / 空串语义分明 |
 | 生词浏览页的范围 / 类型 / 搜索 / 日期 / 状态筛选 | `src/core/vocabBrowse.ts` | 本篇 / 选篇归属走 `articleEntryViewsFrom`；日期 = 入库日 + `dayKeyLocal`（可多选）；状态复用 `isDue` / `isFresh`（待复习每分钟刷新）；搜索防抖 250ms 只影响 URL 同步；选篇 A4 走 `browseA4Rows`（按篇出行 + 篇内编号）；面板只收选择 + 渲染 |

@@ -3,6 +3,7 @@ import { SCHEMA_VERSION } from '../types/document'
 import { KIND_LABEL, kindOf } from './entryKind'
 import { migrateLibrary } from './migrations'
 import type { PrintRow } from './printPlan'
+import { a4Document, escapeHtml } from './printHtml'
 import type { VocabGroup } from './vocab'
 
 /**
@@ -26,14 +27,6 @@ export function dedupeByLemma(items: VocabItem[]): VocabItem[] {
     out.push(it)
   }
   return out
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
 }
 
 /** Anki 标签里不能有空格，统一换成下划线。 */
@@ -228,21 +221,12 @@ export function renderPrintHTML(input: {
   }
 
   const meta = input.subtitle ?? `${count} 词`
-  return `<!doctype html>
-<html lang="zh">
-<head>
-<meta charset="utf-8">
-<title>${escapeHtml(input.title)}</title>
-<style>
-  @page { size: A4; margin: 10mm; }
-  html, body { margin: 0; }
-  body {
-    font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
-    font-size: 8pt;
-    line-height: 1.35;
-    color: #111;
-  }
-  h1 { font-size: 12pt; margin: 0 0 1mm; }
+  return a4Document({
+    title: input.title,
+    margin: '10mm',
+    fontSize: '8pt',
+    lineHeight: '1.35',
+    css: `  h1 { font-size: 12pt; margin: 0 0 1mm; }
   .meta { font-size: 7.5pt; color: #666; margin: 0 0 3mm; }
   h2 {
     font-size: 8.5pt;
@@ -265,17 +249,13 @@ export function renderPrintHTML(input: {
   .kind { color: #fff; background: #999; border-radius: 2px; padding: 0 1mm; font-size: 7pt; }
   .usage { color: #555; }
   .marks { color: #555; font-size: 12px; }
-  @media print { .items { columns: 3; } }
-</style>
-</head>
-<body>
-<h1>${escapeHtml(input.title)}</h1>
+  @media print { .items { columns: 3; } }`,
+    body: `<h1>${escapeHtml(input.title)}</h1>
 <div class="meta">${escapeHtml(meta)}</div>
 <div class="items">
 ${body}
-</div>
-</body>
-</html>`
+</div>`,
+  })
 }
 
 /**

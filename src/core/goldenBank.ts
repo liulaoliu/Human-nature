@@ -2,6 +2,7 @@ import { dayKeyLocal } from './activity'
 import { GOLDEN_TARGET_KIND_LABEL, goldenDrillKey, goldenTargetsFor } from './golden'
 import { findGoldenRecord, goldenReviewDue, type GoldenDrillRecord } from './goldenProgress'
 import type { GoldenLesson, GoldenTarget, GoldenTargetKind } from '../types/document'
+import { a4Document, escapeHtml } from './printHtml'
 
 /**
  * 全库金句本：把每篇的 `SavedArticle.golden` 摊平成可搜索、可筛选、可导出的行。
@@ -143,14 +144,6 @@ function csvField(s: string): string {
   return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
 }
 
-function escapeHtml(s: string): string {
-  return s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-}
-
 /** 金句本 A4 讲义：两栏密排，打印后就是一张写作素材纸。 */
 export function goldenBankToPrintHTML(rows: GoldenBankRow[], title = '全库金句本'): string {
   const body = rows
@@ -168,25 +161,23 @@ export function goldenBankToPrintHTML(rows: GoldenBankRow[], title = '全库金�
       </div>`
     })
     .join('')
-  return `<!doctype html>
-<html lang="zh"><head><meta charset="utf-8"><title>${escapeHtml(title)}</title>
-<style>
-@page { size: A4; margin: 10mm; }
-html, body { margin: 0; }
-body { font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif; color: #111; font-size: 9pt; line-height: 1.4; }
-h1 { font-size: 14pt; margin: 0 0 2mm; }
+  return a4Document({
+    title,
+    margin: '10mm',
+    fontSize: '9pt',
+    lineHeight: '1.4',
+    css: `h1 { font-size: 14pt; margin: 0 0 2mm; }
 .meta { color: #666; font-size: 8pt; margin: 0 0 3mm; }
 .items { columns: 2; column-gap: 6mm; column-rule: .3pt solid #ddd; }
 .item { break-inside: avoid; margin: 0 0 3mm; }
 .head { color: #666; font-size: 7.5pt; }
 .en { font-weight: 600; margin-top: .5mm; }
 .zh { color: #333; }
-.note { color: #555; font-size: 8pt; }
-</style></head><body>
-<h1>${escapeHtml(title)}</h1>
+.note { color: #555; font-size: 8pt; }`,
+    body: `<h1>${escapeHtml(title)}</h1>
 <div class="meta">共 ${rows.length} 句 · ${rows.filter((r) => r.mastered).length} 句已掌握</div>
-<div class="items">${body}</div>
-</body></html>`
+<div class="items">${body}</div>`,
+  })
 }
 
 /** 金句本导出 Anki CSV：正面整句，背面中文 + 句型/时态 + 学习点。 */
