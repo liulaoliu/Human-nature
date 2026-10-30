@@ -272,13 +272,28 @@ function baseLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
 }
 
 /**
- * 仿写 / 语言点造句的历史上限。
+ * 仿写 / 语言点造句的历史：**存不截断，只分页显示**。
  *
  * 这些记录是学习资产（AI 批改原文只有这一份），200 条时几篇文章就满了，旧记录会被静默截掉
  * （2026-10-29 发现：金句课每句可练 1 + N 个语言点，还会写第二稿，200 条一周就能用完）。
- * 所以默认**不截断**（真丢数据），只在超过  时提示导出归档。
+ * 所以落盘一条都不删；到 `WRITING_HISTORY_WARN_AT` 时提示导出归档，
+ * 列表渲染用 `historyPage` 分页（一页 `WRITING_HISTORY_PAGE` 条），避免一次画几千行 DOM。
  */
 export const WRITING_HISTORY_WARN_AT = 5000
+
+/** 学习历史一页显示多少条（只是渲染分页，数据一条都不丢）。 */
+export const WRITING_HISTORY_PAGE = 100
+
+/** 渲染分页：取前 `shown` 条，并告诉界面还剩几条没显示（纯函数）。 */
+export function historyPage<T>(
+  list: readonly T[],
+  shown: number,
+  page = WRITING_HISTORY_PAGE,
+): { rows: T[]; rest: number; next: number } {
+  const limit = Math.max(page, Number.isFinite(shown) ? shown : page)
+  const rows = list.slice(0, limit)
+  return { rows, rest: Math.max(0, list.length - rows.length), next: limit + page }
+}
 
 /** 追加一条记录到最前，并按上限截断（纯函数）。 */
 export function addWritingRecord(

@@ -1,6 +1,11 @@
 import { useMemo, useState } from 'react'
 import GoldenFeedback from './GoldenFeedback'
-import { writingRecordLabel, type WritingRecord } from '../../../core/writing'
+import {
+  historyPage,
+  WRITING_HISTORY_PAGE,
+  writingRecordLabel,
+  type WritingRecord,
+} from '../../../core/writing'
 
 type Scope = 'article' | 'all'
 
@@ -41,6 +46,8 @@ export default function GoldenHistoryView({
   const [scope, setScope] = useState<Scope>('article')
   const [focus, setFocus] = useState('')
   const [pickedIndex, setPickedIndex] = useState<number | null>(null)
+  /** 渲染分页：默认只看最近一页，别一次画几千行 DOM（记录本身一条都不删） */
+  const [shown, setShown] = useState(WRITING_HISTORY_PAGE)
 
   const scoped = useMemo(
     () => [...(scope === 'all' ? rows.all : rows.article)].sort((a, b) => b.at.localeCompare(a.at)),
@@ -57,6 +64,14 @@ export default function GoldenHistoryView({
   }, [scoped])
   const activeFocus = focus && focuses.some(([f]) => f === focus) ? focus : ''
   const list = activeFocus ? scoped.filter((r) => (r.task?.focus ?? '').trim() === activeFocus) : scoped
+  // 换范围 / 换语言点就回到第一页（渲染期重置：比 effect 少一帧，也不会把用户的「显示更多」吞掉）
+  const pageKey = `${scope}|${activeFocus}`
+  const [pageFor, setPageFor] = useState(pageKey)
+  if (pageFor !== pageKey) {
+    setPageFor(pageKey)
+    setShown(WRITING_HISTORY_PAGE)
+  }
+  const page = historyPage(list, shown)
 
   const picked = pickedIndex !== null ? list[pickedIndex] : null
   if (picked) {
@@ -129,7 +144,7 @@ export default function GoldenHistoryView({
       </div>
       {list.length ? (
         <div className="bt-history-list">
-          {list.map((rec, i) => (
+          {page.rows.map((rec, i) => (
             <button
               key={`${rec.at}-${i}`}
               className="bt-history-row"
@@ -144,6 +159,15 @@ export default function GoldenHistoryView({
               <b>{rec.feedback.max > 0 ? `${rec.feedback.total}/${rec.feedback.max}` : '—'}</b>
             </button>
           ))}
+          {page.rest > 0 && (
+            <button
+              className="bt-history-row"
+              onClick={() => setShown(page.next)}
+              title="记录一条都没删，只是先渲染最近这些；点这里继续往前看"
+            >
+              <span className="muted">显示更多（还有 {page.rest} 条）</span>
+            </button>
+          )}
         </div>
       ) : (
         <div className="muted">

@@ -3,12 +3,14 @@ import {
   addWritingRecord,
   buildImitationTaskPrompt,
   countWritesOnDay,
+  historyPage,
   isGoldenWritingRecord,
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
   writingRecordLabel,
   writingAttemptsFor,
+  WRITING_HISTORY_PAGE,
   WRITING_HISTORY_WARN_AT,
   type ImitationTask,
   type WritingRecord,
@@ -165,6 +167,31 @@ describe('writingRecordLabel：一条记录叫什么', () => {
     )
   })
 
+})
+
+describe('historyPage：学习历史只分页显示，不删记录', () => {
+  it('默认一页 100 条，返回剩余条数和下一页上限', () => {
+    const list = Array.from({ length: 250 }, (_, i) => i)
+    const res = historyPage(list, WRITING_HISTORY_PAGE)
+    expect(res.rows).toHaveLength(100)
+    expect(res.rows[0]).toBe(0)
+    expect(res.rest).toBe(150)
+    expect(res.next).toBe(200)
+  })
+
+  it('点「显示更多」翻倍；到底了 rest = 0', () => {
+    const list = Array.from({ length: 250 }, (_, i) => i)
+    expect(historyPage(list, 200).rest).toBe(50)
+    const done = historyPage(list, 300)
+    expect(done.rows).toHaveLength(250)
+    expect(done.rest).toBe(0)
+  })
+
+  it('空列表 / 坏入参不崩（shown 非数字按一页算，小于一页按一页算）', () => {
+    expect(historyPage([], 200)).toEqual({ rows: [], rest: 0, next: 300 })
+    expect(historyPage([1, 2, 3], Number.NaN).rows).toHaveLength(3)
+    expect(historyPage([1, 2, 3], 0).rows).toHaveLength(3)
+  })
 })
 
 describe('writingAttemptsFor：同一题的历史批改', () => {
