@@ -31,9 +31,7 @@ const EXCEPTIONS = {
 
 /** core 里没有同名测试的模块（纯数据 / 纯类型 / 测试夹具 / 待补测试的债）。 */
 const NO_TEST_OK = new Set([
-  'src/core/testSignals.ts',
-  'src/core/ttsVoices.ts',
-  'src/core/dictionary.ts', // TODO：浏览器 fetch 加载器，应该挪到 adapters/
+  'src/core/testSignals.ts', // 合成测试信号（只被 *.test / 测试夹具引用）
   'src/core/ports.ts', // 只有接口与类型
   'src/core/testFixtures.ts', // 测试夹具本身
 ])
