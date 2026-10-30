@@ -1,5 +1,23 @@
 # TODO
 
+> **2026-10-30 审查修复（8 个 commit，均已过门禁）**
+>
+> 1. **NUL 字节**：`useGoldenImitation` 拼去重键写了字面量 NUL，git 把整个文件当二进制、diff 全失效 →
+>    改用 `'\u0000'`，并加 `tool/check_text_files.mjs`（已进 `gates:static`，踩坑记在 TESTING §3-58）。
+> 2. **语言点造句框翻不了页**：没把 `writingHistory` 传给批改实例，`attempts` 恒空 → 补传 + 接线测试。
+> 3. **打印三份实现**：转义 + `@page`/字体外壳收口到 `core/printHtml.ts`（各导出器只留布局样式）。
+> 4. **`core/writing.ts` 混版面**：A4 / Markdown 导出拆到 `core/writingExport.ts`（425 → 329 行）。
+> 5. **历史列表全量渲染**：改成「存不截断、只分页看」——`historyPage`（一页 100 条）+「显示更多」。
+> 6. **来源白名单两侧不一致**：客户端 `normalizeLearning` 补 `normalizeWritingRecord`，与服务端同口径。
+> 7. 格式化：4 处「函数头与首行挤在一行」+ 1 处注释缩进改回正常。
+>
+> **留着没修（知道就够，别当已解决）**：
+> - 金句课子视图（`bank` / `plan` / `history` …）仍只在 `goldenSession` + localStorage，**不进 URL**；
+>   它是侧栏面板不是整页会话，暂不受「整页界面必须有 URL」约束，但刷新回不到原视图。
+> - 三个导出器仍各写自己的布局 CSS（分栏/条目间距），公共外壳已收口，版面差异是刻意的。
+> - `data/xueba.db` 有 2 条词卡字段自相矛盾（`steep` 词性与释义首标打架、`once...` 词被污染）+
+>   16 条多词性待重查，`check_vocab_sense` 会拦 gates；修法：`node tool/audit-vocab.mjs --fix`（本机数据，未动）。
+
 > **2026-10-29 金句课一轮（已上线）**
 >
 > 1. **下一轮优先**：第二稿把上一轮 `feedback.issues` 喂给批改提示词（专查「上轮问题改了没」）。
