@@ -61,11 +61,29 @@ describe('DayHeatmap', () => {
     expect(onToggle).not.toHaveBeenCalled()
   })
 
-  it('周数可调：列数跟着 weeks 走', () => {
+  it('周数可调：列数跟着 weeks 走，格子随容器均分', () => {
     const { container } = render(
       <DayHeatmap dates={[['2026-10-01', 1]]} picked={new Set()} onToggle={() => {}} weeks={26} today={today} />,
     )
-    expect((container.querySelector('.heat-grid') as HTMLElement).style.gridTemplateColumns).toBe('repeat(26, 1fr)')
+    const grid = container.querySelector('.heat-grid') as HTMLElement
+    expect(grid.style.gridTemplateColumns).toBe('repeat(26, 1fr)')
+    expect(grid.style.gap).toBe('2px')
+    // 不再用 minWidth 撑宽：宽度永远等于容器，格子自己缩
+    expect((container.querySelector('.heat') as HTMLElement).style.minWidth).toBe('')
+  })
+
+  it('52 周不撑宽（最近几周不会被挤到视窗外），月份标签变稀', () => {
+    const { container } = render(
+      <DayHeatmap dates={[['2026-10-01', 1]]} picked={new Set()} onToggle={() => {}} weeks={52} today={today} />,
+    )
+    const grid = container.querySelector('.heat-grid') as HTMLElement
+    expect(grid.style.gridTemplateColumns).toBe('repeat(52, 1fr)')
+    expect(grid.style.gap).toBe('1px')
+    expect((container.querySelector('.heat') as HTMLElement).style.minWidth).toBe('')
+    // 52 列里每月标签只有一格宽，隔 3 个月标一次才不互相压住
+    const labels = container.querySelectorAll('.heat-months span')
+    expect(labels.length).toBeGreaterThan(0)
+    expect(labels.length).toBeLessThanOrEqual(5)
   })
 
   it('有内容的格子可 Tab 聚焦，回车 / 空格都能触发（不只鼠标）', () => {

@@ -44,6 +44,8 @@ export interface ReaderSidebarHostProps {
       readDone: ComponentProps<typeof StatsPanel>['readDone']
       goldenDrills: ComponentProps<typeof StatsPanel>['goldenDrills']
       onJump: NonNullable<ComponentProps<typeof StatsPanel>['onJump']>
+      /** 各落点当前能不能去（没打开文章时写作 / 复述 / 金句置灰） */
+      jumpable: NonNullable<ComponentProps<typeof StatsPanel>['jumpable']>
     }
     /** 统计页底部「重建并核对」：服务端重算 + 与本地对账 */
     rebuild: {

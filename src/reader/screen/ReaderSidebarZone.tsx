@@ -86,6 +86,8 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
   const { editWord: handleEdit, reviewWord: handleReview } = vocabEdits
   const { askDelete, askDeleteArticle, enrichExamplesFromTatoeba } = ui
   const { openLangFor } = props.workspace
+  /** 写作 / 精读 / 金句课都要求先有正文；没有时统计页的跳转要置灰。 */
+  const hasArticle = !!doc && doc.sentences.length > 0
 
   return (
     <ReaderSidebarHost
@@ -102,6 +104,12 @@ export default function ReaderSidebarZone(props: ReaderScreenProps) {
           retells: learning.retells,
           readDone: learning.readDone,
           goldenDrills: learning.goldenDrills,
+          /** 没打开文章时这三个落点进不去（写作/精读/金句课都要正文），置灰而不是点了没反应 */
+          jumpable: {
+            writing: hasArticle,
+            retell: hasArticle,
+            golden: hasArticle,
+          },
           /** 汇总行跳转：面板只给语义，落点在这里定（路由 / 面板开关都在这层）。 */
           onJump: (t) => {
             switch (t) {

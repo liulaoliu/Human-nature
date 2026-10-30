@@ -148,15 +148,49 @@ describe('StatsPanel', () => {
     expect(summaryRow('练习')).toEqual(['—', '—', '—'])
   })
 
-  it('点汇总指标把语义交给宿主（面板不认识路由）', () => {
+  it('点汇总整行（含数字）都算点，把语义交给宿主（面板不认识路由）', () => {
     const onJump = vi.fn()
     renderPanel({ activity, onJump })
     fireEvent.click(screen.getByRole('button', { name: '背词' }))
-    fireEvent.click(screen.getByRole('button', { name: '写作' }))
+    // 点数字格也走同一条路：整行都是热区，不用瞄准两个字
+    const row = [...document.querySelectorAll('.stat-summary tbody tr')].find(
+      (el) => el.querySelector('th')?.textContent?.startsWith('写作'),
+    )!
+    fireEvent.click(row.querySelector('td')!)
     fireEvent.click(screen.getByRole('button', { name: '复述' }))
     fireEvent.click(screen.getByRole('button', { name: '读完' }))
     fireEvent.click(screen.getByRole('button', { name: '金句' }))
     expect(onJump.mock.calls.map((c) => c[0])).toEqual(['vocab', 'writing', 'retell', 'readDone', 'golden'])
+  })
+
+  it('可点的行有箭头，光标行为交给样式；练习行不冒充按钮', () => {
+    renderPanel({ activity, onJump: vi.fn() })
+    const arrows = [...document.querySelectorAll('.stat-arrow')].map((el) => el.textContent)
+    expect(arrows).toEqual(['›', '›', '›', '›', '›'])
+    const practiceRow = [...document.querySelectorAll('.stat-summary tbody tr')].find(
+      (el) => el.querySelector('th')?.textContent === '练习',
+    )!
+    expect(practiceRow.className).not.toContain('stat-row-btn')
+    expect(practiceRow.querySelector('.stat-arrow')).toBeNull()
+  })
+
+  it('落点当前去不了时置灰：不渲染按钮、整行不响应，给出原因', () => {
+    const onJump = vi.fn()
+    renderPanel({ activity, onJump, jumpable: { writing: false, retell: false, golden: false } })
+    // 背词 / 读完 始终可去
+    expect(screen.getByRole('button', { name: '背词' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '读完' })).toBeTruthy()
+    // 写作 / 复述 / 金句 置灰
+    for (const label of ['写作', '复述', '金句']) {
+      expect(screen.queryByRole('button', { name: label })).toBeNull()
+      const metric = screen.getByText(label)
+      expect(metric.className).toContain('off')
+      expect(metric.getAttribute('title')).toBe('先打开一篇文章')
+      const row = metric.closest('tr')!
+      expect(row.className).not.toContain('stat-row-btn')
+      fireEvent.click(row)
+    }
+    expect(onJump).not.toHaveBeenCalled()
   })
 
   it('不传 onJump 时汇总指标不可点（不做假按钮）', () => {

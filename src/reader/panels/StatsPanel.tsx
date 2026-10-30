@@ -48,6 +48,7 @@ export default function StatsPanel({
   readDone,
   goldenDrills,
   onJump,
+  jumpable,
   onRebuild,
   rebuildBusy = false,
   rebuildNote = null,
@@ -67,6 +68,8 @@ export default function StatsPanel({
   goldenDrills: GoldenDrillRecord[]
   /** 点汇总里的指标时跳到对应面板；不传则该行不可点 */
   onJump?: (target: StatsJump) => void
+  /** 各落点当前能不能去（如没打开文章时写作 / 复述 / 金句不可用）；缺省都算能去 */
+  jumpable?: Partial<Record<StatsJump, boolean>>
   /** 重建派生聚合 + 与本地对账；不传则不显示这块 */
   onRebuild?: () => void
   rebuildBusy?: boolean
@@ -187,7 +190,7 @@ export default function StatsPanel({
       <div className="side-label">本月（{today.getMonth() + 1} 月）</div>
       {line('本月', monthCats)}
 
-      <div className="side-label">汇总{onJump ? '（点指标跳到对应面板）' : ''}</div>
+      <div className="side-label">汇总{onJump ? '（点整行跳到对应面板）' : ''}</div>
       <table className="stat-summary">
         <thead>
           <tr>
@@ -204,29 +207,39 @@ export default function StatsPanel({
           </tr>
         </thead>
         <tbody>
-          {rows.map((r) => (
-            <tr key={r.key}>
-              <th scope="row">
-                {r.target && onJump ? (
-                  <button
-                    type="button"
-                    className="stat-jump"
-                    title={`打开${r.label}`}
-                    onClick={() => onJump(r.target!)}
-                  >
-                    {r.label}
-                  </button>
-                ) : (
-                  <span className="stat-metric">{r.label}</span>
-                )}
-              </th>
-              {r.cells.map((c, i) => (
-                <td key={i} className={'stat-cell' + (c.text === '—' ? ' zero' : '')} title={c.title}>
-                  {c.text}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map((r) => {
+            // 整行可点：标签是键盘入口（button 的回车/空格会冒泡上来），数字格靠行点击；
+            // 落点当前去不了（没打开文章）就只显示置灰的标签，不做假按钮。
+            const canJump = !!(r.target && onJump && jumpable?.[r.target] !== false)
+            const disabled = !!(r.target && jumpable?.[r.target] === false)
+            return (
+              <tr
+                key={r.key}
+                className={canJump ? 'stat-row-btn' : undefined}
+                onClick={canJump ? () => onJump?.(r.target!) : undefined}
+              >
+                <th scope="row">
+                  {canJump ? (
+                    <button type="button" className="stat-jump" title={`打开${r.label}`}>
+                      {r.label}
+                      <span className="stat-arrow" aria-hidden="true">
+                        ›
+                      </span>
+                    </button>
+                  ) : (
+                    <span className={'stat-metric' + (disabled ? ' off' : '')} title={disabled ? '先打开一篇文章' : undefined}>
+                      {r.label}
+                    </span>
+                  )}
+                </th>
+                {r.cells.map((c, i) => (
+                  <td key={i} className={'stat-cell' + (c.text === '—' ? ' zero' : '')} title={c.title}>
+                    {c.text}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
 

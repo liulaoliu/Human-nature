@@ -37,14 +37,21 @@ export default function DayHeatmap({
 }: DayHeatmapProps) {
   const counts = useMemo(() => Object.fromEntries(dates), [dates])
   const heat = useMemo(() => buildHeatmap(counts, weeks, today), [counts, weeks, today])
-  /** 周数可调（13 / 26 / 52）；固定 CSS 的 13 列要被覆盖，否则多出来的周会挤成隐式列。 */
-  const columns = { gridTemplateColumns: `repeat(${weeks}, 1fr)` }
+  /**
+   * 周数越多格子越小：不再给 `minWidth`（52 周会被撑到 780px、把最近几周挤出侧栏），
+   * 改成「按容器宽度均分 + 间距随周数收缩」，任何周数都能一眼看全，不需要横向滚动。
+   */
+  const gap = weeks > 40 ? 1 : weeks > 20 ? 2 : 3
+  const columns = { gridTemplateColumns: `repeat(${weeks}, 1fr)`, gap: `${gap}px` }
+  /** 52 周时月份标签挤在一起，隔 3 个月标一次；26 周隔 2 个月。 */
+  const labelStep = weeks > 40 ? 3 : weeks > 20 ? 2 : 1
+  const months = heat.monthLabels.filter((_, i) => i % labelStep === 0)
 
   return (
     <div className="exheat">
-      <div className="heat" style={{ minWidth: Math.max(180, weeks * 15) }}>
+      <div className="heat">
         <div className="heat-months" style={columns}>
-          {heat.monthLabels.map((m) => (
+          {months.map((m) => (
             <span key={`${m.col}-${m.label}`} style={{ gridColumn: m.col + 1 }}>
               {m.label}月
             </span>

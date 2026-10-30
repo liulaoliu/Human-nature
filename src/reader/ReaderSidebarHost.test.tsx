@@ -93,6 +93,7 @@ function makeProps(over: Partial<ReaderSidebarHostProps> = {}): ReaderSidebarHos
         readDone: [],
         goldenDrills: [],
         onJump: fn(),
+        jumpable: { writing: true, retell: true, golden: true },
       },
       rebuild: { run: fn(), busy: false, note: null, matched: false },
     },
