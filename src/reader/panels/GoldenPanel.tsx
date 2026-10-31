@@ -39,6 +39,8 @@ export interface GoldenPanelActions {
     onRemovePoint?: (sentenceId: string, en: string) => void
     /** 到历史详情（recordKey + 范围）；由 ReaderApp 接到 URL */
     onOpenHistory?: (recordKey: string, scope: 'article' | 'all') => void
+    /** 「去练」找不到当前文章句子时的可见提示 */
+    onMissingSentence?: () => void
   }
   /** 当前 `/p/golden` query；没有就 undefined */
   goldenRoute?: GoldenRouteState
@@ -159,8 +161,12 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           onRemovePoint={actions.errors?.onRemovePoint}
           onOpenHistory={actions.onNavigateGolden ? openHistoryRecord : undefined}
           onOpenSentence={(sentenceId) => {
-            const index = api.ordered.findIndex((s) => s.id === sentenceId)
-            if (index >= 0) api.startDrill(index)
+            if (!api.startSentenceDrill(sentenceId)) {
+              actions.errors?.onMissingSentence?.()
+              return
+            }
+            // 去练是 drill 子视图；先把 URL 里的 gv=errors 去掉，否则路由 effect 会把 drill 拉回错因页。
+            if (actions.onNavigateGolden) actions.onNavigateGolden({})
           }}
         />
       )}

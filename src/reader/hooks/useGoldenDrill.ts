@@ -16,6 +16,7 @@ import { useGoldenLesson } from './useGoldenLesson'
 import { useGoldenHotkeys } from './useGoldenHotkeys'
 import { useGoldenRecall } from './useGoldenRecall'
 import { useGoldenSession } from './useGoldenSession'
+import { useGoldenStartSentence } from './useGoldenStartSentence'
 
 export type { GoldenPhase, GoldenView } from './goldenSession'
 
@@ -68,7 +69,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setPendingSave,
     flash,
   })
-  const { lesson, ordered, bySentence, summary, progressFor } = lessonApi
+  const { lesson, ordered, bySentence, summary, progressFor, setSelected } = lessonApi
 
   const sessionApi = useGoldenSession({ doc, sessionId, orderedLength: ordered.length, flash })
   const {
@@ -184,6 +185,15 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     [startSessionDrill, resetFillAssemble, resetRecall],
   )
 
+  const startSentenceDrill = useGoldenStartSentence({
+    ordered,
+    lesson,
+    bySentence,
+    setSelected,
+    startDrill,
+    setPhase,
+  })
+
   /**
    * 跳到第 i 句：练过的句子直接落在**小结**（回看学过的点），没练过的从预览开始。
    * 回看不改进度；想重练用顶栏的「再练一次」。
@@ -259,6 +269,7 @@ export function useGoldenDrill(params: UseGoldenDrillParams) {
     setPendingSave,
     openGolden,
     startDrill,
+    startSentenceDrill,
     nextSentence,
     prevSentence,
     restartSentence,

@@ -9,7 +9,7 @@
 - 分支 `main`；批改契约 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 升到 **v11**（新增 `writing_error_progress`）
 - 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
   回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
-- 门禁：`npm run gates` 全绿（328 文件 / 2913 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+- 门禁：`npm run gates` 全绿（328 文件 / 2915 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
 
 ### 这轮做了什么
 
@@ -27,6 +27,9 @@
 7. **推荐分组**：推荐按 `kind + point + articleId + sentenceId + focus` 拆组，跨篇「加入本课」不会指错篇。
 8. **错因 → 历史**：错因行/历史行共用自定义悬浮卡；点「看批改」开 `GoldenFeedback` 抽屉，
    点「历史 ↗」走 `/p/golden?gv=history&gr=<recordKey>&gs=…&from=errors`，浏览器返回回错因复盘。
+9. **错因 → 去练**：`useGoldenStartSentence` 按 `sentenceId` 找当前课；未选题自动加入
+   `GoldenLesson.selected` 后进入本句 **fill**；非当前文章句子返回 false 并 flash。练习进度仍只写
+   `goldenDrills`（SQLite `golden_drill_records`），不写错因卡 SRS。
 
 ### 下一轮优先
 

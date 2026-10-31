@@ -252,6 +252,8 @@ export function useGoldenFeature({
       },
       extraPoints: golden.extraPoints,
       onRemovePoint: golden.removeExtraPoint,
+      onMissingSentence: () =>
+        flash('这句不在当前文章的金句课里：先切到对应文章，再点「去练」'),
     },
     onPrintHistory: (rows, title) => {
       if (!rows.length) {

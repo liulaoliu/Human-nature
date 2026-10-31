@@ -155,6 +155,34 @@ describe('useGoldenDrill', () => {
     expect(h.result.current.records[0].summarySeen).toBeFalsy()
   })
 
+  it('去练：未选进本课的句子会补选并直接进入填空', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [{ id: 'p01', sentenceIds: ['s1', 's2'] }],
+      sentences: [sentence, sentence2],
+      golden: buildLocalGoldenLesson([sentence, sentence2], undefined, { selected: ['s1'] }),
+    }
+    const h = setup(doc)
+    act(() => h.result.current.api.openGolden())
+    act(() => {
+      expect(h.result.current.api.startSentenceDrill('s2')).toBe(true)
+    })
+    expect(h.result.current.api.currentSentence?.id).toBe('s2')
+    expect(h.result.current.api.view).toBe('drill')
+    expect(h.result.current.api.phase).toBe('fill')
+    expect(h.result.current.api.lesson?.selected).toContain('s2')
+  })
+
+  it('去练：当前文章没有这句时返回 false，交给界面提示', () => {
+    const h = setup()
+    act(() => h.result.current.api.openGolden())
+    let ok = true
+    act(() => {
+      ok = h.result.current.api.startSentenceDrill('s404')
+    })
+    expect(ok).toBe(false)
+    expect(h.result.current.api.view).toBe('home')
+  })
+
   it('回看上一句：练过的句子直接落在小结，没练过的从预览开始', () => {
     const doc: ReaderDoc = {
       paragraphs: [{ id: 'p01', sentenceIds: ['s1', 's2'] }],
