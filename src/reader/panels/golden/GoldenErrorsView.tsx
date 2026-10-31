@@ -12,6 +12,7 @@ import {
 } from '../../../core/writingErrorReview'
 import type { AnswerEvent } from '../../../core/answerEvents'
 import type { WritingRecord } from '../../../core/writing'
+import type { GoldenExtraPoint } from '../../../types/document'
 import GoldenErrorReview from './GoldenErrorReview'
 
 export interface GoldenErrorsViewProps {
@@ -26,6 +27,9 @@ export interface GoldenErrorsViewProps {
   answerEvents?: readonly AnswerEvent[]
   /** 记录一次错因复习（source=golden / kind=error-fix） */
   onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
+  /** 本课已加入的额外语言点（可移除） */
+  extraPoints?: GoldenExtraPoint[]
+  onRemovePoint?: (sentenceId: string, en: string) => void
 }
 
 type Scope = 'article' | 'all'
@@ -54,6 +58,8 @@ export default function GoldenErrorsView({
   onOpenSentence,
   answerEvents,
   onReviewAnswer,
+  extraPoints,
+  onRemovePoint,
 }: GoldenErrorsViewProps) {
   const [scope, setScope] = useState<Scope>('article')
   const [since, setSince] = useState<Since>(30)
@@ -250,6 +256,32 @@ export default function GoldenErrorsView({
           <div className="muted">AI 还没有给推荐。重新批改一次（v2 契约）后会带上 0–3 条。</div>
         )}
       </section>
+
+      {extraPoints && extraPoints.length > 0 && (
+        <section className="golden-errors-sec">
+          <h3>本课加练语言点</h3>
+          <div className="golden-errors-list">
+            {extraPoints.map((p) => (
+              <div className="golden-errors-row" key={`${p.sentenceId}:${p.en}`}>
+                <div className="golden-errors-head">
+                  <b>{p.en}</b>
+                  {p.zh && <span className="muted">{p.zh}</span>}
+                  <span className="golden-chip">{p.kind}</span>
+                  {onRemovePoint && (
+                    <button
+                      className="golden-errors-mini"
+                      onClick={() => onRemovePoint(p.sentenceId, p.en)}
+                    >
+                      移除
+                    </button>
+                  )}
+                </div>
+                <div className="muted">已进入「语言点造句」的可选项，不影响本句填空 / 拼句进度。</div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
     </div>
   )
 }

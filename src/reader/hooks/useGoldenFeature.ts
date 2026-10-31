@@ -199,6 +199,8 @@ export function useGoldenFeature({
         })
         recordActivity('write', 1)
       },
+      extraPoints: golden.extraPoints,
+      onRemovePoint: golden.removeExtraPoint,
     },
     onPrintHistory: (rows, title) => {
       if (!rows.length) {

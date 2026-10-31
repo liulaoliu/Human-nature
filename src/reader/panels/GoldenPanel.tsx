@@ -11,6 +11,7 @@ import type { WritingRecord } from '../../core/writing'
 import type { WritingRecommendationGroup } from '../../core/writingErrors'
 import type { WritingErrorCard } from '../../core/writingErrorReview'
 import type { AnswerEvent } from '../../core/answerEvents'
+import type { GoldenExtraPoint } from '../../types/document'
 import type { GoldenLangPointApi } from '../hooks/useGoldenLangPoint'
 import type { GoldenApi, GoldenBankActions, GoldenExamApi, GoldenImitationApi } from './golden/types'
 
@@ -30,6 +31,8 @@ export interface GoldenPanelActions {
     onAddPoint?: (rec: WritingRecommendationGroup) => void
     answerEvents?: readonly AnswerEvent[]
     onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
+    extraPoints?: GoldenExtraPoint[]
+    onRemovePoint?: (sentenceId: string, en: string) => void
   }
   /** 打印当前范围的学习历史（A4） */
   onPrintHistory?: (rows: WritingRecord[], title: string) => void
@@ -87,6 +90,8 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           onAddPoint={actions.errors?.onAddPoint}
           answerEvents={actions.errors?.answerEvents}
           onReviewAnswer={actions.errors?.onReviewAnswer}
+          extraPoints={actions.errors?.extraPoints}
+          onRemovePoint={actions.errors?.onRemovePoint}
           onOpenSentence={(sentenceId) => {
             const index = api.ordered.findIndex((s) => s.id === sentenceId)
             if (index >= 0) api.startDrill(index)
