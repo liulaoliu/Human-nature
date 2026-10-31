@@ -61,10 +61,20 @@ const records: GoldenDrillRecord[] = sentences.map((s, i) => {
 })
 
 const feedback = {
+  version: 2,
   scores: [{ dimension: '结构运用', score: 30, max: 35 }],
   total: 85,
   max: 100,
-  issues: [{ original: 'go', suggestion: 'goes', reason: '主谓一致' }],
+  issues: [
+    {
+      original: 'has improved',
+      suggestion: 'improved',
+      reason: '时态',
+      rule: 'tense-choice',
+      key: 'tense-choice',
+      severity: 'must-fix',
+    },
+  ],
   polished: 'The new policy has improved public health.',
   summary: '注意主谓一致。',
 }
@@ -151,7 +161,7 @@ describe('useGoldenExam', () => {
     expect(h.result.current.history).toHaveLength(1)
     expect(h.result.current.history[0].source).toBe('goldenExam')
     expect(h.result.current.history[0].articleId).toBe('a1')
-    expect(h.result.current.exam.feedback?.issues[0].suggestion).toBe('goes')
+    expect(h.result.current.exam.feedback?.issues[0].suggestion).toBe('improved')
     expect(h.recordActivity).toHaveBeenCalledWith('write', 1)
   })
 })
