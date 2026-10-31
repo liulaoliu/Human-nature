@@ -1,6 +1,44 @@
 # 交接记录
 
-最近一次：**2026-10-29** · 上一次：2026-10-20
+最近一次：**2026-10-31** · 上一次：2026-10-29
+
+## 2026-10-31
+
+### 当前状态
+
+- 分支 `main`；批改契约升到 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 仍是 v10（不新增表）
+- 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
+  回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
+- 门禁：`npm run gates` 全绿（本轮最终数字见提交记录 / 下面的 2026-10-29 对照）
+
+### 这轮做了什么
+
+1. **错因契约**：`core/writingErrorRules.ts` 闭集标签 + 稳定 key；`core/writing.ts` 只解析 v2，
+   `original` 给了学生原文就校验逐字出现；被丢弃 / 自动归类的条数会进 apply 报告和 flash。
+2. **错因复盘**：`core/writingErrors.ts` 汇总本篇 / 全库的规则、类型、句子、趋势与 AI 推荐；
+   `GoldenErrorsView` 从课程页进入，可切 7/30 天，推荐语言点可「加入本课」。
+3. **复习**：`core/writingErrorReview.ts` 从 `answerEvents`（`errfix:<rule>|<key>`）派生 Leitner
+   1/3/7/14/30/60 天队列，`GoldenErrorReview` 现场考错因；不新增 schema / 同步 section。
+4. **加入本课**：`GoldenLesson.extraPoints` 只影响语言点造句选项，不改 `targets` / `goldenDrillKey`；
+   可在复盘里移除，改正文时随 `pruneGoldenLesson` 清理。
+5. **回填工具**：`npm run backfill:writing`（先 `VACUUM INTO` 备份，再单事务更新）。
+
+### 下一轮优先
+
+1. 第二稿把上一轮 `feedback.issues` 喂给批改提示词（专查「上轮问题改了没」）。
+2. `A long road` 两篇重复（`saved:1791421783707` / `saved:1791119917875`）：正文 94% 重合但分句不同，
+   按句 id 合并会指错句，用户决定**先不管**。
+3. 学习记录没有版本快照（`learning_snapshots` 已退役），备份与主库同盘 → 提醒把 `data/xueba.db`
+   或导出 JSON 拷一份到别处。
+
+### 回滚点
+
+- `data/backups/xueba-before-writing-v2-20261031-012945.db`（回填 v2 前，29 条批改）
+- `data/backups/xueba-before-book-2026-10-29.db`（改 book 前，44 篇）
+- `data/backups/xueba-before-merge-2026-10-29.db`（合并重复篇前，45 篇）
+- `data/backups/xueba-before-cleanup-2026-10-29.db`（删垃圾词条前）
+
+---
 
 ## 2026-10-29
 
