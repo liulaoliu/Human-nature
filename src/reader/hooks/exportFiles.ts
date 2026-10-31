@@ -8,7 +8,7 @@ import type { ExportParams } from './exportTypes'
 
 /** 下载 / 词表 / 文章包等“生成文件”动作；不读写应用状态。 */
 export function createExportFiles({ library, saved, learning, writingHistory, visibleBatch, flash }: ExportParams) {
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, readDone, readGoal, goalMemo } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, writingErrorProgress, readDone, readGoal, goalMemo } =
     learning
 
   const download = (name: string, content: string, mime: string) => {
@@ -79,6 +79,7 @@ export function createExportFiles({ library, saved, learning, writingHistory, vi
       kindStats,
       answerEvents,
       goldenDrills,
+      writingErrorProgress,
       readDone,
       readGoal,
       goalMemo,

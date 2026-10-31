@@ -11,6 +11,7 @@ import {
   SCHEMA_V7,
   SCHEMA_V8,
   SCHEMA_V9,
+  SCHEMA_V11,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
@@ -275,9 +276,10 @@ function ensureSchema(db: DatabaseSync): number {
   if (version < 7) {
     tx(db, () => {
       db.exec(SCHEMA_V7)
-      // v8 回译表 / v9 金句进度表要先建：saveDerivedBaseline 会读整份学习记录。
+      // v8 回译表 / v9 金句进度表 / v11 错因复习表要先建：saveDerivedBaseline 会读整份学习记录。
       db.exec(SCHEMA_V8)
       db.exec(SCHEMA_V9)
+      db.exec(SCHEMA_V11)
       // 历史只有聚合值：先存成 baseline，之后的事件才可逐题对账/重建。
       saveDerivedBaseline(db, nowIso())
       db.exec('PRAGMA user_version = 7')
@@ -295,6 +297,10 @@ function ensureSchema(db: DatabaseSync): number {
   if (version < 10) {
     tx(db, () => { addWritingColumns(db); db.exec('PRAGMA user_version = 10') })
     version = 10
+  }
+  if (version < 11) {
+    tx(db, () => { db.exec(SCHEMA_V11); db.exec('PRAGMA user_version = 11') })
+    version = 11
   }
   return version
 }

@@ -37,6 +37,7 @@ export interface LearningOut {
   kindStats: Record<string, Record<string, { total: number; correct: number }>>
   answerEvents: LearningAnswerEvent[]
   goldenDrills: LearningGoldenDrill[]
+  writingErrorProgress: LearningWritingErrorProgress[]
 }
 
 export interface LearningPractice {
@@ -152,6 +153,27 @@ export interface LearningGoldenDrill {
   completedAt?: string
 }
 
+export interface LearningWritingErrorProgress {
+  id: string
+  rule: string
+  key: string
+  articleId: string
+  sentenceId?: string
+  examId?: string
+  focus?: string
+  original: string
+  suggestion: string
+  reason?: string
+  status: string
+  streak: number
+  reviews: number
+  lastAt?: string
+  lastCorrect?: boolean
+  dueAt?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export function emptyLearning(): LearningOut {
   return {
     practice: [],
@@ -168,6 +190,7 @@ export function emptyLearning(): LearningOut {
     kindStats: {},
     answerEvents: [],
     goldenDrills: [],
+    writingErrorProgress: [],
   }
 }
 
@@ -204,6 +227,7 @@ function assertLearning(data: unknown): asserts data is Record<string, unknown> 
     'skimmed',
     'answerEvents',
     'goldenDrills',
+    'writingErrorProgress',
   ]) {
     if (rec[key] !== undefined && !Array.isArray(rec[key])) {
       throw new Error(`学习记录 ${key} 必须是数组`)
@@ -504,6 +528,35 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       if (Number(r.summary_seen) !== 0) rec.summarySeen = true
       if (r.completed_at !== null && r.completed_at !== undefined) rec.completedAt = String(r.completed_at)
       return rec
+    })
+
+  out.writingErrorProgress = db
+    .prepare(
+      'SELECT id, rule, key, article_id, sentence_id, exam_id, focus, original, suggestion, reason, status, streak, reviews, last_at, last_correct, due_at, created_at, updated_at FROM writing_error_progress ORDER BY updated_at DESC, id ASC',
+    )
+    .all()
+    .map((r): LearningWritingErrorProgress => {
+      const row: LearningWritingErrorProgress = {
+        id: String(r.id),
+        rule: String(r.rule ?? ''),
+        key: String(r.key ?? ''),
+        articleId: String(r.article_id ?? ''),
+        original: String(r.original ?? ''),
+        suggestion: String(r.suggestion ?? ''),
+        status: String(r.status ?? 'active'),
+        streak: Number(r.streak) || 0,
+        reviews: Number(r.reviews) || 0,
+        createdAt: String(r.created_at ?? ''),
+        updatedAt: String(r.updated_at ?? ''),
+      }
+      if (r.sentence_id !== null && r.sentence_id !== undefined) row.sentenceId = String(r.sentence_id)
+      if (r.exam_id !== null && r.exam_id !== undefined) row.examId = String(r.exam_id)
+      if (r.focus !== null && r.focus !== undefined) row.focus = String(r.focus)
+      if (r.reason !== null && r.reason !== undefined) row.reason = String(r.reason)
+      if (r.last_at !== null && r.last_at !== undefined) row.lastAt = String(r.last_at)
+      if (r.last_correct !== null && r.last_correct !== undefined) row.lastCorrect = Number(r.last_correct) !== 0
+      if (r.due_at !== null && r.due_at !== undefined) row.dueAt = String(r.due_at)
+      return row
     })
 
   return out

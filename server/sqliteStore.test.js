@@ -445,6 +445,26 @@ describe('sqliteStore：学习记录', () => {
         completedAt: '2026-01-07T00:00:00.000Z',
       },
     ],
+    writingErrorProgress: [
+      {
+        id: 'errfix:word-spelling|spelling-bureaucracy',
+        rule: 'word-spelling',
+        key: 'spelling-bureaucracy',
+        articleId: 'a1',
+        sentenceId: 's1',
+        original: 'bureacracy',
+        suggestion: 'bureaucracy',
+        reason: '拼写',
+        status: 'active',
+        streak: 2,
+        reviews: 3,
+        lastAt: '2026-01-08T00:00:00.000Z',
+        lastCorrect: true,
+        dueAt: '2026-01-15T00:00:00.000Z',
+        createdAt: '2026-01-01T00:00:00.000Z',
+        updatedAt: '2026-01-08T00:00:00.000Z',
+      },
+    ],
   }
 
   it('保存 / 读取 / 覆盖式替换，SQL 表能直接查', async () => {
@@ -475,6 +495,15 @@ describe('sqliteStore：学习记录', () => {
     expect(got.backTranslations[0].feedback).toMatchObject({ total: 86, max: 100 })
     expect(got.goldenDrills).toHaveLength(1)
     expect(got.goldenDrills[0]).toMatchObject({ id: 'a1|s1|k', mastered: true, fillFirst: true, summarySeen: true })
+    expect(got.writingErrorProgress).toHaveLength(1)
+    expect(got.writingErrorProgress[0]).toMatchObject({
+      id: 'errfix:word-spelling|spelling-bureaucracy',
+      status: 'active',
+      streak: 2,
+      reviews: 3,
+      lastCorrect: true,
+    })
+    expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_error_progress').get().n).toBe(1)
 
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM practice_records').get().n).toBe(2)
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM answer_events').get().n).toBe(2)
@@ -551,6 +580,16 @@ describe('sqliteStore：学习记录', () => {
 
     store.saveLearning({ ...learning, backTranslations: [] })
     expect(store.loadLearning().backTranslations).toHaveLength(1)
+  })
+
+  it('错因复习状态增量同步幂等：重复同步不翻倍，整份空数组也不清历史', async () => {
+    const store = openStore(tempDb())
+    store.saveLearningPartial({ writingErrorProgress: learning.writingErrorProgress })
+    store.saveLearningPartial({ writingErrorProgress: learning.writingErrorProgress })
+    expect(store.loadLearning().writingErrorProgress).toHaveLength(1)
+
+    store.saveLearning({ ...learning, writingErrorProgress: [] })
+    expect(store.loadLearning().writingErrorProgress).toHaveLength(1)
   })
 
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', async () => {

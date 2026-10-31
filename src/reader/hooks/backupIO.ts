@@ -17,6 +17,7 @@ import {
   mergeStudyDays,
   mergeWritingHistory,
 } from '../../core/mergeBackup'
+import { mergeWritingErrorProgress } from '../../core/writingErrorProgress'
 import { parseBackupPayload } from '../../core/backupParse'
 import { mergeGoldenIntoArticle } from '../../core/goldenParse'
 import { ARTICLE_PACKAGE_FORMAT } from '../../core/articlePackage'
@@ -39,7 +40,7 @@ export function createBackupIO({
   setSaved,
   setWritingHistory,
 }: ExportParams) {
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, readDone } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, writingErrorProgress, readDone } =
     learning
   const {
     setSessions,
@@ -53,6 +54,7 @@ export function createBackupIO({
     setKindStats,
     setAnswerEvents,
     setGoldenDrills,
+    setWritingErrorProgress,
     setBackTranslations,
     setReadDone,
     setReadGoal,
@@ -96,6 +98,7 @@ export function createBackupIO({
       if (parsed.kindStats) setKindStats(parsed.kindStats)
       if (parsed.answerEvents) setAnswerEvents(parsed.answerEvents)
       if (parsed.goldenDrills) setGoldenDrills(parsed.goldenDrills)
+      if (parsed.writingErrorProgress) setWritingErrorProgress(parsed.writingErrorProgress)
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
@@ -153,6 +156,9 @@ export function createBackupIO({
       if (parsed.kindStats) setKindStats(mergeKindStats(kindStats, parsed.kindStats))
       if (parsed.answerEvents) setAnswerEvents(mergeAnswerEvents(answerEvents, parsed.answerEvents))
       if (parsed.goldenDrills) setGoldenDrills(mergeGoldenDrills(goldenDrills, parsed.goldenDrills))
+      if (parsed.writingErrorProgress) {
+        setWritingErrorProgress(mergeWritingErrorProgress(writingErrorProgress, parsed.writingErrorProgress))
+      }
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       setSaved((await articles.current?.list()) ?? [])
       writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))

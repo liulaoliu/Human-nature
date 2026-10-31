@@ -7,7 +7,7 @@
  * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号、不再建表。
  */
 
-export const SCHEMA_VERSION = 10
+export const SCHEMA_VERSION = 11
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -416,4 +416,38 @@ CREATE TABLE IF NOT EXISTS back_translation_records (
 );
 CREATE INDEX IF NOT EXISTS idx_back_translation_records_at ON back_translation_records(at DESC);
 CREATE INDEX IF NOT EXISTS idx_back_translation_records_article ON back_translation_records(article_id, at DESC);
+`
+
+/**
+ * v11：错因复习的耐久状态。
+ *
+ * `answer_events` 是 append-only 审计，前端还有 5000 条上限；复习卡的
+ * 到期 / 暂停 / 已掌握必须有自己的行，才能跨设备、跨刷新保持一致。
+ * 卡片内容也存一份：旧批改归档后仍能复习。
+ */
+export const SCHEMA_V11 = `
+CREATE TABLE IF NOT EXISTS writing_error_progress (
+  id TEXT PRIMARY KEY,
+  rule TEXT NOT NULL,
+  key TEXT NOT NULL,
+  article_id TEXT NOT NULL DEFAULT '',
+  sentence_id TEXT,
+  exam_id TEXT,
+  focus TEXT,
+  original TEXT NOT NULL DEFAULT '',
+  suggestion TEXT NOT NULL DEFAULT '',
+  reason TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  streak INTEGER NOT NULL DEFAULT 0,
+  reviews INTEGER NOT NULL DEFAULT 0,
+  last_at TEXT,
+  last_correct INTEGER,
+  due_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_writing_error_progress_due
+  ON writing_error_progress(status, due_at);
+CREATE INDEX IF NOT EXISTS idx_writing_error_progress_article
+  ON writing_error_progress(article_id, updated_at DESC);
 `

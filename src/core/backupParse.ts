@@ -78,6 +78,7 @@ const LEARNING_KEYS = [
   'kindStats',
   'answerEvents',
   'goldenDrills',
+  'writingErrorProgress',
 ] as const
 
 type LearningKey = (typeof LEARNING_KEYS)[number]
@@ -97,6 +98,7 @@ const LEARNING_LABEL: Record<LearningKey, string> = {
   kindStats: '题型统计',
   answerEvents: '答题事件',
   goldenDrills: '金句锤炼记录',
+  writingErrorProgress: '错因复习状态',
 }
 
 function countArray(v: unknown): number {
@@ -176,6 +178,7 @@ export function parseBackupPayload(data: unknown): ParsedBackup {
     kindStats: obj.kindStats,
     answerEvents: obj.answerEvents,
     goldenDrills: obj.goldenDrills,
+    writingErrorProgress: obj.writingErrorProgress,
   }
   const normalized = normalizeLearning(learningRaw)
   for (const key of LEARNING_KEYS) {

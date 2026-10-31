@@ -75,6 +75,22 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
           closeness: { exact: true, ratio: 1 },
         },
       ],
+      writingErrorProgress: [
+        {
+          id: 'errfix:word-spelling|spelling-bureaucracy',
+          rule: 'word-spelling',
+          key: 'spelling-bureaucracy',
+          articleId: 'a1',
+          sentenceId: 's1',
+          original: 'bureacracy',
+          suggestion: 'bureaucracy',
+          status: 'active',
+          streak: 2,
+          reviews: 2,
+          createdAt: at,
+          updatedAt: at,
+        },
+      ],
       readGoal: 12,
       goalMemo: '每天一篇',
     })
@@ -90,6 +106,8 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.kindStats?.a1.quiz).toEqual({ total: 5, correct: 4 })
     expect(parsed.answerEvents).toHaveLength(1)
     expect(parsed.backTranslations).toHaveLength(1)
+    expect(parsed.writingErrorProgress).toHaveLength(1)
+    expect(parsed.writingErrorProgress?.[0]).toMatchObject({ id: 'errfix:word-spelling|spelling-bureaucracy', streak: 2 })
     expect(parsed.readGoal).toBe(12)
     expect(parsed.goalMemo).toBe('每天一篇')
     expect(parsed.dropped).toBe(0)

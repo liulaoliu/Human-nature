@@ -23,6 +23,7 @@ import type { MistakeEntry } from './mistakes'
 import type { PracticeRecord } from './practice'
 import { sentenceTextKey } from './vocab/sentenceTexts'
 import type { WritingRecord } from './writing'
+import type { WritingErrorProgress } from './writingErrorProgress'
 
 /** 文章包的文件标记：导入侧据此拒绝「覆盖导入」，避免把整库清成只剩这一篇。 */
 export const ARTICLE_PACKAGE_FORMAT = 'xueba-article-package'
@@ -40,6 +41,8 @@ export interface ArticlePackageLearning {
   answerEvents?: AnswerEvent[]
   /** D老师小课堂：这篇的逐句进度 */
   goldenDrills?: GoldenDrillRecord[]
+  /** 错因复习：这张卡对应的文章进度 */
+  writingErrorProgress?: WritingErrorProgress[]
 }
 
 export interface ArticlePackageInput {
@@ -153,5 +156,6 @@ export function buildArticlePackage(input: ArticlePackageInput): ArticlePackage 
   pkg.skimmed = (learning.skimmed ?? []).filter((id) => keys.has(id))
   pkg.answerEvents = (learning.answerEvents ?? []).filter((e) => keys.has(e.articleId))
   pkg.goldenDrills = (learning.goldenDrills ?? []).filter((r) => keys.has(r.articleId))
+  pkg.writingErrorProgress = (learning.writingErrorProgress ?? []).filter((r) => keys.has(r.articleId))
   return pkg
 }

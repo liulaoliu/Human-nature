@@ -237,6 +237,44 @@ function writeGoldenDrills(db: DatabaseSync, data: LearningData): void {
   }
 }
 
+function writeWritingErrorProgress(db: DatabaseSync, data: LearningData): void {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO writing_error_progress
+      (id, rule, key, article_id, sentence_id, exam_id, focus, original, suggestion, reason,
+       status, streak, reviews, last_at, last_correct, due_at, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list<unknown>(data.writingErrorProgress)) {
+    if (!isRecord(r) || typeof r.id !== 'string' || !r.id) continue
+    const rule = text(r.rule)
+    const key = text(r.key)
+    if (!rule || !key) continue
+    const status = r.status === 'paused' || r.status === 'mastered' ? r.status : 'active'
+    const created = text(r.createdAt) ?? nowIso()
+    const updated = text(r.updatedAt) ?? created
+    insert.run(
+      r.id,
+      rule,
+      key,
+      text(r.articleId) ?? '',
+      text(r.sentenceId),
+      text(r.examId),
+      text(r.focus),
+      text(r.original) ?? '',
+      text(r.suggestion) ?? '',
+      text(r.reason),
+      status,
+      num(r.streak),
+      num(r.reviews),
+      text(r.lastAt),
+      typeof r.lastCorrect === 'boolean' ? (r.lastCorrect ? 1 : 0) : null,
+      text(r.dueAt),
+      created,
+      updated,
+    )
+  }
+}
+
 function writeAnswerEvents(db: DatabaseSync, data: LearningData): void {
   const insert = db.prepare(`
     INSERT OR IGNORE INTO answer_events (at, day, article_id, source, kind, cat, correct, question_id)
@@ -274,6 +312,7 @@ const WRITERS: Record<string, (db: DatabaseSync, data: LearningData) => void> = 
   kindStats: writeKindStats,
   answerEvents: writeAnswerEvents,
   goldenDrills: writeGoldenDrills,
+  writingErrorProgress: writeWritingErrorProgress,
 }
 
 /** 清掉指定 section 对应的表（答题事件是 append-only，永远不清）。 */
@@ -286,6 +325,8 @@ export function clearLearningSections(db: DatabaseSync, sections: string[]): voi
     if (section === 'backTranslations') continue
     // 金句进度也是长期资产：只 upsert，不因整份保存把旧记录清掉。
     if (section === 'goldenDrills') continue
+    // 错因复习状态同理：只 upsert；暂停/掌握是改行，不靠清表删除。
+    if (section === 'writingErrorProgress') continue
     for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
   }
   for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()

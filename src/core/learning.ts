@@ -23,6 +23,8 @@ import type { PracticeRecord } from './practice'
 import type { PickSession, StudyDay } from './vocabStats'
 import type { WritingRecord } from './writing'
 import { normalizeWritingRecord } from './writing'
+import type { WritingErrorProgress } from './writingErrorProgress'
+import { normalizeWritingErrorProgress } from './writingErrorProgress'
 
 /** 复述打卡：用自己的话复述的留档（按篇）。 */
 export interface RetellRecord {
@@ -64,6 +66,8 @@ export interface LearningData {
   answerEvents: AnswerEvent[]
   /** D老师小课堂：每句的填空/拼句/回忆进度（按句独立） */
   goldenDrills: GoldenDrillRecord[]
+  /** 错因复习：每张 errfix 卡的到期 / 暂停 / 掌握状态（v11） */
+  writingErrorProgress: WritingErrorProgress[]
 }
 
 /** 学习记录里可以单独增量同步的部分。 */
@@ -93,6 +97,7 @@ export const LEARNING_KEYS = {
   kindStats: 'reader:kindStats',
   answerEvents: 'reader:answerEvents',
   goldenDrills: 'reader:goldenDrills',
+  writingErrorProgress: 'reader:writingErrorProgress',
 } as const satisfies Record<LearningSection, string>
 
 export const LEARNING_SECTIONS: LearningSection[] = Object.keys(LEARNING_KEYS) as LearningSection[]
@@ -114,6 +119,7 @@ export function emptyLearning(): LearningData {
     kindStats: {},
     answerEvents: [],
     goldenDrills: [],
+    writingErrorProgress: [],
   }
 }
 
@@ -197,6 +203,7 @@ export function normalizeLearning(raw: unknown): LearningData {
   }
   out.answerEvents = normalizeAnswerEvents(raw.answerEvents).slice(-ANSWER_EVENT_CAP)
   out.goldenDrills = normalizeGoldenDrills(raw.goldenDrills)
+  out.writingErrorProgress = normalizeWritingErrorProgress(raw.writingErrorProgress)
   return out
 }
 
@@ -216,6 +223,7 @@ export function hasLearningData(data: LearningData): boolean {
     data.skimmed.length > 0 ||
     Object.keys(data.kindStats).length > 0 ||
     data.answerEvents.length > 0 ||
-    data.goldenDrills.length > 0
+    data.goldenDrills.length > 0 ||
+    data.writingErrorProgress.length > 0
   )
 }

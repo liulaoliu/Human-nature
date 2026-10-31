@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 10`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
+schema 版本：`PRAGMA user_version = 11`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -177,7 +177,7 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 手动/AI 语言点 | `lang_points` + `lang_point_terms`（词组/习语/用法） |
 | 历史版本 | `vocab_snapshots`（整库 JSON） |
 
-### 4.3 学习记录（v3–v10）
+### 4.3 学习记录（v3–v11）
 
 学习记录不是偏好，不能只靠 localStorage。表是规范化的事件/记录表，不做“万能 KV”：
 
@@ -204,6 +204,10 @@ golden_drill_records(id PK, at, article_id, article_title, sentence_id,
                      drill_key, fill_first, assemble_first, recall_first,
                      fill_tries, assemble_tries, recall_tries, summary_seen,
                      mastered, completed_at)                              -- D老师小课堂每句进度（v9）
+writing_error_progress(id PK, rule, key, article_id, sentence_id, exam_id,
+                     focus, original, suggestion, reason, status, streak,
+                     reviews, last_at, last_correct, due_at, created_at,
+                     updated_at)                                         -- 错因复习状态（v11）
 learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
 ```
 
@@ -212,8 +216,11 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 - `writing_records.feedback_json` 自 **契约 v2** 起带 `version: 2`、`issues[]`（含闭集 `rule`、稳定 `key`、
   `severity`）和 `recommendations[]`。旧记录由 `tools/backfill-writing-v2.mjs` 一次性回填（先 `VACUUM INTO`
   备份，再事务更新）；运行时只分析 v2，不再保留旧格式双读。
-- 错因复习不新增表：答题事件写 `answer_events`，`question_id = errfix:<rule>|<key>`，
-  `source='golden'`、`kind='error-fix'`；Leitner 的到期时间由 `core/writingErrorReview.ts` 从事件现算。- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
+- 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
+  保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
+  `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。
+  旧版只有 `answerEvents` 时，首次同步会按历史事件把 streak 迁进状态表。
+  它和 `golden_drill_records` 一样是长期资产：同步只 upsert，不因整份保存把旧行清掉。- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
   保留本地，之后由 `useLearningSync` 按 section 防抖写回 SQLite；没有待同步修改时以 SQLite 为准，
   直接覆盖过期缓存，避免旧缓存反过来盖新库。成功写回后才清 dirty；失败保留 dirty，
   按 5s 起、最长 60s 的退避**整份重试**（只重放最后 pending 的 section 会漏掉更早失败的部分），
