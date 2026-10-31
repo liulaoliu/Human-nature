@@ -21,7 +21,12 @@ const S = (): Sentence => ({
 describe('goldenToMarkdown', () => {
   it('导出主旨、金句、译文、学习点；带进度时打勾', () => {
     const s = S()
-    const lesson = buildLocalGoldenLesson([s], undefined, { selected: ['s1'] })
+    const lesson = {
+      ...buildLocalGoldenLesson([s], undefined, { selected: ['s1'] }),
+      extraPoints: [
+        { sentenceId: 's1', en: 'come to an end', zh: '结束', kind: 'chunk' as const, source: 'user' as const },
+      ],
+    }
     const rec = {
       ...emptyGoldenRecord('a1', undefined, 's1', goldenDrillKey(s.text, lesson.sentences[0].targets), '2026-10-27T00:00:00.000Z'),
       mastered: true,
@@ -37,6 +42,8 @@ describe('goldenToMarkdown', () => {
     expect(md).toContain('**In response to the pandemic')
     expect(md).toContain('为了应对疫情')
     expect(md).toContain('搭配：in response to')
+    expect(md).toContain('**加练语言点**')
+    expect(md).toContain('come to an end — 结束')
     expect(md).toContain('### s1 ✅')
   })
 

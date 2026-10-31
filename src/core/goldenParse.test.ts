@@ -106,7 +106,7 @@ describe('normalize / prune golden lesson', () => {
     ])
     const dangling = {
       ...next,
-      extraPoints: [{ sentenceId: 's404', en: 'gone', kind: 'chunk' as const }],
+      extraPoints: [{ sentenceId: 's404', en: 'gone', kind: 'chunk' as const, source: 'user' as const }],
     }
     expect(mergeGoldenIntoArticle(existing, { ...incoming, golden: dangling }).golden?.extraPoints?.map((p) => p.en)).toEqual([
       'come to an end',
@@ -120,6 +120,17 @@ describe('normalize / prune golden lesson', () => {
     )!
     expect(pruneGoldenLesson(lesson, [{ id: 's1', text: 'Completely different.' }])).toBeUndefined()
     expect(pruneGoldenLesson(lesson, sentences)?.extraPoints).toHaveLength(1)
+    const two = [...sentences, { id: 's2', text: 'Another sentence for testing.' }]
+    const onlyZh = normalizeGoldenLesson(
+      {
+        ...raw,
+        sentences: [...raw.sentences, { id: 's2', zh: '只有译文，没有 targets' }],
+        selected: ['s1', 's2'],
+        extraPoints: [{ sentenceId: 's2', en: 'come to an end', kind: 'chunk' }],
+      },
+      two,
+    )!
+    expect(pruneGoldenLesson(onlyZh, two)?.extraPoints).toBeUndefined()
   })
 
   it('drillKey 对文本/目标敏感', () => {

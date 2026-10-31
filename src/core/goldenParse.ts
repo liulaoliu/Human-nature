@@ -167,10 +167,12 @@ export function pruneGoldenLesson(lesson: GoldenLesson | undefined, sentences: G
   if (!kept.length) return undefined
   const ids = new Set(kept.map((s) => s.id))
   const exam = pruneGoldenExam(next.exam, sentences)
+  const extraPoints = next.extraPoints?.filter((p) => ids.has(p.sentenceId))
   return {
     ...next,
     sentences: kept,
     selected: next.selected.filter((id) => ids.has(id)),
+    ...(extraPoints?.length ? { extraPoints } : { extraPoints: undefined }),
     ...(exam ? { exam } : { exam: undefined }),
   }
 }

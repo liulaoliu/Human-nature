@@ -47,6 +47,13 @@ export function goldenToMarkdown(
         lines.push(`- ${GOLDEN_TARGET_KIND_LABEL[t.kind]}：${mdText(t.en)}${t.zh ? ` — ${mdText(t.zh)}` : ''}`)
       }
     }
+    const extras = (lesson.extraPoints ?? []).filter((p) => p.sentenceId === s.id)
+    if (extras.length) {
+      lines.push('', '**加练语言点**')
+      for (const p of extras) {
+        lines.push(`- ${mdText(p.en)}${p.zh ? ` — ${mdText(p.zh)}` : ''}`)
+      }
+    }
   }
   return lines.join('\n').trim() + '\n'
 }
