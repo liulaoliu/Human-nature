@@ -7,10 +7,12 @@ import {
 } from '../../../core/writingErrors'
 import {
   collectWritingErrorCards,
-  dueWritingErrorCards,
   type WritingErrorCard,
 } from '../../../core/writingErrorReview'
-import type { AnswerEvent } from '../../../core/answerEvents'
+import {
+  dueCardsFromProgress,
+  type WritingErrorProgress,
+} from '../../../core/writingErrorProgress'
 import type { WritingRecord } from '../../../core/writing'
 import type { GoldenExtraPoint } from '../../../types/document'
 import GoldenErrorReview from './GoldenErrorReview'
@@ -23,10 +25,12 @@ export interface GoldenErrorsViewProps {
   onAddPoint?: (rec: WritingRecommendationGroup) => void
   /** 回到某句继续练；找不到就不显示按钮 */
   onOpenSentence?: (sentenceId: string) => void
-  /** 答题事件：错因复习的 Leitner 状态从已有 answerEvents 派生 */
-  answerEvents?: readonly AnswerEvent[]
+  /** 错因复习的耐久状态；没有行 = 现在到期 */
+  writingErrorProgress?: readonly WritingErrorProgress[]
   /** 记录一次错因复习（source=golden / kind=error-fix） */
   onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
+  onPauseReview?: (card: WritingErrorCard) => void
+  onResumeReview?: (card: WritingErrorCard) => void
   /** 本课已加入的额外语言点（可移除） */
   extraPoints?: GoldenExtraPoint[]
   onRemovePoint?: (sentenceId: string, en: string) => void
@@ -56,8 +60,10 @@ export default function GoldenErrorsView({
   onBack,
   onAddPoint,
   onOpenSentence,
-  answerEvents,
+  writingErrorProgress,
   onReviewAnswer,
+  onPauseReview,
+  onResumeReview,
   extraPoints,
   onRemovePoint,
 }: GoldenErrorsViewProps) {
@@ -74,16 +80,30 @@ export default function GoldenErrorsView({
       }),
     [rows.article, rows.all, scope, since, articleId],
   )
-  const dueCards = useMemo(() => {
-    if (!onReviewAnswer) return []
+  const allCards = useMemo(() => {
     const query = {
       scope,
       ...(scope === 'article' && articleId ? { articleId } : {}),
       ...(since ? { sinceDays: since } : {}),
     }
-    const cards = collectWritingErrorCards(scope === 'article' ? rows.article : rows.all, query)
-    return dueWritingErrorCards(cards, answerEvents ?? [], new Date())
-  }, [onReviewAnswer, scope, articleId, since, rows.article, rows.all, answerEvents])
+    return collectWritingErrorCards(scope === 'article' ? rows.article : rows.all, query)
+  }, [scope, articleId, since, rows.article, rows.all])
+  const progressById = useMemo(
+    () => new Map((writingErrorProgress ?? []).map((p) => [p.id, p])),
+    [writingErrorProgress],
+  )
+  const dueCards = useMemo(
+    () => (onReviewAnswer ? dueCardsFromProgress(allCards, writingErrorProgress ?? [], new Date()) : []),
+    [onReviewAnswer, allCards, writingErrorProgress],
+  )
+  const pausedCards = useMemo(
+    () =>
+      allCards.filter((card) => {
+        const status = progressById.get(card.id)?.status
+        return status === 'paused' || status === 'mastered'
+      }),
+    [allCards, progressById],
+  )
   const topRules = data.byRule.filter((r) => r.mustFix > 0).slice(0, 8)
   const recurring = data.sentences.filter((s) => s.attempts.length >= 2).slice(0, 6)
   const recommendations = data.recommendations.slice(0, 8)
@@ -94,6 +114,7 @@ export default function GoldenErrorsView({
       <GoldenErrorReview
         cards={sessionCards}
         onAnswer={(card, correct) => onReviewAnswer?.(card, correct)}
+        onPause={onPauseReview}
         onBack={() => setSessionCards(null)}
       />
     )
@@ -154,6 +175,33 @@ export default function GoldenErrorsView({
             {dueCards.length ? '只考 must-fix 错因；先看答案也算一次错' : '今天没有到期错因'}
           </span>
         </div>
+      )}
+
+      {pausedCards.length > 0 && (
+        <section className="golden-errors-sec">
+          <h3>已暂停 / 已掌握</h3>
+          <div className="golden-errors-list">
+            {pausedCards.map((card) => {
+              const status = progressById.get(card.id)?.status
+              return (
+                <div className="golden-errors-row" key={card.id}>
+                  <div className="golden-errors-head">
+                    <b>{card.original || card.suggestion}</b>
+                    <span className="golden-chip">{status === 'mastered' ? '已掌握' : '已暂停'}</span>
+                    {onResumeReview && (
+                      <button className="golden-errors-mini" onClick={() => onResumeReview(card)}>
+                        恢复
+                      </button>
+                    )}
+                  </div>
+                  <div className="muted">
+                    {card.original ? `原句：${card.text}` : card.text}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </section>
       )}
 
       {!data.analyzedRecords && (
@@ -242,7 +290,7 @@ export default function GoldenErrorsView({
         {recommendations.length ? (
           <div className="golden-errors-list">
             {recommendations.map((rec) => (
-              <div className="golden-errors-row" key={`${rec.kind}:${rec.pointKey}`}>
+              <div className="golden-errors-row" key={`${rec.kind}:${rec.articleId}:${rec.sentenceId ?? ''}:${rec.focus ?? ''}:${rec.pointKey}`}>
                 <div className="golden-errors-head">
                   <b>{rec.point}</b>
                   {rec.zh && <span className="muted">{rec.zh}</span>}

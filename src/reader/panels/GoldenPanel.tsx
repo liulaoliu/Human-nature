@@ -10,7 +10,7 @@ import GoldenSummary from './golden/GoldenSummary'
 import type { WritingRecord } from '../../core/writing'
 import type { WritingRecommendationGroup } from '../../core/writingErrors'
 import type { WritingErrorCard } from '../../core/writingErrorReview'
-import type { AnswerEvent } from '../../core/answerEvents'
+import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import type { GoldenExtraPoint } from '../../types/document'
 import type { GoldenLangPointApi } from '../hooks/useGoldenLangPoint'
 import type { GoldenApi, GoldenBankActions, GoldenExamApi, GoldenImitationApi } from './golden/types'
@@ -26,11 +26,13 @@ export interface GoldenPanelActions {
   bank?: GoldenBankActions
   /** 本科的仿写 / 考试批改历史；`all` 是全库（含别的篇），默认只看 `article` */
   history?: { article: WritingRecord[]; all: WritingRecord[] }
-  /** 错因复盘：从历史里聚合，不新增存储 */
+  /** 错因复盘：历史聚合 + v11 复习状态；不把规则写进视图 */
   errors?: {
     onAddPoint?: (rec: WritingRecommendationGroup) => void
-    answerEvents?: readonly AnswerEvent[]
+    writingErrorProgress?: readonly WritingErrorProgress[]
     onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
+    onPauseReview?: (card: WritingErrorCard) => void
+    onResumeReview?: (card: WritingErrorCard) => void
     extraPoints?: GoldenExtraPoint[]
     onRemovePoint?: (sentenceId: string, en: string) => void
   }
@@ -88,8 +90,10 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           articleTitle={articleTitle}
           onBack={() => api.setView('home')}
           onAddPoint={actions.errors?.onAddPoint}
-          answerEvents={actions.errors?.answerEvents}
+          writingErrorProgress={actions.errors?.writingErrorProgress}
           onReviewAnswer={actions.errors?.onReviewAnswer}
+          onPauseReview={actions.errors?.onPauseReview}
+          onResumeReview={actions.errors?.onResumeReview}
           extraPoints={actions.errors?.extraPoints}
           onRemovePoint={actions.errors?.onRemovePoint}
           onOpenSentence={(sentenceId) => {

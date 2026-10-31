@@ -576,6 +576,8 @@ export default function ReaderApp() {
     writingHistory: services.writingHistory,
     setWritingHistory: services.setWritingHistory,
     answerEvents: learningData.answerEvents,
+    writingErrorProgress: learningData.writingErrorProgress,
+    setWritingErrorProgress: learningSetters.setWritingErrorProgress,
     recordAnswer,
     recordActivity,
     download,

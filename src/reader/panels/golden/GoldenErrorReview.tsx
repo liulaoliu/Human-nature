@@ -8,6 +8,7 @@ import { WRITING_RULE_LABEL } from '../../../core/writingErrorRules'
 export interface GoldenErrorReviewProps {
   cards: WritingErrorCard[]
   onAnswer: (card: WritingErrorCard, correct: boolean) => void
+  onPause?: (card: WritingErrorCard) => void
   onBack: () => void
 }
 
@@ -37,12 +38,19 @@ function HighlightedSentence({ card }: { card: WritingErrorCard }) {
   )
 }
 
-export default function GoldenErrorReview({ cards, onAnswer, onBack }: GoldenErrorReviewProps) {
+export default function GoldenErrorReview({ cards, onAnswer, onPause, onBack }: GoldenErrorReviewProps) {
   const [index, setIndex] = useState(0)
   const [input, setInput] = useState('')
-  const [result, setResult] = useState<{ correct: boolean; revealed: boolean } | null>(null)
+  const [result, setResult] = useState<{
+    correct: boolean
+    revealed: boolean
+    pending?: boolean
+  } | null>(null)
   const [correctCount, setCorrectCount] = useState(0)
   const card = cards[index]
+  const longAnswer =
+    !!card &&
+    (card.suggestion.length > 60 || card.suggestion.trim().split(/\s+/).filter(Boolean).length > 8)
 
   if (!cards.length) {
     return (
@@ -93,14 +101,32 @@ export default function GoldenErrorReview({ cards, onAnswer, onBack }: GoldenErr
 
   const reveal = () => {
     if (result) return
+    if (longAnswer) {
+      // 长答案（整句/长搭配）不逼用户逐字打；先看答案，再自评。
+      setResult({ correct: false, revealed: true, pending: true })
+      return
+    }
     setResult({ correct: false, revealed: true })
     onAnswer(card, false)
+  }
+
+  const selfGrade = (correct: boolean) => {
+    if (!result?.pending) return
+    setResult({ correct, revealed: true })
+    if (correct) setCorrectCount((n) => n + 1)
+    onAnswer(card, correct)
   }
 
   const next = () => {
     setIndex((i) => i + 1)
     setInput('')
     setResult(null)
+  }
+
+  const pause = () => {
+    if (result) return
+    onPause?.(card)
+    next()
   }
 
   return (
@@ -143,9 +169,14 @@ export default function GoldenErrorReview({ cards, onAnswer, onBack }: GoldenErr
               <button type="button" onClick={reveal}>
                 不会，看答案
               </button>
+              {onPause && (
+                <button type="button" onClick={pause}>
+                  以后不再考
+                </button>
+              )}
             </>
           )}
-          {result && (
+          {result && !result.pending && (
             <button type="submit" className="primary">
               {index + 1 >= cards.length ? '看本轮结果' : '下一个'}
             </button>
@@ -153,11 +184,27 @@ export default function GoldenErrorReview({ cards, onAnswer, onBack }: GoldenErr
         </form>
         {result && (
           <div className={`golden-recall-result ${result.correct ? 'good' : 'bad'}`}>
-            {result.correct ? '✅ 对了' : result.revealed ? '先看答案，算一次错' : '❌ 还不对'}
+            {result.pending
+              ? '先看答案，按你刚才的思路自评：'
+              : result.correct
+                ? '✅ 对了'
+                : result.revealed
+                  ? '先看答案，算一次错'
+                  : '❌ 还不对'}
             <div>
               正确写法：<b>{card.suggestion}</b>
             </div>
             {card.reason && <div className="muted">{card.reason}</div>}
+            {result.pending && (
+              <div className="bar golden-plan-bar">
+                <button type="button" className="primary" onClick={() => selfGrade(true)}>
+                  我写对了
+                </button>
+                <button type="button" onClick={() => selfGrade(false)}>
+                  还是不会
+                </button>
+              </div>
+            )}
           </div>
         )}
       </div>

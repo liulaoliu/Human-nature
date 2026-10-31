@@ -7,7 +7,15 @@ import type { ActivityCat } from '../../core/activity'
 import { isGoldenWritingRecord, WRITING_HISTORY_WARN_AT, type WritingRecord } from '../../core/writing'
 import type { WritingRecommendationGroup } from '../../core/writingErrors'
 import type { WritingErrorCard } from '../../core/writingErrorReview'
+import { collectWritingErrorCards } from '../../core/writingErrorReview'
 import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
+import type { WritingErrorProgress } from '../../core/writingErrorProgress'
+import {
+  applyWritingErrorReview,
+  setWritingErrorProgressStatus,
+  syncWritingErrorProgress,
+  writingErrorProgressFromEvents,
+} from '../../core/writingErrorProgress'
 import { langPointChoiceId, langPointChoices } from '../../core/goldenLangPoint'
 import { writingHistoryToPrintHTML } from '../../core/writingExport'
 import { openPrintWindow } from './printWindow'
@@ -30,6 +38,8 @@ interface GoldenFeatureArgs {
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
   answerEvents: readonly AnswerEvent[]
+  writingErrorProgress: readonly WritingErrorProgress[]
+  setWritingErrorProgress: Dispatch<SetStateAction<WritingErrorProgress[]>>
   recordAnswer: (event: AnswerEventInput) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
   download: (name: string, data: string, mime: string) => void
@@ -54,6 +64,8 @@ export function useGoldenFeature({
   writingHistory,
   setWritingHistory,
   answerEvents,
+  writingErrorProgress,
+  setWritingErrorProgress,
   recordAnswer,
   recordActivity,
   download,
@@ -160,6 +172,22 @@ export function useGoldenFeature({
     }
   }, [writingHistory, golden.articleId])
 
+  const allCards = useMemo(
+    () => collectWritingErrorCards(history.all, { scope: 'all' }),
+    [history.all],
+  )
+  // 新批改产生新错因时补一行进度（不覆盖已有 streak / paused）；只在新卡出现时写一次。
+  useEffect(() => {
+    if (!allCards.length) return
+    const { next, added } = syncWritingErrorProgress(
+      writingErrorProgress,
+      allCards,
+      new Date().toISOString(),
+      answerEvents,
+    )
+    if (added) setWritingErrorProgress(next)
+  }, [allCards, writingErrorProgress, answerEvents, setWritingErrorProgress])
+
   const actions: GoldenPanelActions = {
     onExportMarkdown: bank.exportLesson,
     onGenerate,
@@ -187,8 +215,15 @@ export function useGoldenFeature({
           ...(rec.issueKey ? { issueKey: rec.issueKey } : {}),
         })
       },
-      answerEvents,
+      writingErrorProgress,
       onReviewAnswer: (card: WritingErrorCard, correct: boolean) => {
+        const nowIso = new Date().toISOString()
+        setWritingErrorProgress((prev) => {
+          const old = prev.find((p) => p.id === card.id)
+          const base = old ?? writingErrorProgressFromEvents(card, answerEvents, nowIso)
+          const updated = applyWritingErrorReview(base, card, correct, nowIso)
+          return [updated, ...prev.filter((p) => p.id !== card.id)]
+        })
         recordAnswer({
           articleId: card.articleId,
           source: 'golden',
@@ -198,6 +233,22 @@ export function useGoldenFeature({
           questionId: card.id,
         })
         recordActivity('write', 1)
+      },
+      onPauseReview: (card: WritingErrorCard) => {
+        const nowIso = new Date().toISOString()
+        setWritingErrorProgress((prev) => {
+          const old = prev.find((p) => p.id === card.id)
+          const updated = setWritingErrorProgressStatus(old, card, 'paused', nowIso)
+          return [updated, ...prev.filter((p) => p.id !== card.id)]
+        })
+      },
+      onResumeReview: (card: WritingErrorCard) => {
+        const nowIso = new Date().toISOString()
+        setWritingErrorProgress((prev) => {
+          const old = prev.find((p) => p.id === card.id)
+          const updated = setWritingErrorProgressStatus(old, card, 'active', nowIso)
+          return [updated, ...prev.filter((p) => p.id !== card.id)]
+        })
       },
       extraPoints: golden.extraPoints,
       onRemovePoint: golden.removeExtraPoint,

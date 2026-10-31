@@ -740,3 +740,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     一起哈希，往 targets 里追加语言点会让现有 `GoldenDrillRecord` 全部对不上、进度归零。
     用户主动加的语言点放 `GoldenLesson.extraPoints`，只影响「语言点造句」的可选项；
     同句同英文去重，改正文 / 删句时随 `normalizeGoldenLesson` / `pruneGoldenLesson` 一起清掉。
+ 61. **新增学习表要在 v7 baseline 之前建**（2026-10-31）。`SCHEMA_V11` 的
+    `writing_error_progress` 如果只放在 v11 分支，v7 迁移里的 `saveDerivedBaseline()`
+    会先 `loadLearning()`，于是新库直接 `no such table: writing_error_progress`，`openStore` 返回 null。
+    v7 分支要像 v8/v9 一样提前 `db.exec(SCHEMA_V11)`；v11 分支仍保留幂等创建。

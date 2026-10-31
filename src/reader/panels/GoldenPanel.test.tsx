@@ -246,7 +246,7 @@ describe('GoldenPanel', () => {
     const setView = vi.fn()
     const onAddPoint = vi.fn()
     const onReviewAnswer = vi.fn()
-    const errors = { onAddPoint, answerEvents: [], onReviewAnswer }
+    const errors = { onAddPoint, writingErrorProgress: [], onReviewAnswer }
     const { unmount } = render(
       <GoldenPanel
         api={fakeApi({ setView })}

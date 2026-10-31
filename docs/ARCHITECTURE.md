@@ -89,8 +89,8 @@ types ← core ← adapters ← reader
 | D老师小课堂：AI 提示词 / 解析 / 与本地合并 | `src/core/goldenAi.ts` | AI 只挑句/加注释，不写原句；目标必须逐字出现；AI 与本地目标取并集，本地语言点不被 AI 覆盖 |
 | 仿写批改契约 v2 / 错因标签 | `src/core/writing.ts` + `src/core/writingErrorRules.ts` | 批改只认 `version: 2`；每条 issue 的 `rule` 来自闭集、`key` 是具体卡身份；旧记录用 `tools/backfill-writing-v2.mjs` 一次性回填；视图不许另写一套分类 |
 | 错因趋势 / 推荐聚合 | `src/core/writingErrors.ts` | 本篇 / 全库、规则 / 类型 / 句子 / 推荐都从 v2 记录现算；同一记录同 key 去重；分数统一百分制 |
-| 错因复习（Leitner） | `src/core/writingErrorReview.ts` | 到期状态从 `answerEvents`（`questionId=errfix:<rule>|<key>`）现算，不新增表；答错 1 天、连对 3/7/14/30/60 天，连对 6 次移出队列 |
-| 错因复盘 / 复习界面 | `src/reader/panels/golden/GoldenErrorsView.tsx` + `GoldenErrorReview.tsx` | 只读聚合结果；`GoldenPanel` 负责视图路由；加入本课走 `useGoldenFeature` 的 `errors.onAddPoint` |
+| 错因复习（Leitner） | `src/core/writingErrorProgress.ts` + `writingErrorReview.ts` | v11 `writing_error_progress` 为持久状态；答错 1 天、连对 3/7/14/30/60 天，连对 6 次移出队列；暂停/恢复也在这里 |
+| 错因复习界面 / 状态写入 | `GoldenErrorReview.tsx` + `useGoldenFeature.ts` | 状态表由 `setWritingErrorProgress` 唯一写入；`answerEvents` 只做审计；长答案先看答案再自评，不逼整段输入 |
 | 金句课「加入本课」语言点 | `GoldenLesson.extraPoints` + `core/goldenLangPoint.ts` | 只追加到语言点造句的可选项，**不写 `sentences[].targets`**（targets 参与 `goldenDrillKey`，改了会让进度失效）；同句同英文去重，改正文时随句子 prune |
 | 金句课 → 仿写 | `src/reader/hooks/useWriting.ts` 的 `start({ model, mustUse })` | 总结页「去仿写」把本课目标带进 mustUse；不另写一套仿写提示词 |
 | 全库金句本 / Markdown / Anki / A4 | `src/core/goldenBank.ts` | 只读摊平 `SavedArticle.golden` + `goldenDrills`；搜索/状态筛选/导出，不写库 |

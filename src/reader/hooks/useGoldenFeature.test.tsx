@@ -6,6 +6,7 @@ import type { useGoldenDrill } from './useGoldenDrill'
 import type { ReaderDoc } from './useReaderDoc'
 import type { SavedArticle, Sentence } from '../../types/document'
 import { useGoldenFeature } from './useGoldenFeature'
+import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 
 const sentence: Sentence = {
   id: 's1',
@@ -62,6 +63,8 @@ describe('useGoldenFeature', () => {
         writingHistory: [],
         setWritingHistory: vi.fn(),
         answerEvents: [],
+        writingErrorProgress: [],
+        setWritingErrorProgress: vi.fn(),
         recordAnswer: vi.fn(),
         recordActivity: vi.fn(),
         download: vi.fn(),
@@ -104,6 +107,8 @@ describe('useGoldenFeature', () => {
         writingHistory: [],
         setWritingHistory: vi.fn(),
         answerEvents: [],
+        writingErrorProgress: [],
+        setWritingErrorProgress: vi.fn(),
         recordAnswer: vi.fn(),
         recordActivity: vi.fn(),
         download: vi.fn(),
@@ -120,6 +125,7 @@ describe('useGoldenFeature', () => {
     const recordAnswer = vi.fn()
     const recordActivity = vi.fn()
     const addExtraPoint = vi.fn()
+    const setWritingErrorProgress = vi.fn()
     const golden = {
       lesson: doc.golden,
       articleId: 'a1',
@@ -141,6 +147,8 @@ describe('useGoldenFeature', () => {
         writingHistory: [],
         setWritingHistory: vi.fn(),
         answerEvents: [],
+        writingErrorProgress: [],
+        setWritingErrorProgress,
         recordAnswer,
         recordActivity,
         download: vi.fn(),
@@ -172,6 +180,12 @@ describe('useGoldenFeature', () => {
       questionId: card.id,
     })
     expect(recordActivity).toHaveBeenCalledWith('write', 1)
+    expect(setWritingErrorProgress).toHaveBeenCalled()
+    const updater = setWritingErrorProgress.mock.calls[0][0] as (
+      prev: WritingErrorProgress[],
+    ) => WritingErrorProgress[]
+    const next = updater([])
+    expect(next[0]).toMatchObject({ id: card.id, status: 'active', streak: 1, reviews: 1, lastCorrect: true })
 
     act(() =>
       result.current.actions.errors?.onAddPoint?.({

@@ -48,4 +48,28 @@ describe('GoldenErrorReview', () => {
     render(<GoldenErrorReview cards={[]} onAnswer={vi.fn()} onBack={vi.fn()} />)
     expect(screen.getByText(/今天没有到期的错因卡/)).toBeTruthy()
   })
+
+  it('长答案先看答案再自评，不逼用户整段输入', () => {
+    const longCard: WritingErrorCard = {
+      ...card,
+      suggestion: 'Much as we were told last year, the company is cutting costs again.',
+    }
+    const onAnswer = vi.fn()
+    render(<GoldenErrorReview cards={[longCard]} onAnswer={onAnswer} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '不会，看答案' }))
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '我写对了' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '我写对了' }))
+    expect(onAnswer).toHaveBeenCalledWith(longCard, true)
+  })
+
+  it('可以暂停当前错因，不再进队列', () => {
+    const onAnswer = vi.fn()
+    const onPause = vi.fn()
+    render(<GoldenErrorReview cards={[card]} onAnswer={onAnswer} onPause={onPause} onBack={vi.fn()} />)
+    fireEvent.click(screen.getByRole('button', { name: '以后不再考' }))
+    expect(onPause).toHaveBeenCalledWith(card)
+    expect(onAnswer).not.toHaveBeenCalled()
+    expect(screen.getByText(/本轮完成/)).toBeTruthy()
+  })
 })
