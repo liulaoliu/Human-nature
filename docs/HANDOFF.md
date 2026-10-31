@@ -9,7 +9,7 @@
 - 分支 `main`；批改契约升到 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 仍是 v10（不新增表）
 - 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
   回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
-- 门禁：`npm run gates` 全绿（本轮最终数字见提交记录 / 下面的 2026-10-29 对照）
+- 门禁：`npm run gates` 全绿（327 文件 / 2896 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
 
 ### 这轮做了什么
 
