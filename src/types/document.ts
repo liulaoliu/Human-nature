@@ -419,6 +419,24 @@ export interface GoldenSection {
 /** 一篇文章的金句课内容。AI 生成或本地推导，存 `SavedArticle.golden`。 */
 export type GoldenPickMode = 'recommended' | 'all' | 'manual' | 'ai'
 
+/**
+ * 用户从「错因复盘」加进本课的语言点。
+ *
+ * 为什么不塞进 `sentences[].targets`：`goldenDrillKey` 会把 targets 算进哈希，
+ * 改 targets 等于让现有进度 / 掌握状态全部失效。extraPoints 只影响「语言点造句」
+ * 的可选项，不动填空 / 拼句的身份。
+ */
+export interface GoldenExtraPoint {
+  sentenceId: string
+  en: string
+  zh?: string
+  kind: 'chunk' | 'pattern' | 'collocation' | 'idiom' | 'usage'
+  source: 'ai' | 'user'
+  /** 从哪条错因推荐来的；只做展示/去重，不参与键 */
+  issueKey?: string
+  at?: string
+}
+
 export interface GoldenLesson {
   version: 1
   source: 'ai' | 'local' | 'merged'
@@ -431,6 +449,8 @@ export interface GoldenLesson {
   aiSelected?: string[]
   /** 完成若干句后解锁的仿写考试题；AI 生成，缺省时按已完成句子本地生成 */
   exam?: GoldenExamItem[]
+  /** 错因复盘里「加入本课」的语言点（与 targets 分开，避免改哈希） */
+  extraPoints?: GoldenExtraPoint[]
   /** 本课设置：是否把同一目标只练第一次出现（默认关）；金句来源；填空单位；整句渐进；考试门槛 */
   options?: {
     dedupe?: boolean

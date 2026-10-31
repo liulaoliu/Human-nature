@@ -73,6 +73,48 @@ describe('normalize / prune golden lesson', () => {
     expect(pruneGoldenLesson(withExam!, [{ id: 's1', text: 'Completely different.' }])).toBeUndefined()
   })
 
+  it('extraPoints：只留当前句子，同英文去重，坏 kind 归 chunk', () => {
+    const lesson = normalizeGoldenLesson(
+      {
+        ...raw,
+        extraPoints: [
+          { sentenceId: 's1', en: 'come to an end', zh: '结束', kind: 'chunk', source: 'ai' },
+          { sentenceId: 's1', en: 'come  to an end', kind: 'weird' },
+          { sentenceId: 's404', en: 'gone', kind: 'chunk' },
+        ],
+      },
+      sentences,
+    )
+    expect(lesson?.extraPoints).toHaveLength(1)
+    expect(lesson?.extraPoints?.[0]).toMatchObject({ sentenceId: 's1', kind: 'chunk', source: 'ai' })
+  })
+
+  it('导入合并时 extraPoints 取并集，不因重新生成丢掉', () => {
+    const base = normalizeGoldenLesson(
+      { ...raw, extraPoints: [{ sentenceId: 's1', en: 'come to an end', kind: 'chunk' }] },
+      sentences,
+    )!
+    const next = normalizeGoldenLesson(
+      { ...raw, summary: '新', extraPoints: [{ sentenceId: 's1', en: 'bring an end to', kind: 'chunk' }] },
+      sentences,
+    )!
+    const existing = { updatedAt: '2026-10-01T00:00:00.000Z', golden: base }
+    const incoming = { updatedAt: '2026-10-02T00:00:00.000Z', golden: next }
+    expect(mergeGoldenIntoArticle(existing, incoming).golden?.extraPoints?.map((p) => p.en)).toEqual([
+      'come to an end',
+      'bring an end to',
+    ])
+  })
+
+  it('prune 后句子没了，extraPoints 也不留', () => {
+    const lesson = normalizeGoldenLesson(
+      { ...raw, extraPoints: [{ sentenceId: 's1', en: 'come to an end', kind: 'chunk' }] },
+      sentences,
+    )!
+    expect(pruneGoldenLesson(lesson, [{ id: 's1', text: 'Completely different.' }])).toBeUndefined()
+    expect(pruneGoldenLesson(lesson, sentences)?.extraPoints).toHaveLength(1)
+  })
+
   it('drillKey 对文本/目标敏感', () => {
     const a = goldenDrillKey('abc', [{ en: 'a', kind: 'word' }])
     const b = goldenDrillKey('abc', [{ en: 'a', kind: 'word' }])

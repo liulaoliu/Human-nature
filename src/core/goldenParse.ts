@@ -1,6 +1,56 @@
 import { isObject, normalizeGoldenTargets, str, strList, type GoldenTextMeta } from './golden'
 import { normalizeGoldenExam, pruneGoldenExam } from './goldenExam'
-import type { GoldenLesson, GoldenPickMode, GoldenSection, GoldenSentence } from '../types/document'
+import type {
+  GoldenExtraPoint,
+  GoldenLesson,
+  GoldenPickMode,
+  GoldenSection,
+  GoldenSentence,
+} from '../types/document'
+
+const EXTRA_KINDS = ['chunk', 'pattern', 'collocation', 'idiom', 'usage'] as const
+
+function extraKey(sentenceId: string, en: string): string {
+  return `${sentenceId}\u0000${en.replace(/\s+/g, ' ').trim().toLowerCase()}`
+}
+
+/**
+ * 「加入本课」的语言点：句子必须还在；同句同英文去重；最多 50 条。
+ * 这是外部输入（备份 / SQLite / AI 推荐），坏条目丢弃，不拖垮整课。
+ */
+export function normalizeGoldenExtraPoints(
+  raw: unknown,
+  sentenceIds: ReadonlySet<string>,
+): GoldenExtraPoint[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: GoldenExtraPoint[] = []
+  for (const item of raw) {
+    if (!isObject(item)) continue
+    const sentenceId = str(item.sentenceId)
+    const en = str(item.en).replace(/\s+/g, ' ')
+    if (!sentenceId || !en || !sentenceIds.has(sentenceId)) continue
+    const kind = (EXTRA_KINDS as readonly string[]).includes(str(item.kind))
+      ? (str(item.kind) as GoldenExtraPoint['kind'])
+      : 'chunk'
+    const source = item.source === 'user' ? 'user' : item.source === 'ai' ? 'ai' : 'user'
+    const key = extraKey(sentenceId, en)
+    if (seen.has(key)) continue
+    seen.add(key)
+    out.push({
+      sentenceId,
+      en,
+      ...(str(item.zh) ? { zh: str(item.zh) } : {}),
+      kind,
+      source,
+      ...(str(item.issueKey) ? { issueKey: str(item.issueKey) } : {}),
+      ...(str(item.at) ? { at: str(item.at) } : {}),
+    })
+    if (out.length >= 50) break
+  }
+  return out
+}
+
 
 /**
  * 外部输入（AI / 备份 / SQLite / IndexedDB）→ 金句课内容。
@@ -42,6 +92,7 @@ export function normalizeGoldenLesson(raw: unknown, sentences: GoldenTextMeta[])
     outline.push({ paraId, role, ...(str(item.title) ? { title: str(item.title) } : {}), points })
   }
   const validIds = new Set(out.map((s) => s.id))
+  const extraPoints = normalizeGoldenExtraPoints(raw.extraPoints, validIds)
   const selected = strList(raw.selected).filter((id) => validIds.has(id))
   const aiSelected = strList(raw.aiSelected).filter((id) => validIds.has(id))
   const rawPick = isObject(raw.options) ? raw.options.pick : undefined
@@ -71,6 +122,7 @@ export function normalizeGoldenLesson(raw: unknown, sentences: GoldenTextMeta[])
     sentences: out,
     selected: selected.length ? selected : out.map((s) => s.id),
     ...(aiSelected.length ? { aiSelected } : {}),
+    ...(extraPoints.length ? { extraPoints } : {}),
     ...(exam.length ? { exam } : {}),
     options,
     ...(str(raw.updatedAt) ? { updatedAt: str(raw.updatedAt) } : {}),
@@ -87,9 +139,21 @@ export function mergeGoldenIntoArticle<T extends { golden?: GoldenLesson; update
 ): T {
   const current = existing?.golden
   const next = incoming.golden
-  const golden =
+  const base =
     next && (!current || incoming.updatedAt >= existing!.updatedAt) ? next : current ?? next
-  return { ...incoming, ...(golden ? { golden } : {}) }
+  if (!base) return { ...incoming }
+  // 用户点「加入本课」的结果不能因为重新生成 / 导入旧备份就丢；两边取并集。
+  const seen = new Set<string>()
+  const extraPoints = [...(current?.extraPoints ?? []), ...(next?.extraPoints ?? [])].filter(
+    (p) => {
+      const key = extraKey(p.sentenceId, p.en)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    },
+  )
+  const merged = extraPoints.length ? { ...base, extraPoints } : base
+  return { ...incoming, golden: merged }
 }
 
 /** 改正文后丢掉已经不存在 / 内容对不上的句子；没有可练目标就整课作废。 */

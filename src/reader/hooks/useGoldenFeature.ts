@@ -5,6 +5,7 @@ import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { isGoldenWritingRecord, WRITING_HISTORY_WARN_AT, type WritingRecord } from '../../core/writing'
+import { langPointChoiceId, langPointChoices } from '../../core/goldenLangPoint'
 import { writingHistoryToPrintHTML } from '../../core/writingExport'
 import { openPrintWindow } from './printWindow'
 import type { ReaderDoc } from './useReaderDoc'
@@ -73,6 +74,21 @@ export function useGoldenFeature({
         : null,
     [golden.lesson, golden.currentSentence, doc?.sentences],
   )
+  const currentExtraPoints = useMemo(
+    () => (golden.currentSentence ? golden.extraPointsFor(golden.currentSentence.id) : []),
+    [golden.currentSentence, golden.extraPointsFor],
+  )
+  /** 批改提示词里可引用的文章语言点；id 与「加入本课」使用同一套 slug。 */
+  const availablePoints = useMemo(() => {
+    const s = golden.currentSentence ? golden.bySentence.get(golden.currentSentence.id) : null
+    if (!s) return []
+    return langPointChoices(s, undefined, currentExtraPoints).map((c) => ({
+      id: langPointChoiceId(s.id, c.en),
+      en: c.en,
+      ...(c.zh ? { zh: c.zh } : {}),
+      kind: 'chunk',
+    }))
+  }, [golden.currentSentence, golden.bySentence, currentExtraPoints])
   const sentenceImitation = useGoldenImitation({
     current: sentenceItem,
     articleId: golden.articleId,
@@ -80,6 +96,7 @@ export function useGoldenFeature({
     source: 'goldenSentence',
     setWritingHistory,
     writingHistory,
+    availablePoints,
     flash,
     recordActivity,
   })
@@ -119,6 +136,7 @@ export function useGoldenFeature({
     articleTitle,
     writingHistory,
     setWritingHistory,
+    extraPoints: currentExtraPoints,
     flash,
     recordActivity,
   })

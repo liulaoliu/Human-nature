@@ -63,4 +63,39 @@ describe('useGoldenLesson', () => {
     expect(h.result.current.doc?.golden?.options?.blankUnit).toBe('target')
     expect(h.result.current.doc?.golden?.selected).toEqual(['s1', 's2'])
   })
+
+  it('加入本课写 extraPoints，不动 targets；重复 / 不存在的句子拒绝', () => {
+    const h = setup()
+    act(() => h.result.current.api.setPick('all'))
+    const targetsBefore = JSON.stringify(h.result.current.doc?.golden?.sentences[0].targets)
+    act(() =>
+      h.result.current.api.addExtraPoint({
+        sentenceId: 's1',
+        en: 'come to an end',
+        zh: '结束',
+        kind: 'chunk',
+      }),
+    )
+    expect(h.result.current.doc?.golden?.extraPoints).toHaveLength(1)
+    expect(h.result.current.api.extraPointsFor('s1').map((p) => p.en)).toEqual(['come to an end'])
+    expect(JSON.stringify(h.result.current.doc?.golden?.sentences[0].targets)).toBe(targetsBefore)
+
+    act(() =>
+      h.result.current.api.addExtraPoint({
+        sentenceId: 's1',
+        en: '  come  to an end ',
+        kind: 'chunk',
+      }),
+    )
+    expect(h.result.current.doc?.golden?.extraPoints).toHaveLength(1)
+    expect(h.flash).toHaveBeenCalledWith('这个语言点已经在本课里了')
+
+    act(() =>
+      h.result.current.api.addExtraPoint({ sentenceId: 's404', en: 'x', kind: 'chunk' }),
+    )
+    expect(h.flash).toHaveBeenCalledWith('这个语言点对应的句子不在当前文章里')
+
+    act(() => h.result.current.api.removeExtraPoint('s1', 'come to an end'))
+    expect(h.result.current.doc?.golden?.extraPoints).toBeUndefined()
+  })
 })

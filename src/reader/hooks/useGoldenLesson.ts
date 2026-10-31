@@ -14,7 +14,14 @@ import {
   summarizeGolden,
   type GoldenDrillRecord,
 } from '../../core/goldenProgress'
-import type { GoldenLesson, GoldenPickMode, GoldenSentence, Sentence } from '../../types/document'
+import type {
+  GoldenExtraPoint,
+  GoldenLesson,
+  GoldenPickMode,
+  GoldenSentence,
+  Sentence,
+} from '../../types/document'
+import { langPointKey } from '../../core/goldenLangPoint'
 import type { ReaderDoc } from './useReaderDoc'
 
 interface UseGoldenLessonParams {
@@ -188,6 +195,81 @@ export function useGoldenLesson({
     [lesson, persistLesson],
   )
 
+  const extraPoints = lesson?.extraPoints ?? []
+
+  const extraPointsFor = useCallback(
+    (sentenceId: string): GoldenExtraPoint[] =>
+      extraPoints.filter((p) => p.sentenceId === sentenceId),
+    [extraPoints],
+  )
+
+  /**
+   * 「加入本课」：写 `extraPoints`，不碰 `sentences[].targets`。
+   * 返回 false 时调用方不用再提示，这里已经 flash。
+   */
+  const addExtraPoint = useCallback(
+    (input: {
+      sentenceId: string
+      en: string
+      zh?: string
+      kind: GoldenExtraPoint['kind']
+      issueKey?: string
+      source?: GoldenExtraPoint['source']
+      at?: string
+    }): boolean => {
+      if (!lesson || !doc) {
+        flash('先展开金句课，再加入语言点')
+        return false
+      }
+      const en = input.en.replace(/\s+/g, ' ').trim()
+      if (!en) return false
+      if (!doc.sentences.some((s) => s.id === input.sentenceId)) {
+        flash('这个语言点对应的句子不在当前文章里')
+        return false
+      }
+      const key = langPointKey(en)
+      const exists = (lesson.extraPoints ?? []).some(
+        (p) => p.sentenceId === input.sentenceId && langPointKey(p.en) === key,
+      )
+      if (exists) {
+        flash('这个语言点已经在本课里了')
+        return false
+      }
+      const nextPoint: GoldenExtraPoint = {
+        sentenceId: input.sentenceId,
+        en,
+        ...(input.zh?.trim() ? { zh: input.zh.trim() } : {}),
+        kind: input.kind,
+        source: input.source ?? 'ai',
+        ...(input.issueKey ? { issueKey: input.issueKey } : {}),
+        ...(input.at ? { at: input.at } : { at: new Date().toISOString() }),
+      }
+      persistLesson({
+        ...lesson,
+        extraPoints: [...(lesson.extraPoints ?? []), nextPoint].slice(-50),
+        updatedAt: new Date().toISOString(),
+      })
+      flash('已加入本课；在「语言点造句」里会多这一项')
+      return true
+    },
+    [lesson, doc, persistLesson, flash],
+  )
+
+  const removeExtraPoint = useCallback(
+    (sentenceId: string, en: string) => {
+      if (!lesson) return
+      const key = langPointKey(en)
+      const next = (lesson.extraPoints ?? []).filter(
+        (p) => !(p.sentenceId === sentenceId && langPointKey(p.en) === key),
+      )
+      persistLesson({
+        ...lesson,
+        ...(next.length ? { extraPoints: next } : { extraPoints: undefined }),
+      })
+    },
+    [lesson, persistLesson],
+  )
+
   return {
     lesson,
     ordered,
@@ -202,5 +284,9 @@ export function useGoldenLesson({
     setBlankUnit,
     setSentenceFill,
     setExamAfter,
+    extraPoints,
+    extraPointsFor,
+    addExtraPoint,
+    removeExtraPoint,
   }
 }

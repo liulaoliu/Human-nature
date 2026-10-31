@@ -12,6 +12,8 @@ export interface UseGoldenLangPointParams {
   /** 全库写作历史：给选项打 ✓，也让每个作答框翻同一题的历史批改 */
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  /** 本句「加入本课」的额外语言点；只影响可选项，不改进度键 */
+  extraPoints?: ReadonlyArray<{ en: string; zh?: string }>
   flash: (message: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
 }
@@ -48,6 +50,7 @@ export function useGoldenLangPoint({
   articleTitle,
   writingHistory,
   setWritingHistory,
+  extraPoints,
   flash,
   recordActivity,
 }: UseGoldenLangPointParams): GoldenLangPointApi {
@@ -55,7 +58,10 @@ export function useGoldenLangPoint({
     () => (sentence ? doneLangPoints(writingHistory, articleId, sentence.id) : EMPTY),
     [writingHistory, articleId, sentence],
   )
-  const choices = useMemo(() => langPointChoices(sentence, done), [sentence, done])
+  const choices = useMemo(
+    () => langPointChoices(sentence, done, extraPoints),
+    [sentence, done, extraPoints],
+  )
 
   const [picked, setPicked] = useState<string[]>([])
   const [pickedFor, setPickedFor] = useState<string | null>(null)

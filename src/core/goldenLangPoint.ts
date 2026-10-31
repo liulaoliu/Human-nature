@@ -26,6 +26,7 @@ const keyOf = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
 export function langPointChoices(
   sentence: Pick<Sentence, 'language' | 'languages'> | null | undefined,
   doneFocus?: ReadonlySet<string>,
+  extraPoints?: ReadonlyArray<{ en: string; zh?: string }>,
 ): LangPointChoice[] {
   if (!sentence) return []
   const done = doneFocus ?? new Set<string>()
@@ -41,6 +42,15 @@ export function langPointChoices(
       seen.add(k)
       out.push({ en, ...(gloss ? { zh: gloss } : {}), done: done.has(k) })
     }
+  }
+  // 「加入本课」是用户主动加的，排在文章自带的语言点后面；同英文只留一条。
+  for (const p of extraPoints ?? []) {
+    const en = p.en.replace(/\s+/g, ' ').trim()
+    if (!en) continue
+    const k = keyOf(en)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push({ en, ...(p.zh ? { zh: p.zh } : {}), done: done.has(k) })
   }
   return out
 }
@@ -63,4 +73,10 @@ export function doneLangPoints(
 /** focus 的比较口径（大小写 / 空白不敏感）。 */
 export function langPointKey(text: string): string {
   return keyOf(text)
+}
+
+/** AI 批改引用文章语言点时的稳定 id：`lp:<sentenceId>:<slug>`。 */
+export function langPointChoiceId(sentenceId: string, en: string): string {
+  const slug = keyOf(en).replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+  return `lp:${sentenceId}:${slug || 'x'}`
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { doneLangPoints, langPointChoices, langPointKey } from './goldenLangPoint'
+import { doneLangPoints, langPointChoiceId, langPointChoices, langPointKey } from './goldenLangPoint'
 import type { Sentence } from '../types/document'
 
 const S = (over: Partial<Sentence> = {}): Sentence => ({
@@ -42,6 +42,20 @@ describe('langPointChoices：本句可单练的词块', () => {
     const done = new Set([langPointKey('come with')])
     const choices = langPointChoices(withLangs(['come with — 配备', 'serve small niches']), done)
     expect(choices.map((c) => c.done)).toEqual([true, false])
+  })
+
+  it('加入本课的 extraPoints 追加在后，同英文不重复；id 稳定', () => {
+    const choices = langPointChoices(
+      withLangs(['come with — 配备']),
+      new Set(),
+      [
+        { en: 'come with', zh: '重复' },
+        { en: 'come to an end', zh: '结束' },
+      ],
+    )
+    expect(choices.map((c) => c.en)).toEqual(['come with', 'come to an end'])
+    expect(choices[0].zh).toBe('配备')
+    expect(langPointChoiceId('s1', 'come to an end')).toBe('lp:s1:come-to-an-end')
   })
 })
 
