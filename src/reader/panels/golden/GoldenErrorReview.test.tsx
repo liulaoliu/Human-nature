@@ -116,7 +116,34 @@ describe('GoldenErrorReview', () => {
     expect(screen.getByText(/第 1 \/ 2 张/)).toBeTruthy()
     fireEvent.click(screen.getByRole('checkbox', { name: '练过的不练' }))
     expect(screen.getByText(/第 1 \/ 1 张/)).toBeTruthy()
-    expect(screen.getByText(/已跳过 1 张练过的/)).toBeTruthy()
+    expect(screen.getByText(/已跳过 1 张/)).toBeTruthy()
+  })
+
+  it('对的不练：跳过上次答对的卡，保留上次答错的卡', () => {
+    const wrongCard: WritingErrorCard = {
+      ...card,
+      id: 'errfix:tense-choice|tense-choice',
+      rule: 'tense-choice',
+      type: 'grammar',
+      key: 'tense-choice',
+      original: 'go',
+      suggestion: 'went',
+      text: 'I go home.',
+    }
+    const now = '2026-10-31T12:00:00.000Z'
+    const correctProgress = applyWritingErrorReview(undefined, card, true, now)
+    const wrongProgress = applyWritingErrorReview(undefined, wrongCard, false, now)
+    render(
+      <GoldenErrorReview
+        cards={[card, wrongCard]}
+        writingErrorProgress={[correctProgress, wrongProgress]}
+        onAnswer={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('checkbox', { name: '对的不练' }))
+    expect(screen.getByText(/第 1 \/ 1 张/)).toBeTruthy()
+    expect(screen.getByText('go')).toBeTruthy()
   })
 
   it('本地检查后可以走 AI 批改入口，记录进学习历史', () => {

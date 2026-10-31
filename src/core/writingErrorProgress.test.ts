@@ -3,6 +3,7 @@ import type { AnswerEvent } from './answerEvents'
 import type { WritingErrorCard } from './writingErrorReview'
 import {
   applyWritingErrorReview,
+  correctWritingErrorCards,
   dueCardsFromProgress,
   mergeWritingErrorProgress,
   normalizeWritingErrorProgress,
@@ -102,6 +103,14 @@ describe('writingErrorProgress', () => {
     expect(unpracticedWritingErrorCards([card, other], [practiced, legacy]).map((c) => c.id)).toEqual([])
     expect(unpracticedWritingErrorCards([card, other], [practiced])).toEqual([other])
     expect(unpracticedWritingErrorCards([card, other], [])).toEqual([card, other])
+  })
+
+  it('「对的不练」只滤掉上次答对 / 连续答对的卡；上次答错仍保留', () => {
+    const correct = applyWritingErrorReview(undefined, card, true, NOW)
+    const wrong = applyWritingErrorReview(undefined, other, false, NOW)
+    expect(correctWritingErrorCards([card, other], [correct]).map((c) => c.id)).toEqual([other.id])
+    expect(correctWritingErrorCards([card, other], [correct, wrong]).map((c) => c.id)).toEqual([other.id])
+    expect(correctWritingErrorCards([card, other], [])).toEqual([card, other])
   })
 
   it('随机 / 全部：不看到期，但跳过 paused；随机最多 20 张且不重复', () => {

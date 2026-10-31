@@ -217,6 +217,11 @@ export function isWritingErrorProgressPracticed(row: WritingErrorProgress | unde
   return !!row && (row.reviews > 0 || !!row.lastAt)
 }
 
+/** 上一次/连续答对：最后一次答错的不算，避免把本轮刚错的卡藏掉。 */
+export function isWritingErrorProgressCorrect(row: WritingErrorProgress | undefined): boolean {
+  return !!row && (row.lastCorrect === true || row.streak > 0)
+}
+
 /** 「练过的不练」：从到期队列里滤掉已有复习记录的卡；没有进度行 = 没练过。 */
 export function unpracticedWritingErrorCards(
   cards: readonly WritingErrorCard[],
@@ -224,6 +229,15 @@ export function unpracticedWritingErrorCards(
 ): WritingErrorCard[] {
   const byId = new Map(progress.map((p) => [p.id, p]))
   return cards.filter((card) => !isWritingErrorProgressPracticed(byId.get(card.id)))
+}
+
+/** 「对的不练」：滤掉上次答对 / 连续答对的卡；上次答错的仍保留。 */
+export function correctWritingErrorCards(
+  cards: readonly WritingErrorCard[],
+  progress: readonly WritingErrorProgress[],
+): WritingErrorCard[] {
+  const byId = new Map(progress.map((p) => [p.id, p]))
+  return cards.filter((card) => !isWritingErrorProgressCorrect(byId.get(card.id)))
 }
 
 /**

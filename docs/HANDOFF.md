@@ -9,7 +9,7 @@
 - 分支 `main`；批改契约 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 升到 **v11**（新增 `writing_error_progress`）
 - 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
   回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
-- 门禁：`npm run gates` 全绿（328 文件 / 2924 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+- 门禁：`npm run gates` 全绿（328 文件 / 2926 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
 
 ### 这轮做了什么
 
@@ -33,8 +33,9 @@
    `goldenDrills`（SQLite `golden_drill_records`），不写错因卡 SRS。
 10. **错因复习体验**：入口分「到期 / 随机（最多 20 张）/ 全部（不看 due，仍跳过 paused）」，
     数据源都跟随复盘页的「本篇/全库 + 时间范围」；判完焦点落到结果块，**Enter 直接下一个**；
-    「练过的不练」按 v11 的 `writing_error_progress.reviews / lastAt` 过滤（进入本轮时给进度拍快照，
-    避免刚答完的卡当场消失）；本地检查后可点 **AI 批改**，复用 `useGoldenImitation`，记录写
+    「练过的不练」按 v11 的 `writing_error_progress.reviews / lastAt` 过滤，「对的不练」按
+    `lastCorrect / streak` 过滤（上次答错的仍保留；进入本轮时给进度拍快照，避免刚答完的卡当场消失）；
+    本地检查后可点 **AI 批改**，复用 `useGoldenImitation`，记录写
     `WritingRecord.source='goldenError'` 并进学习历史；这类记录不反哺错因汇总，避免「改错生新卡」。
 11. **输入焦点**：句子填空进入/切下一组/检查出错时自动聚焦第一个需要填或第一个错的空；错因复习
     下一张卡也把焦点送回输入框。用 `useLayoutEffect`/ref 而不是只靠 `autoFocus`，因为输入框会被 React 复用。

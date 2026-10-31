@@ -4,6 +4,7 @@ import {
   type WritingErrorCard,
 } from '../../../core/writingErrorReview'
 import {
+  correctWritingErrorCards,
   unpracticedWritingErrorCards,
   type WritingErrorProgress,
 } from '../../../core/writingErrorProgress'
@@ -72,6 +73,7 @@ export default function GoldenErrorReview({
   } | null>(null)
   const [correctCount, setCorrectCount] = useState(0)
   const [skipPracticed, setSkipPracticed] = useState(false)
+  const [skipCorrect, setSkipCorrect] = useState(false)
   /**
    * 进入复习时给进度拍个快照。
    *
@@ -81,13 +83,12 @@ export default function GoldenErrorReview({
   const [progressSnapshot] = useState(() => writingErrorProgress ?? [])
   const resultRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const visibleCards = useMemo(
-    () =>
-      skipPracticed
-        ? unpracticedWritingErrorCards(cards, progressSnapshot)
-        : cards,
-    [cards, skipPracticed, progressSnapshot],
-  )
+  const visibleCards = useMemo(() => {
+    let next = cards
+    if (skipPracticed) next = unpracticedWritingErrorCards(next, progressSnapshot)
+    if (skipCorrect) next = correctWritingErrorCards(next, progressSnapshot)
+    return next
+  }, [cards, skipPracticed, skipCorrect, progressSnapshot])
   const card = visibleCards[index]
   const longAnswer =
     !!card &&
@@ -110,23 +111,42 @@ export default function GoldenErrorReview({
     if (!result) inputRef.current?.focus()
   }, [index, result])
 
-  const toggleSkip = (checked: boolean) => {
-    setSkipPracticed(checked)
+  const resetRound = () => {
     setIndex(0)
     setInput('')
     setResult(null)
     setCorrectCount(0)
   }
 
-  const skipToggle = (
-    <label className="check-inline" title="只跳过已经复习过的卡（有复习记录）">
-      <input
-        type="checkbox"
-        checked={skipPracticed}
-        onChange={(e) => toggleSkip(e.target.checked)}
-      />
-      练过的不练
-    </label>
+  const toggleSkip = (checked: boolean) => {
+    setSkipPracticed(checked)
+    resetRound()
+  }
+
+  const toggleCorrect = (checked: boolean) => {
+    setSkipCorrect(checked)
+    resetRound()
+  }
+
+  const filterToggles = (
+    <>
+      <label className="check-inline" title="只跳过已经复习过的卡（有复习记录）">
+        <input
+          type="checkbox"
+          checked={skipPracticed}
+          onChange={(e) => toggleSkip(e.target.checked)}
+        />
+        练过的不练
+      </label>
+      <label className="check-inline" title="跳过上一次答对 / 连续答对的卡；上次答错的仍会考">
+        <input
+          type="checkbox"
+          checked={skipCorrect}
+          onChange={(e) => toggleCorrect(e.target.checked)}
+        />
+        对的不练
+      </label>
+    </>
   )
 
   if (!cards.length) {
@@ -147,10 +167,11 @@ export default function GoldenErrorReview({
         <div className="bar golden-plan-bar">
           <button onClick={onBack}>← 返回错因复盘</button>
           <b>错因复习</b>
-          {skipToggle}
+          {filterToggles}
         </div>
         <div className="golden-summary">
-          这 {cards.length} 张都练过；取消「练过的不练」可以再练，或等下次到期。
+          这 {cards.length} 张都被当前筛选排除了；取消「练过的不练」或「对的不练」可以继续，
+          或等下次到期。
         </div>
       </div>
     )
@@ -162,7 +183,7 @@ export default function GoldenErrorReview({
         <div className="bar golden-plan-bar">
           <button onClick={onBack}>← 返回错因复盘</button>
           <b>错因复习</b>
-          {skipToggle}
+          {filterToggles}
           <span className="muted">
             本轮答对 {correctCount} / {visibleCards.length} 张
           </span>
@@ -224,8 +245,8 @@ export default function GoldenErrorReview({
       <div className="bar golden-plan-bar">
         <button onClick={onBack}>← 返回错因复盘</button>
         <b>错因复习</b>
-        {skipToggle}
-        {skippedCount > 0 && <span className="muted">已跳过 {skippedCount} 张练过的</span>}
+        {filterToggles}
+        {skippedCount > 0 && <span className="muted">已跳过 {skippedCount} 张</span>}
         <span className="muted">
           第 {index + 1} / {visibleCards.length} 张 · 本轮答对 {correctCount}
         </span>
