@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useLayoutEffect, useRef } from 'react'
 import { GOLDEN_TARGET_KIND_LABEL } from '../../../core/golden'
 import type { GoldenCloze } from '../../../core/goldenDrill'
 import GoldenLangPointImitation from './GoldenLangPointImitation'
@@ -52,13 +52,29 @@ export default function GoldenDrillView({
   const cur = api.current
   const sentence = api.currentSentence
   const phase = api.phase
-  const firstInputRef = useRef<HTMLInputElement>(null)
+  const inputRefs = useRef<(HTMLInputElement | null)[]>([])
 
-  // 每组填空开始时回到第一个空；不能靠 autoFocus，输入框会被 React 复用。
-  useEffect(() => {
-    if (phase !== 'fill') return
-    firstInputRef.current?.focus()
-  }, [phase, api.current?.id, api.fillRound, api.fillRoundCount])
+  // 填空的焦点只在这里管：进入/换组回第一个空；检查出错时回到第一个错的空。
+  // 不靠 autoFocus——输入框会被 React 复用，autofocus 只在首次挂载生效。
+  useLayoutEffect(() => {
+    if (phase !== 'fill' || !api.cloze) return
+    if (api.fillCorrect === true || api.fillRoundPassed) return
+    const wrongIndex =
+      api.fillCorrect === false && api.fillChecked
+        ? api.fillChecked.findIndex((ok) => !ok)
+        : -1
+    const target = inputRefs.current[wrongIndex >= 0 ? wrongIndex : 0] ?? inputRefs.current[0]
+    target?.focus()
+  }, [
+    phase,
+    api.current?.id,
+    api.fillRound,
+    api.fillRoundCount,
+    api.fillCorrect,
+    api.fillChecked,
+    api.fillRoundPassed,
+    api.cloze,
+  ])
 
   if (!cur || !sentence) return <div className="golden-body muted">没有可练的句子。</div>
   const fillDone = api.fillRoundPassed || api.fillCorrect === true
@@ -141,7 +157,9 @@ export default function GoldenDrillView({
               <label key={b.index}>
                 <span>[{b.index}] {b.hint ?? GOLDEN_TARGET_KIND_LABEL[b.kind]}</span>
                 <input
-                  ref={b.index === 1 ? firstInputRef : undefined}
+                  ref={(el) => {
+                    inputRefs.current[b.index - 1] = el
+                  }}
                   value={api.fillInputs[b.index - 1] ?? ''}
                   onChange={(e) => {
                     const next = [...api.fillInputs]

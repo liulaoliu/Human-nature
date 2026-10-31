@@ -9,7 +9,7 @@
 - 分支 `main`；批改契约 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 升到 **v11**（新增 `writing_error_progress`）
 - 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
   回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
-- 门禁：`npm run gates` 全绿（328 文件 / 2923 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+- 门禁：`npm run gates` 全绿（328 文件 / 2924 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
 
 ### 这轮做了什么
 
@@ -36,6 +36,8 @@
     「练过的不练」按 v11 的 `writing_error_progress.reviews / lastAt` 过滤（进入本轮时给进度拍快照，
     避免刚答完的卡当场消失）；本地检查后可点 **AI 批改**，复用 `useGoldenImitation`，记录写
     `WritingRecord.source='goldenError'` 并进学习历史；这类记录不反哺错因汇总，避免「改错生新卡」。
+11. **句子填空焦点**：进入填空、切到下一组、检查出错时都自动聚焦到第一个需要填/第一个错的输入框；
+    用 `useLayoutEffect` 而不是 `autoFocus`，因为输入框会被 React 复用。
 
 ### 下一轮优先
 

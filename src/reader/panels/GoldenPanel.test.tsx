@@ -608,6 +608,31 @@ describe('GoldenPanel', () => {
     await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('textbox')[0]))
   })
 
+  it('检查出错后自动聚焦第一个错的空', async () => {
+    const twoBlanks = {
+      sentence: 'We keep up with the news.',
+      parts: [
+        { text: 'We keep ', blank: false },
+        { text: 'up', blank: true, targetIndex: 0, blankIndex: 1 },
+        { text: ' ', blank: false },
+        { text: 'with', blank: true, targetIndex: 0, blankIndex: 2 },
+        { text: ' the news.', blank: false },
+      ],
+      blanks: [
+        { index: 1, targetIndex: 0, wordIndex: 1, answer: 'up', hint: '跟上', kind: 'idiom' },
+        { index: 2, targetIndex: 0, wordIndex: 2, answer: 'with', kind: 'idiom' },
+      ],
+      targets: [{ en: 'keep up with', zh: '跟上', kind: 'idiom' }],
+    }
+    const api = drillApi({
+      cloze: twoBlanks,
+      fillCorrect: false,
+      fillChecked: [true, false],
+    })
+    render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
+    await waitFor(() => expect(document.activeElement).toBe(screen.getAllByRole('textbox')[1]))
+  })
+
   it('本句小结后先进入单句仿写', () => {
     const setPhase = vi.fn()
     const api = drillApi({ phase: 'summary', setPhase })
