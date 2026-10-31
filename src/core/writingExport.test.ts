@@ -12,7 +12,17 @@ describe('writingHistoryToMarkdown（批改成册）', () => {
     task: { task: '仿写 the more… the more…', model: 'M', mustUse: [], rubric: [] },
     feedback: {
       scores: [{ dimension: '结构', score: 4, max: 5, comment: '对称没问题' }],
-      issues: [{ original: 'less I fear', suggestion: 'the less afraid I am', reason: '结构一致' }],
+      issues: [
+        {
+          original: 'less I fear',
+          suggestion: 'the less afraid I am',
+          reason: '结构一致',
+          type: 'grammar',
+          rule: 'grammar-other',
+          key: 'grammar-other',
+          severity: 'must-fix',
+        },
+      ],
       polished: 'The more I read, the less afraid I am.',
       summary: '整体不错，注意平行结构。',
       total: 4,
@@ -53,7 +63,17 @@ describe('writingHistoryToMarkdown（批改成册）', () => {
     const html = writingHistoryToPrintHTML([
       record({ text: 'a < b & c', feedback: {
         scores: [{ dimension: '结构', score: 4, max: 5 }],
-        issues: [{ original: '<x>', suggestion: 'y', reason: 'z' }],
+        issues: [
+          {
+            original: '<x>',
+            suggestion: 'y',
+            reason: 'z',
+            type: 'other',
+            rule: 'other',
+            key: 'other',
+            severity: 'must-fix',
+          },
+        ],
         polished: 'p', summary: 's', total: 4, max: 5,
       } }),
     ])

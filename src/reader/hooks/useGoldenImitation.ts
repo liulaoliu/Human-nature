@@ -2,9 +2,10 @@ import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetState
 import { buildGoldenExamFeedbackPrompt, examToImitation } from '../../core/goldenExam'
 import {
   addWritingRecord,
-  parseWritingFeedback,
+  parseWritingFeedbackDetailed,
   writingAttemptsFor,
   type WritingFeedback,
+  type WritingFeedbackPromptOptions,
   type WritingRecord,
 } from '../../core/writing'
 import type { GoldenExamItem } from '../../types/document'
@@ -25,6 +26,8 @@ export interface UseGoldenImitationParams {
   recordActivity: (cat: ActivityCat, n?: number) => void
   /** 全库写作历史：用来翻看同一题之前的批改（可选） */
   writingHistory?: WritingRecord[]
+  /** 当前题可用的文章语言点；批改时限定 from=article 的 pointId（可选） */
+  availablePoints?: WritingFeedbackPromptOptions['availablePoints']
   /** 测试注入 */
   runAi?: typeof runAiBatch
   aiStatus?: () => Promise<boolean>
@@ -46,6 +49,7 @@ export function useGoldenImitation({
   flash,
   recordActivity,
   writingHistory,
+  availablePoints,
   runAi = runAiBatch,
   aiStatus = fetchAiStatus,
   now = () => new Date(),
@@ -139,16 +143,25 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
         flash('先写一句英文再批改')
         return false
       }
-      const fb = parseWritingFeedback(raw)
-      if (!fb) {
-        setError('没解析出批改结果：需要 JSON：{scores, issues, polished}')
+      const pointIds = availablePoints?.length
+        ? new Set(availablePoints.map((p) => p.id))
+        : undefined
+      const parsed = parseWritingFeedbackDetailed(raw, { answer, availablePointIds: pointIds })
+      if (!parsed) {
+        setError('没解析出批改结果：需要 v2 JSON：{version, scores, issues, recommendations, polished}')
         return false
       }
-      setFeedback(fb)
-      saveAttempt(fb)
+      setFeedback(parsed.feedback)
+      saveAttempt(parsed.feedback)
+      const dropped = parsed.dropped
+      if (dropped.issues || dropped.recommendations) {
+        flash(`已忽略 ${dropped.issues} 条无法定位的问题、${dropped.recommendations} 条无效语言点`)
+      } else if (dropped.inferred) {
+        flash(`${dropped.inferred} 条缺 rule/key，已自动归类`)
+      }
       return true
     },
-    [answer, flash, saveAttempt],
+    [answer, availablePoints, flash, saveAttempt],
   )
 
   const copyGradePrompt = useCallback(async () => {
@@ -161,12 +174,14 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
       return
     }
     try {
-      await navigator.clipboard.writeText(buildGoldenExamFeedbackPrompt(current, answer))
+      await navigator.clipboard.writeText(
+        buildGoldenExamFeedbackPrompt(current, answer, { availablePoints }),
+      )
       flash('已复制批改提示词；把返回的 JSON 粘到「应用 AI 批改结果」')
     } catch {
       setError('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [current, answer, flash])
+  }, [current, answer, availablePoints, flash])
 
   const grade = useCallback(async () => {
     if (!current) {
@@ -177,7 +192,7 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
       flash('先写一句英文再批改')
       return
     }
-    const prompt = buildGoldenExamFeedbackPrompt(current, answer)
+    const prompt = buildGoldenExamFeedbackPrompt(current, answer, { availablePoints })
     if (!(await ensureAi())) {
       await copyGradePrompt()
       return

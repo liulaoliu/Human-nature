@@ -1,6 +1,10 @@
 import { goldenDrillKey, goldenTargetsFor, type GoldenTextMeta } from './golden'
 import type { GoldenDrillRecord } from './goldenProgress'
-import { buildWritingFeedbackPrompt, type ImitationTask } from './writing'
+import {
+  buildWritingFeedbackPrompt,
+  type ImitationTask,
+  type WritingFeedbackPromptOptions,
+} from './writing'
 import type { GoldenExamItem, GoldenLesson } from '../types/document'
 
 /**
@@ -334,8 +338,12 @@ export function examToImitation(item: GoldenExamItem): ImitationTask {
 }
 
 /** 批改提示词：语义上就是“仿写批改”，直接复用核心提示词，避免第二套口径。 */
-export function buildGoldenExamFeedbackPrompt(item: GoldenExamItem, answer: string): string {
-  return buildWritingFeedbackPrompt(examToImitation(item), answer)
+export function buildGoldenExamFeedbackPrompt(
+  item: GoldenExamItem,
+  answer: string,
+  options: WritingFeedbackPromptOptions = {},
+): string {
+  return buildWritingFeedbackPrompt(examToImitation(item), answer, options)
 }
 
 /** 防止重复的旧考试记录被当成普通仿写历史：调用方按这个筛选。 */

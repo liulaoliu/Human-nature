@@ -3,13 +3,29 @@
  *
  * 两轮都是纯文本 → JSON：
  *   1) 出任务：给范句 → { task, model, mustUse, rubric }
- *   2) 批改：给任务 + 学生作答 → { scores, issues, polished, summary }
+ *   2) 批改：给任务 + 学生作答 → { version, scores, issues, recommendations, polished, summary }
  *
  * 提示词刻意强调「严格、就事论事、指出具体错误、给可直接用的改法」，杜绝「很棒/下次注意」式空话。
  * 解析层对不合格的 JSON 直接返回空，不放水。
+ *
+ * v2 批改契约（2026-10 起）：每条 issue 必须带闭集 `rule` + 稳定的 `key`，
+ * AI 额外给 0–3 条 `recommendations`（可加入本课的语言点）。旧记录由
+ * `tools/backfill-writing-v2.mjs` 一次性回填，不做长期双读。
  */
 
 import { dayKeyLocal } from './activity'
+import {
+  classifyLegacyIssue,
+  isWritingIssueKey,
+  isWritingRule,
+  writingKeyFor,
+  writingRuleCatalog,
+  writingTypeOf,
+  type WritingIssueType,
+  type WritingRule,
+} from './writingErrorRules'
+
+export type { WritingIssueType, WritingRule } from './writingErrorRules'
 
 export interface RubricItem {
   dimension: string
@@ -36,22 +52,69 @@ export interface WritingScore {
   comment?: string
 }
 
+export type WritingSeverity = 'must-fix' | 'improvement'
+
 export interface WritingIssue {
   /** 原文片段 */
   original: string
   /** 建议改法 */
   suggestion: string
   reason?: string
+  /** 由 rule 推导，不允许视图另算一份 */
+  type: WritingIssueType
+  /** 闭集错因；跨句 / 跨篇趋势的归一键 */
+  rule: WritingRule
+  /** 这一条错因的具体身份（复习卡 / 去重） */
+  key: string
+  severity: WritingSeverity
+}
+
+export const WRITING_RECOMMENDATION_KINDS = [
+  'chunk',
+  'pattern',
+  'collocation',
+  'usage',
+  'grammar',
+] as const
+
+export type WritingRecommendationKind = (typeof WRITING_RECOMMENDATION_KINDS)[number]
+
+export const WRITING_RECOMMENDATION_FROM = ['error', 'article', 'ai'] as const
+
+export type WritingRecommendationFrom = (typeof WRITING_RECOMMENDATION_FROM)[number]
+
+export interface WritingRecommendation {
+  kind: WritingRecommendationKind
+  /** 英文语言点本身（词块 / 句型 / 搭配） */
+  point: string
+  zh?: string
+  why: string
+  example?: string
+  priority: 1 | 2 | 3
+  from: WritingRecommendationFrom
+  /** 来自哪条错因（from = error 时） */
+  issueKey?: string
+  /** 文章自带语言点 id（from = article 时） */
+  pointId?: string
 }
 
 export interface WritingFeedback {
+  /** 2 = issues 带 rule/key；旧记录回填后也是 2。显示层允许缺失（旧备份）。 */
+  version?: 2
   scores: WritingScore[]
   total: number
   max: number
   issues: WritingIssue[]
+  recommendations?: WritingRecommendation[]
   polished?: string
   summary?: string
 }
+
+/** 只认 v2：分析 / 趋势 / 复习入口用这个判断，旧记录必须先回填。 */
+export function isWritingFeedbackV2(feedback: WritingFeedback | null | undefined): boolean {
+  return feedback?.version === 2
+}
+
 
 function stripFence(raw: string): string {
   const m = raw.match(/```(?:json)?\s*([\s\S]*?)```/i)
@@ -135,20 +198,40 @@ export function parseImitationTask(raw: string): ImitationTask | null {
   }
 }
 
+export interface WritingFeedbackPromptOptions {
+  /** 文章自带的语言点（只能从里面挑 pointId，防止 AI 编出不存在的点） */
+  availablePoints?: ReadonlyArray<{ id: string; en: string; zh?: string; kind?: string }>
+}
+
 /** 批改提示词：给定任务与评分标准 + 学生作答，要求严格批改。 */
-export function buildWritingFeedbackPrompt(task: ImitationTask, userText: string): string {
+export function buildWritingFeedbackPrompt(
+  task: ImitationTask,
+  userText: string,
+  options: WritingFeedbackPromptOptions = {},
+): string {
   const rubric = task.rubric.length
     ? task.rubric.map((r) => `- ${r.dimension}（满分 ${r.weight}）：${r.description ?? ''}`).join('\n')
     : '- 语法准确（满分 40）\n- 用词与搭配（满分 30）\n- 结构与连贯（满分 30）'
+  const points = options.availablePoints?.filter((p) => p.en.trim()) ?? []
+  const pointLines = points.length
+    ? points.map((p) => `- ${p.id} | ${p.en}${p.zh ? ` | ${p.zh}` : ''}${p.kind ? ` | ${p.kind}` : ''}`).join('\n')
+    : '（本题没有可选语言点；recommendations 里不要写 pointId / from=article）'
   return [
     '你是严格的英语写作批改老师。请批改下面这篇仿写。**就事论事，不要客套、不要泛泛鼓励。**',
     '',
     '批改要求（必须严格遵守）：',
     '- 只依据下面的评分标准打分；每项都要给出**具体** comment，指出扣分对应的原句；',
     '- issues 要逐条列出**真实存在的**问题：original 必须是学生原文里**逐字**出现的片段（不要改写），suggestion 给可直接替换的正确写法，reason 说明为什么错（语法/搭配/中式英语等）；',
-    '- 没有把握就不要编造问题；确实没问题就给空数组；',
+    '- 同一条错误只报一次；不要为了凑数把「可以更好」写成「错」；',
+    '- rule 必须从下面的闭集里选；key 用稳定的小写连字符 slug（同一种错误跨句、跨篇保持同一个 key，具体词块用具体片段，如 chunk-come-to-an-end）；',
+    '- severity：硬错（拼写 / 语法 / 搭配 / 词块 / 语义错）写 must-fix；只是更地道的表达写 improvement；',
+    '- recommendations 给 0–3 条**可复习 / 可加入本课**的语言点。kind 只能是 chunk / pattern / collocation / usage（纯语法规则不要放这里，放进 issues）；',
+    '- recommendations 的 why 要说明「和你这次的错/这篇的主题有什么关系」；from=error 时带对应 issueKey，from=article 时只能从下面语言点里选并带 pointId，自己想到的写 from=ai；',
     '- polished 给一份**完整改写**（保留学生原意，修正所有问题）；',
     '- summary 用中文 2–3 句总结，直说最需要改的地方。',
+    '',
+    '错因规则闭集（rule: 说明）：',
+    writingRuleCatalog(),
     '',
     '评分标准：',
     rubric,
@@ -157,18 +240,119 @@ export function buildWritingFeedbackPrompt(task: ImitationTask, userText: string
     task.task,
     `（范句：${task.model}${task.mustUse.length ? `；要求用上：${task.mustUse.join('、')}` : ''}）`,
     '',
+    '可选语言点（id | 英文 | 中文 | 类型）：',
+    pointLines,
+    '',
     '学生作答：',
     '"""',
     userText.trim(),
     '"""',
     '',
     '只输出一个 JSON 对象，不要任何其他文字。格式：',
-    '{"scores":[{"dimension":"语法准确","score":32,"max":40,"comment":"..."}],"total":82,"max":100,"issues":[{"original":"学生原文片段","suggestion":"正确写法","reason":"..."}],"polished":"...","summary":"..."}',
+    '{"version":2,"scores":[{"dimension":"语法准确","score":32,"max":40,"comment":"..."}],"total":82,"max":100,',
+    '"issues":[{"original":"学生原文片段","suggestion":"正确写法","reason":"为什么错","rule":"chunk-sense","key":"chunk-come-to-an-end","severity":"must-fix"}],',
+    '"recommendations":[{"kind":"chunk","point":"come to an end","zh":"结束","why":"你这次把 an end to 当成了独立词块","example":"The meeting came to an end.","priority":1,"from":"error","issueKey":"chunk-come-to-an-end"}],',
+    '"polished":"...","summary":"..."}',
   ].join('\n')
 }
 
-/** 解析批改结果；至少要有 scores 或 issues 才算有效。 */
-export function parseWritingFeedback(raw: string): WritingFeedback | null {
+export interface WritingFeedbackDropped {
+  /** 无法定位 / 缺建议 / 重复的 issues 条数 */
+  issues: number
+  /** 缺字段 / 重复 / 不在白名单的 recommendations 条数 */
+  recommendations: number
+  /** 缺 rule/key、由启发式补全的条数（不是丢弃，但要在界面提示） */
+  inferred: number
+  reasons: string[]
+}
+
+export interface WritingFeedbackParse {
+  feedback: WritingFeedback
+  dropped: WritingFeedbackDropped
+}
+
+export interface WritingFeedbackParseOptions {
+  /** 学生原文；给了就校验 original 必须逐字出现，防止 AI 编原文 */
+  answer?: string
+  /** 文章可选语言点 id；给了就校验 from=article 的 pointId */
+  availablePointIds?: ReadonlySet<string>
+}
+
+function normalizeReasonList(list: string[]): string[] {
+  return [...new Set(list.map((s) => s.trim()).filter(Boolean))].slice(0, 5)
+}
+
+function parseRecommendation(
+  raw: unknown,
+  issueKeys: ReadonlySet<string>,
+  availablePointIds: ReadonlySet<string> | undefined,
+  dropped: WritingFeedbackDropped,
+): WritingRecommendation | null {
+  if (!raw || typeof raw !== 'object') {
+    dropped.recommendations++
+    return null
+  }
+  const o = raw as Record<string, unknown>
+  const kind = asString(o.kind)
+  if (!(WRITING_RECOMMENDATION_KINDS as readonly string[]).includes(kind)) {
+    dropped.recommendations++
+    dropped.reasons.push(`recommendation kind 不在白名单：${kind || '空'}`)
+    return null
+  }
+  const point = asString(o.point)
+  const why = asString(o.why)
+  if (!point || !why) {
+    dropped.recommendations++
+    dropped.reasons.push('recommendation 缺 point / why')
+    return null
+  }
+  const fromRaw = asString(o.from)
+  const from = (WRITING_RECOMMENDATION_FROM as readonly string[]).includes(fromRaw)
+    ? (fromRaw as WritingRecommendationFrom)
+    : 'ai'
+  const priorityRaw = asNumber(o.priority)
+  const priority: 1 | 2 | 3 = priorityRaw === 1 ? 1 : priorityRaw === 3 ? 3 : 2
+  const pointId = asString(o.pointId) || undefined
+  if (from === 'article') {
+    if (!pointId) {
+      dropped.recommendations++
+      dropped.reasons.push('recommendation from=article 但缺 pointId')
+      return null
+    }
+    if (availablePointIds && !availablePointIds.has(pointId)) {
+      dropped.recommendations++
+      dropped.reasons.push(`recommendation pointId 不在本题语言点里：${pointId}`)
+      return null
+    }
+  }
+  const issueKey = asString(o.issueKey) || undefined
+  if (issueKey && !issueKeys.has(issueKey)) {
+    // 不丢推荐本身，但把悬空引用摘掉；趋势仍可用 point 本身。
+    dropped.reasons.push(`recommendation issueKey 没对应 issue：${issueKey}`)
+  }
+  return {
+    kind: kind as WritingRecommendationKind,
+    point,
+    zh: asString(o.zh) || undefined,
+    why,
+    example: asString(o.example) || undefined,
+    priority,
+    from,
+    issueKey: issueKey && issueKeys.has(issueKey) ? issueKey : undefined,
+    pointId,
+  }
+}
+
+/**
+ * 解析批改结果；至少要有 scores 或 issues 才算有效。
+ *
+ * 严格点：issues 的 suggestion 必须有；给了 answer 时 original 必须逐字出现；
+ * rule/key 缺失时用闭集启发式补全并计入 `inferred`（回填旧记录的同一套逻辑）。
+ */
+export function parseWritingFeedbackDetailed(
+  raw: string,
+  options: WritingFeedbackParseOptions = {},
+): WritingFeedbackParse | null {
   const text = stripFence(raw)
   if (!text) return null
   let obj: unknown
@@ -179,6 +363,7 @@ export function parseWritingFeedback(raw: string): WritingFeedback | null {
   }
   if (!obj || typeof obj !== 'object') return null
   const o = obj as Record<string, unknown>
+  const dropped: WritingFeedbackDropped = { issues: 0, recommendations: 0, inferred: 0, reasons: [] }
   const scores: WritingScore[] = []
   if (Array.isArray(o.scores)) {
     for (const s of o.scores) {
@@ -195,31 +380,107 @@ export function parseWritingFeedback(raw: string): WritingFeedback | null {
     }
   }
   const issues: WritingIssue[] = []
+  const seenIssues = new Set<string>()
   if (Array.isArray(o.issues)) {
     for (const s of o.issues) {
-      if (!s || typeof s !== 'object') continue
+      if (!s || typeof s !== 'object') {
+        dropped.issues++
+        continue
+      }
       const so = s as Record<string, unknown>
+      const original = asString(so.original)
       const suggestion = asString(so.suggestion)
-      if (!suggestion) continue
+      const reason = asString(so.reason) || undefined
+      if (!suggestion) {
+        dropped.issues++
+        dropped.reasons.push('issue 缺 suggestion')
+        continue
+      }
+      if (options.answer && original && !options.answer.includes(original)) {
+        dropped.issues++
+        dropped.reasons.push(`original 不在学生原文里：${original.slice(0, 40)}`)
+        continue
+      }
+      const fallback = classifyLegacyIssue({ original, suggestion, reason })
+      let rule: WritingRule
+      if (isWritingRule(so.rule)) {
+        rule = so.rule
+      } else {
+        rule = fallback.rule
+        dropped.inferred++
+      }
+      let key: string
+      if (isWritingIssueKey(so.key)) {
+        key = so.key
+      } else {
+        key = writingKeyFor(rule, original, suggestion)
+        dropped.inferred++
+      }
+      const severityRaw = asString(so.severity)
+      const severity: WritingSeverity =
+        severityRaw === 'improvement' || severityRaw === 'must-fix' ? severityRaw : fallback.severity
+      const dedupe = `${key}|${original}|${suggestion}`
+      if (seenIssues.has(dedupe)) {
+        dropped.issues++
+        continue
+      }
+      seenIssues.add(dedupe)
       issues.push({
-        original: asString(so.original),
+        original,
         suggestion,
-        reason: asString(so.reason) || undefined,
+        reason,
+        type: writingTypeOf(rule),
+        rule,
+        key,
+        severity,
       })
+      if (issues.length >= 20) break
+    }
+  }
+  const issueKeys = new Set(issues.map((i) => i.key))
+  const recommendations: WritingRecommendation[] = []
+  const seenRecommendations = new Set<string>()
+  if (Array.isArray(o.recommendations)) {
+    for (const r of o.recommendations) {
+      const rec = parseRecommendation(r, issueKeys, options.availablePointIds, dropped)
+      if (!rec) continue
+      const dedupe = `${rec.kind}|${rec.point.toLowerCase()}`
+      if (seenRecommendations.has(dedupe)) {
+        dropped.recommendations++
+        continue
+      }
+      seenRecommendations.add(dedupe)
+      recommendations.push(rec)
+      if (recommendations.length >= 5) break
     }
   }
   if (!scores.length && !issues.length) return null
   const total = asNumber(o.total) || scores.reduce((a, s) => a + s.score, 0)
   const max = asNumber(o.max) || scores.reduce((a, s) => a + s.max, 0)
+  dropped.reasons = normalizeReasonList(dropped.reasons)
   return {
-    scores,
-    total,
-    max,
-    issues,
-    polished: asString(o.polished) || undefined,
-    summary: asString(o.summary) || undefined,
+    feedback: {
+      version: 2,
+      scores,
+      total,
+      max,
+      issues,
+      recommendations,
+      polished: asString(o.polished) || undefined,
+      summary: asString(o.summary) || undefined,
+    },
+    dropped,
   }
 }
+
+/** 兼容旧调用：只要结果，不要丢弃计数。 */
+export function parseWritingFeedback(
+  raw: string,
+  options: WritingFeedbackParseOptions = {},
+): WritingFeedback | null {
+  return parseWritingFeedbackDetailed(raw, options)?.feedback ?? null
+}
+
 
 /** 一次仿写练习的记录（存本机，供回看进步）。 */
 export interface WritingRecord {
@@ -237,7 +498,30 @@ export interface WritingRecord {
   examId?: string
   /** 金句课单句 id（source = goldenSentence 时） */
   sentenceId?: string
+  /**
+   * 记录级稳定键：`writing_records.id` 每次同步都会变（整段删了重插），
+   * 错因进度 / 复习卡不能拿它当身份。旧记录没有时用 `writingRecordKey()` 现算。
+   */
+  recordKey?: string
 }
+
+function textFingerprint(text: string): string {
+  let h = 5381
+  for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+  return (h >>> 0).toString(36)
+}
+
+/** 一条批改记录的稳定身份（不依赖 DB 自增 id）。 */
+export function writingRecordKey(
+  rec: Pick<WritingRecord, 'at' | 'articleId' | 'text'> &
+    Partial<Pick<WritingRecord, 'sentenceId' | 'examId' | 'task'>>,
+): string {
+  const focus = rec.task?.focus?.trim() ?? ''
+  const round = rec.task?.round ?? 1
+  const owner = rec.sentenceId ?? rec.examId ?? ''
+  return [rec.at, rec.articleId, owner, focus, String(round), textFingerprint(rec.text)].join('|')
+}
+
 
 /** 金句课产生的记录（单句仿写 / 整课考试），普通仿写历史不混入。 */
 export function isGoldenWritingRecord(rec: WritingRecord): boolean {
@@ -265,6 +549,7 @@ export function normalizeWritingRecord(rec: WritingRecord): WritingRecord {
     ...(source ? { source } : { source: undefined }),
     ...(sentenceId ? { sentenceId } : { sentenceId: undefined }),
     ...(examId ? { examId } : { examId: undefined }),
+    recordKey: rec.recordKey || writingRecordKey(rec),
   }
 }
 

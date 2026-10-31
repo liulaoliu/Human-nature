@@ -16,7 +16,17 @@ const feedback: WritingFeedback = {
   total: 8,
   max: 10,
   scores: [{ dimension: '语法', score: 8, max: 10, comment: '不错' }],
-  issues: [{ original: 'I runned', suggestion: 'I ran', reason: '时态' }],
+  issues: [
+    {
+      original: 'I runned',
+      suggestion: 'I ran',
+      reason: '时态',
+      type: 'grammar',
+      rule: 'tense-choice',
+      key: 'tense-choice',
+      severity: 'must-fix',
+    },
+  ],
   polished: 'I ran fast.',
   summary: '继续加油',
 }

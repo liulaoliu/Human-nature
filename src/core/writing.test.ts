@@ -9,6 +9,8 @@ import {
   buildWritingFeedbackPrompt,
   parseImitationTask,
   parseWritingFeedback,
+  parseWritingFeedbackDetailed,
+  writingRecordKey,
   writingRecordLabel,
   writingAttemptsFor,
   WRITING_HISTORY_PAGE,
@@ -57,23 +59,89 @@ describe('buildWritingFeedbackPrompt', () => {
     expect(p).toContain('语法准确（满分 40）')
     expect(p).toContain('I go to school yesterday.')
     expect(p).toContain('"polished"')
+    expect(p).toContain('"version":2')
+    expect(p).toContain('chunk-sense')
+    expect(p).toContain('"recommendations"')
+  })
+  it('给可选语言点时，把 id 和 from=article 的约束写进提示词', () => {
+    const p = buildWritingFeedbackPrompt(task, 'I go to school.', {
+      availablePoints: [{ id: 'lp:s1:come-to-an-end', en: 'come to an end', zh: '结束', kind: 'chunk' }],
+    })
+    expect(p).toContain('lp:s1:come-to-an-end')
+    expect(p).toContain('from=article')
   })
 })
 
 describe('parseWritingFeedback', () => {
   it('解析分数 + issues + polished', () => {
     const raw = JSON.stringify({
+      version: 2,
       scores: [{ dimension: '语法准确', score: 30, max: 40, comment: '时态错' }],
       total: 30,
       max: 40,
-      issues: [{ original: 'go', suggestion: 'went', reason: '过去时间用过去式' }],
+      issues: [
+        {
+          original: 'go',
+          suggestion: 'went',
+          reason: '过去时间用过去式',
+          rule: 'tense-choice',
+          key: 'tense-choice',
+          severity: 'must-fix',
+        },
+      ],
+      recommendations: [
+        {
+          kind: 'chunk',
+          point: 'go to school',
+          zh: '上学',
+          why: '这次时态错在 go，顺便把这个搭配练熟',
+          priority: 2,
+          from: 'error',
+          issueKey: 'tense-choice',
+        },
+      ],
       polished: 'I went to school yesterday.',
       summary: '注意时态。',
     })
     const f = parseWritingFeedback(raw)
+    expect(f?.version).toBe(2)
     expect(f?.total).toBe(30)
-    expect(f?.issues[0]).toMatchObject({ original: 'go', suggestion: 'went' })
+    expect(f?.issues[0]).toMatchObject({ original: 'go', suggestion: 'went', rule: 'tense-choice' })
+    expect(f?.recommendations?.[0]).toMatchObject({ point: 'go to school', issueKey: 'tense-choice' })
     expect(f?.polished).toContain('went')
+  })
+  it('缺 rule/key 时用闭集补全，并计入 inferred', () => {
+    const raw = JSON.stringify({
+      issues: [{ original: 'bureacracy', suggestion: 'bureaucracy', reason: '拼写错误' }],
+    })
+    const parsed = parseWritingFeedbackDetailed(raw)
+    expect(parsed?.feedback.issues[0]).toMatchObject({
+      rule: 'word-spelling',
+      key: 'spelling-bureaucracy',
+      type: 'spelling',
+    })
+    expect(parsed?.dropped.inferred).toBeGreaterThan(0)
+  })
+  it('original 不在学生原文里 → 丢弃并计数', () => {
+    const raw = JSON.stringify({
+      issues: [
+        { original: '编的原文', suggestion: 'x', rule: 'other', key: 'other', severity: 'must-fix' },
+      ],
+    })
+    const parsed = parseWritingFeedbackDetailed(raw, { answer: 'I go to school.' })
+    expect(parsed).toBeNull()
+  })
+  it('文章语言点 pointId 不在白名单 → 丢弃 recommendation', () => {
+    const raw = JSON.stringify({
+      scores: [{ dimension: '语法', score: 1, max: 2 }],
+      issues: [],
+      recommendations: [
+        { kind: 'chunk', point: 'x', why: 'y', from: 'article', pointId: 'lp:missing' },
+      ],
+    })
+    const parsed = parseWritingFeedbackDetailed(raw, { availablePointIds: new Set(['lp:ok']) })
+    expect(parsed?.feedback.recommendations).toEqual([])
+    expect(parsed?.dropped.recommendations).toBe(1)
   })
   it('没有 scores/issues → null；非法 JSON → null', () => {
     expect(parseWritingFeedback(JSON.stringify({ summary: 'x' }))).toBeNull()
@@ -113,6 +181,24 @@ describe('isGoldenWritingRecord', () => {
     expect(isGoldenWritingRecord(rec('goldenExam'))).toBe(true)
     expect(isGoldenWritingRecord(rec())).toBe(false)
     expect(isGoldenWritingRecord(rec('writing'))).toBe(false)
+  })
+})
+
+describe('writingRecordKey', () => {
+  it('同一内容稳定；换句/换稿/换正文会变', () => {
+    const base = {
+      at: '2026-10-31T00:00:00.000Z',
+      articleId: 'a',
+      text: 'I go to school.',
+      sentenceId: 's1',
+      task: { task: 't', model: 'm', mustUse: [], rubric: [], round: 1 },
+    }
+    expect(writingRecordKey(base)).toBe(writingRecordKey({ ...base }))
+    expect(writingRecordKey(base)).not.toBe(writingRecordKey({ ...base, text: 'I went to school.' }))
+    expect(writingRecordKey(base)).not.toBe(writingRecordKey({ ...base, sentenceId: 's2' }))
+    expect(writingRecordKey(base)).not.toBe(
+      writingRecordKey({ ...base, task: { ...base.task, round: 2 } }),
+    )
   })
 })
 
