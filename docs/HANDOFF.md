@@ -36,8 +36,8 @@
     「练过的不练」按 v11 的 `writing_error_progress.reviews / lastAt` 过滤（进入本轮时给进度拍快照，
     避免刚答完的卡当场消失）；本地检查后可点 **AI 批改**，复用 `useGoldenImitation`，记录写
     `WritingRecord.source='goldenError'` 并进学习历史；这类记录不反哺错因汇总，避免「改错生新卡」。
-11. **句子填空焦点**：进入填空、切到下一组、检查出错时都自动聚焦到第一个需要填/第一个错的输入框；
-    用 `useLayoutEffect` 而不是 `autoFocus`，因为输入框会被 React 复用。
+11. **输入焦点**：句子填空进入/切下一组/检查出错时自动聚焦第一个需要填或第一个错的空；错因复习
+    下一张卡也把焦点送回输入框。用 `useLayoutEffect`/ref 而不是只靠 `autoFocus`，因为输入框会被 React 复用。
 
 ### 下一轮优先
 

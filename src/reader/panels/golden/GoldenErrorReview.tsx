@@ -80,6 +80,7 @@ export default function GoldenErrorReview({
    */
   const [progressSnapshot] = useState(() => writingErrorProgress ?? [])
   const resultRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
   const visibleCards = useMemo(
     () =>
       skipPracticed
@@ -103,6 +104,11 @@ export default function GoldenErrorReview({
   useEffect(() => {
     if (result && !result.pending) resultRef.current?.focus()
   }, [result])
+
+  // 下一张卡复用同一个 input；autoFocus 不会再次触发，必须自己把焦点送回去。
+  useEffect(() => {
+    if (!result) inputRef.current?.focus()
+  }, [index, result])
 
   const toggleSkip = (checked: boolean) => {
     setSkipPracticed(checked)
@@ -240,6 +246,7 @@ export default function GoldenErrorReview({
           }}
         >
           <input
+            ref={inputRef}
             autoFocus
             value={input}
             onChange={(e) => setInput(e.target.value)}

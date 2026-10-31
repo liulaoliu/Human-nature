@@ -83,6 +83,7 @@ describe('GoldenErrorReview', () => {
     fireEvent.click(screen.getByRole('button', { name: '检查' }))
     fireEvent.keyDown(document.activeElement as Element, { key: 'Enter' })
     expect(screen.getByText(/第 2 \/ 2 张/)).toBeTruthy()
+    expect(document.activeElement).toBe(screen.getByLabelText('错因答案'))
 
     fireEvent.change(screen.getByLabelText('错因答案'), { target: { value: 'went' } })
     fireEvent.click(screen.getByRole('button', { name: '检查' }))
