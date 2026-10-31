@@ -6,10 +6,10 @@
 
 ### 当前状态
 
-- 分支 `main`；批改契约升到 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 仍是 v10（不新增表）
+- 分支 `main`；批改契约 **v2**（`rule` / `key` / `severity` + `recommendations[]`），schema 升到 **v11**（新增 `writing_error_progress`）
 - 实时库 29 条金句课批改已一次性回填：67 条 issue → 26 个 rule，45 张 must-fix 复习卡；
   回填备份 `data/backups/xueba-before-writing-v2-20261031-012945.db`，重复跑会跳过 v2
-- 门禁：`npm run gates` 全绿（327 文件 / 2896 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+- 门禁：`npm run gates` 全绿（328 文件 / 2908 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
 
 ### 这轮做了什么
 
@@ -17,15 +17,18 @@
    `original` 给了学生原文就校验逐字出现；被丢弃 / 自动归类的条数会进 apply 报告和 flash。
 2. **错因复盘**：`core/writingErrors.ts` 汇总本篇 / 全库的规则、类型、句子、趋势与 AI 推荐；
    `GoldenErrorsView` 从课程页进入，可切 7/30 天，推荐语言点可「加入本课」。
-3. **复习**：`core/writingErrorReview.ts` 从 `answerEvents`（`errfix:<rule>|<key>`）派生 Leitner
-   1/3/7/14/30/60 天队列，`GoldenErrorReview` 现场考错因；不新增 schema / 同步 section。
+3. **复习**：v11 `writing_error_progress` 存每张卡的 `active / paused / mastered`、连续次数与 `due_at`；
+   1/3/7/14/30/60 天队列，`GoldenErrorReview` 现场考；长答案先看答案再自评，不逼整段输入；
+   旧版只有 `answerEvents` 时按 `errfix:<rule>|<key>` 首次迁进状态表。
 4. **加入本课**：`GoldenLesson.extraPoints` 只影响语言点造句选项，不改 `targets` / `goldenDrillKey`；
    可在复盘里移除，改正文时随 `pruneGoldenLesson` 清理。
 5. **回填工具**：`npm run backfill:writing`（先 `VACUUM INTO` 备份，再单事务更新）。
+6. **第二稿**：批改提示词带上一轮 `issues`，要求逐条检查「改了没」；仍是同一套批改/存记录。
+7. **推荐分组**：推荐按 `kind + point + articleId + sentenceId + focus` 拆组，跨篇「加入本课」不会指错篇。
 
 ### 下一轮优先
 
-1. 第二稿把上一轮 `feedback.issues` 喂给批改提示词（专查「上轮问题改了没」）。
+1. 用真实 AI 批改 JSON 做一轮回归样本（重点看 `original` 近似改写会不会被严格解析误丢）。
 2. `A long road` 两篇重复（`saved:1791421783707` / `saved:1791119917875`）：正文 94% 重合但分句不同，
    按句 id 合并会指错句，用户决定**先不管**。
 3. 学习记录没有版本快照（`learning_snapshots` 已退役），备份与主库同盘 → 提醒把 `data/xueba.db`
