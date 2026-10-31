@@ -64,6 +64,52 @@ export interface ReaderRoute {
    * 结果一开语言点就掉回阅读主界面（2026-10-26 用户反馈）。
    */
   overlay: FlowName | ''
+  /** `/p/golden` 的子视图 / 记录定位；没有 query 时不写这个字段 */
+  golden?: GoldenRouteState
+}
+
+/** D老师小课堂挂在 `/p/golden` 下的子视图；仍然由 `golden` 这一层整页会话承载。 */
+export type GoldenRouteView = 'errors' | 'history'
+
+export interface GoldenRouteState {
+  view?: GoldenRouteView
+  /** 稳定记录键：`WritingRecord.recordKey`，不是数组下标 */
+  recordKey?: string
+  /** 记录可能在别的篇：详情打开时用哪个范围 */
+  scope?: 'article' | 'all'
+  /** 从哪个视图点进详情（返回按钮据此回错因 / 历史列表） */
+  from?: 'errors'
+}
+
+/** 解析 `/p/golden?gv=errors&gr=...&gs=all&from=errors`。坏值忽略，不把页面搞崩。 */
+export function parseGoldenQuery(search: string): GoldenRouteState | undefined {
+  const params = new URLSearchParams(search)
+  const rawView = params.get('gv')
+  const view: GoldenRouteView | undefined =
+    rawView === 'errors' || rawView === 'history' ? rawView : undefined
+  const recordKey = params.get('gr')?.trim() || undefined
+  const scopeRaw = params.get('gs')
+  const scope = scopeRaw === 'all' || scopeRaw === 'article' ? scopeRaw : undefined
+  const from = params.get('from') === 'errors' ? 'errors' : undefined
+  if (!view && !recordKey) return undefined
+  return {
+    ...(view ? { view } : {}),
+    ...(recordKey ? { recordKey } : {}),
+    ...(scope ? { scope } : {}),
+    ...(from ? { from } : {}),
+  }
+}
+
+/** 生成 `/p/golden?...`；详情记录键会做 URL 编码。 */
+export function goldenPanelPath(slug: string, state: GoldenRouteState = {}): string {
+  const base = panelPath(slug, 'golden')
+  const params = new URLSearchParams()
+  if (state.view) params.set('gv', state.view)
+  if (state.recordKey) params.set('gr', state.recordKey)
+  if (state.scope) params.set('gs', state.scope)
+  if (state.from) params.set('from', state.from)
+  const query = params.toString()
+  return query ? `${base}?${query}` : base
 }
 
 const BOOLEAN_PANELS: BooleanPanelName[] = [
@@ -117,7 +163,7 @@ function stripReaderBase(pathname: string): string {
   return pathname
 }
 
-export function parseReaderRoute(pathname: string): ReaderRoute {
+export function parseReaderRoute(pathname: string, search = ''): ReaderRoute {
   const parts = stripReaderBase(pathname)
     .split('/')
     .filter(Boolean)
@@ -130,12 +176,18 @@ export function parseReaderRoute(pathname: string): ReaderRoute {
     })
   // /p/<panel>：没有文章时也能开的面板
   if (parts[0] === 'p') {
-    return { slug: '', ...parsePanels(parts.slice(1)) }
+    return withGoldenQuery({ slug: '', ...parsePanels(parts.slice(1)) }, search)
   }
   if (parts[0] !== 'a') return { slug: '', panel: '', overlay: '' }
   const slug = parts[1] ?? ''
   const panels = parts[2] === 'p' ? parsePanels(parts.slice(3)) : { panel: '' as const, overlay: '' as const }
-  return { slug, ...panels }
+  return withGoldenQuery({ slug, ...panels }, search)
+}
+
+function withGoldenQuery(route: ReaderRoute, search: string): ReaderRoute {
+  if (route.panel !== 'golden') return route
+  const golden = parseGoldenQuery(search)
+  return golden ? { ...route, golden } : route
 }
 
 /** `p/` 后面的段：`<panel>` 或 `<布尔面板>/<浮层>`。认不出的一律当没有，别把页面搞崩。 */

@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import GoldenHistoryView from './GoldenHistoryView'
-import { WRITING_HISTORY_PAGE, type WritingRecord } from '../../../core/writing'
+import { WRITING_HISTORY_PAGE, writingRecordKey, type WritingRecord } from '../../../core/writing'
 
 function rec(i: number): WritingRecord {
   // 时间递减：第 0 条最新（列表按时间倒序）
@@ -49,5 +49,42 @@ describe('学习历史：渲染分页', () => {
   it('空态照旧：本篇没有记录时给引导文案', () => {
     render(<GoldenHistoryView rows={{ article: [], all: [rec(0)] }} onBack={vi.fn()} />)
     expect(screen.getByText(/本篇还没有记录/)).toBeTruthy()
+  })
+
+  it('focusRecordKey 按稳定键打开详情；找不到给回退提示', () => {
+    const rows = [rec(0), rec(1), rec(2)]
+    const { unmount } = render(
+      <GoldenHistoryView
+        rows={{ article: rows, all: rows }}
+        onBack={vi.fn()}
+        focusRecordKey={writingRecordKey(rows[1])}
+      />,
+    )
+    expect(screen.getByText('T1')).toBeTruthy()
+    expect(screen.getByText(/第 2\/3 条/)).toBeTruthy()
+    unmount()
+
+    render(
+      <GoldenHistoryView
+        rows={{ article: rows, all: rows }}
+        onBack={vi.fn()}
+        focusRecordKey="missing"
+      />,
+    )
+    expect(screen.getByText(/这条批改记录已归档/)).toBeTruthy()
+  })
+
+  it('有 onOpenRecord 时点列表交给路由，不在组件里私开详情', () => {
+    const rows = [rec(0), rec(1)]
+    const onOpenRecord = vi.fn()
+    render(
+      <GoldenHistoryView
+        rows={{ article: rows, all: rows }}
+        onBack={vi.fn()}
+        onOpenRecord={onOpenRecord}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /作答：T1/ }))
+    expect(onOpenRecord).toHaveBeenCalledWith(writingRecordKey(rows[1]), 'article')
   })
 })

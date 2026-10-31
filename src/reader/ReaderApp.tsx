@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { type ArticleQuizKind } from '../core/quiz'
 import { dayKeyLocal } from '../core/activity'
 
@@ -7,6 +8,7 @@ import { useArticleIdentity } from './hooks/useArticleIdentity'
 import { useReaderArticleNavigation } from './hooks/useReaderArticleNavigation'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useBrowseFilters } from './hooks/useBrowseFilters'
+import { goldenPanelPath } from './route'
 
 import { useToast } from './hooks/useToast'
 
@@ -93,6 +95,7 @@ export default function ReaderApp() {
   const { articleIndex, currentRef, currentSlug } = useReaderArticleIdentity(book, saved, articleKey, savedId)
   // 面板的开关走 URL（返回键能关面板）；调用方仍然写 setXxxOpen(true/false)
   const { route, panels } = useReaderPanelRouting(currentSlug)
+  const navigate = useNavigate()
   /** 生词浏览页的筛选也走 URL query：刷新 / 分享回到同一组筛选（只 replace，不堆历史）。 */
   const browseFilters = useBrowseFilters(route.panel === 'browse-article' ? 'article' : 'all')
   /** 选中句子后自动 TTS 朗读：见 useReaderPrefs.autoSpeak；引擎 / 音色 / 预生成都在 useReaderSpeech。 */
@@ -585,6 +588,14 @@ export default function ReaderApp() {
     onGenerate: () => void ai.aiTasksApi.copyGoldenPrompt(),
     startWriting: services.writingApi.start,
   })
+  const goldenActions = {
+    ...goldenFeature.actions,
+    goldenRoute: route.golden,
+    onNavigateGolden: (
+      state: Parameters<typeof goldenPanelPath>[1],
+      opts?: { replace?: boolean },
+    ) => navigate(goldenPanelPath(currentSlug, state), { replace: opts?.replace }),
+  }
 
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
@@ -647,7 +658,7 @@ export default function ReaderApp() {
     highlight,
     services,
     golden,
-    goldenActions: goldenFeature.actions,
+    goldenActions,
     panels,
     browseFilters,
     articleRouting,

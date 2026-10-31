@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   articlePath,
+  goldenPanelPath,
   isFlowName,
   isOverlayFlow,
   panelFlags,
   panelPath,
+  parseGoldenQuery,
   parseReaderRoute,
 } from './route'
 
@@ -101,6 +103,39 @@ describe('route：浮层叠在面板上（速读里的语言点）', () => {
       overlay: '',
     })
     expect(panelPath('005-leaders', 'speed', 'plan')).toBe('/reader/a/005-leaders/p/speed')
+  })
+})
+
+describe('route：golden 子视图 / 历史详情', () => {
+  it('errors / history / recordKey / scope 往返，recordKey 会编码', () => {
+    const state = {
+      view: 'history' as const,
+      recordKey: '2026-10-31T00:00:00.000Z|a1|s1|focus|1|x',
+      scope: 'all' as const,
+      from: 'errors' as const,
+    }
+    const path = goldenPanelPath('my-article', state)
+    expect(path).toContain('/reader/a/my-article/p/golden?')
+    expect(path).toContain('gv=history')
+    expect(parseGoldenQuery(path.split('?')[1])).toEqual(state)
+    expect(parseReaderRoute('/reader/a/my-article/p/golden', path.split('?')[1])).toMatchObject({
+      panel: 'golden',
+      golden: state,
+    })
+  })
+
+  it('只有 golden 面板带 query；坏 gv 当没有，gr 单独保留', () => {
+    expect(parseReaderRoute('/reader/p/golden', '?gv=errors')).toMatchObject({
+      panel: 'golden',
+      golden: { view: 'errors' },
+    })
+    expect(parseReaderRoute('/reader/p/speed', '?gv=errors')).toEqual({
+      slug: '',
+      panel: 'speed',
+      overlay: '',
+    })
+    expect(parseGoldenQuery('?gv=nope&gr=x')).toEqual({ recordKey: 'x' })
+    expect(parseGoldenQuery('?gv=nope')).toBeUndefined()
   })
 })
 

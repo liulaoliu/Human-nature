@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import GoldenFeedback from './GoldenFeedback'
+import WritingHoverCard, { hoverDataFromRecord, recordKeyOf } from './WritingHoverCard'
 import {
   historyPage,
   WRITING_HISTORY_PAGE,
@@ -35,6 +36,11 @@ export default function GoldenHistoryView({
   articleTitle,
   onBack,
   onPrint,
+  focusRecordKey,
+  initialScope = 'article',
+  onOpenRecord,
+  onCloseDetail,
+  backLabel = '课程页',
 }: {
   /** `article` = 本篇，`all` = 全库（已按来源筛过，都是金句课记录） */
   rows: { article: WritingRecord[]; all: WritingRecord[] }
@@ -42,8 +48,17 @@ export default function GoldenHistoryView({
   onBack: () => void
   /** 打印当前范围（A4）；没注入就不显示按钮 */
   onPrint?: (rows: WritingRecord[], title: string) => void
+  /** URL 指定的记录；按 recordKey，不按时间/下标 */
+  focusRecordKey?: string
+  initialScope?: Scope
+  /** 有它时，点记录/翻页都交给路由；没有则退回组件内部选择 */
+  onOpenRecord?: (recordKey: string, scope: Scope) => void
+  /** 详情 → 历史列表；有路由时由外层 replace URL */
+  onCloseDetail?: () => void
+  /** 返回按钮文案：从错因点进来是「错因复盘」 */
+  backLabel?: string
 }) {
-  const [scope, setScope] = useState<Scope>('article')
+  const [scope, setScope] = useState<Scope>(initialScope)
   const [focus, setFocus] = useState('')
   const [pickedIndex, setPickedIndex] = useState<number | null>(null)
   /** 渲染分页：默认只看最近一页，别一次画几千行 DOM（记录本身一条都不删） */
@@ -72,33 +87,47 @@ export default function GoldenHistoryView({
     setShown(WRITING_HISTORY_PAGE)
   }
   const page = historyPage(list, shown)
+  const focusIndex = focusRecordKey ? list.findIndex((r) => recordKeyOf(r) === focusRecordKey) : -1
+  const effectiveIndex = focusIndex >= 0 ? focusIndex : pickedIndex
+  const picked = effectiveIndex !== null ? list[effectiveIndex] : null
+  const missingFocus = !!focusRecordKey && focusIndex < 0
 
-  const picked = pickedIndex !== null ? list[pickedIndex] : null
+  const step = (delta: number) => {
+    if (effectiveIndex === null) return
+    const next = Math.max(0, Math.min(list.length - 1, effectiveIndex + delta))
+    if (next === effectiveIndex) return
+    if (onOpenRecord) onOpenRecord(recordKeyOf(list[next]), scope)
+    else setPickedIndex(next)
+  }
+  const closeDetail = () => {
+    if (onCloseDetail) onCloseDetail()
+    else setPickedIndex(null)
+  }
   if (picked) {
     return (
       <div className="golden-body">
         <div className="bar golden-plan-bar">
-          <button onClick={() => setPickedIndex(null)}>← 历史列表</button>
+          <button onClick={closeDetail}>← 历史列表</button>
           <button
-            onClick={() => setPickedIndex((i) => Math.max(0, (i ?? 0) - 1))}
-            disabled={(pickedIndex ?? 0) <= 0}
+            onClick={() => step(-1)}
+            disabled={(effectiveIndex ?? 0) <= 0}
             title="看更早一条"
           >
             ◀ 上一条
           </button>
           <span className="muted">
-            第 {(pickedIndex ?? 0) + 1}/{list.length} 条 · {new Date(picked.at).toLocaleString()}
+            第 {(effectiveIndex ?? 0) + 1}/{list.length} 条 · {new Date(picked.at).toLocaleString()}
           </span>
           <button
-            onClick={() => setPickedIndex((i) => Math.min(list.length - 1, (i ?? 0) + 1))}
-            disabled={(pickedIndex ?? 0) >= list.length - 1}
+            onClick={() => step(1)}
+            disabled={(effectiveIndex ?? 0) >= list.length - 1}
             title="看更新一条"
           >
             下一条 ▶
           </button>
           <b>{writingRecordLabel(picked)}</b>
           {picked.articleTitle && <span className="muted">{picked.articleTitle}</span>}
-          <button onClick={onBack}>课程页</button>
+          <button onClick={onBack}>← {backLabel}</button>
         </div>
         {picked.text && <div className="bt-source">{picked.text}</div>}
         <GoldenFeedback feedback={picked.feedback} model={picked.task?.model || picked.model} />
@@ -143,21 +172,30 @@ export default function GoldenHistoryView({
         </span>
       </div>
       {list.length ? (
-        <div className="bt-history-list">
+        <>
+          {missingFocus && (
+            <div className="golden-summary">
+              这条批改记录已归档或不在当前范围；可以回错因复盘重新选一条。
+            </div>
+          )}
+          <div className="bt-history-list">
           {page.rows.map((rec, i) => (
-            <button
-              key={`${rec.at}-${i}`}
-              className="bt-history-row"
-              onClick={() => setPickedIndex(i)}
-              title={hoverSummary(rec, i)}
-            >
-              <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-              <span className="ellipsis">{writingRecordLabel(rec)}</span>
-              <span className="muted ellipsis">
-                {scope === 'all' ? rec.articleTitle || rec.articleId : rec.task?.task || rec.model}
-              </span>
-              <b>{rec.feedback.max > 0 ? `${rec.feedback.total}/${rec.feedback.max}` : '—'}</b>
-            </button>
+            <WritingHoverCard key={recordKeyOf(rec)} data={hoverDataFromRecord(rec, i)}>
+              <button
+                className="bt-history-row"
+                onClick={() =>
+                  onOpenRecord ? onOpenRecord(recordKeyOf(rec), scope) : setPickedIndex(i)
+                }
+                aria-label={hoverSummary(rec, i)}
+              >
+                <span className="muted">{new Date(rec.at).toLocaleString()}</span>
+                <span className="ellipsis">{writingRecordLabel(rec)}</span>
+                <span className="muted ellipsis">
+                  {scope === 'all' ? rec.articleTitle || rec.articleId : rec.task?.task || rec.model}
+                </span>
+                <b>{rec.feedback.max > 0 ? `${rec.feedback.total}/${rec.feedback.max}` : '—'}</b>
+              </button>
+            </WritingHoverCard>
           ))}
           {page.rest > 0 && (
             <button
@@ -169,6 +207,7 @@ export default function GoldenHistoryView({
             </button>
           )}
         </div>
+        </>
       ) : (
         <div className="muted">
           {activeFocus

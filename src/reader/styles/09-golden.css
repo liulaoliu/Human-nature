@@ -562,6 +562,77 @@
   padding: 0 2px;
 }
 
+/* 悬浮摘要：历史行 / 错因行共用。CSS 显示，不占 React 状态。 */
+.golden-hover {
+  position: relative;
+  display: block;
+  min-width: 0;
+}
+
+.golden-hover-card {
+  display: none;
+  position: absolute;
+  z-index: 70;
+  left: 0;
+  top: calc(100% + 4px);
+  width: min(430px, 86vw);
+  max-height: 260px;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 9px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 8px 28px rgb(0 0 0 / 28%);
+  line-height: 1.55;
+  flex-direction: column;
+  gap: 5px;
+  white-space: normal;
+}
+
+.golden-hover:hover > .golden-hover-card,
+.golden-hover:focus-within > .golden-hover-card {
+  display: flex;
+}
+
+.golden-hover-text {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+/* 错因「看批改」抽屉 */
+.golden-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 6vh 16px 16px;
+  background: rgb(0 0 0 / 42%);
+  overflow: auto;
+}
+
+.golden-drawer {
+  width: min(760px, 100%);
+  max-height: 84vh;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 14px 16px 18px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--panel);
+  box-shadow: 0 16px 48px rgb(0 0 0 / 35%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
 .golden-error-trend {
   display: flex;
   align-items: flex-end;
@@ -604,6 +675,9 @@
 }
 
 @media (max-width: 720px) {
+  .golden-hover-card {
+    display: none !important;
+  }
   .golden-body {
     padding: 12px 12px 32px;
   }

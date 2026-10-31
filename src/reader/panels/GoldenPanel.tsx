@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import GoldenBankView from './golden/GoldenBankView'
 import GoldenDrillView from './golden/GoldenDrillView'
 import GoldenExamView from './golden/GoldenExamView'
@@ -9,6 +10,7 @@ import GoldenRecallView from './golden/GoldenRecallView'
 import GoldenSummary from './golden/GoldenSummary'
 import type { WritingRecord } from '../../core/writing'
 import type { WritingRecommendationGroup } from '../../core/writingErrors'
+import type { GoldenRouteState } from '../route'
 import type { WritingErrorCard } from '../../core/writingErrorReview'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import type { GoldenExtraPoint } from '../../types/document'
@@ -35,7 +37,13 @@ export interface GoldenPanelActions {
     onResumeReview?: (card: WritingErrorCard) => void
     extraPoints?: GoldenExtraPoint[]
     onRemovePoint?: (sentenceId: string, en: string) => void
+    /** 到历史详情（recordKey + 范围）；由 ReaderApp 接到 URL */
+    onOpenHistory?: (recordKey: string, scope: 'article' | 'all') => void
   }
+  /** 当前 `/p/golden` query；没有就 undefined */
+  goldenRoute?: GoldenRouteState
+  /** 改 golden 子视图 / 历史详情；replace 用于关闭/详情翻页 */
+  onNavigateGolden?: (state: GoldenRouteState, opts?: { replace?: boolean }) => void
   /** 打印当前范围的学习历史（A4） */
   onPrintHistory?: (rows: WritingRecord[], title: string) => void
   /** 打印本课 A4 */
@@ -58,7 +66,54 @@ export interface GoldenPanelProps {
 
 /** D老师小课堂壳：只负责标题栏和视图路由，具体视图在 panels/golden/*。 */
 export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: GoldenPanelProps) {
-  if (!api.open) return null
+  const { open, view, setView } = api
+  const routeView = actions.goldenRoute?.view
+  const canRoute = !!actions.onNavigateGolden
+  // URL 里的 gv=errors/history 是事实来源；没有 gv 时，errors/history 不能靠 localStorage 偷停。
+  useEffect(() => {
+    if (!open || !canRoute) return
+    if (routeView) {
+      if (view !== routeView) setView(routeView)
+      return
+    }
+    if (view === 'errors' || view === 'history') setView('home')
+  }, [open, view, setView, canRoute, routeView])
+
+  if (!open) return null
+
+  const openErrors = () => {
+    if (actions.onNavigateGolden) actions.onNavigateGolden({ view: 'errors' })
+    else api.setView('errors')
+  }
+  const openHistory = () => {
+    if (actions.onNavigateGolden) actions.onNavigateGolden({ view: 'history' })
+    else api.setView('history')
+  }
+  const backHome = () => {
+    api.setView('home')
+    actions.onNavigateGolden?.({}, { replace: true })
+  }
+  const backFromHistory = () => {
+    if (actions.goldenRoute?.from === 'errors') {
+      if (actions.onNavigateGolden) {
+        actions.onNavigateGolden(
+          {
+            view: 'errors',
+            ...(actions.goldenRoute?.scope ? { scope: actions.goldenRoute.scope } : {}),
+          },
+          { replace: true },
+        )
+      } else api.setView('errors')
+      return
+    }
+    backHome()
+  }
+  const openHistoryRecord = (recordKey: string, scope: 'article' | 'all') => {
+    actions.onNavigateGolden?.(
+      { view: 'history', recordKey, scope, from: 'errors' },
+    )
+  }
+
   return (
     <div className="study golden">
       <div className="bar study-bar">
@@ -80,22 +135,29 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           exam={actions.exam}
           history={actions.history}
           onOpenBank={() => api.setView('bank')}
-          onOpenHistory={() => api.setView('history')}
-          onOpenErrors={() => api.setView('errors')}
+          onOpenHistory={openHistory}
+          onOpenErrors={openErrors}
         />
       )}
       {api.view === 'errors' && (
         <GoldenErrorsView
           rows={actions.history ?? { article: [], all: [] }}
           articleTitle={articleTitle}
-          onBack={() => api.setView('home')}
+          onBack={backHome}
           onAddPoint={actions.errors?.onAddPoint}
           writingErrorProgress={actions.errors?.writingErrorProgress}
           onReviewAnswer={actions.errors?.onReviewAnswer}
           onPauseReview={actions.errors?.onPauseReview}
           onResumeReview={actions.errors?.onResumeReview}
+          initialScope={actions.goldenRoute?.scope}
+          onScopeChange={
+            actions.onNavigateGolden
+              ? (scope) => actions.onNavigateGolden?.({ view: 'errors', scope }, { replace: true })
+              : undefined
+          }
           extraPoints={actions.errors?.extraPoints}
           onRemovePoint={actions.errors?.onRemovePoint}
+          onOpenHistory={actions.onNavigateGolden ? openHistoryRecord : undefined}
           onOpenSentence={(sentenceId) => {
             const index = api.ordered.findIndex((s) => s.id === sentenceId)
             if (index >= 0) api.startDrill(index)
@@ -106,8 +168,38 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
         <GoldenHistoryView
           rows={actions.history ?? { article: [], all: [] }}
           articleTitle={articleTitle}
-          onBack={() => api.setView('home')}
+          onBack={backFromHistory}
           onPrint={actions.onPrintHistory}
+          focusRecordKey={actions.goldenRoute?.recordKey}
+          initialScope={actions.goldenRoute?.scope}
+          backLabel={actions.goldenRoute?.from === 'errors' ? '错因复盘' : '课程页'}
+          onCloseDetail={
+            actions.onNavigateGolden
+              ? () =>
+                  actions.onNavigateGolden?.(
+                    {
+                      view: 'history',
+                      ...(actions.goldenRoute?.scope ? { scope: actions.goldenRoute.scope } : {}),
+                      ...(actions.goldenRoute?.from === 'errors' ? { from: 'errors' as const } : {}),
+                    },
+                    { replace: true },
+                  )
+              : undefined
+          }
+          onOpenRecord={
+            actions.onNavigateGolden
+              ? (recordKey, scope) =>
+                  actions.onNavigateGolden?.(
+                    {
+                      view: 'history',
+                      recordKey,
+                      scope,
+                      ...(actions.goldenRoute?.from === 'errors' ? { from: 'errors' as const } : {}),
+                    },
+                    { replace: true },
+                  )
+              : undefined
+          }
         />
       )}
       {api.view === 'bank' && (

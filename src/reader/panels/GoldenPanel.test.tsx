@@ -125,6 +125,23 @@ describe('GoldenPanel', () => {
     expect(api.setView).toHaveBeenCalledWith('plan')
   })
 
+  it('goldenRoute 驱动 gv=errors / history 子视图', () => {
+    const setView = vi.fn()
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'home', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{
+          onExportMarkdown: vi.fn(),
+          goldenRoute: { view: 'errors' },
+          onNavigateGolden: vi.fn(),
+        }}
+      />,
+    )
+    expect(setView).toHaveBeenCalledWith('errors')
+  })
+
   it('未选金句时，遣词造句 / 逆向回顾禁用', () => {
     const api = fakeApi()
     render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)
@@ -197,7 +214,7 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('学习历史')).toBeTruthy()
     expect(screen.getByRole('button', { name: '本篇（1）' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '全部（1）' })).toBeTruthy()
-    fireEvent.click(screen.getByTitle(/作答：The more I read/))
+    fireEvent.click(screen.getByRole('button', { name: /作答：The more I read/ }))
     expect(screen.getByText(/单句仿写/)).toBeTruthy()
     expect(screen.getByText('得分：4/5')).toBeTruthy()
     expect(screen.getByText('不错')).toBeTruthy()
@@ -246,6 +263,7 @@ describe('GoldenPanel', () => {
     const setView = vi.fn()
     const onAddPoint = vi.fn()
     const onReviewAnswer = vi.fn()
+    const onNavigateGolden = vi.fn()
     const errors = { onAddPoint, writingErrorProgress: [], onReviewAnswer }
     const { unmount } = render(
       <GoldenPanel
@@ -264,13 +282,29 @@ describe('GoldenPanel', () => {
         api={fakeApi({ view: 'errors', setView })}
         articleTitle="A"
         onSpeak={vi.fn()}
-        actions={{ onExportMarkdown: vi.fn(), history: { article: [rec], all: [rec] }, errors }}
+        actions={{
+          onExportMarkdown: vi.fn(),
+          history: { article: [rec], all: [rec] },
+          errors,
+          goldenRoute: { view: 'errors' },
+          onNavigateGolden,
+        }}
       />,
     )
     expect(screen.getByText('单词拼写')).toBeTruthy()
     expect(screen.getByText('come to an end')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '加入本课' }))
     expect(onAddPoint).toHaveBeenCalledTimes(1)
+
+    fireEvent.click(screen.getAllByRole('button', { name: '看批改' })[0])
+    expect(screen.getByRole('dialog', { name: '批改详情' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '关闭' }))
+
+    fireEvent.click(screen.getAllByRole('button', { name: '历史 ↗' })[0])
+    expect(onNavigateGolden).toHaveBeenCalledWith(
+      expect.objectContaining({ view: 'history', scope: 'article', from: 'errors' }),
+    )
+
     fireEvent.click(screen.getByRole('button', { name: /现在考我（1 张到期）/ }))
     expect(screen.getByText('错因复习')).toBeTruthy()
     expect(screen.getByLabelText('错因答案')).toBeTruthy()
@@ -297,15 +331,15 @@ describe('GoldenPanel', () => {
       />,
     )
     // 悬浮摘要：带作答和评分
-    expect(screen.getByTitle(/作答：second answer/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: /作答：second answer/ })).toBeTruthy()
 
     // 按语言点筛：只剩 2 条
     fireEvent.change(screen.getByLabelText('按语言点筛选'), { target: { value: 'come with' } })
     expect(screen.getByText(/语言点「come with」· 2 条/)).toBeTruthy()
-    expect(screen.queryByTitle(/作答：other answer/)).toBeNull()
+    expect(screen.queryByRole('button', { name: /作答：other answer/ })).toBeNull()
 
     // 点开最新一条（列表按时间倒序，第一条是 second answer）
-    fireEvent.click(screen.getByTitle(/作答：second answer/))
+    fireEvent.click(screen.getByRole('button', { name: /作答：second answer/ }))
     expect(screen.getByText(/第 1\/2 条/)).toBeTruthy()
     const older = screen.getByRole('button', { name: /上一条/ }) as HTMLButtonElement
     expect(older.disabled).toBe(true) // 已是最新一条

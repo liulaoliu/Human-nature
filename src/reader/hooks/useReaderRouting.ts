@@ -36,8 +36,8 @@ export function useReaderArticleIdentity(
 }
 
 export function useReaderPanelRouting(currentSlug: string) {
-  const { pathname } = useLocation()
-  const route = useMemo(() => parseReaderRoute(pathname), [pathname])
+  const { pathname, search } = useLocation()
+  const route = useMemo(() => parseReaderRoute(pathname, search), [pathname, search])
   const raw = useReaderPanels()
   const panels = useRoutedPanels(raw, route, currentSlug)
   return { route, panels }
