@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, type Dispatch, type SetStateAction } from 'react'
 import GoldenBankView from './golden/GoldenBankView'
 import GoldenDrillView from './golden/GoldenDrillView'
 import GoldenExamView from './golden/GoldenExamView'
@@ -9,6 +9,7 @@ import GoldenPlan from './golden/GoldenPlan'
 import GoldenRecallView from './golden/GoldenRecallView'
 import GoldenSummary from './golden/GoldenSummary'
 import type { WritingRecord } from '../../core/writing'
+import type { ActivityCat } from '../../core/activity'
 import type { WritingRecommendationGroup } from '../../core/writingErrors'
 import type { GoldenRouteState } from '../route'
 import type { WritingErrorCard } from '../../core/writingErrorReview'
@@ -35,6 +36,10 @@ export interface GoldenPanelActions {
     onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
     onPauseReview?: (card: WritingErrorCard) => void
     onResumeReview?: (card: WritingErrorCard) => void
+    /** 错因订正 AI 批改：和仿写共用 writingHistory，source='goldenError' */
+    setWritingHistory?: Dispatch<SetStateAction<WritingRecord[]>>
+    flash?: (message: string) => void
+    recordActivity?: (cat: ActivityCat, n?: number) => void
     extraPoints?: GoldenExtraPoint[]
     onRemovePoint?: (sentenceId: string, en: string) => void
     /** 到历史详情（recordKey + 范围）；由 ReaderApp 接到 URL */
@@ -151,6 +156,9 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           onReviewAnswer={actions.errors?.onReviewAnswer}
           onPauseReview={actions.errors?.onPauseReview}
           onResumeReview={actions.errors?.onResumeReview}
+          setWritingHistory={actions.errors?.setWritingHistory}
+          flash={actions.errors?.flash}
+          recordActivity={actions.errors?.recordActivity}
           initialScope={actions.goldenRoute?.scope}
           onScopeChange={
             actions.onNavigateGolden

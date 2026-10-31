@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   summarizeWritingErrors,
   writingErrorHeadline,
@@ -16,6 +16,7 @@ import {
 } from '../../../core/writingErrorProgress'
 import type { WritingRecord } from '../../../core/writing'
 import { writingRecordKey } from '../../../core/writing'
+import type { ActivityCat } from '../../../core/activity'
 import type { GoldenExtraPoint } from '../../../types/document'
 import GoldenErrorReview from './GoldenErrorReview'
 import GoldenRecordDrawer from './GoldenRecordDrawer'
@@ -41,6 +42,10 @@ export interface GoldenErrorsViewProps {
   onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
   onPauseReview?: (card: WritingErrorCard) => void
   onResumeReview?: (card: WritingErrorCard) => void
+  /** 错因订正 AI 批改写进 writingHistory；不传就隐藏 AI 入口 */
+  setWritingHistory?: Dispatch<SetStateAction<WritingRecord[]>>
+  flash?: (message: string) => void
+  recordActivity?: (cat: ActivityCat, n?: number) => void
   /** 本课已加入的额外语言点（可移除） */
   extraPoints?: GoldenExtraPoint[]
   onRemovePoint?: (sentenceId: string, en: string) => void
@@ -77,6 +82,9 @@ export default function GoldenErrorsView({
   onReviewAnswer,
   onPauseReview,
   onResumeReview,
+  setWritingHistory,
+  flash,
+  recordActivity,
   extraPoints,
   onRemovePoint,
 }: GoldenErrorsViewProps) {
@@ -144,6 +152,11 @@ export default function GoldenErrorsView({
     return (
       <GoldenErrorReview
         cards={sessionCards}
+        writingErrorProgress={writingErrorProgress}
+        writingHistory={rows.all}
+        setWritingHistory={setWritingHistory}
+        flash={flash}
+        recordActivity={recordActivity}
         onAnswer={(card, correct) => onReviewAnswer?.(card, correct)}
         onPause={onPauseReview}
         onBack={() => setSessionCards(null)}

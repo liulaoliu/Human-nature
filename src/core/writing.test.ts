@@ -192,9 +192,10 @@ describe('isGoldenWritingRecord', () => {
     feedback: { scores: [], issues: [], total: 0, max: 0 },
     ...(source ? { source } : {}),
   })
-  it('单句仿写和整课考试都算金句课记录', () => {
+  it('单句仿写 / 整课考试 / 错因订正都算金句课记录', () => {
     expect(isGoldenWritingRecord(rec('goldenSentence'))).toBe(true)
     expect(isGoldenWritingRecord(rec('goldenExam'))).toBe(true)
+    expect(isGoldenWritingRecord(rec('goldenError'))).toBe(true)
     expect(isGoldenWritingRecord(rec())).toBe(false)
     expect(isGoldenWritingRecord(rec('writing'))).toBe(false)
   })
@@ -250,6 +251,7 @@ describe('writingRecordLabel：一条记录叫什么', () => {
   it('普通仿写 / 整课考试 / 单句仿写 / 语言点造句各叫各的', () => {
     expect(writingRecordLabel({ source: 'writing', task: undefined })).toBe('仿写')
     expect(writingRecordLabel({ source: 'goldenExam', task: undefined })).toBe('整课考试')
+    expect(writingRecordLabel({ source: 'goldenError', task: undefined })).toBe('错因订正')
     expect(writingRecordLabel({ source: 'goldenSentence', task: { task: 'x', model: 'm', mustUse: [], rubric: [] } })).toBe('单句仿写')
     expect(
       writingRecordLabel({
@@ -283,6 +285,7 @@ describe('normalizeWritingRecord：外部数据里的来源只认白名单', () 
   it('合法来源原样保留（金句课历史才会出现在 D老师小课堂）', () => {
     expect(normalizeWritingRecord({ ...base, source: 'goldenExam', examId: 'e1' }).source).toBe('goldenExam')
     expect(normalizeWritingRecord({ ...base, source: 'goldenSentence', sentenceId: 's1' }).sentenceId).toBe('s1')
+    expect(normalizeWritingRecord({ ...base, source: 'goldenError', sentenceId: 's1' }).source).toBe('goldenError')
     expect(normalizeWritingRecord({ ...base, source: 'writing' }).source).toBe('writing')
   })
 

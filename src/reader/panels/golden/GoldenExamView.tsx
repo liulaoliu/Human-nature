@@ -98,10 +98,10 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
       />
 
       <div className="bar">
-        <button className="primary" onClick={exam.grade} disabled={exam.grading}>
+        <button className="primary" onClick={() => void exam.grade()} disabled={exam.grading}>
           {exam.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={exam.copyGradePrompt}>复制批改提示词</button>
+        <button onClick={() => void exam.copyGradePrompt()}>复制批改提示词</button>
         {exam.index > 0 && <button onClick={exam.prev}>上一题</button>}
         <button onClick={exam.next}>{exam.index + 1 >= exam.items.length ? '交卷' : '下一题'}</button>
       </div>

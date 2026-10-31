@@ -5,6 +5,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { useGoldenImitation } from './useGoldenImitation'
 import type { WritingRecord } from '../../core/writing'
 import type { GoldenExamItem } from '../../types/document'
+import { errorFixExamItem, type WritingErrorCard } from '../../core/writingErrorReview'
 
 const item: GoldenExamItem = {
   id: 'exam:s1',
@@ -140,6 +141,50 @@ describe('useGoldenImitation', () => {
     expect(h.result.current.imitation.viewing).toBeNull()
     act(() => h.result.current.imitation.backToLive())
     expect(h.result.current.imitation.viewing).toBeNull()
+  })
+
+  it('错因订正：外部答案覆盖 state，记录 source=goldenError 并带 focus', async () => {
+    const card: WritingErrorCard = {
+      id: 'errfix:word-spelling|spelling-bureaucracy',
+      rule: 'word-spelling',
+      type: 'spelling',
+      key: 'spelling-bureaucracy',
+      original: 'bureacracy',
+      suggestion: 'bureaucracy',
+      text: 'I learn bureacracy.',
+      recordKey: 'r1',
+      at: '2026-10-30T00:00:00.000Z',
+      articleId: 'a1',
+      sentenceId: 's1',
+    }
+    const raw = JSON.stringify(feedback)
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })
+    const h = renderHook(() => {
+      const [history, setWritingHistory] = useState<WritingRecord[]>([])
+      const imitation = useGoldenImitation({
+        current: errorFixExamItem(card),
+        articleId: 'a1',
+        articleTitle: 'A',
+        source: 'goldenError',
+        setWritingHistory,
+        writingHistory: history,
+        flash: vi.fn(),
+        recordActivity: vi.fn(),
+        runAi,
+        aiStatus: vi.fn().mockResolvedValue(true),
+      })
+      return { imitation, history }
+    })
+    await act(async () => {
+      await h.result.current.imitation.grade('bureaucracy')
+    })
+    await waitFor(() => expect(h.result.current.history).toHaveLength(1))
+    expect(h.result.current.history[0]).toMatchObject({
+      source: 'goldenError',
+      sentenceId: 's1',
+      text: 'bureaucracy',
+    })
+    expect(h.result.current.history[0].task?.focus).toContain('bureacracy')
   })
 
   it('坏批改 JSON 只报错，不写历史', () => {

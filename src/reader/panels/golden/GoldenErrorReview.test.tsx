@@ -3,6 +3,10 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import GoldenErrorReview from './GoldenErrorReview'
 import type { WritingErrorCard } from '../../../core/writingErrorReview'
+import {
+  applyWritingErrorReview,
+  writingErrorProgressFromCard,
+} from '../../../core/writingErrorProgress'
 
 const card: WritingErrorCard = {
   id: 'errfix:word-spelling|spelling-bureaucracy',
@@ -61,6 +65,74 @@ describe('GoldenErrorReview', () => {
     expect(screen.getByRole('button', { name: '我写对了' })).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '我写对了' }))
     expect(onAnswer).toHaveBeenCalledWith(longCard, true)
+  })
+
+  it('结果出来后按 Enter 就是下一个；看完最后一张回车看结果', () => {
+    const second: WritingErrorCard = {
+      ...card,
+      id: 'errfix:tense-choice|tense-choice',
+      rule: 'tense-choice',
+      type: 'grammar',
+      key: 'tense-choice',
+      original: 'go',
+      suggestion: 'went',
+      text: 'I go home.',
+    }
+    render(<GoldenErrorReview cards={[card, second]} onAnswer={vi.fn()} onBack={vi.fn()} />)
+    fireEvent.change(screen.getByLabelText('错因答案'), { target: { value: 'bureaucracy' } })
+    fireEvent.click(screen.getByRole('button', { name: '检查' }))
+    fireEvent.keyDown(document.activeElement as Element, { key: 'Enter' })
+    expect(screen.getByText(/第 2 \/ 2 张/)).toBeTruthy()
+
+    fireEvent.change(screen.getByLabelText('错因答案'), { target: { value: 'went' } })
+    fireEvent.click(screen.getByRole('button', { name: '检查' }))
+    fireEvent.keyDown(document.activeElement as Element, { key: 'Enter' })
+    expect(screen.getByText(/本轮完成：答对 2 \/ 2/)).toBeTruthy()
+  })
+
+  it('练过的不练：按 reviews 跳过已有复习记录的卡', () => {
+    const practiced: WritingErrorCard = {
+      ...card,
+      id: 'errfix:tense-choice|tense-choice',
+      rule: 'tense-choice',
+      type: 'grammar',
+      key: 'tense-choice',
+      original: 'go',
+      suggestion: 'went',
+      text: 'I go home.',
+    }
+    const progress = applyWritingErrorReview(undefined, practiced, true, '2026-10-31T12:00:00.000Z')
+    expect(progress.reviews).toBe(1)
+    const untouched = writingErrorProgressFromCard(card, '2026-10-31T12:00:00.000Z')
+    render(
+      <GoldenErrorReview
+        cards={[card, practiced]}
+        writingErrorProgress={[untouched, progress]}
+        onAnswer={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/第 1 \/ 2 张/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('checkbox', { name: '练过的不练' }))
+    expect(screen.getByText(/第 1 \/ 1 张/)).toBeTruthy()
+    expect(screen.getByText(/已跳过 1 张练过的/)).toBeTruthy()
+  })
+
+  it('本地检查后可以走 AI 批改入口，记录进学习历史', () => {
+    render(
+      <GoldenErrorReview
+        cards={[card]}
+        writingHistory={[]}
+        setWritingHistory={vi.fn()}
+        flash={vi.fn()}
+        recordActivity={vi.fn()}
+        onAnswer={vi.fn()}
+        onBack={vi.fn()}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('错因答案'), { target: { value: 'bureaucracy' } })
+    fireEvent.click(screen.getByRole('button', { name: '检查' }))
+    expect(screen.getByRole('button', { name: 'AI 批改（记入学习历史）' })).toBeTruthy()
   })
 
   it('可以暂停当前错因，不再进队列', () => {

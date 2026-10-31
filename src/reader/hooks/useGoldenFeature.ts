@@ -250,6 +250,9 @@ export function useGoldenFeature({
           return [updated, ...prev.filter((p) => p.id !== card.id)]
         })
       },
+      setWritingHistory,
+      flash,
+      recordActivity,
       extraPoints: golden.extraPoints,
       onRemovePoint: golden.removeExtraPoint,
       onMissingSentence: () =>

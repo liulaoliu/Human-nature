@@ -4,6 +4,7 @@ import type { WritingIssue, WritingRecord } from './writing'
 import {
   collectWritingErrorCards,
   dueWritingErrorCards,
+  errorFixExamItem,
   isWritingErrorAnswerCorrect,
   writingErrorCardId,
   writingErrorReviewSchedule,
@@ -83,6 +84,31 @@ describe('collectWritingErrorCards', () => {
       { scope: 'article', articleId: 'a1', sinceDays: 7, now },
     )
     expect(cards.map((c) => c.key)).toEqual(['tense-choice'])
+  })
+})
+
+describe('errorFixExamItem', () => {
+  it('用改正后的整句做参照，题面只让学生订正片段', () => {
+    const card = collectWritingErrorCards(
+      [rec('2026-10-30T00:00:00.000Z', [
+        issue('word-spelling', 'spelling-bureaucracy', 'must-fix', {
+          original: 'bureacracy',
+          suggestion: 'bureaucracy',
+        }),
+      ], { sentenceId: 's1' })],
+      { scope: 'all', now },
+    )[0]
+    const item = errorFixExamItem(card)
+    expect(item).toMatchObject({
+      id: card.id,
+      sentenceId: 's1',
+      model: 'I learn bureaucracy.',
+      source: 'local',
+      mustUse: [],
+    })
+    expect(item.task).toContain('bureacracy')
+    expect(item.task).toContain('不要要求重写整句')
+    expect(item.focus).toContain('bureacracy')
   })
 })
 

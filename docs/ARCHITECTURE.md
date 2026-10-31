@@ -98,6 +98,7 @@ types ← core ← adapters ← reader
 | D老师小课堂：错因去练 | `src/reader/hooks/useGoldenStartSentence.ts` | 按 `sentenceId` 找当前 lesson 的 `ordered`；本篇未选题先写入 `selected` 再落到 `fill`；非本篇返回 false，界面必须 flash，不能静默无反应 |
 | D老师小课堂整页面板 | `src/reader/panels/GoldenPanel.tsx` + `panels/golden/*` | 壳只做标题栏 + 视图路由；`errors/history` 子视图走 `/p/golden?gv=…&gr=…`，详情用稳定 `recordKey`；其余视图仍由 `api.view` 管 |
 | D老师小课堂：错因复盘 / 历史详情 | `GoldenErrorsView.tsx` + `GoldenHistoryView.tsx` + `route.ts` | 从错因「去练」进 `fill`，不混用错因卡 SRS；历史详情用 `recordKey` query 定位，返回键回错因 |
+| 错因复习：回车 / 跳过练过 / AI 批改 | `GoldenErrorReview.tsx` + `ErrorFixAi.tsx` + `core/writingErrorProgress.ts` | 判完焦点落在结果块，Enter 走下一个；「练过的不练」按 `reviews/lastAt` 过滤；AI 批改复用 `useGoldenImitation`，记录 `source='goldenError'`，不改变本地判定的 SRS，也不反哺错因趋势 |
 | 金句课历史定位 / 悬浮摘要 | `src/reader/route.ts` + `WritingHoverCard.tsx` + `GoldenRecordDrawer.tsx` | `parseGoldenQuery` / `goldenPanelPath` 只做 URL 纯函数；历史行和错因行共用 `WritingHoverCard`；「看批改」抽屉复用 `GoldenFeedback`，「历史 ↗」走路由 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |

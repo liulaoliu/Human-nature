@@ -61,10 +61,10 @@ export default function GoldenSentenceImitation({
       )}
 
       <div className="bar">
-        <button className="primary" onClick={imitation.grade} disabled={!hasAnswer || imitation.grading}>
+        <button className="primary" onClick={() => void imitation.grade()} disabled={!hasAnswer || imitation.grading}>
           {imitation.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={imitation.copyGradePrompt} disabled={!hasAnswer}>复制批改提示词</button>
+        <button onClick={() => void imitation.copyGradePrompt()} disabled={!hasAnswer}>复制批改提示词</button>
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
         <button className="primary" onClick={onNext} disabled={!hasAnswer}>
           {nextLabel}

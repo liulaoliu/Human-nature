@@ -402,7 +402,12 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       const task = parseJson(r.task_json)
       if (task !== undefined) rec.task = task
       // 来源只认白名单：坏值当普通仿写，别让金句课历史被一条脏数据带歪
-      if (r.source === 'writing' || r.source === 'goldenSentence' || r.source === 'goldenExam') {
+      if (
+        r.source === 'writing' ||
+        r.source === 'goldenSentence' ||
+        r.source === 'goldenExam' ||
+        r.source === 'goldenError'
+      ) {
         rec.source = r.source
       }
       if (r.sentence_id !== null && r.sentence_id !== undefined) rec.sentenceId = String(r.sentence_id)

@@ -536,7 +536,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.db.prepare('SELECT COUNT(*) AS n FROM writing_records').get().n).toBe(1)
   })
 
-  it('仿写记录保留来源（金句课单句 / 整课考试），坏值当普通仿写', async () => {
+  it('仿写记录保留来源（单句 / 整课 / 错因订正），坏值当普通仿写', async () => {
     const store = openStore(tempDb())
     const base = {
       articleId: 'a1',
@@ -551,14 +551,15 @@ describe('sqliteStore：学习记录', () => {
       writingHistory: [
         { ...base, at: '2026-01-03T00:00:00.000Z', source: 'goldenSentence', sentenceId: 's1' },
         { ...base, at: '2026-01-04T00:00:00.000Z', source: 'goldenExam', examId: 'e1' },
+        { ...base, at: '2026-01-06T00:00:00.000Z', source: 'goldenError', sentenceId: 's1' },
         { ...base, at: '2026-01-05T00:00:00.000Z', source: 'bogus' },
       ],
     })
     const got = store.loadLearning().writingHistory
-    // 按 at 倒序：01-05 的坏值 → 普通仿写（undefined），01-04 考试，01-03 单句
-    expect(got.map((r) => r.source)).toEqual([undefined, 'goldenExam', 'goldenSentence'])
-    expect(got[1].examId).toBe('e1')
-    expect(got[2].sentenceId).toBe('s1')
+    // 按 at 倒序：01-06 错因订正，01-05 坏值 → 普通仿写（undefined），01-04 考试，01-03 单句
+    expect(got.map((r) => r.source)).toEqual(['goldenError', undefined, 'goldenExam', 'goldenSentence'])
+    expect(got[2].examId).toBe('e1')
+    expect(got[3].sentenceId).toBe('s1')
   })
 
   it('答题事件增量同步幂等：重复 section 不翻倍，也不会被空数组删除', async () => {

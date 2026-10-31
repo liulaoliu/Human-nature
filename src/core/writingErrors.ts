@@ -211,6 +211,8 @@ function timestamp(at: string): number {
 }
 
 function inScope(rec: WritingRecord, query: WritingErrorQuery, cutoff: number): boolean {
+  // 错因订正的 AI 反馈不再反哺错因趋势：否则「改错 → 新错因 → 再改」会自己长卡。
+  if (rec.source === 'goldenError') return false
   if (query.scope === 'article' && rec.articleId !== query.articleId) return false
   if (!cutoff) return true
   const t = timestamp(rec.at)

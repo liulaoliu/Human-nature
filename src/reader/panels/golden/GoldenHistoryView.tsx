@@ -72,6 +72,8 @@ export default function GoldenHistoryView({
   const focuses = useMemo(() => {
     const map = new Map<string, number>()
     for (const r of scoped) {
+      // 错因订正的 focus 是「错因：原片段 → 改法」，不是语言点，别塞进筛选下拉。
+      if (r.source === 'goldenError') continue
       const f = r.task?.focus?.trim()
       if (f) map.set(f, (map.get(f) ?? 0) + 1)
     }

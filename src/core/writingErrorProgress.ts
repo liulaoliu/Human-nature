@@ -210,6 +210,20 @@ export function isWritingErrorProgressDue(row: WritingErrorProgress, now: Date =
   return Number.isFinite(t) && t <= now.getTime()
 }
 
+/** 这张卡是否真的练过（旧数据可能只有 lastAt，没有 reviews）。 */
+export function isWritingErrorProgressPracticed(row: WritingErrorProgress | undefined): boolean {
+  return !!row && (row.reviews > 0 || !!row.lastAt)
+}
+
+/** 「练过的不练」：从到期队列里滤掉已有复习记录的卡；没有进度行 = 没练过。 */
+export function unpracticedWritingErrorCards(
+  cards: readonly WritingErrorCard[],
+  progress: readonly WritingErrorProgress[],
+): WritingErrorCard[] {
+  const byId = new Map(progress.map((p) => [p.id, p]))
+  return cards.filter((card) => !isWritingErrorProgressPracticed(byId.get(card.id)))
+}
+
 /** 到期卡：没有进度行的卡按“现在到期”；paused / mastered 不出现。 */
 export function dueCardsFromProgress(
   cards: readonly WritingErrorCard[],

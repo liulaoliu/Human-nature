@@ -74,6 +74,19 @@ describe('summarizeWritingErrors：口径', () => {
     expect(all.mustFix).toBe(1)
   })
 
+  it('错因订正记录不反哺错因趋势（避免改错生新卡）', () => {
+    const records = [
+      rec({ at: '2026-10-30T10:00:00.000Z' }),
+      {
+        ...rec({ at: '2026-10-31T10:00:00.000Z', issues: [issue('word-spelling', 'spelling-x')] }),
+        source: 'goldenError' as const,
+      },
+    ]
+    const s = summarizeWritingErrors(records, { scope: 'all', now })
+    expect(s.totalRecords).toBe(1)
+    expect(s.analyzedRecords).toBe(1)
+  })
+
   it('同一记录同一 key 只算一次，AI 拆两条不重复计数', () => {
     const records = [
       rec({

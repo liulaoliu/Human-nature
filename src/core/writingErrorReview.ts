@@ -12,12 +12,18 @@
  */
 import type { AnswerEvent } from './answerEvents'
 import type { WritingRecord } from './writing'
+import type { GoldenExamItem } from '../types/document'
 import {
   filterWritingErrorRecords,
   isValidWritingIssue,
   type WritingErrorQuery,
 } from './writingErrors'
-import { writingTypeOf, type WritingIssueType, type WritingRule } from './writingErrorRules'
+import {
+  WRITING_RULE_LABEL,
+  writingTypeOf,
+  type WritingIssueType,
+  type WritingRule,
+} from './writingErrorRules'
 
 export const ERROR_REVIEW_PREFIX = 'errfix:'
 
@@ -64,6 +70,40 @@ export function writingErrorCardId(rule: WritingRule, key: string): string {
 
 export function isWritingErrorCardId(value: string | undefined): value is string {
   return !!value && value.startsWith(ERROR_REVIEW_PREFIX)
+}
+
+/**
+ * 把一张错因卡变成 AI 批改用的题面。
+ *
+ * 学生只写「改正后的片段」，但 AI 需要看到原句和错因，才能判断这个片段是否真的
+ * 解决了问题；`model` 用改正后的完整句，批改反馈里能直接当参照。
+ */
+export function errorFixExamItem(card: WritingErrorCard): GoldenExamItem {
+  const corrected =
+    card.original && card.text.includes(card.original)
+      ? card.text.replace(card.original, card.suggestion)
+      : card.text
+  return {
+    id: card.id,
+    sentenceId: card.sentenceId ?? card.examId ?? (card.recordKey || card.id),
+    task: [
+      `批改这条错因订正。原句：${card.text}`,
+      `错因（${WRITING_RULE_LABEL[card.rule]}）：${card.original || '缺词'} → ${card.suggestion}。`,
+      '学生只需写出改正后的片段，不要要求重写整句。',
+    ].join(' '),
+    model: corrected,
+    structure: `错因类型：${WRITING_RULE_LABEL[card.rule]}`,
+    mustUse: [],
+    rubric: [
+      {
+        dimension: '错因修正',
+        weight: 100,
+        description: '只检查订正是否解决了这条错因，并指出仍然存在的写法问题。',
+      },
+    ],
+    source: 'local',
+    focus: `错因：${card.original || '缺词'} → ${card.suggestion}`,
+  }
 }
 
 /** 从一批批改记录里取每张错因卡（同一 rule+key 只留最新一条）。 */

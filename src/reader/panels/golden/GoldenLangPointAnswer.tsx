@@ -73,10 +73,10 @@ export default function GoldenLangPointAnswer({
         <div className="golden-note">第 2 稿：改完再提交一次批改，会和首稿分开记一条。</div>
       )}
       <div className="bar">
-        <button className="primary" onClick={imitation.grade} disabled={!hasAnswer || imitation.grading}>
+        <button className="primary" onClick={() => void imitation.grade()} disabled={!hasAnswer || imitation.grading}>
           {imitation.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={imitation.copyGradePrompt} disabled={!hasAnswer}>复制批改提示词</button>
+        <button onClick={() => void imitation.copyGradePrompt()} disabled={!hasAnswer}>复制批改提示词</button>
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
       </div>
       {imitation.error && <div className="golden-bad">{imitation.error}</div>}

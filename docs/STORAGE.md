@@ -216,6 +216,9 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 - `writing_records.feedback_json` 自 **契约 v2** 起带 `version: 2`、`issues[]`（含闭集 `rule`、稳定 `key`、
   `severity`）和 `recommendations[]`。旧记录由 `tools/backfill-writing-v2.mjs` 一次性回填（先 `VACUUM INTO`
   备份，再事务更新）；运行时只分析 v2，不再保留旧格式双读。
+- `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError`；
+  `goldenError` 是错因复习里的 AI 订正记录，照常进历史/备份/导出，但 `filterWritingErrorRecords`
+  会跳过它，避免「改错产生新错因、再改」自己长卡。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
   保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
   `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。
@@ -296,7 +299,7 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 | 下载 SQLite 文件 | 浏览器打开 `http://localhost:5173/api/store/db`，或 `curl -OJ http://localhost:5173/api/store/db` | 用 `VACUUM INTO` 生成的一致性快照（含 WAL 中已提交数据），可用 DB Browser / `sqlite3` 打开 |
 | 导出 JSON | `GET /api/store/export`（加 `?download=1` 直接下载） | 词库 + 快照 + 文章 + 学习记录（完整 section） |
 | 应用内「导出全部（备份）」 | 侧栏按钮 | 词库 + 文章 + 练习/错题/活动/写作/复述/背词日/略读/题型统计；导入/合并会把它们一起恢复 |
-| 应用内「导出批改」 | 侧栏按钮（`writingHistoryToMarkdown`） | 仿写 / 金句课单句 / 金句课考试的 **AI 批改**（分数、逐条问题、润色、总评）按时间倒序成一份 Markdown；这些批改平时只在交卷时显示，导出后才算留档 |
+| 应用内「导出批改」 | 侧栏按钮（`writingHistoryToMarkdown`） | 仿写 / 金句课单句 / 金句课考试 / 错因订正的 **AI 批改**（分数、逐条问题、润色、总评）按时间倒序成一份 Markdown；这些批改平时只在交卷时显示，导出后才算留档 |
 | 应用内「文章包」（单篇 / 多篇） | 打印 / 导出面板「🗂 文章包 JSON」（范围选「本篇」或「按文章」） | 正文 + AI 结果（翻译/语法/语言点/生词/搭配/金句课）+ 这篇的词条与按篇收录 + 能归属到这篇的学习记录（练习/错题/读完/写作/回译/复述/略读/答题事件/金句进度）。另一台电脑用「合并导入」；**覆盖导入会拒绝**（否则整库只剩这一篇）。活动/学习时长等全局统计不随单篇走 |
 
 **合并导入的落盘顺序不能反**：文章 → 词库（`persistNow` 等真正成功）→ 学习记录 → 最后才写

@@ -8,6 +8,7 @@ import {
   normalizeWritingErrorProgress,
   setWritingErrorProgressStatus,
   syncWritingErrorProgress,
+  unpracticedWritingErrorCards,
   writingErrorProgressFromCard,
   writingErrorProgressFromEvents,
 } from './writingErrorProgress'
@@ -91,6 +92,14 @@ describe('writingErrorProgress', () => {
     const paused = setWritingErrorProgressStatus(writingErrorProgressFromCard(card, NOW), card, 'paused', NOW)
     const due = dueCardsFromProgress([card, other], [paused], new Date('2026-11-10T00:00:00.000Z'))
     expect(due.map((c) => c.id)).toEqual([other.id])
+  })
+
+  it('「练过的不练」只滤掉 reviews / lastAt 有值的卡', () => {
+    const practiced = applyWritingErrorReview(undefined, card, true, NOW)
+    const legacy = { ...writingErrorProgressFromCard(other, NOW), lastAt: NOW }
+    expect(unpracticedWritingErrorCards([card, other], [practiced, legacy]).map((c) => c.id)).toEqual([])
+    expect(unpracticedWritingErrorCards([card, other], [practiced])).toEqual([other])
+    expect(unpracticedWritingErrorCards([card, other], [])).toEqual([card, other])
   })
 
   it('合并取 updatedAt 新的；sync 只补缺不覆盖进度', () => {

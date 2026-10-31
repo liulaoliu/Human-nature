@@ -12,14 +12,14 @@ import type { GoldenExamItem } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 
-export type GoldenImitationSource = 'goldenExam' | 'goldenSentence'
+export type GoldenImitationSource = 'goldenExam' | 'goldenSentence' | 'goldenError'
 
 export interface UseGoldenImitationParams {
   /** 当前题；null = 还没有题，不能批改 */
   current: GoldenExamItem | null
   articleId: string
   articleTitle: string
-  /** goldenExam = 整课考试；goldenSentence = 每句流程末尾的单句仿写 */
+  /** goldenExam = 整课考试；goldenSentence = 单句仿写；goldenError = 错因订正 */
   source: GoldenImitationSource
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
   flash: (message: string) => void
@@ -37,8 +37,8 @@ export interface UseGoldenImitationParams {
 /**
  * 一次仿写作答（写 → AI 批改 → 存历史）。
  *
- * 整课仿写考试和每句末尾的单句仿写共用这一条，避免两套批改/解析/存记录。
- * 题面由调用方准备：单句仿写用当前句，考试用 `GoldenLesson.exam`。
+ * 整课仿写考试、每句末尾的单句仿写和错因订正共用这一条，避免两套批改/解析/存记录。
+ * 题面由调用方准备：单句仿写用当前句，考试用 `GoldenLesson.exam`，错因订正用 `errorFixExamItem`。
  */
 export function useGoldenImitation({
   current,
@@ -115,14 +115,14 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
   }, [configured, aiStatus])
 
   const saveAttempt = useCallback(
-    (fb: WritingFeedback) => {
+    (fb: WritingFeedback, textOverride?: string) => {
       if (!current) return
       const rec: WritingRecord = {
         at: now().toISOString(),
         articleId,
         ...(articleTitle ? { articleTitle } : {}),
         model: current.model,
-        text: answer.trim(),
+        text: (textOverride ?? answer).trim(),
         feedback: fb,
         task: { ...examToImitation(current), ...(round > 1 ? { round } : {}) },
         source,
@@ -138,21 +138,22 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
   )
 
   const applyGrade = useCallback(
-    (raw: string) => {
-      if (!answer.trim()) {
+    (raw: string, textOverride?: string) => {
+      const text = (textOverride ?? answer).trim()
+      if (!text) {
         flash('先写一句英文再批改')
         return false
       }
       const pointIds = availablePoints?.length
         ? new Set(availablePoints.map((p) => p.id))
         : undefined
-      const parsed = parseWritingFeedbackDetailed(raw, { answer, availablePointIds: pointIds })
+      const parsed = parseWritingFeedbackDetailed(raw, { answer: text, availablePointIds: pointIds })
       if (!parsed) {
         setError('没解析出批改结果：需要 v2 JSON：{version, scores, issues, recommendations, polished}')
         return false
       }
       setFeedback(parsed.feedback)
-      saveAttempt(parsed.feedback)
+      saveAttempt(parsed.feedback, text)
       const dropped = parsed.dropped
       if (dropped.issues || dropped.recommendations) {
         flash(`已忽略 ${dropped.issues} 条无法定位的问题、${dropped.recommendations} 条无效语言点`)
@@ -164,18 +165,19 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     [answer, availablePoints, flash, saveAttempt],
   )
 
-  const copyGradePrompt = useCallback(async () => {
+  const copyGradePrompt = useCallback(async (textOverride?: string) => {
+    const text = (textOverride ?? answer).trim()
     if (!current) {
       flash('这一题还没有题面')
       return
     }
-    if (!answer.trim()) {
+    if (!text) {
       flash('先写一句英文再批改')
       return
     }
     try {
       await navigator.clipboard.writeText(
-        buildGoldenExamFeedbackPrompt(current, answer, {
+        buildGoldenExamFeedbackPrompt(current, text, {
           availablePoints,
           ...(round > 1 && feedback?.issues.length ? { previousIssues: feedback.issues } : {}),
         }),
@@ -186,21 +188,22 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     }
   }, [current, answer, availablePoints, feedback, round, flash])
 
-  const grade = useCallback(async () => {
+  const grade = useCallback(async (textOverride?: string) => {
+    const text = (textOverride ?? answer).trim()
     if (!current) {
       flash('这一题还没有题面')
       return
     }
-    if (!answer.trim()) {
+    if (!text) {
       flash('先写一句英文再批改')
       return
     }
-    const prompt = buildGoldenExamFeedbackPrompt(current, answer, {
+    const prompt = buildGoldenExamFeedbackPrompt(current, text, {
       availablePoints,
       ...(round > 1 && feedback?.issues.length ? { previousIssues: feedback.issues } : {}),
     })
     if (!(await ensureAi())) {
-      await copyGradePrompt()
+      await copyGradePrompt(text)
       return
     }
     setGrading(true)
@@ -215,7 +218,7 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
         setError(out.failed[0]?.error ?? 'AI 没有返回批改结果')
         return
       }
-      applyGrade(raw)
+      applyGrade(raw, text)
     } catch (e) {
       setError(String((e as Error)?.message || e))
     } finally {
