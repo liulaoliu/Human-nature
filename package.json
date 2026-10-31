@@ -13,6 +13,7 @@
     "serve": "node server/appServer.ts",
     "ai:pack": "node tools/ai-pack.mjs",
     "ai:agent": "node tools/ai-agent.mjs",
+    "backfill:writing": "node tools/backfill-writing-v2.mjs",
     "ecdict:build": "node tools/build-ecdict.mjs",
     "mwld:build": "node tools/build-mwld.mjs",
     "tatoeba:build": "node tools/build-tatoeba.mjs",

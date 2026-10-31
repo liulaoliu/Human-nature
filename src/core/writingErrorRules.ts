@@ -260,7 +260,7 @@ function ruleFromText(original: string, suggestion: string, reason: string): Wri
     return 'comma-followed-by-space'
   }
   if (/撇号|年代|90's|1990s/.test(s)) return 'apostrophe-decade'
-  if (/数字.*单位|单位.*空格|\$14|billion/.test(s)) return 'number-unit-spacing'
+  if (/数字.*单位|单位.*(空格|缺)|数字.*空格|单位前|单位之间/.test(s)) return 'number-unit-spacing'
   if (/标点|引号/.test(s)) return 'punctuation-other'
   if (/冠词|定冠词|不定冠词/.test(s)) return /缺|需要|漏/.test(s) ? 'article-missing' : 'article-wrong'
   if (/单复数|复数形式/.test(s)) return 'plural-form'
