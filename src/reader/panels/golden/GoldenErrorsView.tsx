@@ -133,6 +133,13 @@ export default function GoldenErrorsView({
         <span>提升项 <b>{data.improvement}</b> 条</span>
       </div>
 
+      {data.totalRecords > data.analyzedRecords && (
+        <div className="muted">
+          还有 {data.totalRecords - data.analyzedRecords} 条旧批改未分析：运行
+          <code> npm run backfill:writing </code>一次性回填。
+        </div>
+      )}
+
       {onReviewAnswer && (
         <div className="bar golden-plan-bar">
           <button

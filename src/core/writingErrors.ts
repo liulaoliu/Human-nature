@@ -105,6 +105,7 @@ export interface WritingAttemptPoint {
   issues: number
   mustFix: number
   rules: WritingRule[]
+  mustFixRules: WritingRule[]
 }
 
 export interface WritingSentenceSummary {
@@ -408,11 +409,12 @@ export function summarizeWritingErrors(
       }
       ruleMap.set(issue.rule, row)
 
-      const type = typeMap.get(issue.type) ?? { count: 0, mustFix: 0, improvement: 0 }
+      const typeKey = writingTypeOf(issue.rule)
+      const type = typeMap.get(typeKey) ?? { count: 0, mustFix: 0, improvement: 0 }
       type.count++
       if (issue.severity === 'must-fix') type.mustFix++
       else type.improvement++
-      typeMap.set(issue.type, type)
+      typeMap.set(typeKey, type)
 
       sentence.ruleCounts.set(issue.rule, (sentence.ruleCounts.get(issue.rule) ?? 0) + 1)
 
@@ -434,6 +436,7 @@ export function summarizeWritingErrors(
       issues: issues.length,
       mustFix: attemptMustFix,
       rules: attemptRules,
+      mustFixRules: [...new Set(issues.filter((i) => i.severity === 'must-fix').map((i) => i.rule))],
     })
     sentenceMap.set(sentenceKey, sentence)
 
@@ -553,7 +556,7 @@ export function summarizeWritingErrors(
       const attempts = row.attempts.sort((a, b) => timestamp(a.at) - timestamp(b.at))
       const percents = attempts.map((a) => a.percent).filter((p): p is number => p !== null)
       const lastAttempt = attempts[attempts.length - 1]
-      const latestRules = lastAttempt?.rules ?? []
+      const latestRules = lastAttempt?.mustFixRules ?? []
       const topRules = [...row.ruleCounts.entries()]
         .sort((a, b) => b[1] - a[1])
         .map(([rule]) => rule)
