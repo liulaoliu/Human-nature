@@ -104,6 +104,13 @@ describe('normalize / prune golden lesson', () => {
       'come to an end',
       'bring an end to',
     ])
+    const dangling = {
+      ...next,
+      extraPoints: [{ sentenceId: 's404', en: 'gone', kind: 'chunk' as const }],
+    }
+    expect(mergeGoldenIntoArticle(existing, { ...incoming, golden: dangling }).golden?.extraPoints?.map((p) => p.en)).toEqual([
+      'come to an end',
+    ])
   })
 
   it('prune 后句子没了，extraPoints 也不留', () => {

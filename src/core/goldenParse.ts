@@ -143,9 +143,11 @@ export function mergeGoldenIntoArticle<T extends { golden?: GoldenLesson; update
     next && (!current || incoming.updatedAt >= existing!.updatedAt) ? next : current ?? next
   if (!base) return { ...incoming }
   // 用户点「加入本课」的结果不能因为重新生成 / 导入旧备份就丢；两边取并集。
+  const validIds = new Set(base.sentences.map((s) => s.id))
   const seen = new Set<string>()
   const extraPoints = [...(current?.extraPoints ?? []), ...(next?.extraPoints ?? [])].filter(
     (p) => {
+      if (!validIds.has(p.sentenceId)) return false
       const key = extraKey(p.sentenceId, p.en)
       if (seen.has(key)) return false
       seen.add(key)
