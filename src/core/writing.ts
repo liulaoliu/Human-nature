@@ -201,6 +201,10 @@ export function parseImitationTask(raw: string): ImitationTask | null {
 export interface WritingFeedbackPromptOptions {
   /** 文章自带的语言点（只能从里面挑 pointId，防止 AI 编出不存在的点） */
   availablePoints?: ReadonlyArray<{ id: string; en: string; zh?: string; kind?: string }>
+  /** 第二稿：上一轮批改的 issues，让 AI 专查「改了没」 */
+  previousIssues?: ReadonlyArray<
+    Pick<WritingIssue, 'original' | 'suggestion' | 'reason' | 'rule' | 'key'>
+  >
 }
 
 /** 批改提示词：给定任务与评分标准 + 学生作答，要求严格批改。 */
@@ -216,6 +220,19 @@ export function buildWritingFeedbackPrompt(
   const pointLines = points.length
     ? points.map((p) => `- ${p.id} | ${p.en}${p.zh ? ` | ${p.zh}` : ''}${p.kind ? ` | ${p.kind}` : ''}`).join('\n')
     : '（本题没有可选语言点；recommendations 里不要写 pointId / from=article）'
+  const previous = options.previousIssues?.filter((i) => i.suggestion.trim()) ?? []
+  const previousBlock = previous.length
+    ? [
+        '这是改写后的新稿。上一稿批改指出过这些问题：',
+        ...previous.map(
+          (i) =>
+            `- [${i.rule}/${i.key}] “${i.original || '（缺词）'}” → “${i.suggestion}”${i.reason ? `（${i.reason}）` : ''}`,
+        ),
+        '请逐条检查：已经改掉的不要再报；仍然存在或改错的继续报，并尽量沿用同一个 rule/key；',
+        '另外照常检查新出现的问题。',
+        '',
+      ]
+    : []
   return [
     '你是严格的英语写作批改老师。请批改下面这篇仿写。**就事论事，不要客套、不要泛泛鼓励。**',
     '',
@@ -233,6 +250,7 @@ export function buildWritingFeedbackPrompt(
     '错因规则闭集（rule: 说明）：',
     writingRuleCatalog(),
     '',
+    ...previousBlock,
     '评分标准：',
     rubric,
     '',

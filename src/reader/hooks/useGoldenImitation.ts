@@ -175,13 +175,16 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     }
     try {
       await navigator.clipboard.writeText(
-        buildGoldenExamFeedbackPrompt(current, answer, { availablePoints }),
+        buildGoldenExamFeedbackPrompt(current, answer, {
+          availablePoints,
+          ...(round > 1 && feedback?.issues.length ? { previousIssues: feedback.issues } : {}),
+        }),
       )
       flash('已复制批改提示词；把返回的 JSON 粘到「应用 AI 批改结果」')
     } catch {
       setError('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [current, answer, availablePoints, flash])
+  }, [current, answer, availablePoints, feedback, round, flash])
 
   const grade = useCallback(async () => {
     if (!current) {
@@ -192,7 +195,10 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
       flash('先写一句英文再批改')
       return
     }
-    const prompt = buildGoldenExamFeedbackPrompt(current, answer, { availablePoints })
+    const prompt = buildGoldenExamFeedbackPrompt(current, answer, {
+      availablePoints,
+      ...(round > 1 && feedback?.issues.length ? { previousIssues: feedback.issues } : {}),
+    })
     if (!(await ensureAi())) {
       await copyGradePrompt()
       return
@@ -215,7 +221,7 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     } finally {
       setGrading(false)
     }
-  }, [current, answer, availablePoints, ensureAi, copyGradePrompt, runAi, applyGrade, flash])
+  }, [current, answer, availablePoints, feedback, round, ensureAi, copyGradePrompt, runAi, applyGrade, flash])
 
   /**
    * 按上一稿的批改意见再写一稿。

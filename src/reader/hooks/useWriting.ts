@@ -113,12 +113,18 @@ export function useWriting({
     askedWordsRef.current = []
     askedIdsRef.current = []
     try {
-      await navigator.clipboard.writeText(buildWritingFeedbackPrompt(task, text))
+      await navigator.clipboard.writeText(
+        buildWritingFeedbackPrompt(task, text, {
+          ...(task.round && task.round > 1 && feedback?.issues.length
+            ? { previousIssues: feedback.issues }
+            : {}),
+        }),
+      )
       flash('已复制批改提示词；把 AI 的 JSON 粘回「应用结果」')
     } catch {
       flash('复制失败：浏览器需要 localhost 或 https')
     }
-  }, [task, text, flash, setLastTask, askedWordsRef, askedIdsRef])
+  }, [task, text, feedback, flash, setLastTask, askedWordsRef, askedIdsRef])
 
   /** 载入一条历史记录回看。 */
   const loadRecord = useCallback((rec: WritingRecord) => {

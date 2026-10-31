@@ -70,6 +70,22 @@ describe('buildWritingFeedbackPrompt', () => {
     expect(p).toContain('lp:s1:come-to-an-end')
     expect(p).toContain('from=article')
   })
+  it('第二稿带上一轮 issues，要求逐条检查改了没', () => {
+    const p = buildWritingFeedbackPrompt(task, 'I went to school.', {
+      previousIssues: [
+        {
+          original: 'go',
+          suggestion: 'went',
+          reason: '过去时间用过去式',
+          rule: 'tense-choice',
+          key: 'tense-choice',
+        },
+      ],
+    })
+    expect(p).toContain('上一稿批改指出过这些问题')
+    expect(p).toContain('tense-choice/tense-choice')
+    expect(p).toContain('已经改掉的不要再报')
+  })
 })
 
 describe('parseWritingFeedback', () => {
