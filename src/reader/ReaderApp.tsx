@@ -575,6 +575,8 @@ export default function ReaderApp() {
     records: goldenDrills,
     writingHistory: services.writingHistory,
     setWritingHistory: services.setWritingHistory,
+    answerEvents: learningData.answerEvents,
+    recordAnswer,
     recordActivity,
     download,
     flash,

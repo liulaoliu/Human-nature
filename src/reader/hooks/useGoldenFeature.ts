@@ -5,6 +5,9 @@ import { buildLocalGoldenExamItem } from '../../core/goldenExam'
 import type { SavedArticle } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { isGoldenWritingRecord, WRITING_HISTORY_WARN_AT, type WritingRecord } from '../../core/writing'
+import type { WritingRecommendationGroup } from '../../core/writingErrors'
+import type { WritingErrorCard } from '../../core/writingErrorReview'
+import type { AnswerEvent, AnswerEventInput } from '../../core/answerEvents'
 import { langPointChoiceId, langPointChoices } from '../../core/goldenLangPoint'
 import { writingHistoryToPrintHTML } from '../../core/writingExport'
 import { openPrintWindow } from './printWindow'
@@ -26,6 +29,8 @@ interface GoldenFeatureArgs {
   records: GoldenDrillRecord[]
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  answerEvents: readonly AnswerEvent[]
+  recordAnswer: (event: AnswerEventInput) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
   download: (name: string, data: string, mime: string) => void
   flash: (message: string) => void
@@ -48,6 +53,8 @@ export function useGoldenFeature({
   records,
   writingHistory,
   setWritingHistory,
+  answerEvents,
+  recordAnswer,
   recordActivity,
   download,
   flash,
@@ -74,13 +81,16 @@ export function useGoldenFeature({
         : null,
     [golden.lesson, golden.currentSentence, doc?.sentences],
   )
+  const currentSentence = golden.currentSentence
+  const extraPointsFor = golden.extraPointsFor
+  const bySentence = golden.bySentence
   const currentExtraPoints = useMemo(
-    () => (golden.currentSentence ? golden.extraPointsFor(golden.currentSentence.id) : []),
-    [golden.currentSentence, golden.extraPointsFor],
+    () => (currentSentence ? extraPointsFor(currentSentence.id) : []),
+    [currentSentence, extraPointsFor],
   )
   /** 批改提示词里可引用的文章语言点；id 与「加入本课」使用同一套 slug。 */
   const availablePoints = useMemo(() => {
-    const s = golden.currentSentence ? golden.bySentence.get(golden.currentSentence.id) : null
+    const s = currentSentence ? bySentence.get(currentSentence.id) : null
     if (!s) return []
     return langPointChoices(s, undefined, currentExtraPoints).map((c) => ({
       id: langPointChoiceId(s.id, c.en),
@@ -88,7 +98,7 @@ export function useGoldenFeature({
       ...(c.zh ? { zh: c.zh } : {}),
       kind: 'chunk',
     }))
-  }, [golden.currentSentence, golden.bySentence, currentExtraPoints])
+  }, [currentSentence, bySentence, currentExtraPoints])
   const sentenceImitation = useGoldenImitation({
     current: sentenceItem,
     articleId: golden.articleId,
@@ -154,6 +164,42 @@ export function useGoldenFeature({
     onExportMarkdown: bank.exportLesson,
     onGenerate,
     history,
+    errors: {
+      onAddPoint: (rec: WritingRecommendationGroup) => {
+        if (rec.kind === 'grammar') {
+          flash('这条属于语法规则，已经在错因卡里；语言点只收词块 / 句型 / 搭配')
+          return
+        }
+        if (rec.articleId !== golden.articleId) {
+          flash('这条推荐来自别的文章；先切到那篇再加入本课')
+          return
+        }
+        if (!rec.sentenceId) {
+          flash('这条推荐没有对应句子，暂时不能加入本课')
+          return
+        }
+        golden.addExtraPoint({
+          sentenceId: rec.sentenceId,
+          en: rec.point,
+          ...(rec.zh ? { zh: rec.zh } : {}),
+          kind: rec.kind,
+          source: 'ai',
+          ...(rec.issueKey ? { issueKey: rec.issueKey } : {}),
+        })
+      },
+      answerEvents,
+      onReviewAnswer: (card: WritingErrorCard, correct: boolean) => {
+        recordAnswer({
+          articleId: card.articleId,
+          source: 'golden',
+          kind: 'error-fix',
+          cat: 'write',
+          correct,
+          questionId: card.id,
+        })
+        recordActivity('write', 1)
+      },
+    },
     onPrintHistory: (rows, title) => {
       if (!rows.length) {
         flash('没有可打印的学习历史')

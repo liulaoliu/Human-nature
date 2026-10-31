@@ -195,7 +195,7 @@ export function useGoldenLesson({
     [lesson, persistLesson],
   )
 
-  const extraPoints = lesson?.extraPoints ?? []
+  const extraPoints = useMemo(() => lesson?.extraPoints ?? [], [lesson?.extraPoints])
 
   const extraPointsFor = useCallback(
     (sentenceId: string): GoldenExtraPoint[] =>

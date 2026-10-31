@@ -9,6 +9,7 @@ export default function GoldenHome({
   history,
   onOpenBank,
   onOpenHistory,
+  onOpenErrors,
 }: {
   api: GoldenHomeApi
   onGenerate?: () => void
@@ -18,6 +19,7 @@ export default function GoldenHome({
   history?: { article: WritingRecord[]; all: WritingRecord[] }
   onOpenBank: () => void
   onOpenHistory: () => void
+  onOpenErrors: () => void
 }) {
   const selected = api.lesson?.selected.length ?? 0
   const summary = api.summary
@@ -98,7 +100,10 @@ export default function GoldenHome({
         <button onClick={onOpenHistory} title="看本科做过的单句仿写 / 整课考试，以及当时的 AI 批改">
           🕘 学习历史（{history?.article.length ?? 0}）
         </button>
-        <span className="muted">本篇的仿写 / 考试批改，点开看原文；也可切到全部</span>
+        <button onClick={onOpenErrors} title="把批改里的错因按规则汇总，看趋势和 AI 推荐的语言点">
+          🧭 错因复盘
+        </button>
+        <span className="muted">常错点 / 趋势 / 反复练的句子 / AI 推荐</span>
       </div>
       <div className="golden-kpis">
         <span>学习句子 <b>{summary?.selectedSentences ?? 0}</b></span>

@@ -203,6 +203,79 @@ describe('GoldenPanel', () => {
     expect(screen.getByText('不错')).toBeTruthy()
   })
 
+  it('错因复盘：本篇汇总规则 / 推荐，点「加入本课」回调', () => {
+    const at = new Date().toISOString()
+    const rec = {
+      at,
+      articleId: 'a1',
+      articleTitle: 'A',
+      model: 'M',
+      text: 'I learn bureacracy.',
+      source: 'goldenSentence' as const,
+      sentenceId: 's1',
+      task: { task: 'x', model: 'M', mustUse: [], rubric: [] },
+      feedback: {
+        version: 2 as const,
+        scores: [{ dimension: '拼写', score: 30, max: 40 }],
+        total: 30,
+        max: 40,
+        issues: [
+          {
+            original: 'bureacracy',
+            suggestion: 'bureaucracy',
+            reason: '拼写错误',
+            type: 'spelling' as const,
+            rule: 'word-spelling' as const,
+            key: 'spelling-bureaucracy',
+            severity: 'must-fix' as const,
+          },
+        ],
+        recommendations: [
+          {
+            kind: 'chunk' as const,
+            point: 'come to an end',
+            zh: '结束',
+            why: '你这次把 an end to 当成了独立词块',
+            priority: 1 as const,
+            from: 'error' as const,
+            issueKey: 'chunk-come-to-an-end',
+          },
+        ],
+      },
+    }
+    const setView = vi.fn()
+    const onAddPoint = vi.fn()
+    const onReviewAnswer = vi.fn()
+    const errors = { onAddPoint, answerEvents: [], onReviewAnswer }
+    const { unmount } = render(
+      <GoldenPanel
+        api={fakeApi({ setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [rec], all: [rec] }, errors }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /错因复盘/ }))
+    expect(setView).toHaveBeenCalledWith('errors')
+    unmount()
+
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'errors', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), history: { article: [rec], all: [rec] }, errors }}
+      />,
+    )
+    expect(screen.getByText('单词拼写')).toBeTruthy()
+    expect(screen.getByText('come to an end')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '加入本课' }))
+    expect(onAddPoint).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /现在考我（1 张到期）/ }))
+    expect(screen.getByText('错因复习')).toBeTruthy()
+    expect(screen.getByLabelText('错因答案')).toBeTruthy()
+  })
+
   it('学习历史：按语言点筛、详情翻上下一条、悬浮看摘要', () => {
     const mk = (at: string, focus: string, text: string, total: number) => ({
       at,

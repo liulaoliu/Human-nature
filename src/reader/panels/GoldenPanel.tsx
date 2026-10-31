@@ -3,10 +3,14 @@ import GoldenDrillView from './golden/GoldenDrillView'
 import GoldenExamView from './golden/GoldenExamView'
 import GoldenHistoryView from './golden/GoldenHistoryView'
 import GoldenHome from './golden/GoldenHome'
+import GoldenErrorsView from './golden/GoldenErrorsView'
 import GoldenPlan from './golden/GoldenPlan'
 import GoldenRecallView from './golden/GoldenRecallView'
 import GoldenSummary from './golden/GoldenSummary'
 import type { WritingRecord } from '../../core/writing'
+import type { WritingRecommendationGroup } from '../../core/writingErrors'
+import type { WritingErrorCard } from '../../core/writingErrorReview'
+import type { AnswerEvent } from '../../core/answerEvents'
 import type { GoldenLangPointApi } from '../hooks/useGoldenLangPoint'
 import type { GoldenApi, GoldenBankActions, GoldenExamApi, GoldenImitationApi } from './golden/types'
 
@@ -21,6 +25,12 @@ export interface GoldenPanelActions {
   bank?: GoldenBankActions
   /** 本科的仿写 / 考试批改历史；`all` 是全库（含别的篇），默认只看 `article` */
   history?: { article: WritingRecord[]; all: WritingRecord[] }
+  /** 错因复盘：从历史里聚合，不新增存储 */
+  errors?: {
+    onAddPoint?: (rec: WritingRecommendationGroup) => void
+    answerEvents?: readonly AnswerEvent[]
+    onReviewAnswer?: (card: WritingErrorCard, correct: boolean) => void
+  }
   /** 打印当前范围的学习历史（A4） */
   onPrintHistory?: (rows: WritingRecord[], title: string) => void
   /** 打印本课 A4 */
@@ -66,6 +76,21 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           history={actions.history}
           onOpenBank={() => api.setView('bank')}
           onOpenHistory={() => api.setView('history')}
+          onOpenErrors={() => api.setView('errors')}
+        />
+      )}
+      {api.view === 'errors' && (
+        <GoldenErrorsView
+          rows={actions.history ?? { article: [], all: [] }}
+          articleTitle={articleTitle}
+          onBack={() => api.setView('home')}
+          onAddPoint={actions.errors?.onAddPoint}
+          answerEvents={actions.errors?.answerEvents}
+          onReviewAnswer={actions.errors?.onReviewAnswer}
+          onOpenSentence={(sentenceId) => {
+            const index = api.ordered.findIndex((s) => s.id === sentenceId)
+            if (index >= 0) api.startDrill(index)
+          }}
         />
       )}
       {api.view === 'history' && (

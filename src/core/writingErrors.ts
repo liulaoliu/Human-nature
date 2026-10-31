@@ -215,6 +215,17 @@ function inScope(rec: WritingRecord, query: WritingErrorQuery, cutoff: number): 
   return t > 0 && t >= cutoff
 }
 
+/** 复盘 / 复习卡共用的筛选口径：scope + 最近 N 天。 */
+export function filterWritingErrorRecords(
+  records: readonly WritingRecord[],
+  query: WritingErrorQuery,
+): WritingRecord[] {
+  const now = query.now ?? new Date()
+  const sinceDays = query.sinceDays && query.sinceDays > 0 ? Math.floor(query.sinceDays) : undefined
+  const cutoff = sinceDays ? now.getTime() - sinceDays * 24 * 60 * 60 * 1000 : 0
+  return records.filter((r) => inScope(r, query, cutoff)).slice().sort((a, b) => timestamp(b.at) - timestamp(a.at))
+}
+
 function localDayKeys(now: Date, days: number): string[] {
   const out: string[] = []
   for (let i = days - 1; i >= 0; i--) {
@@ -262,11 +273,7 @@ export function summarizeWritingErrors(
   if (query.scope === 'article' && !query.articleId) return { ...EMPTY_SUMMARY, scope: 'article' }
   const now = query.now ?? new Date()
   const sinceDays = query.sinceDays && query.sinceDays > 0 ? Math.floor(query.sinceDays) : undefined
-  const cutoff = sinceDays ? now.getTime() - sinceDays * 24 * 60 * 60 * 1000 : 0
-  const selected = records
-    .filter((r) => inScope(r, query, cutoff))
-    .slice()
-    .sort((a, b) => timestamp(b.at) - timestamp(a.at))
+  const selected = filterWritingErrorRecords(records, query)
 
   const ruleMap = new Map<
     WritingRule,

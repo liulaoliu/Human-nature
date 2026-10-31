@@ -215,7 +215,7 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     } finally {
       setGrading(false)
     }
-  }, [current, answer, ensureAi, copyGradePrompt, runAi, applyGrade, flash])
+  }, [current, answer, availablePoints, ensureAi, copyGradePrompt, runAi, applyGrade, flash])
 
   /**
    * 按上一稿的批改意见再写一稿。

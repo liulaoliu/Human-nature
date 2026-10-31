@@ -45,6 +45,9 @@ describe('useGoldenFeature', () => {
     const golden = {
       lesson: doc.golden,
       close,
+      extraPointsFor: () => [],
+      bySentence: new Map([['s1', sentence]]),
+      addExtraPoint: vi.fn(),
     } as unknown as ReturnType<typeof useGoldenDrill>
     const { result } = renderHook(() =>
       useGoldenFeature({
@@ -58,6 +61,8 @@ describe('useGoldenFeature', () => {
         records: [],
         writingHistory: [],
         setWritingHistory: vi.fn(),
+        answerEvents: [],
+        recordAnswer: vi.fn(),
         recordActivity: vi.fn(),
         download: vi.fn(),
         flash: vi.fn(),
@@ -82,6 +87,9 @@ describe('useGoldenFeature', () => {
       close: vi.fn(),
       setDoc: vi.fn(),
       setPendingSave: vi.fn(),
+      extraPointsFor: () => [],
+      bySentence: new Map([['s1', sentence]]),
+      addExtraPoint: vi.fn(),
     } as unknown as ReturnType<typeof useGoldenDrill>
     const { result } = renderHook(() =>
       useGoldenFeature({
@@ -95,6 +103,8 @@ describe('useGoldenFeature', () => {
         records: [],
         writingHistory: [],
         setWritingHistory: vi.fn(),
+        answerEvents: [],
+        recordAnswer: vi.fn(),
         recordActivity: vi.fn(),
         download: vi.fn(),
         flash: vi.fn(),
@@ -104,5 +114,82 @@ describe('useGoldenFeature', () => {
     )
     expect(result.current.sentenceImitation.current?.sentenceId).toBe('s1')
     expect(result.current.sentenceImitation.current?.model).toBe(sentence.text)
+  })
+
+  it('错因复盘：复习写 answerEvent；推荐加入本课映射成 extraPoint', () => {
+    const recordAnswer = vi.fn()
+    const recordActivity = vi.fn()
+    const addExtraPoint = vi.fn()
+    const golden = {
+      lesson: doc.golden,
+      articleId: 'a1',
+      close: vi.fn(),
+      extraPointsFor: () => [],
+      bySentence: new Map([['s1', sentence]]),
+      addExtraPoint,
+    } as unknown as ReturnType<typeof useGoldenDrill>
+    const { result } = renderHook(() =>
+      useGoldenFeature({
+        golden,
+        doc,
+        articleTitle: 'A',
+        articleKey: 'a1@x',
+        articleIdentity: 'a1@x',
+        savedId: 'a1',
+        saved: [saved],
+        records: [],
+        writingHistory: [],
+        setWritingHistory: vi.fn(),
+        answerEvents: [],
+        recordAnswer,
+        recordActivity,
+        download: vi.fn(),
+        flash: vi.fn(),
+        onGenerate: vi.fn(),
+        startWriting: vi.fn(),
+      }),
+    )
+    const card = {
+      id: 'errfix:word-spelling|spelling-bureaucracy',
+      rule: 'word-spelling' as const,
+      type: 'spelling' as const,
+      key: 'spelling-bureaucracy',
+      original: 'bureacracy',
+      suggestion: 'bureaucracy',
+      text: 'I learn bureacracy.',
+      recordKey: 'r1',
+      at: '2026-10-30T00:00:00.000Z',
+      articleId: 'a1',
+      sentenceId: 's1',
+    }
+    act(() => result.current.actions.errors?.onReviewAnswer?.(card, true))
+    expect(recordAnswer).toHaveBeenCalledWith({
+      articleId: 'a1',
+      source: 'golden',
+      kind: 'error-fix',
+      cat: 'write',
+      correct: true,
+      questionId: card.id,
+    })
+    expect(recordActivity).toHaveBeenCalledWith('write', 1)
+
+    act(() =>
+      result.current.actions.errors?.onAddPoint?.({
+        kind: 'chunk',
+        point: 'come to an end',
+        pointKey: 'chunk-come-to-an-end',
+        why: '常错',
+        priority: 1,
+        from: 'error',
+        issueKey: 'chunk-come-to-an-end',
+        articleId: 'a1',
+        sentenceId: 's1',
+        count: 1,
+        lastAt: '2026-10-30T00:00:00.000Z',
+      }),
+    )
+    expect(addExtraPoint).toHaveBeenCalledWith(
+      expect.objectContaining({ sentenceId: 's1', en: 'come to an end', kind: 'chunk' }),
+    )
   })
 })

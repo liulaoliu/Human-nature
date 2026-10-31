@@ -1,4 +1,14 @@
-export const GOLDEN_VIEWS = ['home', 'plan', 'drill', 'recall', 'summary', 'bank', 'exam', 'history'] as const
+export const GOLDEN_VIEWS = [
+  'home',
+  'plan',
+  'drill',
+  'recall',
+  'summary',
+  'bank',
+  'exam',
+  'history',
+  'errors',
+] as const
 export type GoldenView = (typeof GOLDEN_VIEWS)[number]
 
 /** 单句练习阶段；放在这里给 useGoldenDrill / useGoldenFillAssemble 共用，避免循环 import。 */
