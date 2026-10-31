@@ -570,14 +570,13 @@
 }
 
 .golden-hover-card {
-  display: none;
-  position: absolute;
+  display: flex;
+  position: fixed;
   z-index: 70;
-  left: 0;
-  top: calc(100% + 4px);
   width: min(430px, 86vw);
   max-height: 260px;
   overflow: auto;
+  pointer-events: none;
   box-sizing: border-box;
   padding: 10px 12px;
   border: 1px solid var(--accent);
@@ -589,11 +588,6 @@
   flex-direction: column;
   gap: 5px;
   white-space: normal;
-}
-
-.golden-hover:hover > .golden-hover-card,
-.golden-hover:focus-within > .golden-hover-card {
-  display: flex;
 }
 
 .golden-hover-text {

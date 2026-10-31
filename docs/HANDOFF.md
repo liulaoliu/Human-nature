@@ -27,6 +27,7 @@
 7. **推荐分组**：推荐按 `kind + point + articleId + sentenceId + focus` 拆组，跨篇「加入本课」不会指错篇。
 8. **错因 → 历史**：错因行/历史行共用自定义悬浮卡；点「看批改」开 `GoldenFeedback` 抽屉，
    点「历史 ↗」走 `/p/golden?gv=history&gr=<recordKey>&gs=…&from=errors`，浏览器返回回错因复盘。
+   悬浮卡改成 `position: fixed` 并按视口空间上/下翻转，不再撑大列表滚动区（最后几条不再跳动/闪烁）。
 9. **错因 → 去练**：`useGoldenStartSentence` 按 `sentenceId` 找当前课；未选题自动加入
    `GoldenLesson.selected` 后进入本句 **fill**；非当前文章句子返回 false 并 flash。练习进度仍只写
    `goldenDrills`（SQLite `golden_drill_records`），不写错因卡 SRS。

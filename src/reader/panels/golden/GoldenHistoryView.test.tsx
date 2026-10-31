@@ -84,6 +84,8 @@ describe('学习历史：渲染分页', () => {
         onOpenRecord={onOpenRecord}
       />,
     )
+    fireEvent.mouseEnter(screen.getByRole('button', { name: /作答：T1/ }))
+    expect(screen.getByRole('tooltip')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /作答：T1/ }))
     expect(onOpenRecord).toHaveBeenCalledWith(writingRecordKey(rows[1]), 'article')
   })

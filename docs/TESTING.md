@@ -246,6 +246,13 @@
    规矩：**只要被测代码会读写 localStorage，就在文件里 `installFakeStorage()`**（`beforeEach` 装、
    `afterEach` 还原，见 `src/reader/testStorage.ts`）；只写 `// @vitest-environment jsdom` 不够，
    jsdom 的 storage 在同一文件的所有用例之间是共享的。
+38. **`absolute` 悬浮卡会撑大滚动区，列表最后几条一 hover 就跳/闪**（2026-10-31）。
+   现象：学习历史鼠标移到最后 1–4 条记录上，列表上下抖、卡片闪。根因：卡片是列表行的
+   `position:absolute` 子元素，出现在视口底部时把滚动高度撑大，滚动条出现/消失改变可用宽度，
+   行位移后鼠标离开又收起，形成循环。
+   规矩：悬浮卡用 `position:fixed` + 视口坐标（不参与布局），靠近底部时 `translateY(-100%)` 向上翻，
+   加 `pointer-events:none`，滚动/改窗口大小时直接收起；别再改回 `absolute` + `:hover` 显示。
+   历史行和错因行共用 `WritingHoverCard`，改一处两边生效。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
