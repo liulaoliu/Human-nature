@@ -12,6 +12,9 @@ import {
 } from '../../../core/writingErrorReview'
 import {
   dueCardsFromProgress,
+  randomWritingErrorCards,
+  reviewableWritingErrorCards,
+  WRITING_ERROR_RANDOM_LIMIT,
   type WritingErrorProgress,
 } from '../../../core/writingErrorProgress'
 import type { WritingRecord } from '../../../core/writing'
@@ -123,6 +126,12 @@ export default function GoldenErrorsView({
     () => (onReviewAnswer ? dueCardsFromProgress(allCards, writingErrorProgress ?? [], new Date()) : []),
     [onReviewAnswer, allCards, writingErrorProgress],
   )
+  /** 主动复习池：同一份 scope / since 数据源，不看到期；已暂停的仍不考。 */
+  const reviewableCards = useMemo(
+    () => (onReviewAnswer ? reviewableWritingErrorCards(allCards, writingErrorProgress ?? []) : []),
+    [onReviewAnswer, allCards, writingErrorProgress],
+  )
+  const randomCount = Math.min(WRITING_ERROR_RANDOM_LIMIT, reviewableCards.length)
   const pausedCards = useMemo(
     () =>
       allCards.filter((card) => {
@@ -227,8 +236,28 @@ export default function GoldenErrorsView({
           >
             🧠 现在考我（{dueCards.length} 张到期）
           </button>
+          <button
+            onClick={() =>
+              setSessionCards(randomWritingErrorCards(reviewableCards, WRITING_ERROR_RANDOM_LIMIT))
+            }
+            disabled={!reviewableCards.length}
+            title={`从当前范围随机抽最多 ${WRITING_ERROR_RANDOM_LIMIT} 张，不看是否到期`}
+          >
+            🎲 随机考（{randomCount} 张）
+          </button>
+          <button
+            onClick={() => setSessionCards(reviewableCards)}
+            disabled={!reviewableCards.length}
+            title="考当前范围全部错因，不看是否到期；已暂停的仍不考"
+          >
+            📚 全部考（{reviewableCards.length} 张）
+          </button>
           <span className="muted">
-            {dueCards.length ? '只考 must-fix 错因；先看答案也算一次错' : '今天没有到期错因'}
+            {dueCards.length
+              ? '只考 must-fix 错因；先看答案也算一次错'
+              : reviewableCards.length
+                ? '今天没有到期错因，也可以随机考 / 全部考'
+                : '当前范围没有可考的 must-fix 错因'}
           </span>
         </div>
       )}

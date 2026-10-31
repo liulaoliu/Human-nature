@@ -17,6 +17,8 @@ import { isWritingRule } from './writingErrorRules'
 export const WRITING_ERROR_PROGRESS_CAP = 2000
 export const WRITING_ERROR_MASTER_STREAK = 6
 export const WRITING_ERROR_INTERVALS_DAYS = [3, 7, 14, 30, 60] as const
+/** 随机考默认最多抽这么多张，避免一次点开几百张。 */
+export const WRITING_ERROR_RANDOM_LIMIT = 20
 
 export type WritingErrorProgressStatus = 'active' | 'paused' | 'mastered'
 
@@ -222,6 +224,34 @@ export function unpracticedWritingErrorCards(
 ): WritingErrorCard[] {
   const byId = new Map(progress.map((p) => [p.id, p]))
   return cards.filter((card) => !isWritingErrorProgressPracticed(byId.get(card.id)))
+}
+
+/**
+ * 主动复习（随机 / 全部）的池子：不受到期时间限制，但尊重「以后不再考」的暂停。
+ * 已掌握的可以主动重练，所以不排除。
+ */
+export function reviewableWritingErrorCards(
+  cards: readonly WritingErrorCard[],
+  progress: readonly WritingErrorProgress[],
+): WritingErrorCard[] {
+  const byId = new Map(progress.map((p) => [p.id, p]))
+  return cards.filter((card) => byId.get(card.id)?.status !== 'paused')
+}
+
+/** Fisher–Yates 洗牌；rng 可注入，测试用固定序列。 */
+export function randomWritingErrorCards(
+  cards: readonly WritingErrorCard[],
+  limit = WRITING_ERROR_RANDOM_LIMIT,
+  rng: () => number = Math.random,
+): WritingErrorCard[] {
+  const pool = [...cards]
+  for (let i = pool.length - 1; i > 0; i--) {
+    const j = Math.min(i, Math.max(0, Math.floor(rng() * (i + 1))))
+    const t = pool[i]
+    pool[i] = pool[j]
+    pool[j] = t
+  }
+  return pool.slice(0, Math.max(0, Math.floor(limit)))
 }
 
 /** 到期卡：没有进度行的卡按“现在到期”；paused / mastered 不出现。 */

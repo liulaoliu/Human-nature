@@ -6,6 +6,8 @@ import {
   dueCardsFromProgress,
   mergeWritingErrorProgress,
   normalizeWritingErrorProgress,
+  randomWritingErrorCards,
+  reviewableWritingErrorCards,
   setWritingErrorProgressStatus,
   syncWritingErrorProgress,
   unpracticedWritingErrorCards,
@@ -100,6 +102,19 @@ describe('writingErrorProgress', () => {
     expect(unpracticedWritingErrorCards([card, other], [practiced, legacy]).map((c) => c.id)).toEqual([])
     expect(unpracticedWritingErrorCards([card, other], [practiced])).toEqual([other])
     expect(unpracticedWritingErrorCards([card, other], [])).toEqual([card, other])
+  })
+
+  it('随机 / 全部：不看到期，但跳过 paused；随机最多 20 张且不重复', () => {
+    const paused = setWritingErrorProgressStatus(writingErrorProgressFromCard(card, NOW), card, 'paused', NOW)
+    const mastered = applyWritingErrorReview(undefined, other, true, NOW)
+    mastered.status = 'mastered'
+    expect(reviewableWritingErrorCards([card, other], [paused, mastered])).toEqual([other])
+
+    const many = Array.from({ length: 25 }, (_, i) => ({ ...other, id: `errfix:test|${i}` }))
+    const picked = randomWritingErrorCards(many, 20, () => 0.5)
+    expect(picked).toHaveLength(20)
+    expect(new Set(picked.map((c) => c.id)).size).toBe(20)
+    expect(randomWritingErrorCards([card], 20, () => 0.5)).toEqual([card])
   })
 
   it('合并取 updatedAt 新的；sync 只补缺不覆盖进度', () => {

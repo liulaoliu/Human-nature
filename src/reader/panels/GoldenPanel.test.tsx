@@ -305,6 +305,14 @@ describe('GoldenPanel', () => {
       expect.objectContaining({ view: 'history', scope: 'article', from: 'errors' }),
     )
 
+    expect(screen.getByRole('button', { name: /随机考（1 张）/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /全部考（1 张）/ })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /随机考（1 张）/ }))
+    expect(screen.getByLabelText('错因答案')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '← 返回错因复盘' }))
+    fireEvent.click(screen.getByRole('button', { name: /全部考（1 张）/ }))
+    expect(screen.getByLabelText('错因答案')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '← 返回错因复盘' }))
     fireEvent.click(screen.getByRole('button', { name: /现在考我（1 张到期）/ }))
     expect(screen.getByText('错因复习')).toBeTruthy()
     expect(screen.getByLabelText('错因答案')).toBeTruthy()
