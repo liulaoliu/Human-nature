@@ -744,3 +744,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `writing_error_progress` 如果只放在 v11 分支，v7 迁移里的 `saveDerivedBaseline()`
     会先 `loadLearning()`，于是新库直接 `no such table: writing_error_progress`，`openStore` 返回 null。
     v7 分支要像 v8/v9 一样提前 `db.exec(SCHEMA_V11)`；v11 分支仍保留幂等创建。
+ 62. **金句子视图定位用 `recordKey`，不要用数组下标**（2026-10-31）。错因行/历史行会按
+    `recordKey` 生成 `?gv=history&gr=…&gs=…&from=errors`；下标会随筛选/分页变化，时间戳也可能重复。
+    路由 query 只由 `route.ts` 的 `parseGoldenQuery` / `goldenPanelPath` 构造；详情翻页用
+    `replace`，避免历史栈无限增长。记录不存在时显示回退提示，不能停在空白详情。

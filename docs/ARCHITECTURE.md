@@ -95,7 +95,8 @@ types ← core ← adapters ← reader
 | 金句课 → 仿写 | `src/reader/hooks/useWriting.ts` 的 `start({ model, mustUse })` | 总结页「去仿写」把本课目标带进 mustUse；不另写一套仿写提示词 |
 | 全库金句本 / Markdown / Anki / A4 | `src/core/goldenBank.ts` | 只读摊平 `SavedArticle.golden` + `goldenDrills`；搜索/状态筛选/导出，不写库 |
 | 正文划词 / 选区 | `src/reader/hooks/useSelection.ts` 组合 `useSelectionNavigate` / `useSelectionDrag` / `useSelectionBatchActions`；DOM 小工具在 `selectionDom.ts` | 组合根只连接；正文定位、拖选判词、加待选各自一个状态边界；字符区间 → 词下标在 `core/wordSelect.ts` |
-| D老师小课堂整页面板 | `src/reader/panels/GoldenPanel.tsx` + `panels/golden/*` | 壳只做标题栏 + 视图路由；每个视图用 `Pick<GoldenApi, ...>` 收窄接口；金句本的行 + 导出/打印动作打包成 `bank`，别再逐个 prop 穿三层 |
+| D老师小课堂整页面板 | `src/reader/panels/GoldenPanel.tsx` + `panels/golden/*` | 壳只做标题栏 + 视图路由；`errors/history` 子视图走 `/p/golden?gv=…&gr=…`，详情用稳定 `recordKey`；其余视图仍由 `api.view` 管 |
+| 金句课历史定位 / 悬浮摘要 | `src/reader/route.ts` + `WritingHoverCard.tsx` + `GoldenRecordDrawer.tsx` | `parseGoldenQuery` / `goldenPanelPath` 只做 URL 纯函数；历史行和错因行共用 `WritingHoverCard`；「看批改」抽屉复用 `GoldenFeedback`，「历史 ↗」走路由 |
 | 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
 | 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
 | 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |
