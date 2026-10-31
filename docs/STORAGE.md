@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 9`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
+schema 版本：`PRAGMA user_version = 10`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -177,7 +177,7 @@ lang_point_terms(lang_point_id, kind, ordinal, text)  -- kind = idiom | phrase |
 | 手动/AI 语言点 | `lang_points` + `lang_point_terms`（词组/习语/用法） |
 | 历史版本 | `vocab_snapshots`（整库 JSON） |
 
-### 4.3 学习记录（v3–v9）
+### 4.3 学习记录（v3–v10）
 
 学习记录不是偏好，不能只靠 localStorage。表是规范化的事件/记录表，不做“万能 KV”：
 
@@ -187,7 +187,7 @@ mistake_records(id, kind, at, count, label, item_id, question_json,
                 article_id, text)                                         -- 错题本
 reading_progress(article_id PK, day, title, at)                           -- 读完记录
 writing_records(at, article_id, article_title, model, text,
-                feedback_json, task_json)                                 -- 仿写历史
+                feedback_json, task_json, source, sentence_id, exam_id)  -- 仿写历史（v10 补来源）
 back_translation_records(id PK, at, article_id, article_title, sentence_id,
                 source_zh, context_zh, answer, reference, feedback_json,
                 exact, ratio, graded_by)                                  -- 回译存档（v8）
@@ -209,7 +209,11 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
   `PUT /api/store/learning/partial` 只替换变化的 section（如 `{ practice, kindStats }`），都在一个事务里。
-- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
+- `writing_records.feedback_json` 自 **契约 v2** 起带 `version: 2`、`issues[]`（含闭集 `rule`、稳定 `key`、
+  `severity`）和 `recommendations[]`。旧记录由 `tools/backfill-writing-v2.mjs` 一次性回填（先 `VACUUM INTO`
+  备份，再事务更新）；运行时只分析 v2，不再保留旧格式双读。
+- 错因复习不新增表：答题事件写 `answer_events`，`question_id = errfix:<rule>|<key>`，
+  `source='golden'`、`kind='error-fix'`；Leitner 的到期时间由 `core/writingErrorReview.ts` 从事件现算。- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
   保留本地，之后由 `useLearningSync` 按 section 防抖写回 SQLite；没有待同步修改时以 SQLite 为准，
   直接覆盖过期缓存，避免旧缓存反过来盖新库。成功写回后才清 dirty；失败保留 dirty，
   按 5s 起、最长 60s 的退避**整份重试**（只重放最后 pending 的 section 会漏掉更早失败的部分），

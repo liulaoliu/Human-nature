@@ -732,3 +732,11 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     审查时看不见改了哪行（本轮是事后才发现的）。分隔符要写成转义串 `'\u0000'`。
     现在 `tool/check_text_files.mjs` 会扫 `src` / `server` / `tools` / `tool` / `docs`：
     命中 NUL 或非法 UTF-8（GBK 存盘）直接失败并给出 `文件:行号`，已进 `gates:static`。
+ 59. **批改记录的身份不能拿 `writing_records.id`**（2026-10-31）。学习记录同步会先清空再重插
+    `writing_records`，自增 id 每次都变；错因卡 / 复习事件如果需要稳定身份，用
+    `WritingRecord.recordKey`（`at + articleId + sentenceId + focus + round + 正文指纹`）或
+    `rule|key`。旧批改只回填一次 v2，别再写「缺 version 也能分析」的第二套分支。
+ 60. **「加入本课」不要改 `sentences[].targets`**（2026-10-31）。`goldenDrillKey` 把 targets
+    一起哈希，往 targets 里追加语言点会让现有 `GoldenDrillRecord` 全部对不上、进度归零。
+    用户主动加的语言点放 `GoldenLesson.extraPoints`，只影响「语言点造句」的可选项；
+    同句同英文去重，改正文 / 删句时随 `normalizeGoldenLesson` / `pruneGoldenLesson` 一起清掉。
