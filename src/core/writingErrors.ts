@@ -139,6 +139,7 @@ export interface WritingRecommendationGroup {
   articleTitle?: string
   sentenceId?: string
   examId?: string
+  focus?: string
   count: number
   lastAt: string
 }
@@ -443,7 +444,13 @@ export function summarizeWritingErrors(
     for (const recItem of feedback.recommendations ?? []) {
       const point = recItem.point?.trim()
       if (!point) continue
-      const key = `${recItem.kind}|${point.toLowerCase()}`
+      const key = [
+        recItem.kind,
+        point.toLowerCase(),
+        rec.articleId,
+        rec.sentenceId ?? rec.examId ?? '',
+        rec.task?.focus ?? '',
+      ].join('|')
       const old = recommendationMap.get(key)
       const newer = !old || timestamp(rec.at) >= timestamp(old.lastAt)
       const priority = Math.min(old?._priority ?? 3, recItem.priority)
@@ -509,6 +516,15 @@ export function summarizeWritingErrors(
               : {}
           : old?.examId
             ? { examId: old.examId }
+            : {}),
+        ...(newer
+          ? rec.task?.focus
+            ? { focus: rec.task.focus }
+            : old?.focus
+              ? { focus: old.focus }
+              : {}
+          : old?.focus
+            ? { focus: old.focus }
             : {}),
         count: (old?.count ?? 0) + 1,
         lastAt: newer ? rec.at : (old?.lastAt ?? rec.at),

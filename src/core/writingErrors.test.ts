@@ -186,6 +186,28 @@ describe('summarizeWritingErrors：口径', () => {
     expect(s.recommendations[0]).toMatchObject({ point: 'come to an end', count: 2, priority: 1, why: '第二次' })
   })
 
+  it('推荐按文章/句子拆组，同名语言点不会把加入本课指到别的篇', () => {
+    const make = (articleId: string, sentenceId: string) =>
+      rec({
+        at: '2026-10-30T10:00:00.000Z',
+        articleId,
+        sentenceId,
+        recommendations: [
+          {
+            kind: 'chunk',
+            point: 'come to an end',
+            why: 'y',
+            priority: 2,
+            from: 'error',
+            issueKey: 'chunk-come-to-an-end',
+          },
+        ],
+      })
+    const s = summarizeWritingErrors([make('a1', 's1'), make('a2', 's2')], { scope: 'all', now })
+    expect(s.recommendations).toHaveLength(2)
+    expect(s.recommendations.map((r) => r.articleId).sort()).toEqual(['a1', 'a2'])
+  })
+
   it('空数据 / 缺 articleId 不抛错', () => {
     expect(summarizeWritingErrors([], { scope: 'all', now })).toMatchObject({ totalRecords: 0, analyzedRecords: 0 })
     expect(summarizeWritingErrors([], { scope: 'article', now }).scope).toBe('article')
