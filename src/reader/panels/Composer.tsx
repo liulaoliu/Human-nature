@@ -1,4 +1,4 @@
-import mascotAI from '../../../assets/imgs/GinShinImapct.png'
+import mascotAI from '../../../assets/imgs/GinShinImapct.webp'
 
 export interface ComposerProps {
   /** 是否处于「新建/导入」态（有文章时为可取消的浮层）。 */

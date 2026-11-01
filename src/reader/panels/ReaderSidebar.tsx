@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react'
-import mascotAI from '../../../assets/imgs/GinShinImapct.png'
+import mascotAI from '../../../assets/imgs/GinShinImapct.webp'
 import SideOverview from './SideOverview'
 import SideMastery from './SideMastery'
 import SidePick from './SidePick'

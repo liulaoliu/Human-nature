@@ -116,6 +116,20 @@
 
 ---
 
+## 11. 首屏资源：两张大图和 JSZip 都进了阅读页 chunk（2026-11-01）
+
+- **症状**：`npm run build` 报 `ReaderRoot` 655 kB（gzip 226 kB）超过 500 kB；`dist/assets` 里两张立绘 `big.png` 1.1 MB、`GinShinImapct.png` 1.3 MB。
+- **根因**：
+  1. 立绘原图 1024 / 1104 px，页面只显示 112–132 px，PNG 没压缩；
+  2. `useArticleImport` 顶层 `import { extractEpub, extractPdfText } from '../importers'`，把 JSZip（~100 kB）拉进了阅读页首屏，而 PDF / EPUB 导入是低频动作。
+- **修法**：
+  1. 用 `@napi-rs/canvas` 把两张立绘缩到 384 px、转 WebP（quality 82）：2.41 MB → 58 kB；
+  2. `useArticleImport` 里改成 `await import('../importers')`，只在真正选 PDF / EPUB 时加载（独立 100 kB chunk）。
+- **结果**：`ReaderRoot` 805.9 → 655.7 kB（gzip 257.7 → 226.1 kB），图片请求少 2.35 MB。500 kB 警告仍在：剩下的都是阅读页应用代码；把金句模块拆成 manualChunk 会撞上 `golden ↔ writingErrorReview` 的真实循环依赖（Rollup 直接报 `Circular chunk`），所以没有硬拆。
+- **教训**：**低频功能的重依赖不要顶层 import**；静态图片按显示尺寸出图，别把 1 MB 原图直接扔进 `assets/`。
+
+---
+
 ## 一句话总结
 
 > **交互热路径上，绝不允许出现随「词库规模 × 文档规模」增长的计算；派生计算要分层（随文档变 / 随词库变），大集合先索引成 `Set`/`Map`；重资产走静态服务，不进 bundle。**

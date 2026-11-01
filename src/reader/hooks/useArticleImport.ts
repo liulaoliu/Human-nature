@@ -2,7 +2,6 @@ import { useCallback, useRef, type RefObject } from 'react'
 import { cleanText } from '../../core/cleaner'
 import { segment } from '../../core/segmenter'
 import { buildCleanupPrompt } from '../../core/analyzer'
-import { extractEpub, extractPdfText } from '../importers'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 import type { ArticleOrigin } from '../../types/document'
 
@@ -131,6 +130,8 @@ export function useArticleImport({
     if (!file) return
     setImporting('正在解析 PDF…')
     try {
+      // PDF / EPUB 解析（含 JSZip）只在真正导入文件时才加载，别压进阅读页首屏
+      const { extractPdfText } = await import('../importers')
       const text = await extractPdfText(file, pdfRange)
       setManual(text)
       setNewTitle(file.name.replace(/\.[^.]+$/, ''))
@@ -149,6 +150,7 @@ export function useArticleImport({
     if (!file) return
     setImporting('正在解析 EPUB…')
     try {
+      const { extractEpub } = await import('../importers')
       const chapters = await extractEpub(file)
       if (!chapters.length) {
         flash('EPUB 里没读到文本')

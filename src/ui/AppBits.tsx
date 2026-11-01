@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { pickAudioFile, supportsAudioPicker } from '../adapters/audioPick'
 import type { Take } from '../core/ports'
-import mascotBig from '../../assets/imgs/big.png'
+import mascotBig from '../../assets/imgs/big.webp'
 
 /**
  * 跟读页里的小零件：空状态、备份条、录音导出、时间格式化。
