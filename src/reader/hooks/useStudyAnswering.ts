@@ -66,6 +66,7 @@ export function useStudyAnswering({
   grading,
 }: UseStudyAnsweringParams) {
   const { checked, drillCleared, pendingScore, setPendingScore, setRevealed, resetFlags } = ui
+  const { recordGrade } = grading
   /**
    * 真正落库的评分。账本在 `grading.recordGrade`；这里只负责「清卡片 UI」和「要不要推进」。
    *
@@ -84,7 +85,7 @@ export function useStudyAnswering({
         setPendingScore({ grade: g, advance: opts?.advance !== false })
         return
       }
-      grading.recordGrade(g, queued, opts?.learnPass)
+      recordGrade(g, queued, opts?.learnPass)
       resetFlags()
       setEditOpen(false)
       setDelArmed(false)
@@ -95,12 +96,10 @@ export function useStudyAnswering({
         else setIndex((i) => i + 1)
       }
     },
-    // `grading` 只用到 `recordGrade`（下面逐个列了）；整包对象每次渲染都是新的。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       queue,
       index,
-      grading.recordGrade,
+      recordGrade,
       spellMiss,
       spellingRoundActive,
       mode,
@@ -170,11 +169,10 @@ export function useStudyAnswering({
   const grade = useCallback((g: ReviewGrade) => applyGrade(g), [applyGrade])
 
   /** 面板「认识 / 模糊 / 忘记了」：复习模式走三键状态机，其它模式走评分。 */
+  const { answer: answerReview } = reviewStep
   const pressGrade = useCallback(
-    (g: ReviewGrade) => (mode === 'review' ? reviewStep.answer(g) : grade(g)),
-    // 只用到 `reviewStep.answer`（已列出），不是整个 reviewStep 状态机。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mode, reviewStep.answer, grade],
+    (g: ReviewGrade) => (mode === 'review' ? answerReview(g) : grade(g)),
+    [mode, answerReview, grade],
   )
 
   return {

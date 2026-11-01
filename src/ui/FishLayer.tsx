@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type MouseEvent as ReactMouseEvent, type PointerEvent as ReactPointerEvent } from 'react'
 import { clampFishPos, clampFishSize, nextFishSize } from '../core/fishLayout'
 import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
 
@@ -24,6 +24,13 @@ import { readFishPos, readFishSize, saveFishLayout } from '../state/fishPrefs'
  * 正文上——这是滚轮/拖动必须付出的代价；两个手柄之外没有扩大热区。
  */
 const FISH_BASE = '/fish'
+
+function viewport() {
+  return {
+    w: typeof window !== 'undefined' ? window.innerWidth : 1200,
+    h: typeof window !== 'undefined' ? window.innerHeight : 800,
+  }
+}
 
 let fishCache: Promise<string[]> | null = null
 function loadFishNames(): Promise<string[]> {
@@ -74,11 +81,7 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
   }, [])
 
-  const viewport = () => ({
-    w: typeof window !== 'undefined' ? window.innerWidth : 1200,
-    h: typeof window !== 'undefined' ? window.innerHeight : 800,
-  })
-  const applySize = (w: number) => {
+  const applySize = useCallback((w: number) => {
     const s = clampFishSize(w)
     sizeRef.current = s
     setSize(s)
@@ -86,21 +89,21 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     const p = clampFishPos(posRef.current.right, posRef.current.bottom, s, viewport())
     posRef.current = p
     setPos(p)
-  }
+  }, [])
   const applyPos = (right: number, bottom: number) => {
     const p = clampFishPos(right, bottom, sizeRef.current, viewport())
     posRef.current = p
     setPos(p)
   }
-  const persist = () => saveFishLayout(pageKey, sizeRef.current, posRef.current)
+  const persist = useCallback(() => saveFishLayout(pageKey, sizeRef.current, posRef.current), [pageKey])
   /** 滚轮/拖动结束后的防抖落盘。 */
-  const schedulePersist = () => {
+  const schedulePersist = useCallback(() => {
     if (persistTimer.current !== null) window.clearTimeout(persistTimer.current)
     persistTimer.current = window.setTimeout(() => {
       persistTimer.current = null
       persist()
     }, 200)
-  }
+  }, [persist])
 
   /**
    * 滚轮缩放。必须用原生监听并 `passive: false`：React 的 onWheel 在根节点上是
@@ -119,8 +122,7 @@ export default function FishLayer({ pageKey = 'default' }: { pageKey?: string })
     }
     el.addEventListener('wheel', onWheel, { passive: false })
     return () => el.removeEventListener('wheel', onWheel)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [url, pageKey])
+  }, [url, applySize, schedulePersist])
 
   /** 卸载前把还没落盘的缩放写回去。 */
   useEffect(

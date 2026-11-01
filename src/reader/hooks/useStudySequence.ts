@@ -63,6 +63,8 @@ export function useStudySequence({
   flash,
   resetCardUi,
 }: UseStudySequenceParams) {
+  const { reset: resetSpellingRound } = spellingRound
+  const { resetLedger, getForgotIds } = grading
   /** 正在拼写测试的这一组的组末下标（拼完把 index 推到这里）。 */
   const pendingGroupEndRef = useRef<number | null>(null)
   /** 当前组在队列里的起点（组完成时前移；重开一轮归零）。 */
@@ -70,16 +72,13 @@ export function useStudySequence({
 
   const resetSession = useCallback(() => {
     setExtraRound(emptyExtraRound())
-    grading.resetLedger()
+    resetLedger()
     setRetrying(false)
     groupCursorRef.current = 0
     pendingGroupEndRef.current = null
-    spellingRound.reset()
+    resetSpellingRound()
     resetCardUi()
-    // `spellingRound` 是 hook 返回的整包对象，只用到 `.reset()`（已在上面逐个列出）；
-    // 把整包放进依赖会让它在每次渲染时换身份，这个回调就白做 memo 了。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resetCardUi, spellingRound.reset, grading.resetLedger, setExtraRound, setRetrying])
+  }, [resetCardUi, resetSpellingRound, resetLedger, setExtraRound, setRetrying])
 
   /**
    * 推进到下一张卡：到了「每组 N 词」的组末先停下把本组全部词拼一遍，
@@ -142,7 +141,7 @@ export function useStudySequence({
 
   /** 收尾重练本轮点过「忘记了」的词（每轮只发起一次，已练满 3 次的不再进队）。 */
   const retryForgot = useCallback(() => {
-    const ids = new Set(grading.getForgotIds())
+    const ids = new Set(getForgotIds())
     const items = library.items.filter((it) => ids.has(it.id))
     if (!items.length) return
     const plan = planRetryForgot(extraRound, items.map((it) => it.id))
@@ -157,21 +156,19 @@ export function useStudySequence({
     }
     const keep = new Set(plan.ids)
     const retryItems = items.filter((it) => keep.has(it.id))
-    grading.resetLedger()
+    resetLedger()
     setQueue(retryItems)
     setRoundTotal(retryItems.length)
     setRetrying(true)
     setIndex(0)
     resetCardUi()
-    // `grading` 只用它的两个方法（已逐个列在下面）；整包放进来等于每次渲染都重算。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     library.items,
     extraRound,
     flash,
     resetCardUi,
-    grading.resetLedger,
-    grading.getForgotIds,
+    resetLedger,
+    getForgotIds,
     setExtraRound,
     setQueue,
     setRoundTotal,

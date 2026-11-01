@@ -124,12 +124,12 @@ export function useAiPack({ jobsInput, applyTaskResult, download, flash, onRepor
   })
 
   /** 重置网页版进度时，连带清掉 agent 回执的缺项（两路共用「重置」这个动作）。 */
+  const { resetWebProgress: resetWeb } = web
+  const { clearMissing } = agent
   const resetWebProgress = useCallback(() => {
-    web.resetWebProgress()
-    agent.clearMissing()
-    // 只用到两个成员方法（已列出）；`web` / `agent` 整包每次渲染都是新对象。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [web.resetWebProgress, agent.clearMissing])
+    resetWeb()
+    clearMissing()
+  }, [resetWeb, clearMissing])
 
   const nextHint = aiNextHint({
     batchCount: jobsInput.batch.length,

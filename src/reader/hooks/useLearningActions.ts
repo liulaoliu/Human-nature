@@ -36,6 +36,7 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
   } = setters
 
   const now = params.now
+  const { articleIdentity, flash } = params
 
   /** 追加一条答题事件（每题一条；聚合值仍由各自 hook 照常写）。 */
   const recordAnswer = useCallback(
@@ -63,18 +64,16 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
   const saveRetell = useCallback(
     (text: string) => {
       const t = text.trim()
-      if (!t || !params.articleIdentity) return
+      if (!t || !articleIdentity) return
       const at = (now ? now() : new Date()).toISOString()
       const words = t.split(/\s+/).filter(Boolean).length
       setRetells((prev) =>
-        [{ at, articleId: params.articleIdentity as string, text: t, words }, ...prev].slice(0, 200),
+        [{ at, articleId: articleIdentity as string, text: t, words }, ...prev].slice(0, 200),
       )
       setActivity((prev) => addActivity(prev, dayKeyLocal(now ? now() : new Date()), 'write', 1))
-      params.flash('已记录复述 ✅')
+      flash('已记录复述 ✅')
     },
-    // 只读 `params` 的两个字段（都已列出），不把整个 params 对象放进依赖。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [params.articleIdentity, params.flash, now, setRetells, setActivity],
+    [articleIdentity, flash, now, setRetells, setActivity],
   )
 
   const deleteRetell = useCallback(
@@ -84,10 +83,10 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
 
   /** 略读标记：同一篇点一次开、再点关。 */
   const toggleSkimmed = useCallback(() => {
-    const id = params.articleIdentity
+    const id = articleIdentity
     if (!id) return
     setSkimmed((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }, [params.articleIdentity, setSkimmed])
+  }, [articleIdentity, setSkimmed])
 
   /**
    * 一轮考完 → 按题型累加到**本篇**（每次练习都算，产出看板据此算正确率）。
@@ -95,7 +94,7 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
    */
   const mergeKindStats = useCallback(
     (rows: { kind: string; total: number; correct: number }[]) => {
-      const id = params.articleIdentity
+      const id = articleIdentity
       if (!id) return
       setKindStats((prev) => {
         const forArticle = { ...(prev[id] ?? {}) }
@@ -106,7 +105,7 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
         return { ...prev, [id]: forArticle }
       })
     },
-    [params.articleIdentity, setKindStats],
+    [articleIdentity, setKindStats],
   )
 
   /** 记「今天学过这个词」（每日目标按不同单词计数）：重复点不重复算，只留最近 200 天。 */
@@ -163,11 +162,11 @@ export function useLearningActions({ params, studiedDays, setters }: UseLearning
           kind,
           total,
           correct,
-          articleId: params.articleIdentity || undefined,
+          articleId: articleIdentity || undefined,
         }),
       )
     },
-    [params.articleIdentity, setPractice],
+    [articleIdentity, setPractice],
   )
 
   const addMistake = useCallback(

@@ -312,10 +312,18 @@ export default function ReaderApp() {
     setConfirmDelSave(false)
     setSelSid(null)
     setSelIndices([])
-    // 九个 setter 全是 useState 的（useArticleDocState / useReaderHighlightState / useBatchQueue），
-    // 引用恒定；列进依赖只会让这个回调在每次渲染时换身份。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    // 九个 setter 全是 useState 的，引用恒定；列全依赖后不再需要豁免。
+  }, [
+    setSelectedId,
+    setExact,
+    setUseExact,
+    setBatch,
+    setPeekSid,
+    setLastPicked,
+    setConfirmDelSave,
+    setSelSid,
+    setSelIndices,
+  ])
 
   /** 文章工作区（文档动作 + 新建/导入 + 语言点编辑）；状态在 hooks/useArticleWorkspace。 */
   const workspace = useArticleWorkspace({

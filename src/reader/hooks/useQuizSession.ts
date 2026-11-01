@@ -149,10 +149,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
       setAutoRun(auto)
       setSetupOpen(false)
     },
-    // 漏的四个都是 useState 的 setter（setArticleRun / setQueue / setAutoRun / setSetupOpen），
-    // `allRef` 是 ref；引用全恒定，列进来只会多噪音。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [clearAdvance, closeOthers, auto, flash, resetProgress, resetDrill],
+    // 四个 setter 都是 useState 的，引用恒定；列全依赖后不再需要豁免。
+    [clearAdvance, closeOthers, auto, flash, resetProgress, resetDrill, setArticleRun, setQueue, setAutoRun, setSetupOpen, allRef],
   )
 
   const {
@@ -213,9 +211,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setSetupOpen(false)
     setArticleRun(false)
     setSpellMiss(null)
-    // 四个都是 useState 的 setter（setQueue / setSetupOpen / setArticleRun / setSpellMiss），引用恒定。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearAdvance, clearDrill])
+    // 四个都是 useState 的 setter，引用恒定。
+  }, [clearAdvance, clearDrill, setQueue, setSetupOpen, setArticleRun, setSpellMiss])
 
   /** 拼写判错未确认时，不允许直接结束把这次判罚吞掉。 */
   const close = useCallback(() => {
@@ -233,8 +230,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setSpellMiss(null)
     advance()
     // `setSpellMiss` 是 useState 的 setter，引用恒定。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [spellMiss, advance])
+  }, [spellMiss, advance, setSpellMiss])
 
   /** 立即从头重学拼错的词：关掉考试，交给背单词会话走完整流程。 */
   const relearnSpellMiss = useCallback(() => {

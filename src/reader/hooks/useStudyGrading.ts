@@ -62,37 +62,46 @@ export function useStudyGrading({
   const bumpedRef = useRef<Set<string>>(new Set())
 
   /** 新词头一回被判到才计一次「今天已引入」。 */
-  const bumpIfFirstNew = (cur: VocabItem) => {
-    if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
-      bumpedRef.current.add(cur.id)
-      onBumpNewToday()
-    }
-  }
+  const bumpIfFirstNew = useCallback(
+    (cur: VocabItem) => {
+      if (isFresh(cur) && !bumpedRef.current.has(cur.id)) {
+        bumpedRef.current.add(cur.id)
+        onBumpNewToday()
+      }
+    },
+    [onBumpNewToday],
+  )
 
   /** 一次判分的共同账：+1 张卡、记「今天学过」、记一次学习活动、对应桶 +1。 */
-  const tally = (bucket: 'know' | 'fuzzy' | 'forgot', id: string) => {
-    addStudyTime(0, 1)
-    markStudied(id)
-    recordActivity('vocab', 1)
-    setCounts((c) => ({ ...c, [bucket]: c[bucket] + 1 }))
-  }
+  const tally = useCallback(
+    (bucket: 'know' | 'fuzzy' | 'forgot', id: string) => {
+      addStudyTime(0, 1)
+      markStudied(id)
+      recordActivity('vocab', 1)
+      setCounts((c) => ({ ...c, [bucket]: c[bucket] + 1 }))
+    },
+    [addStudyTime, markStudied, recordActivity],
+  )
 
-  const noteForgot = (id: string) => {
+  const noteForgot = useCallback((id: string) => {
     if (!forgotRef.current.includes(id)) {
       forgotRef.current.push(id)
       setForgotCount(forgotRef.current.length)
     }
-  }
+  }, [])
 
   /** 忘记 / 模糊的词本轮末尾再出现（每卡 3 次上限，规则在 `core/vocab/extra`）。 */
-  const requeue = (cur: VocabItem, g: ReviewGrade): boolean => {
-    const decision = planExtra(extraRound, cur.id, g)
-    if (!decision.append) return false
-    setExtraRound(decision.round)
-    setQueue((q) => (q ? [...q, cur] : q))
-    setExtraCount((n) => n + 1)
-    return true
-  }
+  const requeue = useCallback(
+    (cur: VocabItem, g: ReviewGrade): boolean => {
+      const decision = planExtra(extraRound, cur.id, g)
+      if (!decision.append) return false
+      setExtraRound(decision.round)
+      setQueue((q) => (q ? [...q, cur] : q))
+      setExtraCount((n) => n + 1)
+      return true
+    },
+    [extraRound, setExtraRound, setQueue],
+  )
 
   /** 一句判定提示，过一会儿自己消失（`ms` 到点清空）。 */
   const showGradeInfo = useCallback((text: string, ms = 1600) => {
@@ -125,9 +134,8 @@ export function useStudyGrading({
       if (g === 'again') noteForgot(cur.id)
       if (g === 'again' || g === 'hard') requeue(cur, g)
     },
-    // 全部依赖都是外部注入的稳定引用或本轮状态，跟原来的 applyGrade 一致
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [library, extraRound, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity, showGradeInfo],
+    // 依赖全是外部注入的稳定引用或本轮状态；四个小账本动作已 useCallback，列全即可。
+    [library, persist, bumpIfFirstNew, tally, noteForgot, requeue, showGradeInfo],
   )
 
   /**
@@ -142,8 +150,7 @@ export function useStudyGrading({
       noteForgot(cur.id)
       return requeue(cur, 'again')
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [library, extraRound, persist, onBumpNewToday, addStudyTime, markStudied, recordActivity],
+    [library, persist, bumpIfFirstNew, tally, noteForgot, requeue],
   )
 
   /**
@@ -155,8 +162,7 @@ export function useStudyGrading({
       persist(markSpellingMiss(library, item.id))
       tally('forgot', item.id)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [library, persist, addStudyTime, markStudied, recordActivity],
+    [library, persist, tally],
   )
 
   /**
@@ -180,8 +186,7 @@ export function useStudyGrading({
       showGradeInfo('已标为「不认识」· 已从零重学')
       flash('已标为「不认识」的全新词，已安排重学')
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [library, persist, addStudyTime, markStudied, recordActivity, flash, showGradeInfo],
+    [library, persist, noteForgot, tally, showGradeInfo, flash],
   )
 
   /** 本轮点过「忘记了」的词 id（收尾重练用；返回的是账本快照，外部别改）。 */

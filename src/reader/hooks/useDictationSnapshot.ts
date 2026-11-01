@@ -40,12 +40,10 @@ export function useDictationSnapshot({
   /** 本轮出自全篇的哪一段（用于显示「第 X–Y / 全篇 M」）。 */
   const [roundInfo, setRoundInfo] = useState(restored?.round ?? { offset: 0, grand: 0 })
 
-  // 队列是按恢复时的模式建的，挂载时对齐一次
+  // 队列是按恢复时的模式建的，挂载时对齐一次（`restored` 是 useState 初值，引用恒定）
   useEffect(() => {
     if (restored) setMode(restored.mode)
-    // 只在挂载时对齐一次
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [restored, setMode])
 
   // 刷新页面后能接着听写
   useEffect(() => {

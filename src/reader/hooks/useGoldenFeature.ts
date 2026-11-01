@@ -123,11 +123,10 @@ export function useGoldenFeature({
     recordActivity,
   })
   // 每次进「本句仿写」都从空白开始；同一句重练也不带上一轮答案。
+  const { reset: resetImitation } = sentenceImitation
   useEffect(() => {
-    if (golden.phase === 'imitation') sentenceImitation.reset()
-    // 只用到 `sentenceImitation.reset`（已列出），不是整个仿写状态机。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [golden.phase, golden.current?.id, sentenceImitation.reset])
+    if (golden.phase === 'imitation') resetImitation()
+  }, [golden.phase, golden.current?.id, resetImitation])
   const bank = useGoldenBank({
     saved,
     savedId,

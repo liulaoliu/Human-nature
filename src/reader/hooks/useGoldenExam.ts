@@ -101,6 +101,7 @@ export function useGoldenExam({
     aiStatus,
     now,
   })
+  const { reset: resetAttempt, ensureAi } = attempt
   const error = taskError || attempt.error
   const history = useMemo(
     () => writingHistory.filter((r) => isGoldenExamRecord(r) && r.articleId === articleId),
@@ -121,11 +122,9 @@ export function useGoldenExam({
   )
 
   const reset = useCallback(() => {
-    attempt.reset()
+    resetAttempt()
     setTaskError('')
-    // 只用到 `attempt.reset`（已列出），不是整个 attempt 状态机。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attempt.reset])
+  }, [resetAttempt])
 
   const start = useCallback(() => {
     if (!lesson) {
@@ -169,7 +168,7 @@ export function useGoldenExam({
       return
     }
     const prompt = buildGoldenExamPrompt({ title: articleTitle, sentences: promptSentences })
-    if (!(await attempt.ensureAi())) {
+    if (!(await ensureAi())) {
       try {
         await navigator.clipboard.writeText(prompt)
         flash('已复制 AI 出题提示词；把返回的 JSON 粘到下面「应用 AI 结果」')
@@ -196,9 +195,7 @@ export function useGoldenExam({
     } finally {
       setGenerating(false)
     }
-    // 只用到 `attempt.ensureAi`（已列出），不是整个 attempt 状态机。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lesson, unlocked, after, metas, records, articleId, articleTitle, attempt.ensureAi, runAi, applyTasks, flash])
+  }, [lesson, unlocked, after, metas, records, articleId, articleTitle, ensureAi, runAi, applyTasks, flash])
 
   const copyTaskPrompt = useCallback(async () => {
     if (!lesson || !unlocked) return

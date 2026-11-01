@@ -184,14 +184,15 @@ export default function VocabBrowsePanel({
   )
 
   // 换了范围 / 文章后，原先选中的日期可能已经没内容了 → 只留还有内容的；全没了就回到「全部日期」。
+  // 清理时要带上「当前输入框里的查询词」，但不该因为每敲一个字就重跑：
+  // 用 ref 拿最新值，effect 只跟已应用的 filters。
+  const queryDraftRef = useRef(queryDraft)
+  queryDraftRef.current = queryDraft
   useEffect(() => {
     if (!filters.days.length) return
     const avail = new Set(result.days.map(([d]) => d))
     const next = filters.days.filter((d) => avail.has(d))
-    if (next.length !== filters.days.length) onFiltersChange({ ...filters, query: queryDraft, days: next })
-    // 故意不跟 `queryDraft` 重跑：每敲一个字就清一次日期筛选是错的。
-    // effect 触发时用的是当帧闭包，所以 `queryDraft` 仍是最新值。
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (next.length !== filters.days.length) onFiltersChange({ ...filters, query: queryDraftRef.current, days: next })
   }, [filters, result.days, onFiltersChange])
 
   const title =
