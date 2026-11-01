@@ -65,16 +65,21 @@ describe('sqliteStore：词库', () => {
 
     const raw = new DatabaseSync(path, { readOnly: true })
     const snap = raw.prepare('SELECT payload FROM vocab_snapshots LIMIT 1').get()
-    // 已删除的功能不再建表（老库里留着的旧表也不读）：词库上一版 / 文章上一版 / 学习记录快照
+    // 已删除的功能不再建表（老库里留着的旧表也不读）：词库上一版 / 文章上一版
     const dropped = raw
       .prepare(
-        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('vocab_prev', 'article_prev', 'learning_snapshots')",
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('vocab_prev', 'article_prev')",
       )
+      .all()
+    // v12 重新建了学习记录快照表（节流 + gzip），这里确认它存在
+    const kept = raw
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'learning_snapshots'")
       .all()
     raw.close()
     // 16MB 的整库 JSON 存两份就是 32MB；压完是 BLOB，不是 JSON 文本
     expect(typeof snap.payload).not.toBe('string')
     expect(dropped).toEqual([])
+    expect(kept).toHaveLength(1)
     expect(store.exportAll().vocabSnapshots[0].library.items.length).toBeGreaterThan(0)
   })
 
@@ -646,6 +651,42 @@ describe('sqliteStore：学习记录', () => {
     const store = openStore(tempDb())
     store.saveLearning(learning)
     expect(store.exportAll().learning.practice).toHaveLength(2)
+  })
+
+  it('学习快照：自动节流、手动拍一张、覆盖后能恢复且保留新答题事件', () => {
+    const store = openStore(tempDb())
+    store.saveLearning(learning)
+
+    // 第一次 partial：上一张不存在，拍一张自动快照（内容是刚写进去的学习记录）
+    store.saveLearningPartial({ practice: learning.practice })
+    expect(store.listLearningSnapshots().length).toBeGreaterThan(0)
+
+    // 内容没变 + 10 分钟内：自动快照不再写；手动也走 dedupe
+    const count = store.listLearningSnapshots().length
+    store.saveLearningPartial({ practice: learning.practice })
+    expect(store.listLearningSnapshots().length).toBe(count)
+    expect(store.snapshotLearning('manual')).toBeNull()
+
+    // 改一点再手动拍，作为恢复点
+    const extra = { at: '2026-03-01T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 }
+    store.saveLearningPartial({ practice: [...learning.practice, extra] })
+    const snapAt = store.snapshotLearning('manual')
+    expect(snapAt).toBeTruthy()
+
+    // 整份覆盖成空练习
+    store.saveLearning({ ...learning, practice: [] })
+    expect(store.loadLearning().practice).toHaveLength(0)
+
+    // 覆盖后新增答题事件；恢复旧快照时 append-only，新的不能丢
+    const newer = { ...learning.answerEvents[0], at: '2026-04-01T00:00:00.000Z', questionId: 'q-new' }
+    store.saveLearningPartial({ answerEvents: [...learning.answerEvents, newer] })
+
+    expect(store.restoreLearningSnapshot(snapAt)).toBe(true)
+    const restored = store.loadLearning()
+    expect(restored.practice).toHaveLength(3)
+    expect(restored.answerEvents.some((e) => e.questionId === 'q-new')).toBe(true)
+    expect(store.listLearningSnapshots().some((s) => s.reason === 'before-restore')).toBe(true)
+    expect(store.restoreLearningSnapshot('1999-01-01T00:00:00.000Z')).toBe(false)
   })
 })
 

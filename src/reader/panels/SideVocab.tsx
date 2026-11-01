@@ -6,6 +6,8 @@ import type { PrintRow } from '../../core/printPlan'
 import { sortItems, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
 import { langEntries, wordEntries } from '../../core/entryKind'
 import LangPointList from './LangPointList'
+import BackupHealth from './BackupHealth'
+import LearningSnapshots from './LearningSnapshots'
 import { fmtDur } from '../format'
 import { calendarDayKey } from '../../core/activity'
 
@@ -448,6 +450,9 @@ export default function SideVocab({
           />
         </label>
       </div>
+
+      <BackupHealth />
+      <LearningSnapshots />
 
       {statsOpen && (
         <div className="stats">

@@ -4,6 +4,7 @@ import type { VocabItem } from '../../types/document'
 import { dayKeyLocal } from '../../core/activity'
 import { buildArticlePackage } from '../../core/articlePackage'
 import { writingHistoryToMarkdown } from '../../core/writingExport'
+import { markBackupAt } from '../../adapters/backupHealth'
 import type { ExportParams } from './exportTypes'
 
 /** 下载 / 词表 / 文章包等“生成文件”动作；不读写应用状态。 */
@@ -86,6 +87,8 @@ export function createExportFiles({ library, saved, learning, writingHistory, vi
     }
     const day = dayKeyLocal()
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')
+    // 记下「导出过」：备份提醒条据此判断是否该催；同盘备份挡不住磁盘坏，提醒放别处
+    markBackupAt()
   }
 
   /**

@@ -4,10 +4,11 @@
  * 事实来源仍然是 JSON payload；这里只放表结构，避免 store 的读写逻辑被 DDL 淹没。
  * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
  * v4 旧词条文章 id，v7 答题事件与聚合基线，v8 回译存档；
- * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号、不再建表。
+ * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号；
+ * v12 重新引入**节流版**学习记录快照（见 `SCHEMA_V12`）。
  */
 
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -450,4 +451,24 @@ CREATE INDEX IF NOT EXISTS idx_writing_error_progress_due
   ON writing_error_progress(status, due_at);
 CREATE INDEX IF NOT EXISTS idx_writing_error_progress_article
   ON writing_error_progress(article_id, updated_at DESC);
+`
+
+/**
+ * v12：学习记录的版本快照。
+ *
+ * v5 曾有过 `learning_snapshots`，后来因为「每次保存都整份 load + 写」把写路径拖慢而退役。
+ * 这次恢复成**节流版**：正常保存最多 10 分钟拍一张，整份覆盖 / 重建派生 / 恢复快照前
+ * 额外拍一张；payload gzip，只留最近 12 版。
+ *
+ * 它解决的是**逻辑回滚**（误导入、误覆盖、重建算错），不是异盘备份：
+ * 磁盘坏了仍然靠「导出全部」/「下载整库」和 `data/backups/`。
+ */
+export const SCHEMA_V12 = `
+CREATE TABLE IF NOT EXISTS learning_snapshots (
+  at TEXT PRIMARY KEY,
+  reason TEXT NOT NULL DEFAULT '',
+  payload BLOB NOT NULL,
+  bytes INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_learning_snapshots_at ON learning_snapshots(at DESC);
 `

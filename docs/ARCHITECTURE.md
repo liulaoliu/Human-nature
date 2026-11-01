@@ -698,6 +698,9 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
   学习记录落盘 / 解析在 `hooks/useLearningCollections`，写动作在 `hooks/useLearningActions`，
   `hooks/useLearningData` 只装配并把 `readDone` 并进导出快照 / 合并 setters；「重建并核对」在
   `hooks/useLearningRebuild`（挂进 `useLearningData` 一起返回，避免再多一个装配点），
+  学习记录版本快照在服务端 `server/sqliteLearning.ts`（v12，节流 + gzip，最近 12 版），
+  侧栏入口是 `panels/LearningSnapshots`；「上次导出多久了 + 下载整库」在 `panels/BackupHealth`
+  （纯规则 `core/backupReminder`、localStorage 读写 `adapters/backupHealth`），
   派生统计簇在 `hooks/useReaderDerived`，词库增删 / 评分 / 编辑在 `hooks/useVocabEdits`，复述 / 略读动作在 `hooks/useLearningActions`，错题重练 / 包围战在 `hooks/useMistakeActions`，本篇派生在 `hooks/useArticleDerived`，就绪清单 / 日志 / 打印索引在 `hooks/useReaderViewData`，文章工作区 / 新建导入在 `hooks/useArticleWorkspace`，六种会话与错题重练在 `hooks/useSessionServices`，AI 复制/工作包/粘回在 `hooks/useAiServices`，正文小动作在 `hooks/useArticleUiActions`；布局/槽位在 `ReaderScreen`（只做映射，不读存储），提示词复制在 `hooks/aiTasks`（普通 factory，不占 hook），粘贴应用在 `hooks/usePasteApply`，本机偏好（18 个小开关）在 `hooks/useReaderPrefs`，本篇生词口径在 `hooks/useArticleVocabView`，精读工作流的阶段→工具 / 拷打→题型两张表在 `hooks/useIntensiveActions`，修饰键与队列自动朗读在 `hooks/useModifierKeys` / `hooks/useQueueAutoSpeak`，
   考试设置（题型/范围/题量/鞭打）在 `hooks/useQuizSettings`（候选池与出题集在 `core/quizPool`），
   回译出题 / 导航在 `hooks/useBackTranslateSession`，批改与存档在 `hooks/useBackTranslateGrading`；

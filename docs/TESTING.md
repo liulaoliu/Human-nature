@@ -756,3 +756,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `recordKey` 生成 `?gv=history&gr=…&gs=…&from=errors`；下标会随筛选/分页变化，时间戳也可能重复。
     路由 query 只由 `route.ts` 的 `parseGoldenQuery` / `goldenPanelPath` 构造；详情翻页用
     `replace`，避免历史栈无限增长。记录不存在时显示回退提示，不能停在空白详情。
+ 63. **Node 26 自带的 `localStorage` 会让 jsdom 组件测试拿到空实现**（2026-11-01）。
+    直接 `window.localStorage.clear()` 报 `Cannot read properties of undefined`；这不是 jsdom 没开，
+    而是 Node 26 的 `localStorage` 全局在没有 `--localstorage-file` 时就是不可用状态。
+    `BackupHealth.test` 里用 `Object.defineProperty(window, 'localStorage', { value: fakeStorage() })`
+    换内存版；**适配器读取 localStorage 一律走 `window.localStorage` + try/catch**，
+    别在核心层碰浏览器 API。

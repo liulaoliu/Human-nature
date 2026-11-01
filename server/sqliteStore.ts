@@ -12,17 +12,23 @@ import {
   SCHEMA_V8,
   SCHEMA_V9,
   SCHEMA_V11,
+  SCHEMA_V12,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
 import {
   hasLearningRows,
   LEARNING_SECTIONS,
+  listLearningSnapshots,
   loadLearning,
   rebuildLearningDerived,
+  restoreLearningSnapshot,
   saveDerivedBaseline,
+  snapshotLearning,
+  SNAPSHOT_MIN_INTERVAL_MS,
   writeLearning,
   type LearningOut,
+  type LearningSnapshotMeta,
 } from './sqliteLearning.ts'
 import { list, nowIso, text, tx } from './sqliteUtil.ts'
 import { rebuildVocabProjection } from './sqliteVocab.ts'
@@ -302,6 +308,10 @@ function ensureSchema(db: DatabaseSync): number {
     tx(db, () => { db.exec(SCHEMA_V11); db.exec('PRAGMA user_version = 11') })
     version = 11
   }
+  if (version < 12) {
+    tx(db, () => { db.exec(SCHEMA_V12); db.exec('PRAGMA user_version = 12') })
+    version = 12
+  }
   return version
 }
 
@@ -398,6 +408,9 @@ export interface Store {
   saveLearning(data: unknown): void
   saveLearningPartial(data: unknown): void
   migrateLearning(data: unknown): { migrated: boolean; value: unknown }
+  snapshotLearning(reason?: string): string | null
+  listLearningSnapshots(): LearningSnapshotMeta[]
+  restoreLearningSnapshot(at: string): boolean
   listArticles(): unknown[]
   getArticle(id: string): unknown
   saveArticle(article: unknown): void
@@ -620,15 +633,24 @@ export function openStore(dbPath: string): Store | null {
       },
       /** 用 baseline + 答题事件重建题型聚合；活动聚合保留（不碰其它学习记录）。 */
       rebuildLearningDerived() {
-        return tx(db, () => rebuildLearningDerived(db))
+        return tx(db, () => {
+          snapshotLearning(db, 'before-rebuild')
+          return rebuildLearningDerived(db)
+        })
       },
       saveLearning(data) {
-        tx(db, () => writeLearning(db, data))
+        tx(db, () => {
+          snapshotLearning(db, 'before-full-replace')
+          writeLearning(db, data)
+        })
       },
       /**
        * 只替换变化的 section。
        * 前端一次答题可能同时改 practice / kindStats / activity，但不会碰写作历史，
        * 所以不要为了三条练习把整份学习记录删掉重插。
+       *
+       * 写入前按 10 分钟节流拍快照：正常学习路径的写放大只多一条
+       * `SELECT at ... LIMIT 1`，不会每几秒 load + gzip 整份记录。
        */
       saveLearningPartial(data) {
         if (!data || typeof data !== 'object' || Array.isArray(data)) {
@@ -639,7 +661,19 @@ export function openStore(dbPath: string): Store | null {
           if (!LEARNING_SECTIONS.includes(section)) throw new Error(`未知学习记录 section: ${section}`)
         }
         if (!sections.length) return
-        tx(db, () => writeLearning(db, data, sections))
+        tx(db, () => {
+          snapshotLearning(db, 'auto', { minIntervalMs: SNAPSHOT_MIN_INTERVAL_MS })
+          writeLearning(db, data, sections)
+        })
+      },
+      snapshotLearning(reason = 'manual') {
+        return tx(db, () => snapshotLearning(db, reason))
+      },
+      listLearningSnapshots() {
+        return listLearningSnapshots(db)
+      },
+      restoreLearningSnapshot(at) {
+        return tx(db, () => restoreLearningSnapshot(db, String(at)))
       },
       /**
        * 首次从 localStorage 迁上来时用：只有服务端还没有任何学习记录才写入。

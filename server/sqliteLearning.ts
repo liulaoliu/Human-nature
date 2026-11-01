@@ -1,4 +1,5 @@
 import type { DatabaseSync } from 'node:sqlite'
+import { gunzipSync, gzipSync } from 'node:zlib'
 import { nowIso, num } from './sqliteUtil.ts'
 import { writeSections } from './sqliteLearningWrite.ts'
 import { LEARNING_SECTIONS, LEARNING_TABLES } from './sqliteLearningSections.ts'
@@ -258,6 +259,129 @@ export function hasLearningRows(db: DatabaseSync): boolean {
     if (Number(row?.n ?? 0) > 0) return true
   }
   return false
+}
+
+export interface LearningSnapshotMeta {
+  at: string
+  reason: string
+  bytes: number
+}
+
+/** 正常保存最多 10 分钟拍一张；留 12 版 ≈ 最近两小时。 */
+export const SNAPSHOT_MIN_INTERVAL_MS = 10 * 60 * 1000
+const SNAPSHOT_KEEP = 12
+
+/** 同一毫秒内连续拍快照时主键也不能撞。 */
+function nextSnapshotAt(db: DatabaseSync): string {
+  let at = nowIso()
+  for (let i = 0; i < 100; i++) {
+    if (!db.prepare('SELECT 1 FROM learning_snapshots WHERE at = ?').get(at)) return at
+    at = new Date(Date.parse(at) + 1).toISOString()
+  }
+  return `${at}:${Math.random().toString(36).slice(2, 8)}`
+}
+
+function latestSnapshotJson(db: DatabaseSync): string | null {
+  const row = db.prepare('SELECT payload FROM learning_snapshots ORDER BY at DESC LIMIT 1').get()
+  if (!row) return null
+  try {
+    return gunzipSync(Buffer.from(row.payload as Uint8Array)).toString('utf8')
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 给当前学习记录拍一张快照。
+ *
+ * - `minIntervalMs > 0`：离上一张不够久就跳过（正常保存走 10 分钟节流）；
+ * - 内容和上一张完全一样也跳过（dedupe）；
+ * - 返回新快照的 `at`，跳过时返回 null。
+ *
+ * 只做逻辑回滚，**不是异盘备份**：磁盘坏了要靠导出 / 下载整库 / `data/backups/`。
+ */
+export function snapshotLearning(
+  db: DatabaseSync,
+  reason = 'manual',
+  opts: { minIntervalMs?: number } = {},
+): string | null {
+  if (!hasLearningRows(db)) return null
+  const last = db.prepare('SELECT at FROM learning_snapshots ORDER BY at DESC LIMIT 1').get()
+  const min = opts.minIntervalMs ?? 0
+  if (last && min > 0) {
+    const elapsed = Date.now() - Date.parse(String(last.at))
+    if (Number.isFinite(elapsed) && elapsed >= 0 && elapsed < min) return null
+  }
+  const json = JSON.stringify(loadLearning(db))
+  if (last && latestSnapshotJson(db) === json) return null
+  const payload = gzipSync(Buffer.from(json, 'utf8'), { level: 6 })
+  const at = nextSnapshotAt(db)
+  db.prepare('INSERT INTO learning_snapshots (at, reason, payload, bytes) VALUES (?, ?, ?, ?)').run(
+    at,
+    reason,
+    payload,
+    payload.length,
+  )
+  db.prepare(
+    'DELETE FROM learning_snapshots WHERE at NOT IN (SELECT at FROM learning_snapshots ORDER BY at DESC LIMIT ?)',
+  ).run(SNAPSHOT_KEEP)
+  return at
+}
+
+export function listLearningSnapshots(db: DatabaseSync): LearningSnapshotMeta[] {
+  return db
+    .prepare('SELECT at, reason, bytes FROM learning_snapshots ORDER BY at DESC')
+    .all()
+    .map((r) => ({
+      at: String(r.at),
+      reason: String(r.reason ?? ''),
+      bytes: Number(r.bytes ?? 0),
+    }))
+}
+
+/** 答题事件 append-only：恢复旧快照时保留当前事件，按「时间 + 题号 + 题型 + 对错」去重。 */
+function mergeAnswerEvents(
+  current: LearningAnswerEvent[],
+  old: LearningAnswerEvent[],
+): LearningAnswerEvent[] {
+  const key = (e: LearningAnswerEvent) =>
+    `${e.at}|${e.questionId ?? ''}|${e.kind}|${e.correct ? 1 : 0}`
+  const seen = new Set<string>()
+  const out: LearningAnswerEvent[] = []
+  for (const e of [...old, ...current]) {
+    const k = key(e)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(e)
+  }
+  return out.sort((a, b) => a.at.localeCompare(b.at))
+}
+
+/**
+ * 恢复一张学习快照。
+ *
+ * 恢复前先给当前状态拍一张（`before-restore`），恢复错了还能回来；
+ * 答题事件按 append-only 语义取「旧快照 ∪ 当前」，不丢新事件。
+ */
+export function restoreLearningSnapshot(db: DatabaseSync, at: string): boolean {
+  const row = db.prepare('SELECT payload FROM learning_snapshots WHERE at = ?').get(String(at))
+  if (!row) return false
+  let data: Partial<LearningOut>
+  try {
+    data = JSON.parse(gunzipSync(Buffer.from(row.payload as Uint8Array)).toString('utf8')) as Partial<LearningOut>
+  } catch {
+    throw new Error('学习快照已损坏，无法恢复')
+  }
+  snapshotLearning(db, 'before-restore')
+  const current = loadLearning(db)
+  const oldEvents = Array.isArray(data.answerEvents) ? data.answerEvents : []
+  const merged: LearningOut = {
+    ...current,
+    ...data,
+    answerEvents: mergeAnswerEvents(current.answerEvents, oldEvents),
+  }
+  writeLearning(db, merged)
+  return true
 }
 
 /**

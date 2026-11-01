@@ -1,6 +1,48 @@
 # 交接记录
 
-最近一次：**2026-10-31** · 上一次：2026-10-29
+最近一次：**2026-11-01** · 上一次：**2026-10-31**
+
+## 2026-11-01
+
+### 当前状态
+
+- 分支 `main`；schema **v12**（重新引入节流版 `learning_snapshots`）
+- 门禁：`npm run gates` 全绿（340 文件 / 2980 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+
+### 这轮做了什么
+
+1. **背单词会话拆分**：`useStudySession` 498 → 445 行；卡面重置 / 导航与拼错锁 / 当前卡派生
+   分别到 `useStudyCardReset` / `useStudyNavigation` / `core/vocab/studyView`，
+   `changeSpelling` 并入 `useStudySpelling`。
+2. **`src/ui` 测试补齐**：2 → 8 个测试文件，覆盖 `/` 主路由装配、横幅、块列表、播放条、
+   循环行、录音面板；新增用例 mock `SessionStore` / `browserAudio` / `FishLayer`。
+3. **hook 依赖豁免清理**：`react-hooks/exhaustive-deps` 21 → 1。setter / ref /
+   内部账本动作（`bumpIfFirstNew` / `tally` / `noteForgot` / `requeue`）改 `useCallback`；
+   唯一保留的是 `useApplyTaskResult` 的手写 `ApplyTaskParams` 字段表（类型加字段必须同步加）。
+4. **首屏资源**：两张立绘 PNG 2.41 MB → 384px WebP 58 KB；PDF / EPUB 解析（JSZip）改按需
+   `import()`，`ReaderRoot` 805.9 → 655.7 KB（gzip 257.7 → 226.1 KB）。500 KB 警告仍在：
+   剩余是阅读页应用代码；把金句模块拆 manualChunk 会撞 `golden ↔ writingErrorReview`
+   的真实循环依赖（Rollup `Circular chunk`），所以没硬拆。
+5. **学习记录版本快照（v12）**：正常保存 10 分钟节流 + gzip + 最近 12 版；整份覆盖 / 重建派生 /
+   恢复前额外拍；恢复时答题事件按 append-only 取并集。API：
+   `GET/POST /api/store/learning/snapshots`、`POST /api/store/learning/snapshots/restore`。
+   侧栏「导出全部（备份）」下方新增 `LearningSnapshots`（默认折叠，展开才拉列表）和
+   `BackupHealth`（上次导出 >7 天变警示色 + 「下载整库」）。它只做逻辑回滚，异盘备份仍靠手动导出。
+
+### 下一轮优先
+
+1. 用真实 AI 批改 JSON 做一轮回归样本（重点看 `original` 近似改写会不会被严格解析误丢）。
+2. `A long road` 两篇重复（`saved:1791421783707` / `saved:1791119917875`）：正文 94% 重合但分句不同，
+   按句 id 合并会指错句，用户决定**先不管**。
+3. 若还要继续压 `ReaderRoot`：把金句面板做成真正的动态 `import`（不是 manualChunk），
+   先拆 `golden ↔ writingErrorReview` 的循环依赖。
+
+### 回滚点
+
+- `data/backups/` 下的每日整库备份；schema v12 升级前会自动 `VACUUM INTO` 一份
+- 学习记录：侧栏「学习记录快照」默认保留最近 12 版（服务端 `learning_snapshots`）
+
+---
 
 ## 2026-10-31
 
@@ -45,8 +87,9 @@
 1. 用真实 AI 批改 JSON 做一轮回归样本（重点看 `original` 近似改写会不会被严格解析误丢）。
 2. `A long road` 两篇重复（`saved:1791421783707` / `saved:1791119917875`）：正文 94% 重合但分句不同，
    按句 id 合并会指错句，用户决定**先不管**。
-3. 学习记录没有版本快照（`learning_snapshots` 已退役），备份与主库同盘 → 提醒把 `data/xueba.db`
-   或导出 JSON 拷一份到别处。
+3. ✅ 学习记录版本快照（2026-11-01 补 v12：正常保存 10 分钟节流 + gzip + 最近 12 版；
+   整份覆盖 / 重建 / 恢复前额外拍；恢复保留当前新增答题事件）。异盘备份仍是手动：
+   侧栏显示「上次导出多久了」并在超过 7 天时变警示色，旁边有「下载整库」。
 
 ### 回滚点
 

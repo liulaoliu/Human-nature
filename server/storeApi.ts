@@ -239,6 +239,31 @@ export async function handleStoreApi(
       return
     }
 
+    if (path === '/learning/snapshots' && method === 'GET') {
+      sendJson(res, 200, { ok: true, value: store.listLearningSnapshots() })
+      return
+    }
+
+    if (path === '/learning/snapshots' && method === 'POST') {
+      sendJson(res, 200, { ok: true, value: store.snapshotLearning('manual') })
+      return
+    }
+
+    if (path === '/learning/snapshots/restore' && method === 'POST') {
+      const body = await readJson(req)
+      const at = body && typeof body === 'object' ? String((body as { at?: unknown }).at ?? '') : ''
+      if (!at) {
+        fail(res, 400, '缺少要恢复的快照时间')
+        return
+      }
+      if (!store.restoreLearningSnapshot(at)) {
+        fail(res, 404, '找不到这张学习快照')
+        return
+      }
+      sendJson(res, 200, { ok: true, value: store.loadLearning() })
+      return
+    }
+
     if (path === '/learning' && method === 'GET') {
       sendJson(res, 200, { ok: true, value: store.loadLearning() })
       return

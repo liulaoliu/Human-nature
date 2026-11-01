@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 11`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态；v5/v6 已退役，分别对应删除的学习记录快照与文章上一版，只保留版本号）。
+schema 版本：`PRAGMA user_version = 12`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态，v12 恢复**节流版**学习记录快照；v5 的旧快照表当时退役，v6 的文章上一版也退役，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -209,6 +209,7 @@ writing_error_progress(id PK, rule, key, article_id, sentence_id, exam_id,
                      reviews, last_at, last_correct, due_at, created_at,
                      updated_at)                                         -- 错因复习状态（v11）
 learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
+learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v12 学习记录快照（gzip，最近 12 版）
 ```
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
@@ -243,9 +244,16 @@ learning_derived_baseline(id=1, payload JSON, at)                         -- v7 
   活动日一律用 `core/activity.dayKeyLocal`（事件写入时已落 `day`，服务端不另算日期）。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成
   `saved:…` id；`examples[].articleId` / `contexts[].articleId` 一起换。同名/找不到的标题不猜。
-- 学习记录没有 JSON 快照表（v5 的 `learning_snapshots` 已退役）：写坏了靠
-  `data/backups/` 的每日整库备份回滚，粒度是「一天」；`answer_events` 是 append-only，
-  已记录的答题事件不会因为整份保存被删。
+- **学习记录快照（v12）**：`learning_snapshots` 存整份 `LearningOut` 的 gzip JSON，
+  正常保存最多 **10 分钟**拍一张（`PUT /learning/partial` 前检查上一张时间，节流时只多一条
+  `SELECT ... LIMIT 1`），整份覆盖 / 重建派生 / 恢复前各额外拍一张；内容与上一张完全相同则跳过。
+  只留最近 **12 版**（约最近两小时）。恢复走
+  `POST /api/store/learning/snapshots/restore`：恢复前先给当前状态拍一张 `before-restore`，
+  且 `answer_events` 按 append-only 取「旧快照 ∪ 当前」，不丢恢复后新增的答题事件。
+  界面在侧栏「导出全部（备份）」下方（`LearningSnapshots`），默认折叠、展开才拉列表。
+  它解决的是**逻辑回滚**（误导入 / 误覆盖 / 重建算错），**不是异盘备份**：
+  磁盘坏了仍然靠「导出全部」/「下载整库」（`GET /api/store/db`）和 `data/backups/`。
+  侧栏同时显示「上次导出多久了」的提醒（`core/backupReminder`），超过 7 天变警示色。
 - 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
   `data/backups/`（迁移备份保留 5 份）；每天第一次打开已有库再留一份 `xueba-daily-YYYY-MM-DD.db`
   （保留 7 天）。服务长开时每 30 分钟检查一次日期，跨过午夜会自动补当天备份，不用重启。

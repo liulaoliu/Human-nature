@@ -207,6 +207,20 @@
 .bar .check-inline { display: inline-flex; align-items: center; gap: 5px; color: var(--dim); font-size: 13px; cursor: pointer; }
 .bar .check-inline input { width: 15px; height: 15px; accent-color: var(--accent); }
 
+/* 备份健康 + 学习快照：只在侧栏备份区出现，默认不抢视觉 */
+.backup-health {
+  display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center;
+  justify-content: space-between; margin: -8px 0 12px;
+  font-size: 12px; color: var(--dim);
+}
+.backup-health.due, .backup-health.never { color: #e0a24a; }
+.backup-health a { color: inherit; text-decoration: underline; text-underline-offset: 2px; }
+.snap-box { margin: -4px 0 14px; font-size: 12px; color: var(--dim); }
+.snap-box summary { cursor: pointer; user-select: none; }
+.snap-body { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.snap-body select { max-width: 100%; }
+.snap-msg { flex-basis: 100%; color: var(--accent); }
+
 /* 精读顶栏：滚动时固定在视窗顶端（像 Excel 冻结标题行）。
    负 margin 撑满 .reader-main 的 padding，滚动时正文不会从边缘/上方露出。 */
 .reader-toolbar {

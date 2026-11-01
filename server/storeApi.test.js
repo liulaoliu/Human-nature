@@ -81,3 +81,49 @@ describe('GET /vocab：响应形状与压缩', () => {
     closeAllStores()
   })
 })
+
+describe('学习记录快照 API', () => {
+  it('手动拍 → 列表 → 覆盖 → 恢复；缺 at 返回 400', async () => {
+    const put = (body) =>
+      fetch(`${baseUrl}/api/store/learning`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+    const payload = {
+      practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 }],
+    }
+    expect((await put(payload)).status).toBe(200)
+
+    const created = await (
+      await fetch(`${baseUrl}/api/store/learning/snapshots`, { method: 'POST' })
+    ).json()
+    expect(created.ok).toBe(true)
+    expect(typeof created.value).toBe('string')
+
+    const list = await (await fetch(`${baseUrl}/api/store/learning/snapshots`)).json()
+    expect(list.ok).toBe(true)
+    expect(list.value.some((s) => s.at === created.value && s.reason === 'manual')).toBe(true)
+
+    await put({ practice: [] })
+    const empty = await (await fetch(`${baseUrl}/api/store/learning`)).json()
+    expect(empty.value.practice).toHaveLength(0)
+
+    const restored = await (
+      await fetch(`${baseUrl}/api/store/learning/snapshots/restore`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ at: created.value }),
+      })
+    ).json()
+    expect(restored.ok).toBe(true)
+    expect(restored.value.practice).toHaveLength(1)
+
+    const missing = await fetch(`${baseUrl}/api/store/learning/snapshots/restore`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    expect(missing.status).toBe(400)
+  })
+})
