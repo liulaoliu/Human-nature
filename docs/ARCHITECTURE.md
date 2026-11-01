@@ -764,10 +764,12 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 `useDictationRounds`、判分进 `useDictationChecking`）。
 `useApplyTaskResult` 486 → 77：没有 React 状态，改成普通 factory + 按任务拆处理器，hook 只留 `useMemo` 保函数身份
 （依赖里逐个列出 `ApplyTaskParams` 的字段，见文件内注释：类型加字段必须同步加）。
-`useStudySession` 718 → 699 → 497（已回到 500 行硬线下）：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
-`useStudyCardUi`，拼写判卷接线进 `useStudySpelling`，评分 / 学习四选项 / 复习三键 / 锤炼门禁进
-`useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收 `ui` 卡面对象，
-不再逐个透传 `checked / pendingScore / setRevealed`。
+`useStudySession` 718 → 699 → 497 → **445**：队列时序 / 组末拼写 / 收尾重练进 `useStudySequence`，卡面开关进
+`useStudyCardUi`，换卡重置进 `useStudyCardReset`（子 hook 的 reset 用 ref 注册，`resetCardUi` 引用保持稳定），
+退出 / 上一个 / 下一个 / 标不认识与拼错锁进 `useStudyNavigation`，当前卡与选释义门禁派生进
+`core/vocab/studyView`（纯函数，单独测试），拼写判卷与模式切换进 `useStudySpelling`，评分 / 学习四选项 /
+复习三键 / 锤炼门禁进 `useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收
+`ui` 卡面对象，不再逐个透传 `checked / pendingScore / setRevealed`。
 
 ### 背单词会话为什么不上全局状态管理器（2026-10-28）
 

@@ -24,6 +24,8 @@ export interface UseStudySpellingParams {
   ui: StudyCardUi
   resetCardUi: () => void
   setIndex: Dispatch<SetStateAction<number>>
+  /** 拼写模式开关（切换时要清掉上一题的输入 / 判卷状态）。 */
+  setSpelling: Dispatch<SetStateAction<boolean>>
 }
 
 export function useStudySpelling({
@@ -35,8 +37,9 @@ export function useStudySpelling({
   ui,
   resetCardUi,
   setIndex,
+  setSpelling,
 }: UseStudySpellingParams) {
-  const { input, checked, setChecked, setRevealed } = ui
+  const { input, checked, setChecked, setRevealed, setInput } = ui
   /**
    * 拼写判定：不做「再试一次」——允许反复输入等于把判断变成抄写。
    * 判错立刻按「忘记」写 SRS（relearn +1）并打「不认识」标签，本轮重排到队尾。
@@ -75,11 +78,22 @@ export function useStudySpelling({
   /** 锤炼板拼写步的拼错回调：与正面拼写同一条判定与落库路径。 */
   const applySpellingMiss = useCallback((typed: string) => spellGate.check(typed), [spellGate])
 
+  /** 切拼写模式要先清掉上一题的输入 / 判卷状态，这属于会话规则，不放视图里。 */
+  const changeSpelling = useCallback(
+    (on: boolean) => {
+      setSpelling(on)
+      setChecked(false)
+      setInput('')
+    },
+    [setSpelling, setChecked, setInput],
+  )
+
   return {
     spellMiss,
     resetSpellGate: spellGate.reset,
     ackSpellMiss,
     checkSpelling,
     applySpellingMiss,
+    changeSpelling,
   }
 }
