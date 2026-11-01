@@ -271,6 +271,26 @@ export interface LearningSnapshotMeta {
 export const SNAPSHOT_MIN_INTERVAL_MS = 10 * 60 * 1000
 const SNAPSHOT_KEEP = 12
 
+/**
+ * v5 的 `learning_snapshots` 是 `id` 主键 + `record_count` + 明文 payload；
+ * v12 换成了 `at` 主键 + `bytes` + gzip BLOB。老表不能靠 `CREATE TABLE IF NOT EXISTS`
+ * 混过去，否则第一次拍快照就会 `no such column: bytes`。
+ * 这里把老表改名归档（不删数据），再让 v12 建新表；迁移前 openStore 已做过整库备份。
+ */
+export function archiveLegacyLearningSnapshots(db: DatabaseSync): void {
+  const exists = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'learning_snapshots'")
+    .get()
+  if (!exists) return
+  const cols = new Set(db.prepare('PRAGMA table_info(learning_snapshots)').all().map((r) => String(r.name)))
+  if (cols.has('bytes')) return
+  const archived = db
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'learning_snapshots_v5'")
+    .get()
+  if (archived) db.exec('DROP TABLE learning_snapshots')
+  else db.exec('ALTER TABLE learning_snapshots RENAME TO learning_snapshots_v5')
+}
+
 /** 同一毫秒内连续拍快照时主键也不能撞。 */
 function nextSnapshotAt(db: DatabaseSync): string {
   let at = nowIso()

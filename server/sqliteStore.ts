@@ -17,6 +17,7 @@ import {
 } from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
 import {
+  archiveLegacyLearningSnapshots,
   hasLearningRows,
   LEARNING_SECTIONS,
   listLearningSnapshots,
@@ -309,7 +310,11 @@ function ensureSchema(db: DatabaseSync): number {
     version = 11
   }
   if (version < 12) {
-    tx(db, () => { db.exec(SCHEMA_V12); db.exec('PRAGMA user_version = 12') })
+    tx(db, () => {
+      archiveLegacyLearningSnapshots(db)
+      db.exec(SCHEMA_V12)
+      db.exec('PRAGMA user_version = 12')
+    })
     version = 12
   }
   return version

@@ -254,6 +254,9 @@ learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v1
   它解决的是**逻辑回滚**（误导入 / 误覆盖 / 重建算错），**不是异盘备份**：
   磁盘坏了仍然靠「导出全部」/「下载整库」（`GET /api/store/db`）和 `data/backups/`。
   侧栏同时显示「上次导出多久了」的提醒（`core/backupReminder`），超过 7 天变警示色。
+  老库若还留着 v5 的 `learning_snapshots`（`id` 主键 + `record_count` + 明文 payload），
+  v12 迁移会先把它改名成 `learning_snapshots_v5` 归档，再建新表——否则第一次拍快照就会
+  `no such column: bytes`。归档表不读，确认不需要后可以自行 `DROP`。
 - 打开数据库时先 `PRAGMA quick_check`；schema 升级前用 `VACUUM INTO` 把整库备份到
   `data/backups/`（迁移备份保留 5 份）；每天第一次打开已有库再留一份 `xueba-daily-YYYY-MM-DD.db`
   （保留 7 天）。服务长开时每 30 分钟检查一次日期，跨过午夜会自动补当天备份，不用重启。

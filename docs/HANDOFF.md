@@ -7,7 +7,8 @@
 ### 当前状态
 
 - 分支 `main`；schema **v12**（重新引入节流版 `learning_snapshots`）
-- 门禁：`npm run gates` 全绿（340 文件 / 2980 passed / 1 skipped + tsc + 静态门禁 + ESLint 0 warning）
+- 门禁：`npm run gates` 全绿（340 文件 / 2980 passed / 1 skipped）；补 v12 迁移用例后
+  `server/sqliteStore.test.js` 27 passed、`gates:static` 复跑绿
 
 ### 这轮做了什么
 

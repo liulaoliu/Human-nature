@@ -762,3 +762,8 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `BackupHealth.test` 里用 `Object.defineProperty(window, 'localStorage', { value: fakeStorage() })`
     换内存版；**适配器读取 localStorage 一律走 `window.localStorage` + try/catch**，
     别在核心层碰浏览器 API。
+ 64. **重新启用退役表不能只靠 `CREATE TABLE IF NOT EXISTS`**（2026-11-01）。v12 重新启用
+    `learning_snapshots` 时，老库里还躺着 v5 的同名表（`id` 主键 + `record_count` + 明文 payload）；
+    `CREATE TABLE IF NOT EXISTS` 看到表名存在就直接跳过，第一次拍快照就 `no such column: bytes`。
+    v12 迁移先按列判断，把老表改名成 `learning_snapshots_v5` 归档再建新表
+    （`sqliteStore.test.js` 已造 v11 老表钉住）。**任何“重新启用同名表”的迁移都要先 `PRAGMA table_info`。**

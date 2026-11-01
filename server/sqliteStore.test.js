@@ -688,6 +688,44 @@ describe('sqliteStore：学习记录', () => {
     expect(store.listLearningSnapshots().some((s) => s.reason === 'before-restore')).toBe(true)
     expect(store.restoreLearningSnapshot('1999-01-01T00:00:00.000Z')).toBe(false)
   })
+
+  it('老库的 v5 learning_snapshots 会归档成 _v5，v12 新表能正常拍快照', () => {
+    const path = tempDb()
+    const first = openStore(path)
+    first.close()
+
+    // 造一个 v11 库：把 v12 的新表换回 v5 结构
+    const raw = new DatabaseSync(path)
+    raw.exec('DROP TABLE learning_snapshots')
+    raw.exec(`CREATE TABLE learning_snapshots (
+      id INTEGER PRIMARY KEY,
+      at TEXT NOT NULL,
+      reason TEXT NOT NULL DEFAULT '',
+      record_count INTEGER NOT NULL DEFAULT 0,
+      payload TEXT NOT NULL
+    )`)
+    raw
+      .prepare('INSERT INTO learning_snapshots (at, reason, record_count, payload) VALUES (?, ?, ?, ?)')
+      .run('2026-01-01T00:00:00.000Z', 'auto', 1, '{"practice":[]}')
+    raw.exec('PRAGMA user_version = 11')
+    raw.close()
+
+    const store = openStore(path)
+    const check = new DatabaseSync(path, { readOnly: true })
+    expect(Number(check.prepare('PRAGMA user_version').get().user_version)).toBe(12)
+    expect(Number(check.prepare('SELECT COUNT(*) AS n FROM learning_snapshots_v5').get().n)).toBe(1)
+    const cols = check.prepare('PRAGMA table_info(learning_snapshots)').all().map((r) => String(r.name))
+    check.close()
+    expect(cols).toContain('bytes')
+
+    store.saveLearning({
+      practice: [{ at: '2026-01-02T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 }],
+    })
+    store.saveLearningPartial({
+      practice: [{ at: '2026-01-02T00:00:00.000Z', kind: 'quiz', total: 1, correct: 1 }],
+    })
+    expect(store.listLearningSnapshots().length).toBeGreaterThan(0)
+  })
 })
 
 describe('sqliteStore：重建派生聚合', () => {
