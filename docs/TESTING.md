@@ -767,3 +767,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `CREATE TABLE IF NOT EXISTS` 看到表名存在就直接跳过，第一次拍快照就 `no such column: bytes`。
     v12 迁移先按列判断，把老表改名成 `learning_snapshots_v5` 归档再建新表
     （`sqliteStore.test.js` 已造 v11 老表钉住）。**任何“重新启用同名表”的迁移都要先 `PRAGMA table_info`。**
+ 65. **AI 结果只带篇内句号，切篇贴回会串写**（2026-11-01）。译文/语言点的结果形状是
+    `[{id:"s001", ...}]`，旧逻辑只按 id 写回当前文章；在 A 篇复制提示词、切到 B 篇贴结果，
+    就会把 A 的译文/语言点写进 B 的同号句子（Passé 的 s001/s002 被 Myanmar 篇覆盖，
+    2026-10-31 13:40 那次 apply 只改了这两句）。现在 `createApplyTaskResult` 统一校验
+    `meta.articleKey` 与当前 `articleKey`，不一致直接拒绝；金句原来的单独校验已合并到这一处。
+    `createApplyTaskResult.test` 钉住「切篇拒绝 / 同篇写回 / 无 meta 兼容」。

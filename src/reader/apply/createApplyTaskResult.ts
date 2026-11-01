@@ -20,6 +20,25 @@ const HANDLERS: Partial<Record<AiTaskKey, (ctx: ApplyContext) => ApplyOutcome>> 
 }
 
 /**
+ * 复制提示词时记下所属文章；应用时如果已经切篇，必须拒绝。
+ *
+ * 译文 / 语言点结果只带 `s001` 这样的**篇内 id**，不带正文；旧逻辑只按 id 写回，
+ * 于是「在 A 篇复制提示词、切到 B 篇贴结果」会把 A 的译文/语言点写进 B 的同号句子
+ * （Passé 的 s001/s002 就这么被 Myanmar 篇覆盖过）。所有任务统一在这里挡。
+ */
+function rejectIfArticleChanged(ctx: ApplyContext): ApplyOutcome | null {
+  const askedKey = ctx.meta?.articleKey
+  if (askedKey && ctx.articleKey && askedKey !== ctx.articleKey) {
+    return {
+      report: ['文章已切换，这份结果未应用；切回原文章再贴一次'],
+      missing: null,
+      ok: false,
+    }
+  }
+  return null
+}
+
+/**
  * 应用一份 AI 结果（按任务分派）。单条「应用结果」与整包导入都走这里。
  *
  * 这里没有 React 状态，所以是普通 factory，不是 hook；`useApplyTaskResult` 只负责
@@ -38,6 +57,9 @@ export function createApplyTaskResult(params: ApplyTaskParams): ApplyTaskFn {
       params.persist(next)
     }
     const ctx: ApplyContext = { ...params, task, text, askedWords, askedIds, meta, currentLibrary, commit }
+
+    const rejected = rejectIfArticleChanged(ctx)
+    if (rejected) return rejected
 
     // 表格型任务：解析 / 校验 / 回执都在 core/aiApply，这里只落库
     const table = applyTableTaskIfAny(ctx)

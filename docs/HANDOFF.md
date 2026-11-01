@@ -29,6 +29,10 @@
    `GET/POST /api/store/learning/snapshots`、`POST /api/store/learning/snapshots/restore`。
    侧栏「导出全部（备份）」下方新增 `LearningSnapshots`（默认折叠，展开才拉列表）和
    `BackupHealth`（上次导出 >7 天变警示色 + 「下载整库」）。它只做逻辑回滚，异盘备份仍靠手动导出。
+6. **修 AI 结果切篇串写**：Passé 的 s001/s002 被 Myanmar 篇的译文/语言点覆盖（旧 apply
+   只按 `s001` 这类篇内 id 匹配）；现在 `createApplyTaskResult` 统一校验复制提示词时的
+   `articleKey`，切篇直接拒绝。误写数据已清掉（s001/s002 的 `translation` / `languages` 置空），
+   修前备份 `data/backups/xueba-before-passe-repair-2026-11-01T08-05-39-478Z.db`。
 
 ### 下一轮优先
 

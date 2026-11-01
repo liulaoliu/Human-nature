@@ -52,4 +52,23 @@ describe('createApplyTaskResult：普通 factory', () => {
     expect(outcome.report.join(' ')).toContain('词形')
     expect(params.persist).toHaveBeenCalled()
   })
+
+  it('切篇后拒绝应用：s001 只能写回复制提示词时的那篇', () => {
+    const params = { ...makeParams(), articleKey: 'saved:B' }
+    const apply = createApplyTaskResult(params)
+    const raw = '{"sentences":[{"id":"s001","translation":"缅甸新政府…"}]}'
+    const out = apply(null, raw, [], ['s001'], { articleKey: 'saved:A' })
+    expect(out.ok).toBe(false)
+    expect(out.report[0]).toContain('文章已切换')
+    expect(params.setDoc).not.toHaveBeenCalled()
+    expect(params.setPendingSave).not.toHaveBeenCalled()
+  })
+
+  it('同一篇文章正常写回；没带 articleKey 的旧调用保持兼容', () => {
+    const params = { ...makeParams(), articleKey: 'saved:B' }
+    const apply = createApplyTaskResult(params)
+    const raw = '{"sentences":[{"id":"s001","translation":"译文"}]}'
+    expect(apply(null, raw, [], ['s001'], { articleKey: 'saved:B' }).ok).toBe(true)
+    expect(params.setDoc).toHaveBeenCalled()
+  })
 })

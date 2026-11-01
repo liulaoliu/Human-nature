@@ -3,15 +3,12 @@ import { mergeGoldenLessons, parseGoldenLesson } from '../../core/goldenAi'
 import type { ApplyContext, ApplyOutcome } from './types'
 
 /**
- * D老师小课堂：AI 金句课写回文章；应用前校验文章，避免切篇后写错。
+ * D老师小课堂：AI 金句课写回文章。切篇校验已统一放在 `createApplyTaskResult`。
  * 目标句 / 学习点的清洗在 `core/goldenAi`，这里只负责合并与回执。
  */
 export function applyGoldenLesson(ctx: ApplyContext): ApplyOutcome {
-  const { doc, meta, articleKey, setDoc, setPendingSave } = ctx
+  const { doc, setDoc, setPendingSave } = ctx
   if (!doc || !doc.sentences.length) return { report: ['先打开一篇文章'], missing: null, ok: false }
-  if (meta?.articleKey && articleKey && meta.articleKey !== articleKey) {
-    return { report: ['文章已切换，这份金句结果未应用；切回原文章再贴一次'], missing: null, ok: false }
-  }
 
   const lesson = parseGoldenLesson(ctx.text, doc.sentences)
   if (!lesson) {
