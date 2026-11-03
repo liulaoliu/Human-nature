@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
-import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import GoldenErrorReview from './GoldenErrorReview'
 import type { WritingErrorCard } from '../../../core/writingErrorReview'
 import {
@@ -22,6 +22,13 @@ const card: WritingErrorCard = {
   articleId: 'a1',
   sentenceId: 's1',
 }
+
+beforeEach(() => {
+  Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+})
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('GoldenErrorReview', () => {
   it('答对显示答案并记录 correct=true', () => {
@@ -146,7 +153,7 @@ describe('GoldenErrorReview', () => {
     expect(screen.getByText('go')).toBeTruthy()
   })
 
-  it('本地检查后可以走 AI 批改入口，记录进学习历史', () => {
+  it('本地检查后可以走 AI 批改入口，复制提示词展开、应用成功收起', async () => {
     render(
       <GoldenErrorReview
         cards={[card]}
@@ -161,6 +168,23 @@ describe('GoldenErrorReview', () => {
     fireEvent.change(screen.getByLabelText('错因答案'), { target: { value: 'bureaucracy' } })
     fireEvent.click(screen.getByRole('button', { name: '检查' }))
     expect(screen.getByRole('button', { name: 'AI 批改（记入学习历史）' })).toBeTruthy()
+
+    const box = document.querySelector('details.golden-exam-paste') as HTMLDetailsElement
+    expect(box.open).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '复制批改提示词' }))
+    await waitFor(() => expect(box.open).toBe(true))
+
+    fireEvent.change(screen.getByPlaceholderText(/scores/), {
+      target: {
+        value: JSON.stringify({
+          scores: [{ dimension: '错因修正', score: 100, max: 100 }],
+          issues: [],
+          summary: 'OK',
+        }),
+      },
+    })
+    fireEvent.click(screen.getByRole('button', { name: '应用' }))
+    await waitFor(() => expect(box.open).toBe(false))
   })
 
   it('可以暂停当前错因，不再进队列', () => {

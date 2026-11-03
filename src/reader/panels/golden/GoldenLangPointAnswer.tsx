@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { buildLangPointItem } from '../../../core/goldenExam'
 import type { LangPointChoice } from '../../../core/goldenLangPoint'
 import { useGoldenImitation } from '../../hooks/useGoldenImitation'
+import { useGoldenPasteBox } from '../../hooks/useGoldenPasteBox'
 import type { GoldenLangPointApi } from '../../hooks/useGoldenLangPoint'
 import GoldenAttemptsPager from './GoldenAttemptsPager'
 import GoldenFeedback from './GoldenFeedback'
@@ -20,16 +21,13 @@ export default function GoldenLangPointAnswer({
   index,
   api,
   showZh,
-  defaultOpen,
 }: {
   point: LangPointChoice
   index: number
   api: GoldenLangPointApi
   showZh: boolean
-  /** 只有一道题时 AI 结果框默认展开；多题时收起，避免一屏全是粘贴框 */
-  defaultOpen?: boolean
 }) {
-  const [paste, setPaste] = useState('')
+  const paste = useGoldenPasteBox()
   const item = useMemo(
     () => (api.sentence ? buildLangPointItem(api.sentence, point) : null),
     [api.sentence, point],
@@ -73,10 +71,16 @@ export default function GoldenLangPointAnswer({
         <div className="golden-note">第 2 稿：改完再提交一次批改，会和首稿分开记一条。</div>
       )}
       <div className="bar">
-        <button className="primary" onClick={() => void imitation.grade()} disabled={!hasAnswer || imitation.grading}>
+        <button
+          className="primary"
+          onClick={() => void paste.auto(() => imitation.grade())}
+          disabled={!hasAnswer || imitation.grading}
+        >
           {imitation.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={() => void imitation.copyGradePrompt()} disabled={!hasAnswer}>复制批改提示词</button>
+        <button onClick={() => paste.copy(() => void imitation.copyGradePrompt())} disabled={!hasAnswer}>
+          复制批改提示词
+        </button>
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
       </div>
       {imitation.error && <div className="golden-bad">{imitation.error}</div>}
@@ -92,12 +96,11 @@ export default function GoldenLangPointAnswer({
       )}
       <GoldenPasteBox
         label={`应用 AI 批改结果（${no} ${point.en}）`}
-        defaultOpen={defaultOpen}
-        value={paste}
-        onChange={setPaste}
-        onApply={() => {
-          if (imitation.applyGrade(paste)) setPaste('')
-        }}
+        open={paste.open}
+        onOpenChange={paste.setOpen}
+        value={paste.text}
+        onChange={paste.setText}
+        onApply={() => paste.apply((text) => imitation.applyGrade(text))}
         placeholder='{"scores":[{"dimension":"词块使用","score":45,"max":50}],"issues":[],"polished":"...","summary":"..."}'
       />
     </div>

@@ -59,7 +59,6 @@ export default function GoldenLangPointImitation({ langPoint }: { langPoint: Gol
               index={i}
               api={langPoint}
               showZh={showZh}
-              defaultOpen={chosen.length === 1}
             />
           ))}
         </>

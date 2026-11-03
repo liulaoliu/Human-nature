@@ -18,6 +18,9 @@ import type { ReaderDoc } from './useReaderDoc'
 import { fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 import { useGoldenImitation } from './useGoldenImitation'
 
+/** 出题动作的结果：AI 直连生成 / 没配 AI 改成复制提示词 / 失败。 */
+export type GoldenExamTaskOutcome = 'generated' | 'copied' | 'failed'
+
 export interface UseGoldenExamParams {
   doc: ReaderDoc | null
   lesson: GoldenLesson | null
@@ -157,25 +160,26 @@ export function useGoldenExam({
     [metas, persist, reset, flash],
   )
 
-  const generateTasks = useCallback(async () => {
+  const generateTasks = useCallback(async (): Promise<GoldenExamTaskOutcome> => {
     if (!lesson || !unlocked) {
       flash(`完成 ${after} 句后解锁仿写考试`)
-      return
+      return 'failed'
     }
     const promptSentences = goldenExamPromptSentences(lesson, metas, records, articleId)
     if (!promptSentences.length) {
       flash('还没有完成句子，无法出题')
-      return
+      return 'failed'
     }
     const prompt = buildGoldenExamPrompt({ title: articleTitle, sentences: promptSentences })
     if (!(await ensureAi())) {
       try {
         await navigator.clipboard.writeText(prompt)
         flash('已复制 AI 出题提示词；把返回的 JSON 粘到下面「应用 AI 结果」')
+        return 'copied'
       } catch {
         setTaskError('复制失败：浏览器需要 localhost 或 https')
+        return 'failed'
       }
-      return
     }
     setGenerating(true)
     setTaskError('')
@@ -187,30 +191,33 @@ export function useGoldenExam({
       const raw = out.results[0]?.raw
       if (!raw) {
         setTaskError(out.failed[0]?.error ?? 'AI 没有返回考试题')
-        return
+        return 'failed'
       }
-      applyTasks(raw)
+      return applyTasks(raw) ? 'generated' : 'failed'
     } catch (e) {
       setTaskError(String((e as Error)?.message || e))
+      return 'failed'
     } finally {
       setGenerating(false)
     }
   }, [lesson, unlocked, after, metas, records, articleId, articleTitle, ensureAi, runAi, applyTasks, flash])
 
-  const copyTaskPrompt = useCallback(async () => {
-    if (!lesson || !unlocked) return
+  const copyTaskPrompt = useCallback(async (): Promise<boolean> => {
+    if (!lesson || !unlocked) return false
     const promptSentences = goldenExamPromptSentences(lesson, metas, records, articleId)
     if (!promptSentences.length) {
       flash('还没有完成句子，无法出题')
-      return
+      return false
     }
     try {
       await navigator.clipboard.writeText(
         buildGoldenExamPrompt({ title: articleTitle, sentences: promptSentences }),
       )
       flash('已复制 AI 出题提示词')
+      return true
     } catch {
       setTaskError('复制失败：浏览器需要 localhost 或 https')
+      return false
     }
   }, [lesson, unlocked, metas, records, articleId, articleTitle, flash])
 

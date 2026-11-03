@@ -77,6 +77,7 @@ types ← core ← adapters ← reader
 | D老师小课堂：挖空 / 拼句 / 逆向默写判分 | `src/core/goldenDrill.ts` | 填空默认一个词一个空，并按 `keep up with → with → up with → keep up with` 细分轮次；随后追加「一个词 → 全部目标词 → 分句/整句」的复述轮（长句最后一轮只挖目标所在分句）；拼句仍按语言点块 |
 | D老师小课堂：仿写考试 | `src/core/goldenExam.ts` + `src/reader/hooks/useGoldenExam.ts` | 完成 5/10 句后解锁；本地先出题，AI 可重出题并批改；题存 `GoldenLesson.exam`，成绩存 `WritingRecord.source='goldenExam'`；AI 结果必须过 `normalizeGoldenExam`（句子 id / 范句 / mustUse 校验） |
 | D老师小课堂：每句仿写 / 批改 | `src/core/goldenExam.ts` + `src/reader/hooks/useGoldenImitation.ts` + `GoldenSentenceImitation.tsx` | 每句「小结」后先做一次当前句仿写，再进入下一句/逆向回顾；题面由当前句本地生成，不写 `GoldenLesson.exam`；成绩存 `WritingRecord.source='goldenSentence'`；整课考试与单句仿写共用同一套批改、解析、粘贴框和反馈展示 |
+| D老师小课堂：AI 结果粘贴框开合 | `src/reader/hooks/useGoldenPasteBox.ts` + `GoldenPasteBox.tsx` | 本句仿写 / 语言点造句 / 错因订正 / 仿写考试共用：手动复制提示词才展开；AI 直连成功不展开；应用成功才清空并收起，失败保持展开和输入。新结果框接这个 hook，别在组件里各写一份 |
 | D老师小课堂：内容 / 选句 | `src/reader/hooks/useGoldenLesson.ts` | 本地推导、候选、统计、`progressFor`、写回 `doc.golden`；不碰视图状态 |
 | D老师小课堂：会话外壳 | `src/reader/hooks/useGoldenSession.ts` | `open/view/phase/index/recallIndex` + localStorage 恢复；只存“人走到哪了” |
 | D老师小课堂：当前句与进度写入 | `src/reader/hooks/useGoldenCurrent.ts` | 当前句、目标、`drillKey`、当前记录、小结 / 重练；进度唯一入口仍是 `recordGolden` |

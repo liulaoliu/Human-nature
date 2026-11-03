@@ -473,7 +473,7 @@ describe('GoldenPanel', () => {
     expect(screen.getByText(/本篇还没有记录/)).toBeTruthy()
   })
 
-  it('本句仿写下方有「语言点造句」：多选、按序号出输入框、中英开关、批改框默认展开', () => {
+  it('本句仿写下方有「语言点造句」：多选、按序号出输入框、中英开关、批改框默认收起', () => {
     const api = drillApi({ phase: 'imitation', currentSentence: { id: 's1', text: 'We keep up with the news.' } })
     const sentenceImitation = fakeImitation({
       current: {
@@ -532,10 +532,10 @@ describe('GoldenPanel', () => {
     expect(screen.getByRole('button', { name: 'keep up with' })).toBeTruthy()
     expect(localStorage.getItem('reader:goldenLangZh')).toBe('false')
 
-    // AI 结果框：单句仿写默认展开；语言点多题时收起，避免一屏全是粘贴框
+    // AI 结果框：单句仿写 / 语言点都默认收起；复制提示词后才展开
     const boxes = document.querySelectorAll('details.golden-exam-paste')
     expect(boxes.length).toBe(3)
-    expect((boxes[0] as HTMLDetailsElement).open).toBe(true)
+    expect((boxes[0] as HTMLDetailsElement).open).toBe(false)
     expect((boxes[1] as HTMLDetailsElement).open).toBe(false)
     expect((boxes[2] as HTMLDetailsElement).open).toBe(false)
   })

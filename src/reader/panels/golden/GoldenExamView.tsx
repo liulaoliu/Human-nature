@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useGoldenPasteBox } from '../../hooks/useGoldenPasteBox'
 import GoldenFeedback from './GoldenFeedback'
 import GoldenPasteBox from './GoldenPasteBox'
 import type { GoldenExamApi } from './types'
@@ -9,8 +9,8 @@ import type { GoldenExamApi } from './types'
  * 判分口径复用 `core/writing` 的 WritingFeedback；这里只做展示与粘贴入口。
  */
 export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; onBack: () => void }) {
-  const [taskPaste, setTaskPaste] = useState('')
-  const [gradePaste, setGradePaste] = useState('')
+  const gradePaste = useGoldenPasteBox()
+  const taskPaste = useGoldenPasteBox()
 
   if (!exam.unlocked) {
     return (
@@ -45,19 +45,19 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
           </div>
           <div className="bar">
             <button className="primary" onClick={exam.start}>再考一轮</button>
-            <button onClick={exam.generateTasks} disabled={exam.generating}>
+            <button onClick={() => void taskPaste.auto(() => exam.generateTasks())} disabled={exam.generating}>
               {exam.generating ? 'AI 出题中…' : 'AI 重新出题'}
             </button>
-            <button onClick={exam.copyTaskPrompt}>复制出题提示词</button>
+            <button onClick={() => taskPaste.copy(() => void exam.copyTaskPrompt())}>复制出题提示词</button>
           </div>
         </div>
         <GoldenPasteBox
           label="应用 AI 出题结果（JSON）"
-          value={taskPaste}
-          onChange={setTaskPaste}
-          onApply={() => {
-            if (exam.applyTasks(taskPaste)) setTaskPaste('')
-          }}
+          open={taskPaste.open}
+          onOpenChange={taskPaste.setOpen}
+          value={taskPaste.text}
+          onChange={taskPaste.setText}
+          onApply={() => taskPaste.apply((text) => exam.applyTasks(text))}
           placeholder='{"items":[{"sentenceId":"s1","task":"...","structure":"...","mustUse":["..."],"rubric":[]}]}'
         />
       </div>
@@ -71,10 +71,10 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
         <b>仿写考试</b>
         <span className="muted">第 {exam.index + 1} / {exam.items.length} 题</span>
         <span className="muted">已完成 {exam.completedCount} 句</span>
-        <button onClick={exam.generateTasks} disabled={exam.generating}>
+        <button onClick={() => void taskPaste.auto(() => exam.generateTasks())} disabled={exam.generating}>
           {exam.generating ? 'AI 出题中…' : 'AI 重新出题'}
         </button>
-        <button onClick={exam.copyTaskPrompt}>复制出题提示词</button>
+        <button onClick={() => taskPaste.copy(() => void exam.copyTaskPrompt())}>复制出题提示词</button>
       </div>
 
       <div className="golden-preview">
@@ -98,10 +98,14 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
       />
 
       <div className="bar">
-        <button className="primary" onClick={() => void exam.grade()} disabled={exam.grading}>
+        <button
+          className="primary"
+          onClick={() => void gradePaste.auto(() => exam.grade())}
+          disabled={exam.grading}
+        >
           {exam.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={() => void exam.copyGradePrompt()}>复制批改提示词</button>
+        <button onClick={() => gradePaste.copy(() => void exam.copyGradePrompt())}>复制批改提示词</button>
         {exam.index > 0 && <button onClick={exam.prev}>上一题</button>}
         <button onClick={exam.next}>{exam.index + 1 >= exam.items.length ? '交卷' : '下一题'}</button>
       </div>
@@ -112,21 +116,21 @@ export default function GoldenExamView({ exam, onBack }: { exam: GoldenExamApi; 
 
       <GoldenPasteBox
         label="应用 AI 批改结果（JSON）"
-        value={gradePaste}
-        onChange={setGradePaste}
-        onApply={() => {
-          if (exam.applyGrade(gradePaste)) setGradePaste('')
-        }}
+        open={gradePaste.open}
+        onOpenChange={gradePaste.setOpen}
+        value={gradePaste.text}
+        onChange={gradePaste.setText}
+        onApply={() => gradePaste.apply((text) => exam.applyGrade(text))}
         placeholder='{"scores":[{"dimension":"结构运用","score":30,"max":35}],"issues":[],"polished":"...","summary":"..."}'
       />
 
       <GoldenPasteBox
         label="应用 AI 出题结果（JSON）"
-        value={taskPaste}
-        onChange={setTaskPaste}
-        onApply={() => {
-          if (exam.applyTasks(taskPaste)) setTaskPaste('')
-        }}
+        open={taskPaste.open}
+        onOpenChange={taskPaste.setOpen}
+        value={taskPaste.text}
+        onChange={taskPaste.setText}
+        onApply={() => taskPaste.apply((text) => exam.applyTasks(text))}
         placeholder='{"items":[{"sentenceId":"s1","task":"...","structure":"...","mustUse":["..."],"rubric":[]}]}'
       />
 

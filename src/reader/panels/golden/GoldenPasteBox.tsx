@@ -1,10 +1,8 @@
-import { useState } from 'react'
-
 /**
  * 仿写相关 AI 结果的统一粘贴入口：出题 / 批改 / 语言点造句共用一个折叠框。
  *
- * 默认展开（多数人是「先复制提示词 → 拿结果 → 直接粘回来」），但可以手动收起；
- * 用受控 `open` 而不是裸 `open` 属性：重渲染不会把它弹回去。
+ * 展开状态由调用方（`useGoldenPasteBox`）统一管理：手动复制提示词后展开，
+ * 应用成功后收起；这里只负责渲染和把 summary 的点击回传。
  */
 export default function GoldenPasteBox({
   label,
@@ -12,22 +10,22 @@ export default function GoldenPasteBox({
   onChange,
   onApply,
   placeholder,
-  defaultOpen = true,
+  open,
+  onOpenChange,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   onApply: () => void
   placeholder: string
-  /** 默认是否展开（默认 true） */
-  defaultOpen?: boolean
+  open: boolean
+  onOpenChange: (open: boolean) => void
 }) {
-  const [open, setOpen] = useState(defaultOpen)
   return (
     <details
       className="golden-exam-paste"
       open={open}
-      onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}
+      onToggle={(e) => onOpenChange((e.currentTarget as HTMLDetailsElement).open)}
     >
       <summary>{label}</summary>
       <textarea

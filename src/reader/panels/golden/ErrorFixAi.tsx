@@ -1,8 +1,9 @@
-import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, type Dispatch, type SetStateAction } from 'react'
 import { errorFixExamItem, type WritingErrorCard } from '../../../core/writingErrorReview'
 import type { ActivityCat } from '../../../core/activity'
 import type { WritingRecord } from '../../../core/writing'
 import { useGoldenImitation } from '../../hooks/useGoldenImitation'
+import { useGoldenPasteBox } from '../../hooks/useGoldenPasteBox'
 import GoldenAttemptsPager from './GoldenAttemptsPager'
 import GoldenFeedback from './GoldenFeedback'
 import GoldenPasteBox from './GoldenPasteBox'
@@ -30,7 +31,7 @@ export default function ErrorFixAi({
   flash: (message: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
 }) {
-  const [paste, setPaste] = useState('')
+  const paste = useGoldenPasteBox()
   const current = useMemo(() => errorFixExamItem(card), [card])
   const imitation = useGoldenImitation({
     current,
@@ -54,12 +55,16 @@ export default function ErrorFixAi({
         <button
           type="button"
           className="primary"
-          onClick={() => void imitation.grade(answer)}
+          onClick={() => void paste.auto(() => imitation.grade(answer))}
           disabled={!hasAnswer || imitation.grading}
         >
           {imitation.grading ? 'AI 批改中…' : 'AI 批改（记入学习历史）'}
         </button>
-        <button type="button" onClick={() => void imitation.copyGradePrompt(answer)} disabled={!hasAnswer}>
+        <button
+          type="button"
+          onClick={() => paste.copy(() => void imitation.copyGradePrompt(answer))}
+          disabled={!hasAnswer}
+        >
           复制批改提示词
         </button>
       </div>
@@ -69,13 +74,12 @@ export default function ErrorFixAi({
       {feedback && <GoldenFeedback feedback={feedback} model={current.model} />}
       <GoldenPasteBox
         label="应用 AI 批改结果（错因订正）"
-        value={paste}
-        onChange={setPaste}
-        onApply={() => {
-          if (imitation.applyGrade(paste, answer)) setPaste('')
-        }}
+        open={paste.open}
+        onOpenChange={paste.setOpen}
+        value={paste.text}
+        onChange={paste.setText}
+        onApply={() => paste.apply((text) => imitation.applyGrade(text, answer))}
         placeholder='{"scores":[{"dimension":"错因修正","score":100,"max":100}],"issues":[],"polished":"...","summary":"..."}'
-        defaultOpen={false}
       />
     </div>
   )

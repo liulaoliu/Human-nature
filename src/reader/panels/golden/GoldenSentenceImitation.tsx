@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useGoldenPasteBox } from '../../hooks/useGoldenPasteBox'
 import type { GoldenImitationApi } from '../../hooks/useGoldenImitation'
 import GoldenAttemptsPager from './GoldenAttemptsPager'
 import GoldenFeedback from './GoldenFeedback'
@@ -17,7 +17,7 @@ export default function GoldenSentenceImitation({
   nextLabel: string
   onNext: () => void
 }) {
-  const [paste, setPaste] = useState('')
+  const paste = useGoldenPasteBox()
   const current = imitation.current
   const hasAnswer = !!imitation.answer.trim()
 
@@ -61,10 +61,16 @@ export default function GoldenSentenceImitation({
       )}
 
       <div className="bar">
-        <button className="primary" onClick={() => void imitation.grade()} disabled={!hasAnswer || imitation.grading}>
+        <button
+          className="primary"
+          onClick={() => void paste.auto(() => imitation.grade())}
+          disabled={!hasAnswer || imitation.grading}
+        >
           {imitation.grading ? '批改中…' : '提交 AI 批改'}
         </button>
-        <button onClick={() => void imitation.copyGradePrompt()} disabled={!hasAnswer}>复制批改提示词</button>
+        <button onClick={() => paste.copy(() => void imitation.copyGradePrompt())} disabled={!hasAnswer}>
+          复制批改提示词
+        </button>
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
         <button className="primary" onClick={onNext} disabled={!hasAnswer}>
           {nextLabel}
@@ -80,11 +86,11 @@ export default function GoldenSentenceImitation({
 
       <GoldenPasteBox
         label="应用 AI 批改结果（JSON）"
-        value={paste}
-        onChange={setPaste}
-        onApply={() => {
-          if (imitation.applyGrade(paste)) setPaste('')
-        }}
+        open={paste.open}
+        onOpenChange={paste.setOpen}
+        value={paste.text}
+        onChange={paste.setText}
+        onApply={() => paste.apply((text) => imitation.applyGrade(text))}
         placeholder='{"scores":[{"dimension":"结构运用","score":30,"max":35}],"issues":[],"polished":"...","summary":"..."}'
       />
     </div>

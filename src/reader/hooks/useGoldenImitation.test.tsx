@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGoldenImitation } from './useGoldenImitation'
 import type { WritingRecord } from '../../core/writing'
 import type { GoldenExamItem } from '../../types/document'
@@ -48,6 +48,13 @@ function setup(runAi = vi.fn(), aiStatus = vi.fn().mockResolvedValue(true), now 
   })
   return { ...hook, recordActivity, runAi, aiStatus }
 }
+
+beforeEach(() => {
+  Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+})
+afterEach(() => {
+  vi.restoreAllMocks()
+})
 
 describe('useGoldenImitation', () => {
   it('单句仿写批改后写入历史，带 sentenceId 和来源', async () => {
@@ -197,5 +204,56 @@ describe('useGoldenImitation', () => {
     expect(ok).toBe(false)
     expect(h.result.current.imitation.error).toContain('没解析出批改结果')
     expect(h.result.current.history).toHaveLength(0)
+  })
+
+  it('复制批改提示词：成功返回 true，剪贴板失败返回 false 并提示', async () => {
+    const h = setup()
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    let ok = false
+    await act(async () => {
+      ok = await h.result.current.imitation.copyGradePrompt()
+    })
+    expect(ok).toBe(true)
+    expect(navigator.clipboard.writeText).toHaveBeenCalled()
+
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error('denied'))
+    await act(async () => {
+      ok = await h.result.current.imitation.copyGradePrompt()
+    })
+    expect(ok).toBe(false)
+    expect(h.result.current.imitation.error).toContain('复制失败')
+  })
+
+  it('没配 AI 时 grade 改成复制提示词并返回 copied；AI 直连成功返回 graded', async () => {
+    const h = setup(vi.fn(), vi.fn().mockResolvedValue(false))
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    let outcome = ''
+    await act(async () => {
+      outcome = await h.result.current.imitation.grade()
+    })
+    expect(outcome).toBe('copied')
+    expect(navigator.clipboard.writeText).toHaveBeenCalled()
+
+    const raw = JSON.stringify(feedback)
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })
+    const h2 = setup(runAi, vi.fn().mockResolvedValue(true))
+    act(() => h2.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    await act(async () => {
+      outcome = await h2.result.current.imitation.grade()
+    })
+    expect(outcome).toBe('graded')
+    expect(h2.result.current.imitation.feedback?.total).toBe(90)
+  })
+
+  it('AI 返回坏 JSON 时 grade 返回 failed', async () => {
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw: 'not json' }], failed: [], dropped: 0 })
+    const h = setup(runAi)
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    let outcome = ''
+    await act(async () => {
+      outcome = await h.result.current.imitation.grade()
+    })
+    expect(outcome).toBe('failed')
+    expect(h.result.current.imitation.error).toContain('没解析出批改结果')
   })
 })

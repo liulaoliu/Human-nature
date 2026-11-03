@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useGoldenExam } from './useGoldenExam'
 import { goldenDrillKey, goldenTargetsFor } from '../../core/golden'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
@@ -111,6 +111,13 @@ function setup(runAi = vi.fn(), aiStatus = vi.fn().mockResolvedValue(true)) {
   return { ...hook, setPendingSave, flash, recordActivity, runAi, aiStatus }
 }
 
+beforeEach(() => {
+  Object.assign(navigator, { clipboard: { writeText: vi.fn().mockResolvedValue(undefined) } })
+})
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 describe('useGoldenExam', () => {
   it('完成 5 句解锁；本地出题写回课程', () => {
     const h = setup()
@@ -163,5 +170,41 @@ describe('useGoldenExam', () => {
     expect(h.result.current.history[0].articleId).toBe('a1')
     expect(h.result.current.exam.feedback?.issues[0].suggestion).toBe('improved')
     expect(h.recordActivity).toHaveBeenCalledWith('write', 1)
+  })
+
+  it('没配 AI 时出题改成复制提示词并返回 copied；AI 直连返回 generated', async () => {
+    const h = setup(vi.fn(), vi.fn().mockResolvedValue(false))
+    act(() => h.result.current.exam.start())
+    let copied = false
+    await act(async () => {
+      copied = await h.result.current.exam.copyTaskPrompt()
+    })
+    expect(copied).toBe(true)
+
+    let outcome = ''
+    await act(async () => {
+      outcome = await h.result.current.exam.generateTasks()
+    })
+    expect(outcome).toBe('copied')
+    expect(navigator.clipboard.writeText).toHaveBeenCalled()
+
+    const raw = JSON.stringify({
+      items: [
+        {
+          sentenceId: 's1',
+          task: '用这个结构写一句关于环保的新句子。',
+          structure: 'In response to + n., … has become …',
+          mustUse: ['In response'],
+          rubric: [{ dimension: '结构运用', weight: 100 }],
+        },
+      ],
+    })
+    const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'golden_exam', raw }], failed: [], dropped: 0 })
+    const h2 = setup(runAi, vi.fn().mockResolvedValue(true))
+    act(() => h2.result.current.exam.start())
+    await act(async () => {
+      outcome = await h2.result.current.exam.generateTasks()
+    })
+    expect(outcome).toBe('generated')
   })
 })

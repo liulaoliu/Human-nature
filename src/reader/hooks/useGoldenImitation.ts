@@ -14,6 +14,9 @@ import { fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 
 export type GoldenImitationSource = 'goldenExam' | 'goldenSentence' | 'goldenError'
 
+/** 批改动作的结果：AI 直连成功 / 没配 AI 改成复制提示词 / 失败。 */
+export type GoldenGradeOutcome = 'graded' | 'copied' | 'failed'
+
 export interface UseGoldenImitationParams {
   /** 当前题；null = 还没有题，不能批改 */
   current: GoldenExamItem | null
@@ -165,15 +168,15 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     [answer, availablePoints, flash, saveAttempt],
   )
 
-  const copyGradePrompt = useCallback(async (textOverride?: string) => {
+  const copyGradePrompt = useCallback(async (textOverride?: string): Promise<boolean> => {
     const text = (textOverride ?? answer).trim()
     if (!current) {
       flash('这一题还没有题面')
-      return
+      return false
     }
     if (!text) {
       flash('先写一句英文再批改')
-      return
+      return false
     }
     try {
       await navigator.clipboard.writeText(
@@ -183,28 +186,29 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
         }),
       )
       flash('已复制批改提示词；把返回的 JSON 粘到「应用 AI 批改结果」')
+      return true
     } catch {
       setError('复制失败：浏览器需要 localhost 或 https')
+      return false
     }
   }, [current, answer, availablePoints, feedback, round, flash])
 
-  const grade = useCallback(async (textOverride?: string) => {
+  const grade = useCallback(async (textOverride?: string): Promise<GoldenGradeOutcome> => {
     const text = (textOverride ?? answer).trim()
     if (!current) {
       flash('这一题还没有题面')
-      return
+      return 'failed'
     }
     if (!text) {
       flash('先写一句英文再批改')
-      return
+      return 'failed'
     }
     const prompt = buildGoldenExamFeedbackPrompt(current, text, {
       availablePoints,
       ...(round > 1 && feedback?.issues.length ? { previousIssues: feedback.issues } : {}),
     })
     if (!(await ensureAi())) {
-      await copyGradePrompt(text)
-      return
+      return (await copyGradePrompt(text)) ? 'copied' : 'failed'
     }
     setGrading(true)
     setError('')
@@ -216,11 +220,12 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
       const raw = out.results[0]?.raw
       if (!raw) {
         setError(out.failed[0]?.error ?? 'AI 没有返回批改结果')
-        return
+        return 'failed'
       }
-      applyGrade(raw, text)
+      return applyGrade(raw, text) ? 'graded' : 'failed'
     } catch (e) {
       setError(String((e as Error)?.message || e))
+      return 'failed'
     } finally {
       setGrading(false)
     }
