@@ -273,6 +273,8 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           onDeleteRetell: deleteRetell,
           onStage: openIntensiveStage,
           onDrill: startIntensiveDrill,
+          drillLimit: quizApi.drillLimit,
+          onDrillLimitChange: quizApi.setDrillLimit,
           onSiege: startSiege,
         }}
         goal={{

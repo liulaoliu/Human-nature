@@ -1,5 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import { buildQuizSet, poolFor, poolSizes, QUIZ_SCOPES, studyableItems, type PoolContext } from './quizPool'
+import {
+  buildQuizSet,
+  DEFAULT_DRILL_LIMIT,
+  DRILL_LIMIT_OPTIONS,
+  normalizeDrillLimit,
+  poolFor,
+  poolSizes,
+  QUIZ_SCOPES,
+  studyableItems,
+  type PoolContext,
+} from './quizPool'
 import type { VocabItem } from '../types/document'
 
 const NOW = new Date('2026-10-20T00:00:00.000Z')
@@ -107,6 +117,26 @@ describe('poolSizes：按当前题型数题量', () => {
 describe('QUIZ_SCOPES：取值表与类型对齐', () => {
   it('五个范围都在', () => {
     expect([...QUIZ_SCOPES]).toEqual(['all', 'article', 'unmastered', 'due', 'lapses'])
+  })
+})
+
+describe('drillLimit：记忆 / 词块拷打每次几项', () => {
+  it('默认 10，档位表包含默认值', () => {
+    expect(DEFAULT_DRILL_LIMIT).toBe(10)
+    expect(DRILL_LIMIT_OPTIONS).toContain(DEFAULT_DRILL_LIMIT)
+  })
+
+  it('合法档位原样保留（数字 / 字符串都认）', () => {
+    for (const n of DRILL_LIMIT_OPTIONS) {
+      expect(normalizeDrillLimit(n)).toBe(n)
+      expect(normalizeDrillLimit(String(n))).toBe(n)
+    }
+  })
+
+  it('坏数据 / 不在档位里的数 / 0 / 负数 → 回默认 10', () => {
+    for (const bad of [undefined, null, '', 'abc', 0, -10, 7, 999, NaN, Infinity]) {
+      expect(normalizeDrillLimit(bad)).toBe(DEFAULT_DRILL_LIMIT)
+    }
   })
 })
 

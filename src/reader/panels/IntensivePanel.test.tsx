@@ -53,6 +53,8 @@ function props(over: Partial<IntensivePanelProps> = {}): IntensivePanelProps {
     onDeleteRetell: noop,
     onStage: noop,
     onDrill: noop,
+    drillLimit: 10,
+    onDrillLimitChange: noop,
     onSiege: noop,
     ...over,
   }
@@ -175,6 +177,25 @@ describe('IntensivePanel：拷打与复述', () => {
 
     rerender(<IntensivePanel {...props({ onDrill, hasDoc: false })} />)
     expect((screen.getByRole('button', { name: '🥊 记忆拷打' }) as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('记忆 / 词块每次题数可调：默认 10，改下拉走回调', () => {
+    const onDrillLimitChange = vi.fn()
+    const { rerender } = render(<IntensivePanel {...props({ onDrillLimitChange })} />)
+    const select = screen.getByLabelText('记忆 / 词块拷打每次题数') as HTMLSelectElement
+    expect(select.value).toBe('10')
+    expect(screen.getByRole('option', { name: '10 题' })).toBeTruthy()
+
+    fireEvent.change(select, { target: { value: '20' } })
+    expect(onDrillLimitChange).toHaveBeenCalledWith(20)
+
+    rerender(<IntensivePanel {...props({ drillLimit: 20, onDrillLimitChange })} />)
+    expect((screen.getByLabelText('记忆 / 词块拷打每次题数') as HTMLSelectElement).value).toBe('20')
+  })
+
+  it('跑批中题数下拉也锁住（避免中途改设置）', () => {
+    render(<IntensivePanel {...props({ batchRunning: true })} />)
+    expect((screen.getByLabelText('记忆 / 词块拷打每次题数') as HTMLSelectElement).disabled).toBe(true)
   })
 
   it('复述：空文本不能存；保存后清空输入', () => {

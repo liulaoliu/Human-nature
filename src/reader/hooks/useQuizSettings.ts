@@ -7,7 +7,12 @@
 import type { Dispatch, SetStateAction } from 'react'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
 import { isArticleKind, isQuizKind, type QuizKind } from '../../core/quiz'
-import { QUIZ_SCOPES, type QuizScope } from '../../core/quizPool'
+import {
+  DEFAULT_DRILL_LIMIT,
+  normalizeDrillLimit,
+  QUIZ_SCOPES,
+  type QuizScope,
+} from '../../core/quizPool'
 
 /** 默认词级题型：拼写 / 例句填空 / 搭配填空。 */
 export const DEFAULT_QUIZ_KINDS: QuizKind[] = ['spell', 'cloze', 'usage']
@@ -35,6 +40,12 @@ function useKinds(key: string, fallback: QuizKind[], keep: (k: QuizKind) => bool
   })
 }
 
+/** 记忆 / 词块拷打项数：存成字符串，读回先过档位守卫（坏值回默认 10）。 */
+const persistentDrillLimit = {
+  parse: (raw: string) => normalizeDrillLimit(raw),
+  serialize: (value: number) => String(value),
+}
+
 export interface QuizSettings {
   kinds: QuizKind[]
   setKinds: Dispatch<SetStateAction<QuizKind[]>>
@@ -42,6 +53,9 @@ export interface QuizSettings {
   setScope: Dispatch<SetStateAction<QuizScope>>
   limit: number
   setLimit: Dispatch<SetStateAction<number>>
+  /** 记忆 / 词块拷打每次几项（精读面板可调，默认 10）。 */
+  drillLimit: number
+  setDrillLimit: Dispatch<SetStateAction<number>>
   /** 答题后自动切下一题。 */
   auto: boolean
   setAuto: Dispatch<SetStateAction<boolean>>
@@ -66,6 +80,11 @@ export function useQuizSettings(): QuizSettings {
     persistentEnum(QUIZ_SCOPES, 'article'),
   )
   const [limit, setLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
+  const [drillLimit, setDrillLimit] = useLocalStorageState(
+    'reader:quizDrillLimit',
+    DEFAULT_DRILL_LIMIT,
+    persistentDrillLimit,
+  )
   const [auto, setAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
   const [unique, setUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
   const [speakAfter, setSpeakAfter] = useLocalStorageState('reader:quizSpeak', true, persistentBoolTrue)
@@ -79,6 +98,8 @@ export function useQuizSettings(): QuizSettings {
     setScope,
     limit,
     setLimit,
+    drillLimit,
+    setDrillLimit,
     auto,
     setAuto,
     unique,

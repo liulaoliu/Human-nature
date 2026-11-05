@@ -2,6 +2,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_ARTICLE_KINDS, DEFAULT_QUIZ_KINDS, useQuizSettings } from './useQuizSettings'
+import { DEFAULT_DRILL_LIMIT } from '../../core/quizPool'
 import { installFakeStorage } from '../testStorage'
 
 /**
@@ -26,6 +27,7 @@ describe('useQuizSettings：默认值', () => {
     expect(result.current.articleKinds).toEqual(DEFAULT_ARTICLE_KINDS)
     expect(result.current.scope).toBe('article')
     expect(result.current.limit).toBe(20)
+    expect(result.current.drillLimit).toBe(DEFAULT_DRILL_LIMIT)
     expect(result.current.unique).toBe(true)
     expect(result.current.speakAfter).toBe(true)
     expect(result.current.auto).toBe(false)
@@ -59,6 +61,15 @@ describe('useQuizSettings：读坏数据不许炸', () => {
     const { result } = renderHook(() => useQuizSettings())
     expect(result.current.scope).toBe('article')
   })
+
+  it('拷打项数存了坏值 / 不在档位里 → 回默认 10', () => {
+    for (const bad of ['abc', '0', '-5', '7', '999']) {
+      localStorage.setItem('reader:quizDrillLimit', bad)
+      const { result, unmount } = renderHook(() => useQuizSettings())
+      expect(result.current.drillLimit).toBe(DEFAULT_DRILL_LIMIT)
+      unmount()
+    }
+  })
 })
 
 describe('useQuizSettings：写入能落盘', () => {
@@ -67,15 +78,18 @@ describe('useQuizSettings：写入能落盘', () => {
     act(() => {
       result.current.setKinds(['meaning', 'ear'])
       result.current.setLimit(50)
+      result.current.setDrillLimit(20)
       result.current.setAuto(true)
       result.current.setLoopWrong(true)
     })
     expect(JSON.parse(localStorage.getItem('reader:quizKinds')!)).toEqual(['meaning', 'ear'])
     expect(localStorage.getItem('reader:quizLimit')).toBe('50')
+    expect(localStorage.getItem('reader:quizDrillLimit')).toBe('20')
     expect(localStorage.getItem('reader:quizAuto')).toBe('1')
     expect(localStorage.getItem('reader:quizLoopWrong')).toBe('1')
     // 状态也要同步变（不然界面不动）
     expect(result.current.kinds).toEqual(['meaning', 'ear'])
     expect(result.current.limit).toBe(50)
+    expect(result.current.drillLimit).toBe(20)
   })
 })

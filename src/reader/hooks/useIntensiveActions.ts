@@ -24,7 +24,13 @@ export interface IntensiveActionsDeps {
   /** 一键跑批（补词/句/语言点） */
   runAiLocal: () => void
   /** 词级考试（按题型，写 SRS）；`scope` 省略 = 本篇 */
-  startQuizDrill: (kinds: QuizKind[], scope?: 'article' | 'all', opts?: { warmup?: 'memory' | 'chunk' }) => void
+  startQuizDrill: (
+    kinds: QuizKind[],
+    scope?: 'article' | 'all',
+    opts?: { warmup?: 'memory' | 'chunk'; limit?: number },
+  ) => void
+  /** 记忆 / 词块拷打每次几项（设置存本机，默认 10）。 */
+  drillLimit: number
   /** 文章级测验（句子题，不写 SRS） */
   startQuizArticleDrill: (kinds: QuizKind[]) => void
 }
@@ -40,7 +46,16 @@ const DRILL_KINDS: Record<DrillKind, QuizKind[]> = {
 }
 
 export function useIntensiveActions(deps: IntensiveActionsDeps) {
-  const { setIntensiveOpen, openSpeedRead, startStudy, openWriting, runAiLocal, startQuizDrill, startQuizArticleDrill } = deps
+  const {
+    setIntensiveOpen,
+    openSpeedRead,
+    startStudy,
+    openWriting,
+    runAiLocal,
+    startQuizDrill,
+    startQuizArticleDrill,
+    drillLimit,
+  } = deps
 
   /** 某个阶段「跳到对应工具」 */
   const openIntensiveStage = useCallback(
@@ -70,10 +85,12 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       if (kind === 'grammar') startQuizArticleDrill(kinds)
       // 记忆 / 词块两档是闭卷回忆：先摊开这轮要考的词（词 + 释义 / 词块）再开考。
       // 直接上来就考，第一次见的词只能靠猜 —— 猜错还会被当成「没记住」记进错题本。
-      else if (kind === 'memory' || kind === 'chunk') startQuizDrill(kinds, 'article', { warmup: kind })
+      // 每次几项也在这两档上单独生效（面板里可调，默认 10），不跟普通考试共用 20 的题量。
+      else if (kind === 'memory' || kind === 'chunk')
+        startQuizDrill(kinds, 'article', { warmup: kind, limit: drillLimit })
       else startQuizDrill(kinds, 'article')
     },
-    [setIntensiveOpen, startQuizDrill, startQuizArticleDrill],
+    [setIntensiveOpen, startQuizDrill, startQuizArticleDrill, drillLimit],
   )
 
   return { openIntensiveStage, startIntensiveDrill }

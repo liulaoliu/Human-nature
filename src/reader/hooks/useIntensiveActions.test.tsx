@@ -12,6 +12,7 @@ function setup() {
     runAiLocal: vi.fn(),
     startQuizDrill: vi.fn(),
     startQuizArticleDrill: vi.fn(),
+    drillLimit: 10,
   }
   const { result } = renderHook(() => useIntensiveActions(deps))
   return { deps, result }
@@ -58,7 +59,37 @@ describe('useIntensiveActions（精读工作流入口）', () => {
   it('拷打：记忆 = 拼写/选义/选择，走词级（本篇），并且先给预习卡', () => {
     const { deps, result } = setup()
     act(() => result.current.startIntensiveDrill('memory'))
-    expect(deps.startQuizDrill).toHaveBeenCalledWith(['spell', 'meaning', 'choice'], 'article', { warmup: 'memory' })
+    expect(deps.startQuizDrill).toHaveBeenCalledWith(['spell', 'meaning', 'choice'], 'article', {
+      warmup: 'memory',
+      limit: 10,
+    })
+  })
+
+  it('记忆 / 词块拷打按面板设置的数量出题（其它拷打不受影响）', () => {
+    const deps = {
+      setIntensiveOpen: vi.fn(),
+      openSpeedRead: vi.fn(),
+      startStudy: vi.fn(),
+      openWriting: vi.fn(),
+      runAiLocal: vi.fn(),
+      startQuizDrill: vi.fn(),
+      startQuizArticleDrill: vi.fn(),
+      drillLimit: 20,
+    }
+    const { result } = renderHook(() => useIntensiveActions(deps))
+    act(() => result.current.startIntensiveDrill('memory'))
+    expect(deps.startQuizDrill).toHaveBeenLastCalledWith(['spell', 'meaning', 'choice'], 'article', {
+      warmup: 'memory',
+      limit: 20,
+    })
+    act(() => result.current.startIntensiveDrill('chunk'))
+    expect(deps.startQuizDrill).toHaveBeenLastCalledWith(
+      ['usage', 'cloze', 'collocation', 'prep', 'idiom'],
+      'article',
+      { warmup: 'chunk', limit: 20 },
+    )
+    act(() => result.current.startIntensiveDrill('deep'))
+    expect(deps.startQuizDrill).toHaveBeenLastCalledWith(['define', 'defineChoice'], 'article')
   })
 
   it('拷打：词块 / 深度 / 标词 / 听力 各自的题型', () => {
@@ -72,7 +103,8 @@ describe('useIntensiveActions（精读工作流入口）', () => {
       const { deps, result } = setup()
       act(() => result.current.startIntensiveDrill(kind))
       // 只有「记忆 / 词块」两档先给预习卡（闭卷回忆，先认一遍再考）
-      if (kind === 'chunk') expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article', { warmup: 'chunk' })
+      if (kind === 'chunk')
+        expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article', { warmup: 'chunk', limit: 10 })
       else expect(deps.startQuizDrill).toHaveBeenCalledWith(kinds, 'article')
     }
   })

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AI_BATCH_NAME } from '../labels'
+import { DRILL_LIMIT_OPTIONS } from '../../core/quizPool'
 import type { IntensivePlan, IntensiveStageKey } from '../../core/intensive'
 import type { OutputBoard } from '../../core/output'
 
@@ -36,6 +37,9 @@ export interface IntensivePanelProps {
   onStage: (key: IntensiveStageKey) => void
   /** 快捷「拷打」 */
   onDrill: (kind: DrillKind) => void
+  /** 记忆 / 词块拷打每次考几项（用户可调，持久化，默认 10）。 */
+  drillLimit: number
+  onDrillLimitChange: (n: number) => void
   /** 「错题包围战」：错题 + 优先 + 学不稳 一起围剿（打到全对）。 */
   onSiege: () => void
 }
@@ -68,6 +72,8 @@ export default function IntensivePanel({
   onDeleteRetell,
   onStage,
   onDrill,
+  drillLimit,
+  onDrillLimitChange,
   onSiege,
 }: IntensivePanelProps) {
   const [retellDraft, setRetellDraft] = useState('')
@@ -189,7 +195,27 @@ export default function IntensivePanel({
         </div>
 
         <div className="idrills">
-          <b>快速拷打（只针对本篇）</b>
+          <div className="idrills-head">
+            <b>快速拷打（只针对本篇）</b>
+            <label
+              className="idrill-limit"
+              title="记忆 / 词块拷打每次考几题；选完会记住，下次开考仍用这个数"
+            >
+              <span className="muted">记忆 / 词块每次</span>
+              <select
+                aria-label="记忆 / 词块拷打每次题数"
+                value={String(drillLimit)}
+                onChange={(e) => onDrillLimitChange(Number(e.target.value))}
+                disabled={busy}
+              >
+                {DRILL_LIMIT_OPTIONS.map((n) => (
+                  <option key={n} value={n}>
+                    {n} 题
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="idrill-row">
             <span className="muted">词 · 搭配</span>
             <button onClick={() => onDrill('memory')} disabled={!hasDoc || busy} title="拼写 + 看词选义 + 词形辨析：把词变成长期记忆">

@@ -257,6 +257,29 @@ describe('useQuizSession：拼写错 = 不认识，不许重试 / 直接退出',
   })
 })
 
+describe('useQuizSession：精读拷打的每次项数（记忆 / 词块）', () => {
+  const manyWords = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      word({ id: `w${i}`, word: `word${i}`, lemma: `word${i}`, meaning: `意思${i}` }),
+    )
+
+  it('startDrill 传 limit：预习卡和队列都只取 N 项', () => {
+    render(<Harness library={lib(manyWords(15))} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory', limit: 10 }))
+    expect(api!.warmup?.cards).toHaveLength(10)
+    expect(api!.warmup?.questions).toHaveLength(10)
+
+    act(() => api!.beginWarmup())
+    expect(api!.queue).toHaveLength(10)
+  })
+
+  it('不传 limit：仍用考试设置里的题量（默认 20）', () => {
+    render(<Harness library={lib(manyWords(25))} />)
+    act(() => api!.startDrill(['spell'], 'all'))
+    expect(api!.queue).toHaveLength(20)
+  })
+})
+
 describe('useQuizSession：拷打前先学一遍（预习卡）', () => {
   it('记忆拷打：先出预习卡，点「开始」才真正开考', () => {
     render(<Harness library={lib([word({ examples: [{ text: 'I run daily.' }] })])} />)

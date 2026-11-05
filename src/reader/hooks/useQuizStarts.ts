@@ -50,7 +50,7 @@ export interface QuizStarts {
   startDrill: (
     ks: QuizKind[],
     scopeArg?: QuizScope,
-    opts?: { warmup?: 'memory' | 'chunk' },
+    opts?: { warmup?: 'memory' | 'chunk'; limit?: number },
   ) => void
   startArticleDrill: (ks: QuizKind[]) => void
 }
@@ -126,7 +126,7 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
    * 考出来的分才有意义（也让「词块拷打」第一次就能看到词组长什么样）。
    */
   const startDrill = useCallback(
-    (ks: QuizKind[], scopeArg: QuizScope = 'article', opts?: { warmup?: 'memory' | 'chunk' }) => {
+    (ks: QuizKind[], scopeArg: QuizScope = 'article', opts?: { warmup?: 'memory' | 'chunk'; limit?: number }) => {
       const vocabKinds = ks.filter((k) => !isArticleKind(k))
       const qs = buildQuizSet(poolFor(studyable, scopeArg, poolCtx), vocabKinds, unique)
       if (!qs.length) {
@@ -135,7 +135,9 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       }
       setKinds(ks)
       setScope(scopeArg)
-      const picked = shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length)
+      // 精读面板的记忆 / 词块拷打可以单独指定「每次几项」；其它入口仍用考试设置的题量。
+      const take = opts?.limit ?? limit
+      const picked = shuffleQuiz(qs).slice(0, take > 0 ? take : qs.length)
       if (opts?.warmup) {
         const cards = buildWarmupCards(libraryItems, picked, opts.warmup)
         setWarmup({
