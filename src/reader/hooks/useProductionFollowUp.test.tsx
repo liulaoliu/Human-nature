@@ -35,5 +35,13 @@ describe('useProductionFollowUp：批改后追问', () => {
     expect(String(callAi.mock.calls[0][1])).toContain('为什么加 a？')
     expect(result.current.items).toEqual([{ q: '为什么加 a？', a: '这里用 a 更自然。' }])
     expect(result.current.asking).toBe(false)
+
+    await act(async () => {
+      await result.current.ask('那 the 呢？')
+    })
+    const secondPrompt = String(callAi.mock.calls[1][1])
+    expect(secondPrompt).toContain('学生问：为什么加 a？')
+    expect(secondPrompt).toContain('你答：这里用 a 更自然。')
+    expect(result.current.items).toHaveLength(2)
   })
 })

@@ -51,7 +51,7 @@ export function useProductionFollowUp({
       setError('')
       try {
         const prior = items
-          .slice(-4)
+          .slice(-PRODUCTION_FOLLOW_UP_CAP)
           .map((it) => `学生问：${it.q}\n你答：${it.a}`)
           .join('\n\n')
         const issues = feedback.issues
