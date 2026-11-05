@@ -1,10 +1,12 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { ProductionMode } from '../../core/production'
 import {
   filterProductionHistory,
   groupProductionAttempts,
   productionHistoryMarkdown,
+  productionReviewCounts,
   productionStats,
+  productionTargetKey,
   productionTaskOf,
   productionRecordHits,
   productionTopErrors,
@@ -44,6 +46,14 @@ export default function ProductionHistoryPanel({
   const [mode, setMode] = useState<ProductionMode | 'all'>('all')
   const [topic, setTopic] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [targetKey, setTargetKey] = useState<string | null>(null)
+  const [limit, setLimit] = useState(40)
+
+  useEffect(() => {
+    setLimit(40)
+    setSelected(null)
+    setTargetKey(null)
+  }, [scope, mode, topic, articleIdentity])
 
   const filtered = useMemo(
     () =>
@@ -58,9 +68,18 @@ export default function ProductionHistoryPanel({
   const trend = useMemo(() => productionTrend(filtered, new Date().toISOString()), [filtered])
   const topErrors = useMemo(() => productionTopErrors(filtered), [filtered])
   const groups = useMemo(() => groupProductionAttempts(filtered), [filtered])
+  const shownGroups = groups.slice(0, limit)
   const group = groups.find((g) => g.key === selected) ?? groups[0] ?? null
-  const due = progress.filter((p) => new Date(p.dueAt).getTime() <= Date.now())
-  const weak = progress.filter((p) => p.misses > 0 || p.hits / Math.max(1, p.attempts) < 0.7)
+  const counts = productionReviewCounts(progress, new Date().toISOString())
+  const targetProgress = targetKey ? progress.find((p) => p.key === targetKey) : undefined
+  const targetRows = useMemo(() => {
+    if (!targetKey) return []
+    return filtered.flatMap((rec) =>
+      productionRecordHits(rec)
+        .filter((h) => productionTargetKey(h.kind, h.text) === targetKey)
+        .map((h) => ({ rec, hit: h })),
+    )
+  }, [filtered, targetKey])
 
   return (
     <div className="production-body production-history">
@@ -76,8 +95,8 @@ export default function ProductionHistoryPanel({
         <span>重写 {filteredStats.rewrites} 次</span>
         <span>目标块命中 {Math.round(filteredStats.hitRate * 100)}%</span>
         <span>平均分 {Math.round(filteredStats.avgScore)}</span>
-        <span>到期 {due.length}</span>
-        <span>薄弱 {weak.length}</span>
+        <span>到期 {counts.due}</span>
+        <span>薄弱 {counts.weak}</span>
       </div>
 
       <div className="production-stats">
@@ -128,7 +147,7 @@ export default function ProductionHistoryPanel({
       ) : (
         <div className="production-history-layout">
           <div className="production-history-list">
-            {groups.map((g) => {
+            {shownGroups.map((g) => {
               const last = g.records[g.records.length - 1]
               const task = productionTaskOf(last)
               return (
@@ -145,6 +164,11 @@ export default function ProductionHistoryPanel({
                 </button>
               )
             })}
+            {groups.length > limit && (
+              <button onClick={() => setLimit((n) => n + 40)}>
+                显示更多（还剩 {groups.length - limit} 组）
+              </button>
+            )}
           </div>
 
           {group && (
@@ -170,9 +194,14 @@ export default function ProductionHistoryPanel({
                     {hits.length > 0 && (
                       <div className="production-hits">
                         {hits.map((h) => (
-                          <span key={h.id} className={h.used ? 'ok' : 'bad'}>
+                          <button
+                            key={h.id}
+                            className={'production-hit ' + (h.used ? 'ok' : 'bad')}
+                            onClick={() => setTargetKey(productionTargetKey(h.kind, h.text))}
+                            title="看这个目标块的历次命中"
+                          >
                             {h.text}：{h.used ? '用上了' : '没用上'}
-                          </span>
+                          </button>
                         ))}
                       </div>
                     )}
@@ -180,6 +209,34 @@ export default function ProductionHistoryPanel({
                   </div>
                 )
               })}
+              {targetKey && (
+                <div className="production-target-detail">
+                  <div className="bar">
+                    <b>目标块：{targetRows[0]?.hit.text ?? targetKey}</b>
+                    <button onClick={() => setTargetKey(null)}>关闭</button>
+                  </div>
+                  {targetProgress ? (
+                    <div className="muted">
+                      练过 {targetProgress.attempts} 次 · 命中 {targetProgress.hits} 次 · 连对{' '}
+                      {targetProgress.streak} · 到期 {new Date(targetProgress.dueAt).toLocaleDateString()}
+                    </div>
+                  ) : (
+                    <div className="muted">还没有这个目标块的进度记录。</div>
+                  )}
+                  {targetRows.length === 0 ? (
+                    <div className="muted">当前筛选里没有它的产出。</div>
+                  ) : (
+                    <div className="production-target-rows">
+                      {targetRows.map(({ rec, hit }) => (
+                        <div key={`${rec.recordKey}-${hit.id}`} className={hit.used ? 'ok' : 'bad'}>
+                          {new Date(rec.at).toLocaleDateString()} · {hit.used ? '用上了' : '没用上'} ·{' '}
+                          {rec.text.slice(0, 80)}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
         </div>

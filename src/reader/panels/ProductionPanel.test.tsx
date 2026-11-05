@@ -1,10 +1,19 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { DEFAULT_PRODUCTION_SETTINGS } from '../../core/production'
 import type { WritingFeedback } from '../../core/writing'
 import type { useProductionSession } from '../hooks/useProductionSession'
 import ProductionPanel from './ProductionPanel'
+
+function renderPanel(ui: React.ReactElement) {
+  return render(<MemoryRouter>{ui}</MemoryRouter>)
+}
+
+function rerenderPanel(rerender: (ui: React.ReactElement) => void, ui: React.ReactElement) {
+  rerender(<MemoryRouter>{ui}</MemoryRouter>)
+}
 
 const feedback: WritingFeedback = {
   version: 2,
@@ -69,6 +78,7 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
       avgScore: 0,
     },
     sessionId: 's1',
+    followUp: { items: [], asking: false, error: '', ask: noop },
     cancelRun: noop,
     ...over,
   } as unknown as ReturnType<typeof useProductionSession>
@@ -82,7 +92,7 @@ describe('ProductionPanel：奶牛工棚', () => {
       start,
       settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'full' },
     })
-    render(<ProductionPanel model={model} />)
+    renderPanel(<ProductionPanel model={model} />)
     expect(screen.getByText('🐄 D老师奶牛工棚')).toBeTruthy()
     expect(screen.queryByLabelText('产出主题')).toBeNull()
     expect(screen.getByLabelText('本轮题目数')).toBeTruthy()
@@ -97,7 +107,7 @@ describe('ProductionPanel：奶牛工棚', () => {
       start,
       settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
     })
-    render(<ProductionPanel model={model} />)
+    renderPanel(<ProductionPanel model={model} />)
     expect((screen.getByLabelText('产出主题') as HTMLInputElement).value).toBe('工作沟通')
     expect(screen.queryByLabelText('每题目标块数')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '按主题出题' }))
@@ -105,7 +115,7 @@ describe('ProductionPanel：奶牛工棚', () => {
   })
 
   it('全脂可关本机词块；脱脂奶可开本机词块', () => {
-    const { rerender } = render(
+    const { rerender } = renderPanel(
       <ProductionPanel
         model={props({
           settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'full', fullUseChunks: false },
@@ -114,7 +124,7 @@ describe('ProductionPanel：奶牛工棚', () => {
     )
     expect(screen.queryByLabelText('每题目标块数')).toBeNull()
 
-    rerender(
+    rerenderPanel(rerender,
       <ProductionPanel
         model={props({
           settings: {
@@ -142,7 +152,7 @@ describe('ProductionPanel：奶牛工棚', () => {
         referenceText: 'Hello. Second sentence.',
       },
     })
-    render(<ProductionPanel model={model} />)
+    renderPanel(<ProductionPanel model={model} />)
     expect(screen.getByRole('button', { name: /全脂/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /脱脂奶/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /风味酸奶/ })).toBeTruthy()
@@ -172,13 +182,13 @@ describe('ProductionPanel：奶牛工棚', () => {
       grade,
       rewrite,
     })
-    const { rerender } = render(<ProductionPanel model={model} />)
+    const { rerender } = renderPanel(<ProductionPanel model={model} />)
     expect(screen.getByText('目标块 1 个（答完再看具体是哪些）')).toBeTruthy()
     expect(screen.queryByText('follow up')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '批改这一稿' }))
     expect(grade).toHaveBeenCalled()
 
-    rerender(
+    rerenderPanel(rerender,
       <ProductionPanel
         model={props({
           ...model,
@@ -201,7 +211,7 @@ describe('ProductionPanel：奶牛工棚', () => {
       targets: [],
       reference: 'Hello.',
     }
-    render(
+    renderPanel(
       <ProductionPanel
         model={props({
           stage: 'playing',
@@ -216,6 +226,59 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(screen.getByText('把 AI 返回的批改 JSON 粘到这里')).toBeTruthy()
   })
 
+  it('挖空 / 词序题型是真交互：填格或点词都会改答案', () => {
+    const setAnswer = vi.fn()
+    const current = {
+      id: 'p1',
+      zh: '说明进度',
+      goal: '',
+      targets: [{ id: 'v1', itemId: 'v1', kind: 'word' as const, text: 'follow up', meaning: '跟进' }],
+      model: 'I will follow up today.',
+    }
+    const { rerender } = renderPanel(
+      <ProductionPanel
+        model={props({
+          stage: 'playing',
+          settings: { ...DEFAULT_PRODUCTION_SETTINGS, variant: 'cloze' },
+          current,
+          prompts: [current],
+          answer: '',
+          setAnswer,
+        })}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('第1空'), { target: { value: 'follow up' } })
+    expect(setAnswer).toHaveBeenCalledWith('I will follow up today.')
+
+    setAnswer.mockClear()
+    rerenderPanel(
+      rerender,
+      <ProductionPanel
+        model={props({
+          stage: 'playing',
+          settings: { ...DEFAULT_PRODUCTION_SETTINGS, variant: 'reorder' },
+          current,
+          prompts: [current],
+          answer: '',
+          setAnswer,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getAllByRole('button', { name: /will|follow|today|I/ })[0])
+    expect(setAnswer).toHaveBeenCalled()
+  })
+
+  it('历史视图可用 ?ph=1 深链接；返回回到选草料', () => {
+    render(
+      <MemoryRouter initialEntries={['/reader/p/production?ph=1']}>
+        <ProductionPanel model={props()} />
+      </MemoryRouter>,
+    )
+    expect(screen.getByText('产出历史')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '← 返回工棚' }))
+    expect(screen.getByText('🐄 D老师奶牛工棚')).toBeTruthy()
+  })
+
   it('第二稿后可以进下一题；完成页能再来一组', () => {
     const next = vi.fn()
     const restart = vi.fn()
@@ -225,7 +288,7 @@ describe('ProductionPanel：奶牛工棚', () => {
       goal: '',
       targets: [{ id: 'v1', itemId: 'v1', kind: 'word' as const, text: 'follow up', meaning: '跟进' }],
     }
-    const { rerender } = render(
+    const { rerender } = renderPanel(
       <ProductionPanel
         model={props({
           stage: 'playing',
@@ -240,7 +303,7 @@ describe('ProductionPanel：奶牛工棚', () => {
     fireEvent.click(screen.getByRole('button', { name: '下一题' }))
     expect(next).toHaveBeenCalled()
 
-    rerender(<ProductionPanel model={props({ stage: 'done', restart })} />)
+    rerenderPanel(rerender, <ProductionPanel model={props({ stage: 'done', restart })} />)
     fireEvent.click(screen.getByRole('button', { name: '再来一组' }))
     expect(restart).toHaveBeenCalled()
   })

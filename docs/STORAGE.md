@@ -224,7 +224,8 @@ learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v1
   中文情境 / 参考译文 / 目标块 / 命中 / sessionId，`feedback_json` 仍是 v2 批改；不新开 attempts 表。
   目标块 due/weak/recent/mistakes 进度由这些 attempts **现算**，不额外存 `production_progress`：
   attempts 是 append-only 的事实，多存一份派生状态只会多一个要迁移和对账的源。
-  未提交的当前会话草稿在 `reader:productionDraft`（按文章校验），刷新/重进工棚可恢复。
+  未提交的当前会话草稿在 `reader:productionDraft`（按文章校验、最多 5 篇），刷新/重进工棚可恢复；
+  整库备份会带上它，覆盖导入替换、合并导入按文章取较新草稿。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
   保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
   `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。

@@ -17,6 +17,7 @@ import type { WritingFeedback } from './writing'
 export const PRODUCTION_DRAFT_KEY = 'reader:productionDraft'
 const VERSION = 1
 const MAX_PROMPTS = 60
+const DRAFT_CAP = 5
 
 export interface ProductionDraft {
   version: 1
@@ -99,6 +100,43 @@ function normalizeFeedback(v: unknown): WritingFeedback | null {
   const max = Number(v.max)
   if (!Number.isFinite(total) || !Number.isFinite(max)) return null
   return v as unknown as WritingFeedback
+}
+
+/** 草稿集合：按文章保留最近 5 组；兼容旧版单草稿对象。 */
+export function normalizeProductionDraftMap(raw: unknown): Record<string, ProductionDraft> {
+  if (!isObject(raw)) return {}
+  const out: Record<string, ProductionDraft> = {}
+  if (raw.version === VERSION && typeof raw.articleId === 'string') {
+    const draft = normalizeProductionDraft(raw)
+    if (draft) out[draft.articleId] = draft
+  } else {
+    for (const value of Object.values(raw)) {
+      const draft = normalizeProductionDraft(value)
+      if (draft) out[draft.articleId] = draft
+    }
+  }
+  return Object.fromEntries(
+    Object.entries(out)
+      .sort(([, a], [, b]) => b.at.localeCompare(a.at))
+      .slice(0, DRAFT_CAP),
+  )
+}
+
+/** 合并导入：同一篇文章取较新的草稿，保留最多 5 篇。 */
+export function mergeProductionDraftMaps(
+  current: Record<string, ProductionDraft>,
+  incoming: Record<string, ProductionDraft>,
+): Record<string, ProductionDraft> {
+  const out = { ...current }
+  for (const [key, draft] of Object.entries(incoming)) {
+    const old = out[key]
+    if (!old || draft.at >= old.at) out[key] = draft
+  }
+  return Object.fromEntries(
+    Object.entries(out)
+      .sort(([, a], [, b]) => b.at.localeCompare(a.at))
+      .slice(0, DRAFT_CAP),
+  )
 }
 
 export function normalizeProductionDraft(raw: unknown, articleId?: string): ProductionDraft | null {

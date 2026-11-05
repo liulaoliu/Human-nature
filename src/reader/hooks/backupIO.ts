@@ -1,4 +1,4 @@
-import { readRaw, writeRaw, writeJson } from '../storage'
+import { readJson, readRaw, writeRaw, writeJson } from '../storage'
 import { backupFingerprint, hasImported, parseImportLedger, rememberImport } from '../../core/importLedger'
 import { mergeReadDone } from '../../core/goals'
 import {
@@ -19,6 +19,11 @@ import {
 } from '../../core/mergeBackup'
 import { mergeWritingErrorProgress } from '../../core/writingErrorProgress'
 import { parseBackupPayload } from '../../core/backupParse'
+import {
+  mergeProductionDraftMaps,
+  normalizeProductionDraftMap,
+  PRODUCTION_DRAFT_KEY,
+} from '../../core/productionDraft'
 import { mergeGoldenIntoArticle } from '../../core/goldenParse'
 import { ARTICLE_PACKAGE_FORMAT } from '../../core/articlePackage'
 import type { ExportParams } from './exportTypes'
@@ -102,6 +107,9 @@ export function createBackupIO({
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
+      if (parsed.productionDraft !== undefined) {
+        writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(normalizeProductionDraftMap(parsed.productionDraft)))
+      }
       setSaved((await articles.current?.list()) ?? [])
       flash(
         `导入完成：文章 ${parsed.articles.length} 篇${parsed.library ? `，生词 ${parsed.library.items.length} 个` : ''}` +
@@ -160,6 +168,11 @@ export function createBackupIO({
         setWritingErrorProgress(mergeWritingErrorProgress(writingErrorProgress, parsed.writingErrorProgress))
       }
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
+      if (parsed.productionDraft !== undefined) {
+        const current = normalizeProductionDraftMap(readJson<unknown>(PRODUCTION_DRAFT_KEY, null))
+        const incoming = normalizeProductionDraftMap(parsed.productionDraft)
+        writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(mergeProductionDraftMaps(current, incoming)))
+      }
       setSaved((await articles.current?.list()) ?? [])
       writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))
       flash(

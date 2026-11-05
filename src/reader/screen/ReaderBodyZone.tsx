@@ -5,6 +5,7 @@ import GoldenPanel from '../panels/GoldenPanel'
 import Composer from '../panels/Composer'
 import ReaderArticle from '../ReaderArticle'
 import type { ReaderScreenProps } from '../ReaderScreen'
+import { productionReviewCounts } from '../../core/productionHistory'
 import { bodyMode } from './bodyMode'
 
 /**
@@ -146,6 +147,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
   const { intensivePlan, intensiveSkimmed, myRetells, outputBoard } = props.articleDerived
   const { todayReadDone, readDone, readGoal, setReadGoal, goalMemo, setGoalMemo, articleReadDay, markReadDone, undoReadDone, saveRetell, deleteRetell, toggleSkimmed } = props.learning
   const { doExportAnki, exportWordList, doPrint, doPrintRows, doExportWrong, doExportArticlePackage } = props.exporter
+  const productionCounts = productionReviewCounts(props.production.progress, new Date().toISOString())
 
   /** 本篇语境释义（速读和正文悬浮提示共用；不再全库扫） */
   const wordMeaning = (w: string, sid?: string | null) => meaningOf(w, sid)
@@ -237,6 +239,8 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           todoPending: aiWebPending,
           todayCards,
           todayWrites,
+          productionDue: productionCounts.due,
+          productionWeak: productionCounts.weak,
           todayKey,
           onNewArticle: () => {
             setPlanOpen(false)
@@ -249,6 +253,13 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           onOpenSpeedRead: () => {
             setPlanOpen(false)
             openSpeedRead()
+          },
+          onOpenProduction: () => {
+            setPlanOpen(false)
+            props.production.updateSettings({
+              scope: productionCounts.due > 0 ? 'due' : productionCounts.weak > 0 ? 'weak' : 'all',
+            })
+            props.production.openProduction()
           },
         }}
         intensive={{

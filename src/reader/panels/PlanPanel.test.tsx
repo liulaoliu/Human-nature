@@ -13,10 +13,13 @@ function props(over: Partial<PlanPanelProps> = {}): PlanPanelProps {
     todoPending: 0,
     todayCards: 3,
     todayWrites: 1,
+    productionDue: 2,
+    productionWeak: 1,
     todayKey: '2026-10-20',
     onNewArticle: noop,
     onStartStudy: noop,
     onOpenSpeedRead: noop,
+    onOpenProduction: noop,
     ...over,
   }
 }
@@ -33,11 +36,12 @@ afterEach(() => {
 })
 
 describe('PlanPanel', () => {
-  it('渲染五步清单、进度与数据提示', () => {
+  it('渲染六步清单、进度与数据提示', () => {
     render(<PlanPanel {...props()} />)
     expect(screen.getByText('📋 今日计划')).toBeTruthy()
-    expect(screen.getByText(/清单 0\/5/)).toBeTruthy()
+    expect(screen.getByText(/清单 0\/6/)).toBeTruthy()
     expect(screen.getByText('✅ 本篇待办已完成')).toBeTruthy()
+    expect(screen.getByText('到期 2 个目标块')).toBeTruthy()
     expect(screen.getByText('今天 3 张')).toBeTruthy()
     expect(screen.getByText('今天 1 条')).toBeTruthy()
     expect(screen.getByText(/当前这篇/)).toBeTruthy()
@@ -66,7 +70,7 @@ describe('PlanPanel', () => {
     const boxes = screen.getAllByRole('checkbox')
     fireEvent.click(boxes[0])
     expect(JSON.parse(localStorage.getItem('reader:plan:2026-10-20') ?? '{}').checked).toEqual(['read'])
-    expect(screen.getByText(/清单 1\/5/)).toBeTruthy()
+    expect(screen.getByText(/清单 1\/6/)).toBeTruthy()
     unmount()
 
     render(<PlanPanel {...props()} />)
@@ -76,10 +80,10 @@ describe('PlanPanel', () => {
   it('换天时读新一天的清单，不串天', () => {
     localStorage.setItem('reader:plan:2026-10-19', JSON.stringify({ checked: ['read', 'speed'] }))
     const { rerender } = render(<PlanPanel {...props({ todayKey: '2026-10-19' })} />)
-    expect(screen.getByText(/清单 2\/5/)).toBeTruthy()
+    expect(screen.getByText(/清单 2\/6/)).toBeTruthy()
 
     rerender(<PlanPanel {...props({ todayKey: '2026-10-20' })} />)
-    expect(screen.getByText(/清单 0\/5/)).toBeTruthy()
+    expect(screen.getByText(/清单 0\/6/)).toBeTruthy()
   })
 
   it('点遮罩关闭；点面板本身不关闭', () => {
@@ -111,5 +115,12 @@ describe('PlanPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: '去背单词' }))
     expect(onOpenSpeedRead).toHaveBeenCalled()
     expect(onStartStudy).toHaveBeenCalled()
+  })
+
+  it('去奶牛工棚走回调', () => {
+    const onOpenProduction = vi.fn()
+    render(<PlanPanel {...props({ onOpenProduction })} />)
+    fireEvent.click(screen.getByRole('button', { name: '去奶牛工棚' }))
+    expect(onOpenProduction).toHaveBeenCalled()
   })
 })

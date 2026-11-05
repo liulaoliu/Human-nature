@@ -505,15 +505,34 @@ export function targetUsed(answer: string, target: ProductionTarget): boolean {
   return re.test(hay)
 }
 
+export interface ClozePart {
+  text: string
+  /** 有 target = 这里要填空；`text` 是原目标块文本。 */
+  target?: ProductionTarget
+}
+
+/** 把参考句按目标块切成「普通文本 / 空」两段，供真正的填空交互使用。 */
+export function clozeParts(model: string, targets: readonly ProductionTarget[]): ClozePart[] {
+  const sorted = [...targets]
+    .filter((t) => t.text.trim())
+    .sort((a, b) => b.text.length - a.text.length)
+  if (!sorted.length) return [{ text: model }]
+  const byText = new Map(sorted.map((t) => [t.text.trim().toLowerCase(), t]))
+  const re = new RegExp(`(${sorted.map((t) => escapeRegExp(t.text.trim())).join('|')})`, 'gi')
+  const parts: ClozePart[] = []
+  for (const piece of model.split(re)) {
+    if (!piece) continue
+    const target = byText.get(piece.trim().toLowerCase())
+    parts.push(target ? { text: piece, target } : { text: piece })
+  }
+  return parts.length ? parts : [{ text: model }]
+}
+
 /** 把目标块从参考句里挖掉，用于「句中挖空」提示。 */
 export function clozeSentence(model: string, targets: readonly ProductionTarget[]): string {
-  let out = model
-  const sorted = [...targets].sort((a, b) => b.text.length - a.text.length)
-  for (const target of sorted) {
-    const text = target.text.trim()
-    if (text) out = out.replace(new RegExp(escapeRegExp(text), 'gi'), '_____')
-  }
-  return out
+  return clozeParts(model, targets)
+    .map((p) => (p.target ? '_____' : p.text))
+    .join('')
 }
 
 /** 把参考句拆成词，按 seed 稳定洗牌，用于「排序」提示。 */

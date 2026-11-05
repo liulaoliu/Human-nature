@@ -4,6 +4,7 @@ import { sentenceFixture, vocabItem } from './testFixtures'
 import {
   buildProductionTargets,
   checkProductionTargets,
+  clozeParts,
   clozeSentence,
   shuffledWords,
   DEFAULT_PRODUCTION_SETTINGS,
@@ -285,6 +286,9 @@ describe('targetUsed / checkProductionTargets：目标块硬校验', () => {
     expect(out).toContain('_____')
     expect(out).not.toContain('follow up')
     expect(model).toBe('I will follow up with the client.')
+    const parts = clozeParts(model, [target({ kind: 'phrase', text: 'follow up' })])
+    expect(parts.filter((p) => p.target)).toHaveLength(1)
+    expect(parts.map((p) => (p.target ? 'BLANK' : p.text)).join('')).toContain('BLANK')
     expect(shuffledWords(model, 'p1').sort()).toEqual(model.split(' ').sort())
   })
 

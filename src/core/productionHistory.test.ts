@@ -8,6 +8,7 @@ import {
   groupProductionAttempts,
   productionHistoryMarkdown,
   productionRecords,
+  productionReviewCounts,
   productionStats,
 } from './productionHistory'
 
@@ -93,6 +94,39 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
     expect(productionRecords(list)).toHaveLength(2)
     expect(groupProductionAttempts(list)[0].records).toHaveLength(2)
     expect(productionHistoryMarkdown(list)).toContain('跟同事说明进度')
+  })
+
+  it('提醒数：到期按 dueAt，薄弱按漏用 / 命中率', () => {
+    const counts = productionReviewCounts(
+      [
+        {
+          key: 'word:run',
+          kind: 'word',
+          text: 'run',
+          meaning: '跑',
+          streak: 0,
+          attempts: 2,
+          hits: 0,
+          misses: 2,
+          dueAt: '2026-11-01T00:00:00.000Z',
+          lastAt: '2026-11-01T00:00:00.000Z',
+        },
+        {
+          key: 'word:curb',
+          kind: 'word',
+          text: 'curb',
+          meaning: '抑制',
+          streak: 2,
+          attempts: 2,
+          hits: 2,
+          misses: 0,
+          dueAt: '2027-01-01T00:00:00.000Z',
+          lastAt: '2026-11-01T00:00:00.000Z',
+        },
+      ],
+      '2026-11-05T00:00:00.000Z',
+    )
+    expect(counts).toEqual({ due: 1, weak: 1 })
   })
 
   it('跳过稿进历史但不计入真实产出 / 平均分', () => {

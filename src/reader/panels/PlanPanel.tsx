@@ -12,11 +12,15 @@ export interface PlanPanelProps {
   todayCards: number
   /** 今天写了多少条仿写。 */
   todayWrites: number
+  /** 奶牛工棚到期 / 薄弱目标块。 */
+  productionDue: number
+  productionWeak: number
   /** 本地日期键 YYYY-MM-DD。 */
   todayKey: string
   onNewArticle: () => void
   onStartStudy: () => void
   onOpenSpeedRead: () => void
+  onOpenProduction: () => void
 }
 
 interface Step {
@@ -30,6 +34,7 @@ const STEPS: Step[] = [
   { id: 'vocab', label: '背单词（先清今天到期，再看新词）' },
   { id: 'speak', label: '跟读 / 朗读 2–3 句，出声跟读' },
   { id: 'write', label: '仿写 1 句 + AI 批改' },
+  { id: 'production', label: '奶牛工棚 1 组（到期目标块优先）' },
 ]
 
 const planKey = (day: string) => `reader:plan:${day}`
@@ -48,10 +53,13 @@ export default function PlanPanel({
   todoPending,
   todayCards,
   todayWrites,
+  productionDue,
+  productionWeak,
   todayKey,
   onNewArticle,
   onStartStudy,
   onOpenSpeedRead,
+  onOpenProduction,
 }: PlanPanelProps) {
   const [checked, setChecked] = useState<string[]>(() => loadChecked(todayKey))
 
@@ -69,6 +77,11 @@ export default function PlanPanel({
     if (id === 'read') return hasDoc ? (todoPending === 0 ? '✅ 本篇待办已完成' : `还剩 ${todoPending} 项待办`) : '还没打开文章'
     if (id === 'vocab') return todayCards > 0 ? `今天 ${todayCards} 张` : '今天还没背'
     if (id === 'write') return todayWrites > 0 ? `今天 ${todayWrites} 条` : '今天还没写'
+    if (id === 'production') {
+      if (productionDue > 0) return `到期 ${productionDue} 个目标块`
+      if (productionWeak > 0) return `薄弱 ${productionWeak} 个；可选薄弱范围`
+      return '没有到期目标块，也可以自由练'
+    }
     return ''
   }
 
@@ -113,6 +126,9 @@ export default function PlanPanel({
             </button>
             <button onClick={onStartStudy} disabled={!hasDoc}>
               去背单词
+            </button>
+            <button onClick={onOpenProduction} className="primary">
+              去奶牛工棚
             </button>
           </div>
         </div>

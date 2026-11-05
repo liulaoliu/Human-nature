@@ -1,26 +1,30 @@
 import { describe, expect, it } from 'vitest'
-import { normalizeProductionDraft } from './productionDraft'
+import {
+  mergeProductionDraftMaps,
+  normalizeProductionDraft,
+  normalizeProductionDraftMap,
+} from './productionDraft'
 
 const draft = {
-  version: 1,
+  version: 1 as const,
   sessionId: 's1',
   articleId: 'A',
   at: '2026-11-01T00:00:00.000Z',
-  mode: 'full',
+  mode: 'full' as const,
   sessionTopic: '随机',
   prompts: [
     {
       id: 'p1',
       zh: '说明进度',
       goal: '汇报',
-      targets: [{ id: 't1', itemId: 'v1', kind: 'word', text: 'run', meaning: '跑' }],
+      targets: [{ id: 't1', itemId: 'v1', kind: 'word' as const, text: 'run', meaning: '跑' }],
     },
   ],
   index: 0,
   answer: 'draft',
   feedback: null,
   previousFeedback: null,
-  hits: [{ id: 't1', kind: 'word', text: 'run', meaning: '跑', used: true }],
+  hits: [{ id: 't1', kind: 'word' as const, text: 'run', meaning: '跑', used: true }],
   round: 1,
   notice: '',
 }
@@ -46,5 +50,16 @@ describe('productionDraft：会话草稿守卫', () => {
     expect(normalizeProductionDraft(draft, 'B')).toBeNull()
     expect(normalizeProductionDraft({ ...draft, version: 2 }, 'A')).toBeNull()
     expect(normalizeProductionDraft({ ...draft, prompts: [] }, 'A')).toBeNull()
+  })
+
+  it('多草稿按文章保留；合并导入取较新的一版', () => {
+    const other = { ...draft, articleId: 'B', at: '2026-11-02T00:00:00.000Z', answer: 'B draft' }
+    const map = normalizeProductionDraftMap({ A: draft, B: other })
+    expect(Object.keys(map).sort()).toEqual(['A', 'B'])
+    const merged = mergeProductionDraftMaps(
+      { A: { ...draft, answer: 'old' } },
+      { A: { ...draft, at: '2026-11-03T00:00:00.000Z', answer: 'new' } },
+    )
+    expect(merged.A.answer).toBe('new')
   })
 })

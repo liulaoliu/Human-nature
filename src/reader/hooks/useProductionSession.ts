@@ -14,6 +14,8 @@ import {
   type ProductionTask,
 } from '../../core/productionPrompts'
 import { addWritingRecord, writingRecordKey, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import type { AnswerEvent } from '../../core/answerEvents'
+import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import {
   deriveProductionProgress,
   makeSkippedProductionRecord,
@@ -26,6 +28,8 @@ import type { runAiBatch } from '../../adapters/aiRun'
 import type { ProductionDraft } from '../../core/productionDraft'
 import { useProductionAi } from './useProductionAi'
 import { useProductionDraft } from './useProductionDraft'
+import { useProductionErrors } from './useProductionErrors'
+import { useProductionFollowUp } from './useProductionFollowUp'
 import { useProductionPacks, type ProductionStartPayload } from './useProductionPacks'
 import { useProductionSettings } from './useProductionSettings'
 
@@ -46,6 +50,10 @@ export interface UseProductionSessionParams {
   articleTitle: string
   writingHistory: WritingRecord[]
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+  /** 错因复习：产出批改的 must-fix 也写进同一套错因卡。 */
+  writingErrorProgress?: readonly WritingErrorProgress[]
+  setWritingErrorProgress?: Dispatch<SetStateAction<WritingErrorProgress[]>>
+  answerEvents?: readonly AnswerEvent[]
   recordActivity: (cat: ActivityCat, n?: number) => void
   flash: (message: string) => void
   /** 朗读题干；不传则不显示「听题干」。 */
@@ -70,6 +78,9 @@ export function useProductionSession({
   articleTitle,
   writingHistory,
   setWritingHistory,
+  writingErrorProgress,
+  setWritingErrorProgress,
+  answerEvents,
   recordActivity,
   flash,
   speak,
@@ -103,7 +114,9 @@ export function useProductionSession({
 
   const current = prompts[index] ?? null
   const allHistory = useMemo(() => productionRecords(writingHistory), [writingHistory])
+  useProductionErrors({ records: allHistory, writingErrorProgress, setWritingErrorProgress, answerEvents, now })
   const progress = useMemo(() => deriveProductionProgress(allHistory), [allHistory])
+  const followUp = useProductionFollowUp({ current, answer, feedback, ensureAi, callAi, flash })
   const stats = useMemo(() => productionStats(allHistory), [allHistory])
   const history = useMemo(
     () =>
@@ -477,6 +490,7 @@ export function useProductionSession({
     stats,
     sessionId,
     sessionMode,
+    followUp,
     cancelRun,
   }
 }

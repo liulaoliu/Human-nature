@@ -65,14 +65,41 @@
   padding: 8px 10px;
   border-left: 3px solid var(--accent);
   background: var(--panel-2);
-  line-height: 1.7;
+  line-height: 1.9;
   letter-spacing: 0.02em;
 }
+.production-cloze input {
+  width: auto;
+  min-width: 64px;
+  margin: 0 3px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-bottom-color: var(--accent);
+  border-radius: 4px;
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+}
 .production-wordbank {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 5px;
   padding: 8px 10px;
   border-left: 3px solid var(--accent);
   background: var(--panel-2);
   line-height: 1.8;
+}
+.production-wordbank .production-word {
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--panel);
+  color: inherit;
+  cursor: pointer;
+}
+.production-wordbank .production-word:hover {
+  border-color: var(--accent);
 }
 .production-pairs {
   display: flex;
@@ -168,6 +195,58 @@
 }
 .production-hits .ok { color: var(--green); }
 .production-hits .bad { color: #d9534f; }
+.production-hit {
+  padding: 1px 6px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.production-hit.ok { color: var(--green); }
+.production-hit.bad { color: #d9534f; }
+.production-target-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.production-target-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+.production-target-rows .ok { color: var(--green); }
+.production-target-rows .bad { color: #d9534f; }
+.production-followup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.production-followup .bar input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.production-followup-item {
+  padding: 6px 8px;
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.production-followup-q {
+  color: var(--muted);
+  font-size: 12px;
+}
+.production-followup-a {
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
 .production-review,
 .production-prev,
 .production-paste {

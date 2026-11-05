@@ -5,6 +5,8 @@ import { dayKeyLocal } from '../../core/activity'
 import { buildArticlePackage } from '../../core/articlePackage'
 import { writingHistoryToMarkdown } from '../../core/writingExport'
 import { markBackupAt } from '../../adapters/backupHealth'
+import { PRODUCTION_DRAFT_KEY } from '../../core/productionDraft'
+import { readJson } from '../storage'
 import type { ExportParams } from './exportTypes'
 
 /** 下载 / 词表 / 文章包等“生成文件”动作；不读写应用状态。 */
@@ -84,6 +86,7 @@ export function createExportFiles({ library, saved, learning, writingHistory, vi
       readDone,
       readGoal,
       goalMemo,
+      productionDraft: readJson<unknown>(PRODUCTION_DRAFT_KEY, null),
     }
     const day = dayKeyLocal()
     download(`economist-backup-${day}.json`, JSON.stringify(backup, null, 2), 'application/json')

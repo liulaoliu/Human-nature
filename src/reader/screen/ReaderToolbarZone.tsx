@@ -1,5 +1,6 @@
 import ReaderToolbarHost from '../ReaderToolbarHost'
 import type { ReaderScreenProps } from '../ReaderScreen'
+import { productionReviewCounts } from '../../core/productionHistory'
 
 /**
  * 顶栏槽位：只把「文章管理 / 朗读 / 预生成 / 统计 / 显示设置」映射到 `ReaderToolbarHost`。
@@ -53,6 +54,7 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
   const { aiTasksApi } = props.ai
   const { copyTranslateAll, copyAutoVocab } = aiTasksApi
   const { pregen, pregenerateAll, cancelPregenerate } = props.pregenApi
+  const productionCounts = productionReviewCounts(props.production.progress, new Date().toISOString())
 
   return (
     <ReaderToolbarHost
@@ -89,6 +91,8 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
         onSpeedRead: openSpeedRead,
         onOpenGolden: props.golden.openGolden,
         onOpenProduction: props.production.openProduction,
+        productionDue: productionCounts.due,
+        productionWeak: productionCounts.weak,
         onOpenBack: openBack,
         onOpenIntensive: () => setIntensiveOpen(true),
         onOpenJournal: () => setJournalOpen(true),

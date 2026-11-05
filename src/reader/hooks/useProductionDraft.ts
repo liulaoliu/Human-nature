@@ -1,24 +1,15 @@
 import { useCallback } from 'react'
-import { normalizeProductionDraft, PRODUCTION_DRAFT_KEY, type ProductionDraft } from '../../core/productionDraft'
+import {
+  normalizeProductionDraftMap,
+  PRODUCTION_DRAFT_KEY,
+  type ProductionDraft,
+} from '../../core/productionDraft'
 import { readJson, removeRaw, reportStorageFailure, writeRaw } from '../storage'
 
 type DraftMap = Record<string, ProductionDraft>
 
 function readMap(): DraftMap {
-  const raw = readJson<unknown>(PRODUCTION_DRAFT_KEY, null)
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
-  // 兼容第一版单草稿格式（对象本身带 version/articleId）。
-  const candidate = raw as Record<string, unknown>
-  if (candidate.version === 1 && typeof candidate.articleId === 'string') {
-    const draft = normalizeProductionDraft(candidate)
-    return draft ? { [draft.articleId]: draft } : {}
-  }
-  const out: DraftMap = {}
-  for (const value of Object.values(candidate)) {
-    const draft = normalizeProductionDraft(value)
-    if (draft) out[draft.articleId] = draft
-  }
-  return out
+  return normalizeProductionDraftMap(readJson<unknown>(PRODUCTION_DRAFT_KEY, null))
 }
 
 /**

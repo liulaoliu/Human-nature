@@ -165,6 +165,25 @@ export function isProgressWeak(progress: ProductionProgress): boolean {
   return progress.misses > 0 || progress.hits / Math.max(1, progress.attempts) < 0.7
 }
 
+export interface ProductionReviewCounts {
+  due: number
+  weak: number
+}
+
+/** 顶栏 / 今日计划用的目标块提醒数：到期 + 薄弱。 */
+export function productionReviewCounts(
+  progress: readonly ProductionProgress[],
+  nowIso: string,
+): ProductionReviewCounts {
+  let due = 0
+  let weak = 0
+  for (const p of progress) {
+    if (isProgressDue(p, nowIso)) due++
+    if (isProgressWeak(p)) weak++
+  }
+  return { due, weak }
+}
+
 export function isProgressRecent(progress: ProductionProgress, nowIso: string, days = 7): boolean {
   const last = Date.parse(progress.lastAt)
   const now = Date.parse(nowIso)
@@ -303,7 +322,10 @@ export function groupProductionAttempts(records: readonly WritingRecord[]): Prod
   for (const rec of productionRecords(records)) {
     const task = productionTaskOf(rec)
     if (!task) continue
-    const key = `${task.sessionId ?? `at:${rec.at}`}|${task.promptId}`
+    // 旧记录没有 sessionId：按「同一天 + 文章 + 模式 + 主题」兜底，
+    // 至少让同一次两稿还能并排；不同天的会自然分开。
+    const legacy = `legacy:${rec.at.slice(0, 10)}|${rec.articleId}|${task.mode}|${task.topic}`
+    const key = `${task.sessionId ?? legacy}|${task.promptId}`
     const prev = groups.get(key)
     if (prev) prev.records.push(rec)
     else {

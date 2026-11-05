@@ -316,6 +316,21 @@
 /* 定宽之后必须配合不换行，否则文字会折成两行；内边距也收窄，20 个控件才排得下 */
 .reader-toolbar .tb-row button { white-space: nowrap; padding-left: 8px; padding-right: 8px; }
 .reader-toolbar .tb-tts-note { flex: 0 0 auto; font-size: 11px; white-space: nowrap; }
+.reader-toolbar .tb-production { position: relative; }
+.reader-toolbar .tb-production-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
 .reader-toolbar select { text-overflow: ellipsis; }
 
 .article { max-width: none; }

@@ -63,6 +63,8 @@ function makeProps(over: Partial<ReaderToolbarHostProps> = {}): ReaderToolbarHos
       onSpeedRead: fn(),
       onOpenGolden: fn(),
       onOpenProduction: fn(),
+      productionDue: 2,
+      productionWeak: 1,
       onOpenBack: fn(),
       onOpenIntensive: fn(),
       onOpenJournal: fn(),

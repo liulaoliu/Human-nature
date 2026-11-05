@@ -21,6 +21,8 @@ export interface ParsedBackup extends Partial<LearningData> {
   library: VocabLibrary | null
   readGoal?: number
   goalMemo?: string
+  /** 奶牛工棚会话草稿（外部输入；导入时再 normalize）。 */
+  productionDraft?: unknown
   /** 被丢弃的条目总数（坏数据 / 修不出来的） */
   dropped: number
   /** 给人看的丢弃原因（去重后） */
@@ -206,6 +208,7 @@ export function parseBackupPayload(data: unknown): ParsedBackup {
     drop('阅读目标不是有效数字', 1)
   }
   if (typeof obj.goalMemo === 'string') out.goalMemo = obj.goalMemo
+  if (obj.productionDraft !== undefined) out.productionDraft = obj.productionDraft
 
   return out
 }

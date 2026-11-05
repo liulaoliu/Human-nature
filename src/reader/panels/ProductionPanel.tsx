@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
   PRODUCTION_ANGLE_LABEL,
@@ -18,8 +19,6 @@ import {
   PRODUCTION_VARIANT_LABEL,
   PRODUCTION_VARIANTS,
   PRODUCTION_WEAK_RATIOS,
-  clozeSentence,
-  shuffledWords,
   type ProductionTargetKind,
 } from '../../core/production'
 import {
@@ -32,7 +31,9 @@ import { writingRecordLabel } from '../../core/writing'
 import type { useProductionSession } from '../hooks/useProductionSession'
 import GoldenFeedback from './golden/GoldenFeedback'
 import RoundSizeSelect from './RoundSizeSelect'
-import ProductionHistoryPanel from './ProductionHistoryPanel'
+import ProductionFollowUp from './ProductionFollowUp'
+import ProductionHistoryView from './ProductionHistoryView'
+import ProductionHint from './ProductionHint'
 
 export interface ProductionPanelProps {
   model: ReturnType<typeof useProductionSession>
@@ -57,7 +58,18 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
   const [yogurtPairs, setYogurtPairs] = useState<YogurtPair[] | null>(null)
   const [pairWarning, setPairWarning] = useState('')
   const [pairError, setPairError] = useState('')
-  const [historyOpen, setHistoryOpen] = useState(false)
+  const [searchParams, setSearchParams] = useSearchParams()
+  const historyOpen = searchParams.get('ph') === '1'
+  const openHistory = () => {
+    const next = new URLSearchParams(searchParams)
+    next.set('ph', '1')
+    setSearchParams(next)
+  }
+  const closeHistory = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('ph')
+    setSearchParams(next, { replace: true })
+  }
   const articleTitle = model.articleTitle
   const { settings, updateSettings } = model
   const pastePrompt = model.pendingPrompt
@@ -144,17 +156,8 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
     })
   }
 
-  if (historyOpen) {
-    return (
-      <ProductionHistoryPanel
-        records={model.allHistory}
-        progress={model.progress}
-        articleIdentity={model.articleIdentity}
-        articleTitle={articleTitle}
-        onBack={() => setHistoryOpen(false)}
-      />
-    )
-  }
+  if (historyOpen)
+    return <ProductionHistoryView open records={model.allHistory} progress={model.progress} articleIdentity={model.articleIdentity} articleTitle={articleTitle} onBack={closeHistory} />
 
   return (
     <div className="study production">
@@ -166,7 +169,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
           {model.stage === 'playing' ? '暂停' : '关闭'}
         </button>
         <b>🐄 D老师奶牛工棚</b>
-        <button onClick={() => setHistoryOpen(true)} title="看产出历史、两稿对比和目标块趋势">
+        <button onClick={openHistory} title="看产出历史、两稿对比和目标块趋势（地址会带 ?ph=1）">
           历史
         </button>
         <span className="muted">
@@ -604,18 +607,19 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
           <div className="production-prompt">
             <div className="production-zh">{model.current.zh}</div>
             {model.current.goal && <div className="muted">目标：{model.current.goal}</div>}
-            {settings.variant === 'cloze' && model.current.model && model.current.targets.length > 0 && (
-              <div className="production-cloze">
-                <b>挖空提示：</b>
-                {clozeSentence(model.current.model, model.current.targets)}
-              </div>
-            )}
-            {settings.variant === 'reorder' && model.current.model && model.current.targets.length > 0 && (
-              <div className="production-wordbank">
-                <b>词序提示：</b>
-                {shuffledWords(model.current.model, model.current.id).join(' · ')}
-              </div>
-            )}
+            {settings.variant !== 'translate' &&
+              model.current.model &&
+              model.current.targets.length > 0 && (
+                <ProductionHint
+                  key={model.current.id}
+                  mode={settings.variant}
+                  model={model.current.model}
+                  targets={model.current.targets}
+                  value={model.answer}
+                  onChange={model.setAnswer}
+                  seed={model.current.id}
+                />
+              )}
             {model.speak && (
               <div className="bar">
                 <button onClick={() => model.speak?.(model.current?.zh ?? '')} title="朗读题干；先听再写">
@@ -676,7 +680,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 <button
                   className="primary"
                   onClick={() => void model.grade()}
-                  disabled={!model.answer.trim() || model.grading || model.generating}
+                  disabled={!model.answer.trim() || model.answer.includes('_____') || model.grading || model.generating}
                 >
                   {model.grading ? '批改中…' : model.round === 1 ? '批改这一稿' : '提交重写并批改'}
                 </button>
@@ -728,6 +732,12 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                   跳过这题
                 </button>
               </div>
+              <ProductionFollowUp
+                items={model.followUp.items}
+                asking={model.followUp.asking}
+                error={model.followUp.error}
+                onAsk={model.followUp.ask}
+              />
             </div>
           )}
 

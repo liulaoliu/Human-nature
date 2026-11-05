@@ -54,6 +54,9 @@ export interface ReaderToolbarProps {
   onSpeedRead: () => void
   onOpenGolden: () => void
   onOpenProduction: () => void
+  /** 到期 / 薄弱目标块数量；只做提醒，不改变工棚入口文案。 */
+  productionDue: number
+  productionWeak: number
   onOpenBack: () => void
   onOpenIntensive: () => void
   onOpenJournal: () => void
@@ -143,6 +146,8 @@ export default function ReaderToolbar({
   onSpeedRead,
   onOpenGolden,
   onOpenProduction,
+  productionDue,
+  productionWeak,
   onOpenBack,
   onOpenIntensive,
   onOpenJournal,
@@ -389,9 +394,14 @@ export default function ReaderToolbar({
           <button
             className="tb-production"
             onClick={onOpenProduction}
-            title="D老师🐄 奶牛工棚：全脂随机主题 / 脱脂奶按主题 / 风味酸奶逐句翻译；可选带本机词块，先写英文再批改重写"
+            title={`D老师🐄 奶牛工棚：全脂随机主题 / 脱脂奶按主题 / 风味酸奶逐句翻译；可选带本机词块，先写英文再批改重写${productionDue > 0 ? ` · 到期 ${productionDue} 个目标块` : productionWeak > 0 ? ` · 薄弱 ${productionWeak} 个目标块` : ''}`}
           >
             D老师🐄 奶牛工棚
+            {productionDue > 0 && (
+              <span className="tb-production-badge" aria-label={`到期 ${productionDue} 个目标块`}>
+                {productionDue}
+              </span>
+            )}
           </button>
         )}
         {!editing && (
