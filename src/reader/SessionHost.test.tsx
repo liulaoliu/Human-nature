@@ -40,6 +40,7 @@ function props(over: Partial<SessionHostProps> = {}): SessionHostProps {
     },
     writing: { open: false } as never,
     back: { open: false } as never,
+    production: { open: false } as never,
     ...over,
   }
 }

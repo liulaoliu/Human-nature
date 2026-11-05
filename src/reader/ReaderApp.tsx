@@ -45,6 +45,7 @@ import { readerViewFlags } from '../core/readerView'
 import { useIntensiveActions } from './hooks/useIntensiveActions'
 import { useGoldenDrill } from './hooks/useGoldenDrill'
 import { useGoldenFeature } from './hooks/useGoldenFeature'
+import { useProductionSession } from './hooks/useProductionSession'
 
 export default function ReaderApp() {
   const docState = useArticleDocState()
@@ -270,6 +271,18 @@ export default function ReaderApp() {
     saveBackTranslation,
   })
   const { queue: dictQueue, index: dictIndex } = services.dictApi
+
+  /** D老师奶牛工棚：产出训练。作答/批改复用 writingHistory（source='production'）落盘。 */
+  const production = useProductionSession({
+    doc,
+    library,
+    articleIdentity,
+    articleTitle,
+    writingHistory: services.writingHistory,
+    setWritingHistory: services.setWritingHistory,
+    recordActivity,
+    flash,
+  })
 
   // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：
   // 纯派生无副作用，状态仍由各自 hook 持有 —— 逻辑与记忆化都在 useReaderDerived。
@@ -642,6 +655,7 @@ export default function ReaderApp() {
     listenOpen: services.listenOpen,
     backOpen: services.backOpen,
     goldenOpen: golden.open,
+    productionOpen: production.open,
     speedReadOpen: panels.speedReadOpen,
     writingOpen: services.writingOpen,
     browseAll: panels.browseAll,
@@ -656,6 +670,7 @@ export default function ReaderApp() {
     // 金句课需要正文；深链接刷新时等正文/索引就绪再开，文章不存在则让路由回落。
     ready: libraryLoaded && (route.panel !== 'golden' || !!doc || !route.slug || articleRouting.indexReady),
     golden: { active: golden.open, open: golden.openGolden, close: golden.close },
+    production,
   })
 
   const model: ReaderAppModel = {
@@ -664,6 +679,7 @@ export default function ReaderApp() {
     paste,
     highlight,
     services,
+    production,
     golden,
     goldenActions,
     panels,

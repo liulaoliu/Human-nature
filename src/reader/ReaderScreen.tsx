@@ -152,6 +152,8 @@ export interface ReaderScreenProps {
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>
   services: ReturnType<typeof useSessionServices>
+  /** D老师奶牛工棚：整页产出训练。 */
+  production: SessionP['production']
   /** D老师小课堂整页会话 */
   golden: ReturnType<typeof useGoldenDrill>
   ai: ReturnType<typeof useAiServices>

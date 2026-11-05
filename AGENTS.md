@@ -4,7 +4,7 @@
 
 ## 项目简介
 
-「学吧老哥」——英语精读/背单词 Web 应用（React + TS + Vite；IndexedDB 存词库与文章）。
+「D老师帮你办」——英语精读/背单词/产出训练 Web 应用（React + TS + Vite；SQLite 主存 + IndexedDB 兜底）。
 分层、依赖方向、新代码放哪里：见 **`docs/ARCHITECTURE.md`**（那份是可执行的约定）。
 测试分层、门禁、踩坑清单：见 **`docs/TESTING.md`**。
 

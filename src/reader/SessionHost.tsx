@@ -7,7 +7,9 @@ import type { useDictation } from './hooks/useDictation'
 import type { useListening } from './hooks/useListening'
 import type { useWriting } from './hooks/useWriting'
 import type { useBackTranslate } from './hooks/useBackTranslate'
+import type { useProductionSession } from './hooks/useProductionSession'
 import StudyPanelFromModel from './panels/StudyPanelFromModel'
+import ProductionPanel from './panels/ProductionPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
 import QuizPanel from './panels/QuizPanel'
 import DrillWarmup from './panels/DrillWarmup'
@@ -49,6 +51,7 @@ export interface SessionHostProps {
   }
   writing: ReturnType<typeof useWriting>
   back: ReturnType<typeof useBackTranslate>
+  production: ReturnType<typeof useProductionSession>
 }
 
 /**
@@ -71,11 +74,15 @@ export default function SessionHost({
   listening,
   writing,
   back,
+  production,
 }: SessionHostProps) {
   const quickCurrent =
     quick.queue && quick.index < quick.queue.length
       ? (items.find((it) => it.id === quick.queue![quick.index].id) ?? quick.queue[quick.index])
       : null
+
+  // 产出训练是整页会话：打开时只画它，避免和背词 / 考试 / 金句课叠在一起。
+  if (production.open) return <ProductionPanel model={production} />
 
   return (
     <>

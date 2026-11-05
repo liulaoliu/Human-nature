@@ -46,6 +46,7 @@ export type FlowName =
   | 'write'
   | 'back'
   | 'golden'
+  | 'production'
   | 'lang'
   | 'compose'
 
@@ -141,6 +142,7 @@ export const FLOW_NAMES: FlowName[] = [
   'write',
   'back',
   'golden',
+  'production',
   'lang',
   'compose',
 ]

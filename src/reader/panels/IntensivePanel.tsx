@@ -42,6 +42,8 @@ export interface IntensivePanelProps {
   onDrillLimitChange: (kind: DrillKind, limit: number) => void
   /** 「错题包围战」：错题 + 优先 + 学不稳 一起围剿（打到全对）。 */
   onSiege: (limit: number) => void
+  /** 进入 D老师奶牛工棚：用已学词块做产出训练。 */
+  onOpenProduction: () => void
   /** 滚动位置记忆键（文章标识）；不传 = 不记。 */
   scrollKey?: string
 }
@@ -77,6 +79,7 @@ export default function IntensivePanel({
   drillLimits,
   onDrillLimitChange,
   onSiege,
+  onOpenProduction,
   scrollKey = '',
 }: IntensivePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
@@ -207,6 +210,16 @@ export default function IntensivePanel({
           onDrill={onDrill}
           onSiege={onSiege}
         />
+
+        <div className="iproduction">
+          <div>
+            <b>🐄 D老师奶牛工棚</b>
+            <span className="muted"> 用已经学过的词 / 词组 / 习语，写真实想说的话</span>
+          </div>
+          <button className="primary" onClick={onOpenProduction} disabled={busy} title="AI 出中文情境，你用已学词块写英文，批改后再重写">
+            进去挤奶
+          </button>
+        </div>
 
         <div className="iretell">
           <b>✍️ 复述打卡（用自己的话讲一遍）</b>

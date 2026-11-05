@@ -217,14 +217,18 @@ learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v1
 - `writing_records.feedback_json` 自 **契约 v2** 起带 `version: 2`、`issues[]`（含闭集 `rule`、稳定 `key`、
   `severity`）和 `recommendations[]`。旧记录由 `tools/backfill-writing-v2.mjs` 一次性回填（先 `VACUUM INTO`
   备份，再事务更新）；运行时只分析 v2，不再保留旧格式双读。
-- `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError`；
+- `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError / production`；
   `goldenError` 是错因复习里的 AI 订正记录，照常进历史/备份/导出，但 `filterWritingErrorRecords`
   会跳过它，避免「改错产生新错因、再改」自己长卡。
+- **奶牛工棚 MVP 复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存主题 /
+  中文情境 / 目标块 / 命中情况，`feedback_json` 仍是 v2 批改；不新开表。等到需要按目标块排期
+  （`production_progress`）再单独迁移，避免现在为了一个功能复制一套历史/导出/备份链路。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
   保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
   `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。
   旧版只有 `answerEvents` 时，首次同步会按历史事件把 streak 迁进状态表。
-  它和 `golden_drill_records` 一样是长期资产：同步只 upsert，不因整份保存把旧行清掉。- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
+  它和 `golden_drill_records` 一样是长期资产：同步只 upsert，不因整份保存把旧行清掉。
+- 前端 `localStorage` 仍是**同步缓存**：本地有待同步修改（`reader:learningDirty`）时先补缺失键、
   保留本地，之后由 `useLearningSync` 按 section 防抖写回 SQLite；没有待同步修改时以 SQLite 为准，
   直接覆盖过期缓存，避免旧缓存反过来盖新库。成功写回后才清 dirty；失败保留 dirty，
   按 5s 起、最长 60s 的退避**整份重试**（只重放最后 pending 的 section 会漏掉更早失败的部分），

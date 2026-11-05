@@ -14,6 +14,7 @@
 | 错题本 | SQLite `mistake_records`；localStorage `reader:mistakes` 缓存 | 各练习 hook + `useLearningSync` | `itemId` 形如 `vocab:run` |
 | 读完 / 精读进度 | SQLite `reading_progress` / `skimmed_articles`；localStorage 缓存 | `hooks/useReadDone` + `useLearningSync` | 按逻辑日（04:00 结算） |
 | 学习活动 / 日志 / 练习 / 打卡 | SQLite `activity_days` / `practice_records` / `study_word_days` 等；localStorage 缓存 | 各 hook + `useLearningSync` | **日志是 `core/journal` 算出来的视图**，不是独立表 |
+| 奶牛工棚产出稿 | SQLite `writing_records`（`source='production'`）；localStorage `reader:writingHistory` 缓存 | `useProductionSession` + `useLearningSync` | 每稿一条，`task_json` 带主题/中文题/目标块/命中；复用仿写历史与导出 |
 | 语言点「已收过」记账 | localStorage `reader:langCollected` | `hooks/useLibraryAutoFill` | 可重建缓存；清空 = 从文章重收一遍 |
 
 > 分类原则见 `docs/STORAGE.md` §2.1：偏好/会话留 localStorage；学习记录进 SQLite；

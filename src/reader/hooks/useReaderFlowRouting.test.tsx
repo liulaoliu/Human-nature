@@ -4,6 +4,7 @@ import { renderHook } from '@testing-library/react'
 import type { ReaderRoute } from '../route'
 import type { useArticleWorkspace } from './useArticleWorkspace'
 import type { useSessionServices } from './useSessionServices'
+import type { useProductionSession } from './useProductionSession'
 import type { FlowControls } from './useRoutedFlows'
 
 /** 只测「哪个字段接到哪个面板」，历史行为由 `useRoutedFlows.test` 负责。 */
@@ -44,6 +45,8 @@ function setup(ready = true) {
   const setComposing = vi.fn()
   const cancelWarmup = vi.fn()
   const forceClose = vi.fn()
+  const openProduction = vi.fn()
+  const closeProduction = vi.fn()
 
   const services = {
     studyQueue: null,
@@ -76,6 +79,12 @@ function setup(ready = true) {
     openLangFor,
   } as unknown as ReturnType<typeof useArticleWorkspace>
 
+  const production = {
+    open: false,
+    openProduction,
+    close: closeProduction,
+  } as unknown as ReturnType<typeof useProductionSession>
+
   const route: ReaderRoute = { slug: 'my-article', panel: '', overlay: '' }
   renderHook(() =>
     useReaderFlowRouting(route, 'my-article', {
@@ -84,6 +93,7 @@ function setup(ready = true) {
       sentence: null,
       ready,
       golden: { active: false, open: vi.fn(), close: vi.fn() },
+      production,
     }),
   )
 
@@ -107,6 +117,8 @@ function setup(ready = true) {
     setComposing,
     cancelWarmup,
     forceClose,
+    openProduction,
+    closeProduction,
   }
 }
 
@@ -117,7 +129,7 @@ describe('useReaderFlowRouting：字段映射', () => {
     expect(captured.slug).toBe('my-article')
     expect(captured.ready).toBe(false)
     expect(Object.keys(flows).sort()).toEqual(
-      ['compose', 'dict', 'listen', 'lang', 'golden', 'quick', 'quiz', 'study', 'write', 'back'].sort(),
+      ['compose', 'dict', 'listen', 'lang', 'golden', 'production', 'quick', 'quiz', 'study', 'write', 'back'].sort(),
     )
   })
 
@@ -155,6 +167,11 @@ describe('useReaderFlowRouting：字段映射', () => {
     s.flows.back.close()
     expect(s.openBack).toHaveBeenCalledOnce()
     expect(s.backClose).toHaveBeenCalledOnce()
+
+    s.flows.production.open()
+    s.flows.production.close()
+    expect(s.openProduction).toHaveBeenCalledOnce()
+    expect(s.closeProduction).toHaveBeenCalledOnce()
 
     s.flows.lang.open()
     s.flows.lang.close()

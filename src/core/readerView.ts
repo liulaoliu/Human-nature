@@ -8,6 +8,7 @@ export interface ReaderViewFlagsInput {
   listenOpen: boolean
   backOpen: boolean
   goldenOpen: boolean
+  productionOpen: boolean
   speedReadOpen: boolean
   writingOpen: boolean
   browseAll: boolean
@@ -32,6 +33,7 @@ export function readerViewFlags(input: ReaderViewFlagsInput): ReaderViewFlags {
     input.listenOpen ||
     input.backOpen ||
     input.goldenOpen ||
+    input.productionOpen ||
     input.speedReadOpen
   const readingView =
     !input.studyOpen && !examActive && !input.writingOpen && !input.browseAll && !input.browseArticle

@@ -259,6 +259,13 @@ describe('writingRecordLabel：一条记录叫什么', () => {
         task: { task: 'x', model: 'm', mustUse: ['come with'], rubric: [], focus: 'come with' },
       }),
     ).toBe('语言点造句 · come with')
+    expect(writingRecordLabel({ source: 'production', task: undefined })).toBe('奶牛工棚')
+    expect(
+      writingRecordLabel({
+        source: 'production',
+        task: { task: 'x', model: 'm', mustUse: ['follow up'], rubric: [], focus: 'follow up' },
+      }),
+    ).toBe('奶牛工棚 · follow up')
   })
   it('第二稿在名字里标出来（第 2 稿）', () => {
     expect(
@@ -287,6 +294,7 @@ describe('normalizeWritingRecord：外部数据里的来源只认白名单', () 
     expect(normalizeWritingRecord({ ...base, source: 'goldenSentence', sentenceId: 's1' }).sentenceId).toBe('s1')
     expect(normalizeWritingRecord({ ...base, source: 'goldenError', sentenceId: 's1' }).source).toBe('goldenError')
     expect(normalizeWritingRecord({ ...base, source: 'writing' }).source).toBe('writing')
+    expect(normalizeWritingRecord({ ...base, source: 'production' }).source).toBe('production')
   })
 
   it('坏来源当普通仿写；id 不是字符串就丢掉（和服务端 sqliteLearning 同一口径）', () => {

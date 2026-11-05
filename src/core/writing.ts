@@ -511,7 +511,7 @@ export interface WritingRecord {
   /** 当时的仿写任务（题目 + rubric），可能没有 */
   task?: ImitationTask
   /** 普通仿写缺省；金句课记录（单句仿写 / 整课考试 / 错因订正）分开标记，历史可分流 */
-  source?: 'writing' | 'goldenExam' | 'goldenSentence' | 'goldenError'
+  source?: 'writing' | 'goldenExam' | 'goldenSentence' | 'goldenError' | 'production'
   /** 金句课考试题 id（source = goldenExam 时） */
   examId?: string
   /** 金句课单句 id（source = goldenSentence 时） */
@@ -546,7 +546,7 @@ export function isGoldenWritingRecord(rec: WritingRecord): boolean {
   return rec.source === 'goldenExam' || rec.source === 'goldenSentence' || rec.source === 'goldenError'
 }
 
-const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError'] as const
+const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production'] as const
 
 /**
  * 一条批改记录的**外部数据守卫**（localStorage / 服务端 / 备份都可能带脏值）。
@@ -576,6 +576,7 @@ const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string>
   goldenSentence: '单句仿写',
   goldenExam: '整课考试',
   goldenError: '错因订正',
+  production: '奶牛工棚',
 }
 
 /**
@@ -596,6 +597,10 @@ function baseLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
   if (rec.source === 'goldenSentence') {
     const focus = rec.task?.focus?.trim()
     return focus ? `语言点造句 · ${focus}` : WRITING_SOURCE_LABEL.goldenSentence
+  }
+  if (rec.source === 'production') {
+    const focus = rec.task?.focus?.trim()
+    return focus ? `奶牛工棚 · ${focus}` : WRITING_SOURCE_LABEL.production
   }
   return WRITING_SOURCE_LABEL.writing
 }

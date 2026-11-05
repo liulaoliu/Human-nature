@@ -194,6 +194,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
         }}
         writing={writingApi}
         back={props.services.backApi}
+        production={props.production}
       />
 
       {golden.open && (
@@ -276,6 +277,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           drillLimits: quizApi.drillLimits,
           onDrillLimitChange: quizApi.setDrillLimit,
           onSiege: startSiege,
+          onOpenProduction: props.production.openProduction,
           scrollKey: props.panelScrollKey,
         }}
         goal={{

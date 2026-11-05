@@ -11,6 +11,7 @@ const base: ReaderViewFlagsInput = {
   listenOpen: false,
   backOpen: false,
   goldenOpen: false,
+  productionOpen: false,
   speedReadOpen: false,
   writingOpen: false,
   browseAll: false,
@@ -24,6 +25,7 @@ describe('reader view flags', () => {
 
   it('任一整页会话都算 examActive，并关掉阅读工具栏', () => {
     expect(readerViewFlags({ ...base, goldenOpen: true })).toEqual({ examActive: true, readingView: false })
+    expect(readerViewFlags({ ...base, productionOpen: true })).toEqual({ examActive: true, readingView: false })
     expect(readerViewFlags({ ...base, speedReadOpen: true }).readingView).toBe(false)
     expect(readerViewFlags({ ...base, listenOpen: true }).examActive).toBe(true)
   })

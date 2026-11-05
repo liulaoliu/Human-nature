@@ -3,6 +3,7 @@ import type { ReaderRoute } from '../route'
 import type { useArticleWorkspace } from './useArticleWorkspace'
 import { useRoutedFlows, type FlowControls } from './useRoutedFlows'
 import type { useSessionServices } from './useSessionServices'
+import type { useProductionSession } from './useProductionSession'
 
 export interface ReaderFlowRoutingParams {
   services: ReturnType<typeof useSessionServices>
@@ -13,6 +14,8 @@ export interface ReaderFlowRoutingParams {
   ready: boolean
   /** D老师小课堂的会话开关（单独一个 hook，不塞进六类练习会话）。 */
   golden: { active: boolean; open: () => void; close: () => void }
+  /** D老师奶牛工棚：产出训练整页会话。 */
+  production: ReturnType<typeof useProductionSession>
 }
 
 /**
@@ -26,7 +29,7 @@ export interface ReaderFlowRoutingParams {
 export function useReaderFlowRouting(
   route: ReaderRoute,
   slug: string,
-  { services, workspace, sentence, ready, golden }: ReaderFlowRoutingParams,
+  { services, workspace, sentence, ready, golden, production }: ReaderFlowRoutingParams,
 ): void {
   const {
     studyQueue,
@@ -73,6 +76,11 @@ export function useReaderFlowRouting(
     write: { active: writingOpen, open: openWriting, close: () => writingApi.setOpen(false) },
     back: { active: backOpen, open: openBack, close: backApi.close },
     golden: { active: golden.active, open: golden.open, close: golden.close },
+    production: {
+      active: production.open,
+      open: production.openProduction,
+      close: production.close,
+    },
     lang: {
       active: langOpen,
       open: () => openLangFor(sentence),

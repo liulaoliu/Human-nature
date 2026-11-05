@@ -1,0 +1,123 @@
+/* D老师奶牛工棚：产出训练 */
+.iproduction {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px dashed var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.production {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.production-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: min(960px, 100%);
+  margin: 0 auto;
+  padding: 16px 18px 28px;
+  overflow: auto;
+}
+.production-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.production-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.production-topic {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--input-bg, var(--panel));
+  color: inherit;
+  font-size: 15px;
+}
+.production-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.production-zh {
+  font-size: 18px;
+  font-weight: 650;
+  line-height: 1.6;
+}
+.production-progress {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.production-answer,
+.production-paste textarea {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--input-bg, var(--panel));
+  color: inherit;
+  font: inherit;
+  line-height: 1.65;
+  resize: vertical;
+}
+.production-hits {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  line-height: 1.6;
+}
+.production-hits .ok { color: var(--green); }
+.production-hits .bad { color: #d9534f; }
+.production-review,
+.production-prev,
+.production-paste {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.production-error {
+  color: #d9534f;
+  white-space: pre-wrap;
+}
+.production-history {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line);
+}
+.production-history-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+.production-done {
+  align-items: flex-start;
+  padding-top: 36px;
+}
