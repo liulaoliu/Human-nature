@@ -85,7 +85,13 @@ export function useSpeechInput({ lang = 'en-US', onText }: UseSpeechInputParams)
         if (text) onText(text)
       }
       rec.onerror = (event) => {
-        setError(event.error === 'not-allowed' ? '麦克风权限被拒绝' : `语音输入失败：${event.error ?? '未知错误'}`)
+        if (event.error !== 'aborted') {
+          setError(
+            event.error === 'not-allowed'
+              ? '麦克风权限被拒绝'
+              : `语音输入失败：${event.error ?? '未知错误'}`,
+          )
+        }
         setListening(false)
         recRef.current = null
       }
