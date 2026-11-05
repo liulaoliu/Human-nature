@@ -598,7 +598,7 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().writingErrorProgress).toHaveLength(1)
   })
 
-  it('目标块进度增量同步幂等：只 upsert，不被空数组清掉', async () => {
+  it('目标块进度增量同步幂等：重复写不翻倍，孤儿行会被清掉', async () => {
     const store = openStore(tempDb())
     const row = {
       key: 'word:run',
@@ -618,8 +618,13 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().productionProgress).toHaveLength(1)
     expect(store.loadLearning().productionProgress[0]).toMatchObject({ key: 'word:run', attempts: 2 })
 
+    store.saveLearningPartial({
+      productionProgress: [{ ...row, key: 'word:walk', text: 'walk' }],
+    })
+    expect(store.loadLearning().productionProgress.map((r) => r.key)).toEqual(['word:walk'])
+
     store.saveLearning({ ...learning, productionProgress: [] })
-    expect(store.loadLearning().productionProgress).toHaveLength(1)
+    expect(store.loadLearning().productionProgress).toHaveLength(0)
   })
 
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', async () => {

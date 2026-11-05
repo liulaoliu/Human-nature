@@ -36,3 +36,34 @@ describe('useProductionProgressSync：目标块进度落表', () => {
     expect(rows[0]).toMatchObject({ key: 'word:run', attempts: 1 })
   })
 })
+
+it('已有表 + 新增 attempts 只增量叠加；删记录会回算清空', () => {
+  const setStored = vi.fn()
+  const base = {
+    key: 'word:run',
+    kind: 'word' as const,
+    text: 'run',
+    meaning: '跑',
+    attempts: 1,
+    hits: 1,
+    misses: 0,
+    streak: 1,
+    lastAt: '2026-11-05T10:00:00.000Z',
+    dueAt: '2026-11-06T10:00:00.000Z',
+    updatedAt: '2026-11-05T10:00:00.000Z',
+  }
+  const { rerender } = renderHook(
+    ({ records }) => useProductionProgressSync({ records, stored: [base], setStored }),
+    { initialProps: { records: [] as WritingRecord[] } },
+  )
+  expect(setStored).not.toHaveBeenCalled()
+  const next = { ...record, at: '2026-11-06T10:00:00.000Z' }
+  rerender({ records: [next] })
+  expect(setStored).toHaveBeenCalled()
+  const rows = setStored.mock.calls[0][0] as { attempts: number }[]
+  expect(rows[0].attempts).toBe(2)
+
+  setStored.mockClear()
+  rerender({ records: [] })
+  expect(setStored).toHaveBeenCalledWith([])
+})

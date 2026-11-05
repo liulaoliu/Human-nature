@@ -298,6 +298,8 @@ function writeAnswerEvents(db: DatabaseSync, data: LearningData): void {
 }
 
 function writeProductionProgress(db: DatabaseSync, data: LearningData): void {
+  if (!Array.isArray(data.productionProgress)) return
+  const keys: string[] = []
   const insert = db.prepare(`
     INSERT OR REPLACE INTO production_progress
       (key, item_id, kind, text, meaning, attempts, hits, misses, streak,
@@ -311,6 +313,7 @@ function writeProductionProgress(db: DatabaseSync, data: LearningData): void {
     const body = text(r.text)
     if (!key || !body) continue
     if (kind !== 'word' && kind !== 'phrase' && kind !== 'idiom') continue
+    keys.push(key)
     const lastAt = text(r.lastAt) ?? nowIso()
     const dueAt = text(r.dueAt) ?? lastAt
     insert.run(
@@ -329,6 +332,12 @@ function writeProductionProgress(db: DatabaseSync, data: LearningData): void {
       text(r.lastMode),
       text(r.updatedAt) ?? lastAt,
     )
+  }
+  if (keys.length) {
+    const placeholders = keys.map(() => '?').join(', ')
+    db.prepare(`DELETE FROM production_progress WHERE key NOT IN (${placeholders})`).run(...keys)
+  } else {
+    db.prepare('DELETE FROM production_progress').run()
   }
 }
 

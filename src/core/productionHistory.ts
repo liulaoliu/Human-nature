@@ -204,44 +204,56 @@ function addDays(iso: string, days: number): string {
  * 从 attempts 推导目标块进度：命中一次升一档，漏一次立刻到期。
  * 同一天可以重复练，但 `streak` 只在命中时增长。
  */
+function applyProductionRecord(map: Map<string, ProductionProgress>, rec: WritingRecord): void {
+  const task = productionTaskOf(rec)
+  if (!task) return
+  const hits = productionRecordHits(rec)
+  for (const hit of hits) {
+    const key = productionTargetKey(hit.kind, hit.text)
+    const prev = map.get(key)
+    const target = task.targets.find((t) => productionTargetKey(t.kind, t.text) === key)
+    const base: ProductionProgress = prev ?? {
+      key,
+      ...(target?.itemId ? { itemId: target.itemId } : {}),
+      kind: hit.kind,
+      text: hit.text,
+      meaning: hit.meaning,
+      attempts: 0,
+      hits: 0,
+      misses: 0,
+      streak: 0,
+      lastAt: rec.at,
+      dueAt: rec.at,
+    }
+    const streak = hit.used ? base.streak + 1 : 0
+    map.set(key, {
+      ...base,
+      attempts: base.attempts + 1,
+      hits: base.hits + (hit.used ? 1 : 0),
+      misses: base.misses + (hit.used ? 0 : 1),
+      streak,
+      lastAt: rec.at,
+      dueAt: hit.used ? addDays(rec.at, DUE_DAYS[Math.min(streak - 1, DUE_DAYS.length - 1)]) : rec.at,
+      lastArticleId: rec.articleId,
+      lastMode: task.mode,
+      updatedAt: rec.at,
+    })
+  }
+}
+
 export function deriveProductionProgress(records: readonly WritingRecord[]): ProductionProgress[] {
   const map = new Map<string, ProductionProgress>()
-  for (const rec of records) {
-    const task = productionTaskOf(rec)
-    if (!task) continue
-    const hits = productionRecordHits(rec)
-    for (const hit of hits) {
-      const key = productionTargetKey(hit.kind, hit.text)
-      const prev = map.get(key)
-      const target = task.targets.find((t) => productionTargetKey(t.kind, t.text) === key)
-      const base: ProductionProgress = prev ?? {
-        key,
-        ...(target?.itemId ? { itemId: target.itemId } : {}),
-        kind: hit.kind,
-        text: hit.text,
-        meaning: hit.meaning,
-        attempts: 0,
-        hits: 0,
-        misses: 0,
-        streak: 0,
-        lastAt: rec.at,
-        dueAt: rec.at,
-      }
-      const streak = hit.used ? base.streak + 1 : 0
-      map.set(key, {
-        ...base,
-        attempts: base.attempts + 1,
-        hits: base.hits + (hit.used ? 1 : 0),
-        misses: base.misses + (hit.used ? 0 : 1),
-        streak,
-        lastAt: rec.at,
-        dueAt: hit.used ? addDays(rec.at, DUE_DAYS[Math.min(streak - 1, DUE_DAYS.length - 1)]) : rec.at,
-        lastArticleId: rec.articleId,
-        lastMode: task.mode,
-        updatedAt: rec.at,
-      })
-    }
-  }
+  for (const rec of records) applyProductionRecord(map, rec)
+  return [...map.values()]
+}
+
+/** 增量：把新增 attempts 叠到已有进度上（调用方负责只传没算过的记录）。 */
+export function applyProductionProgressRecords(
+  progress: readonly ProductionProgress[],
+  records: readonly WritingRecord[],
+): ProductionProgress[] {
+  const map = new Map(progress.map((p) => [p.key, p]))
+  for (const rec of records) applyProductionRecord(map, rec)
   return [...map.values()]
 }
 
