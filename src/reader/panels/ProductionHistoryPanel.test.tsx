@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { makeProductionTask } from '../../core/productionPrompts'
 import type { ProductionTarget } from '../../core/production'
 import type { WritingRecord } from '../../core/writing'
@@ -45,13 +46,15 @@ describe('ProductionHistoryPanel：产出历史', () => {
   it('显示统计 / 分组 / 两稿内容；切到没有记录的模式显示空状态', () => {
     const onBack = vi.fn()
     render(
-      <ProductionHistoryPanel
-        records={[record]}
-        progress={[]}
-        articleIdentity="A"
-        articleTitle="A"
-        onBack={onBack}
-      />,
+      <MemoryRouter initialEntries={['/reader/p/production?ph=1']}>
+        <ProductionHistoryPanel
+          records={[record]}
+          progress={[]}
+          articleIdentity="A"
+          articleTitle="A"
+          onBack={onBack}
+        />
+      </MemoryRouter>,
     )
     expect(screen.getByText(/产出 1 次/)).toBeTruthy()
     expect(screen.getByText('跟同事说明进度')).toBeTruthy()
@@ -60,5 +63,39 @@ describe('ProductionHistoryPanel：产出历史', () => {
     expect(screen.getByText(/还没有记录/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '← 返回工棚' }))
     expect(onBack).toHaveBeenCalled()
+  })
+
+  it('筛选和目标块详情能从 URL 深链接恢复', () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/reader/p/production?ph=1&pa=all&pm=full&pt=%E5%B7%A5%E4%BD%9C&ptk=word%3Afollow+up',
+        ]}
+      >
+        <ProductionHistoryPanel
+          records={[record]}
+          progress={[
+            {
+              key: 'word:follow up',
+              kind: 'word',
+              text: 'follow up',
+              meaning: '跟进',
+              attempts: 2,
+              hits: 1,
+              misses: 1,
+              streak: 0,
+              lastAt: '2026-11-01T10:00:00.000Z',
+              dueAt: '2026-11-02T10:00:00.000Z',
+            },
+          ]}
+          articleIdentity="A"
+          articleTitle="A"
+          onBack={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    expect((screen.getByLabelText('历史主题搜索') as HTMLInputElement).value).toBe('工作')
+    expect((screen.getByLabelText('历史模式') as HTMLSelectElement).value).toBe('full')
+    expect(screen.getByText('目标块：follow up')).toBeTruthy()
   })
 })

@@ -15,6 +15,7 @@ export interface PlanPanelProps {
   /** 奶牛工棚到期 / 薄弱目标块。 */
   productionDue: number
   productionWeak: number
+  productionNew: number
   /** 本地日期键 YYYY-MM-DD。 */
   todayKey: string
   onNewArticle: () => void
@@ -55,6 +56,7 @@ export default function PlanPanel({
   todayWrites,
   productionDue,
   productionWeak,
+  productionNew,
   todayKey,
   onNewArticle,
   onStartStudy,
@@ -78,9 +80,12 @@ export default function PlanPanel({
     if (id === 'vocab') return todayCards > 0 ? `今天 ${todayCards} 张` : '今天还没背'
     if (id === 'write') return todayWrites > 0 ? `今天 ${todayWrites} 条` : '今天还没写'
     if (id === 'production') {
-      if (productionDue > 0) return `到期 ${productionDue} 个目标块`
-      if (productionWeak > 0) return `薄弱 ${productionWeak} 个；可选薄弱范围`
-      return '没有到期目标块，也可以自由练'
+      const bits = [
+        productionDue > 0 ? `到期 ${productionDue}` : '',
+        productionNew > 0 ? `新 ${productionNew}` : '',
+        productionWeak > 0 ? `薄弱 ${productionWeak}` : '',
+      ].filter(Boolean)
+      return bits.length ? `${bits.join(' · ')} 个目标块` : '没有到期目标块，也可以自由练'
     }
     return ''
   }

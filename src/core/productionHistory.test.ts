@@ -126,7 +126,30 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
       ],
       '2026-11-05T00:00:00.000Z',
     )
-    expect(counts).toEqual({ due: 1, weak: 1 })
+    expect(counts).toEqual({ due: 1, weak: 1, newTargets: 0 })
+
+    const withNew = productionReviewCounts(
+      [
+        {
+          key: 'word:run',
+          kind: 'word',
+          text: 'run',
+          meaning: '跑',
+          streak: 0,
+          attempts: 1,
+          hits: 1,
+          misses: 0,
+          dueAt: '2027-01-01T00:00:00.000Z',
+          lastAt: '2026-11-01T00:00:00.000Z',
+        },
+      ],
+      '2026-11-05T00:00:00.000Z',
+      [
+        { id: 'run', itemId: 'run', kind: 'word', text: 'run', meaning: '跑' },
+        { id: 'curb', itemId: 'curb', kind: 'word', text: 'curb', meaning: '抑制' },
+      ],
+    )
+    expect(withNew.newTargets).toBe(1)
   })
 
   it('跳过稿进历史但不计入真实产出 / 平均分', () => {
@@ -152,5 +175,17 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
     const list = [real, skipped]
     expect(productionStats(list)).toMatchObject({ attempts: 1, avgScore: 80, targetAttempts: 1 })
     expect(productionHistoryMarkdown(list)).toContain('跳过（未提交，无 AI 批改）')
+  })
+
+  it('旧记录没有 sessionId 时标成 legacy 分组', () => {
+    const real = record()
+    const legacy = record({
+      task: {
+        ...(real.task as unknown as Record<string, unknown>),
+        sessionId: undefined,
+      } as unknown as WritingRecord['task'],
+    })
+    const groups = groupProductionAttempts([legacy])
+    expect(groups[0].legacy).toBe(true)
   })
 })

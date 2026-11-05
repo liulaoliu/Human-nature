@@ -15,6 +15,7 @@ function props(over: Partial<PlanPanelProps> = {}): PlanPanelProps {
     todayWrites: 1,
     productionDue: 2,
     productionWeak: 1,
+    productionNew: 4,
     todayKey: '2026-10-20',
     onNewArticle: noop,
     onStartStudy: noop,
@@ -41,7 +42,7 @@ describe('PlanPanel', () => {
     expect(screen.getByText('📋 今日计划')).toBeTruthy()
     expect(screen.getByText(/清单 0\/6/)).toBeTruthy()
     expect(screen.getByText('✅ 本篇待办已完成')).toBeTruthy()
-    expect(screen.getByText('到期 2 个目标块')).toBeTruthy()
+    expect(screen.getByText('到期 2 · 新 4 · 薄弱 1 个目标块')).toBeTruthy()
     expect(screen.getByText('今天 3 张')).toBeTruthy()
     expect(screen.getByText('今天 1 条')).toBeTruthy()
     expect(screen.getByText(/当前这篇/)).toBeTruthy()

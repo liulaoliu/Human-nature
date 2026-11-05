@@ -12,6 +12,7 @@ import {
 } from '../../core/productionPrompts'
 import {
   buildProductionTargets,
+  PRODUCTION_DUE_DAILY_CAP,
   PRODUCTION_MODE_LABEL,
   productionDocLemmas,
   type ProductionMode,
@@ -208,13 +209,16 @@ export function useProductionPacks({
       return
     }
     const docLemmas = productionDocLemmas(doc?.sentences)
+    const requested = settings.promptCount * settings.targetsPerPrompt
+    const targetLimit =
+      settings.scope === 'due' ? Math.min(requested, PRODUCTION_DUE_DAILY_CAP) : requested
     let pool = buildProductionTargets({
       items: library.items,
       scope: settings.scope,
       articleIdentity,
       docLemmas,
       types: settings.types,
-      limit: settings.promptCount * settings.targetsPerPrompt,
+      limit: targetLimit,
       weakRatio: settings.weakRatio,
       theme: settings.topic.trim(),
       progress,
@@ -227,7 +231,7 @@ export function useProductionPacks({
         articleIdentity,
         docLemmas,
         types: settings.types,
-        limit: settings.promptCount * settings.targetsPerPrompt,
+        limit: targetLimit,
         weakRatio: settings.weakRatio,
         theme: settings.topic.trim(),
         progress,
@@ -244,7 +248,7 @@ export function useProductionPacks({
     const per = Math.min(settings.targetsPerPrompt, Math.max(1, pool.targets.length))
     const count = Math.max(1, Math.min(settings.promptCount, Math.floor(pool.targets.length / per) || 1))
     const shortNotice =
-      pool.targets.length < settings.promptCount * settings.targetsPerPrompt
+      pool.targets.length < targetLimit
         ? `可用目标块只有 ${pool.targets.length} 个，这次先出 ${count} 道 × ${per} 个`
         : ''
     if (shortNotice) flash(shortNotice)

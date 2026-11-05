@@ -234,6 +234,29 @@ export interface ProductionProgressLike {
   lastAt: string
 }
 
+/** 一天从「到期」范围最多抽几个目标块，避免一次清几百个。 */
+export const PRODUCTION_DUE_DAILY_CAP = 6
+
+/** 全库候选目标块（去重、按类型过滤）；用于「到期 / 新目标」提醒口径。 */
+export function productionTargetCandidates(
+  items: VocabItem[],
+  types: readonly ProductionTargetKind[],
+): ProductionTarget[] {
+  const typeSet = new Set(types)
+  if (!typeSet.size) return []
+  const seen = new Set<string>()
+  const out: ProductionTarget[] = []
+  for (const item of studyableItems(items)) {
+    for (const target of targetsOfItem(item, typeSet)) {
+      const key = `${target.kind}:${target.text.trim().toLowerCase().replace(/\s+/g, ' ')}`
+      if (!target.text || seen.has(key)) continue
+      seen.add(key)
+      out.push(target)
+    }
+  }
+  return out
+}
+
 export interface BuildProductionTargetsOptions {
   items: VocabItem[]
   scope: ProductionScope

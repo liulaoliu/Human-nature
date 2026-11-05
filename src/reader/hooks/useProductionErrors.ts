@@ -28,12 +28,12 @@ export function useProductionErrors({
 
   useEffect(() => {
     if (!setWritingErrorProgress || !cards.length) return
-    const { next, added } = syncWritingErrorProgress(
+    const { next, added, changed } = syncWritingErrorProgress(
       writingErrorProgress,
       cards,
       now().toISOString(),
       answerEvents,
     )
-    if (added) setWritingErrorProgress(next)
+    if (added || changed) setWritingErrorProgress(next)
   }, [cards, writingErrorProgress, setWritingErrorProgress, answerEvents, now])
 }

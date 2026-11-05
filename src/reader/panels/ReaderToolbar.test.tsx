@@ -74,6 +74,7 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
     onOpenProduction: noop,
     productionDue: 0,
     productionWeak: 0,
+    productionNew: 0,
     onOpenBack: noop,
     onOpenIntensive: noop,
     onOpenJournal: noop,

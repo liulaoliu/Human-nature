@@ -46,6 +46,7 @@ export interface ReaderToolbarHostProps {
     onOpenProduction: () => void
     productionDue: number
     productionWeak: number
+    productionNew: number
     onOpenBack: () => void
     onOpenIntensive: () => void
     onOpenJournal: () => void
@@ -177,6 +178,7 @@ export default function ReaderToolbarHost({
       onOpenProduction={reading.onOpenProduction}
       productionDue={reading.productionDue}
       productionWeak={reading.productionWeak}
+      productionNew={reading.productionNew}
       onOpenBack={reading.onOpenBack}
       onOpenIntensive={reading.onOpenIntensive}
       onOpenJournal={reading.onOpenJournal}

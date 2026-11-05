@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { ProductionMode } from '../../core/production'
 import {
   filterProductionHistory,
@@ -42,17 +43,29 @@ export default function ProductionHistoryPanel({
   articleTitle,
   onBack,
 }: ProductionHistoryPanelProps) {
-  const [scope, setScope] = useState<'all' | 'article'>('article')
-  const [mode, setMode] = useState<ProductionMode | 'all'>('all')
-  const [topic, setTopic] = useState('')
+  const [params, setParams] = useSearchParams()
   const [selected, setSelected] = useState<string | null>(null)
-  const [targetKey, setTargetKey] = useState<string | null>(null)
   const [limit, setLimit] = useState(40)
+  const rawMode = params.get('pm')
+  const mode: ProductionMode | 'all' =
+    rawMode === 'full' || rawMode === 'skim' || rawMode === 'yogurt' ? rawMode : 'all'
+  const scope: 'all' | 'article' = params.get('pa') === 'all' ? 'all' : 'article'
+  const topic = params.get('pt') ?? ''
+  const targetKey = params.get('ptk')
+  const setParam = (key: string, value: string) => {
+    const next = new URLSearchParams(params)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setParams(next, { replace: true })
+  }
+  const setScope = (value: 'all' | 'article') => setParam('pa', value === 'all' ? 'all' : '')
+  const setMode = (value: ProductionMode | 'all') => setParam('pm', value === 'all' ? '' : value)
+  const setTopic = (value: string) => setParam('pt', value)
+  const setTargetKey = (value: string | null) => setParam('ptk', value ?? '')
 
   useEffect(() => {
     setLimit(40)
     setSelected(null)
-    setTargetKey(null)
   }, [scope, mode, topic, articleIdentity])
 
   const filtered = useMemo(
@@ -65,8 +78,10 @@ export default function ProductionHistoryPanel({
     [records, scope, articleIdentity, mode, topic],
   )
   const filteredStats = useMemo(() => productionStats(filtered), [filtered])
-  const trend = useMemo(() => productionTrend(filtered, new Date().toISOString()), [filtered])
-  const topErrors = useMemo(() => productionTopErrors(filtered), [filtered])
+  // 趋势 / 高频错因只看最近 1000 条；历史列表另有分页，避免老记录拖慢首屏。
+  const recent = useMemo(() => filtered.slice(0, 1000), [filtered])
+  const trend = useMemo(() => productionTrend(recent, new Date().toISOString()), [recent])
+  const topErrors = useMemo(() => productionTopErrors(recent), [recent])
   const groups = useMemo(() => groupProductionAttempts(filtered), [filtered])
   const shownGroups = groups.slice(0, limit)
   const group = groups.find((g) => g.key === selected) ?? groups[0] ?? null
@@ -159,6 +174,7 @@ export default function ProductionHistoryPanel({
                   <b>{task?.task || g.title}</b>
                   <span className="muted">
                     {task?.mode ? PRODUCTION_MODE_LABEL[task.mode] : '产出'} · {g.records.length} 稿 ·{' '}
+                    {g.legacy ? '旧记录 · ' : ''}
                     {task?.skipped ? '跳过' : `${last?.feedback.total}/${last?.feedback.max}`}
                   </span>
                 </button>

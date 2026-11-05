@@ -54,4 +54,32 @@ describe('useProductionErrors：产出错因进复习卡', () => {
     const next = setProgress.mock.calls[0][0] as { id: string }[]
     expect(next[0].id).toBe('errfix:article-missing|cat')
   })
+
+  it('同一错因内容更新时也会写回，不只新增', () => {
+    const setProgress = vi.fn()
+    const old = {
+      id: 'errfix:article-missing|cat',
+      rule: 'article-missing' as const,
+      key: 'cat',
+      articleId: 'A',
+      original: 'old',
+      suggestion: 'old suggestion',
+      status: 'active' as const,
+      streak: 2,
+      reviews: 3,
+      createdAt: '2026-10-01T00:00:00.000Z',
+      updatedAt: '2026-10-01T00:00:00.000Z',
+    }
+    renderHook(() =>
+      useProductionErrors({
+        records: [record],
+        writingErrorProgress: [old],
+        setWritingErrorProgress: setProgress,
+        now: () => new Date('2026-11-05T10:00:00.000Z'),
+      }),
+    )
+    expect(setProgress).toHaveBeenCalled()
+    const next = setProgress.mock.calls[0][0] as { suggestion: string }[]
+    expect(next[0].suggestion).toBe('saw a cat')
+  })
 })

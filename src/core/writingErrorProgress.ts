@@ -311,9 +311,10 @@ export function syncWritingErrorProgress(
   cards: readonly WritingErrorCard[],
   nowIso: string,
   legacyEvents: readonly AnswerEvent[] = [],
-): { next: WritingErrorProgress[]; added: number } {
+): { next: WritingErrorProgress[]; added: number; changed: number } {
   const byId = new Map(progress.map((p) => [p.id, p]))
   let added = 0
+  let changed = 0
   for (const card of cards) {
     const old = byId.get(card.id)
     if (!old) {
@@ -325,7 +326,9 @@ export function syncWritingErrorProgress(
       )
       added++
     } else {
-      byId.set(card.id, { ...withCard(old, card), updatedAt: old.updatedAt })
+      const next = { ...withCard(old, card), updatedAt: old.updatedAt }
+      if (cardContentChanged(old, next)) changed++
+      byId.set(card.id, next)
     }
   }
   return {
@@ -333,5 +336,19 @@ export function syncWritingErrorProgress(
       .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
       .slice(0, WRITING_ERROR_PROGRESS_CAP),
     added,
+    changed,
   }
+}
+
+/** 只比较卡片内容；复习进度字段（streak / dueAt）不参与。 */
+function cardContentChanged(a: WritingErrorProgress, b: WritingErrorProgress): boolean {
+  return (
+    a.articleId !== b.articleId ||
+    a.sentenceId !== b.sentenceId ||
+    a.examId !== b.examId ||
+    a.focus !== b.focus ||
+    a.original !== b.original ||
+    a.suggestion !== b.suggestion ||
+    a.reason !== b.reason
+  )
 }

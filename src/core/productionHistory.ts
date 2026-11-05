@@ -1,6 +1,7 @@
 import { dayKeyLocal } from './activity'
 import type {
   ProductionMode,
+  ProductionTarget,
   ProductionTargetHit,
   ProductionTargetKind,
 } from './production'
@@ -168,12 +169,15 @@ export function isProgressWeak(progress: ProductionProgress): boolean {
 export interface ProductionReviewCounts {
   due: number
   weak: number
+  /** 全库候选里还没练过的目标块；不传候选时保持 0。 */
+  newTargets: number
 }
 
-/** 顶栏 / 今日计划用的目标块提醒数：到期 + 薄弱。 */
+/** 顶栏 / 今日计划用的目标块提醒数：到期 + 薄弱 + 新目标。 */
 export function productionReviewCounts(
   progress: readonly ProductionProgress[],
   nowIso: string,
+  candidates: readonly ProductionTarget[] = [],
 ): ProductionReviewCounts {
   let due = 0
   let weak = 0
@@ -181,7 +185,9 @@ export function productionReviewCounts(
     if (isProgressDue(p, nowIso)) due++
     if (isProgressWeak(p)) weak++
   }
-  return { due, weak }
+  const keys = new Set(progress.map((p) => p.key))
+  const newTargets = candidates.filter((t) => !keys.has(productionTargetKey(t.kind, t.text))).length
+  return { due, weak, newTargets }
 }
 
 export function isProgressRecent(progress: ProductionProgress, nowIso: string, days = 7): boolean {
@@ -313,6 +319,8 @@ export interface ProductionAttemptGroup {
   sessionId?: string
   promptId: string
   title: string
+  /** 旧记录没有 sessionId，只做了日期兜底分组。 */
+  legacy?: boolean
   records: WritingRecord[]
 }
 
@@ -331,7 +339,7 @@ export function groupProductionAttempts(records: readonly WritingRecord[]): Prod
     else {
       groups.set(key, {
         key,
-        ...(task.sessionId ? { sessionId: task.sessionId } : {}),
+        ...(task.sessionId ? { sessionId: task.sessionId } : { legacy: true }),
         promptId: task.promptId,
         title: task.task || task.topic,
         records: [rec],
