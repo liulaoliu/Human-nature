@@ -61,6 +61,44 @@
   line-height: 1.65;
   resize: vertical;
 }
+.production-cloze {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  line-height: 1.7;
+  letter-spacing: 0.02em;
+}
+.production-wordbank {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  line-height: 1.8;
+}
+.production-pairs {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.production-pair {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.production-pair textarea {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--input-bg, var(--panel));
+  color: inherit;
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+}
 .production-notice {
   padding: 8px 10px;
   border-left: 3px solid var(--accent);
@@ -157,6 +195,70 @@
   gap: 10px;
   flex-wrap: wrap;
   font-size: 13px;
+}
+.production-stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  font-size: 13px;
+}
+.production-history-layout {
+  display: grid;
+  grid-template-columns: minmax(200px, 0.8fr) minmax(0, 1.6fr);
+  gap: 12px;
+  align-items: start;
+}
+.production-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.production-history-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.production-history-item.active {
+  border-color: var(--accent);
+  background: var(--panel-2);
+}
+.production-history-detail {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 10px;
+  align-items: start;
+}
+.production-history-attempt {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+.production-history-text {
+  white-space: pre-wrap;
+  line-height: 1.65;
+}
+@media (max-width: 720px) {
+  .production-history-layout {
+    grid-template-columns: 1fr;
+  }
 }
 .production-done {
   align-items: flex-start;

@@ -13,7 +13,11 @@ const packRaw = JSON.stringify({
   prompts: [{ zh: '跟同事说明你下午会跟进。', goal: '说明进度', targetIds: ['v1|self|word'] }],
 })
 const topicPackRaw = JSON.stringify({
-  prompts: [{ zh: '解释你为什么迟到了。', goal: '解释原因' }],
+  prompts: [
+    { zh: '解释你为什么迟到了。', goal: '解释原因' },
+    { zh: '向同事提出一个请求。', goal: '提出请求' },
+    { zh: '表达你对这个安排的不同意见。', goal: '表达不同意见' },
+  ],
 })
 const feedbackRaw = JSON.stringify({
   version: 2,
@@ -249,6 +253,85 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     )
   })
 
+  it('刷新后恢复当前会话草稿；跳过会保留草稿并进入下一题', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        scope: 'all',
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    act(() => h.result.current.setAnswer('draft answer'))
+    act(() => h.result.current.close())
+    h.unmount()
+
+    const restored = setup()
+    act(() => restored.result.current.openProduction())
+    expect(restored.result.current.stage).toBe('playing')
+    expect(restored.result.current.answer).toBe('draft answer')
+    expect(restored.result.current.current?.zh).toContain('跟进')
+
+    act(() => restored.result.current.skip())
+    expect(restored.result.current.stage).toBe('done')
+  })
+
+  it('手工纠正目标块命中会写回已保存的一稿', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        scope: 'all',
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    act(() => h.result.current.setAnswer('I run daily.'))
+    await act(async () => {
+      await h.result.current.grade()
+    })
+    act(() => h.result.current.setHitUsed(h.result.current.hits[0].id, false))
+    expect(h.result.current.hits[0].used).toBe(false)
+    expect(
+      (h.getRecords()[0].task as { hits?: { used: boolean }[] }).hits?.[0].used,
+    ).toBe(false)
+  })
+
+  it('风味酸奶：英译中方向 + 用户对齐后的句对直接开始', () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'yogurt',
+        yogurtDirection: 'en-zh',
+        yogurtParagraph: false,
+      }),
+    )
+    act(() =>
+      h.result.current.startYogurtPairs([
+        { source: 'Hello.', reference: '你好。' },
+        { source: 'Goodbye.', reference: '再见。' },
+      ]),
+    )
+    expect(h.result.current.stage).toBe('playing')
+    expect(h.result.current.prompts).toHaveLength(2)
+    expect(h.result.current.current).toMatchObject({
+      zh: 'Hello.',
+      reference: '你好。',
+      answerLang: 'zh',
+    })
+  })
+
   it('风味酸奶：本地拆句，不调 AI 出题；批改时把参考译文作为范句', async () => {
     const h = setup()
     act(() =>
@@ -256,6 +339,7 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
         mode: 'yogurt',
         sourceText: '第一句。第二句。',
         referenceText: 'First sentence. Second sentence.',
+        yogurtParagraph: false,
       }),
     )
     await act(async () => {

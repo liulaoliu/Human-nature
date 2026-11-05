@@ -21,6 +21,7 @@ import {
   type PracticeRecord,
 } from '../../core/practice'
 import { dayDetail, fmtSpan, summarizeRange, type StatsInput } from '../../core/statsSummary'
+import { productionRecords, productionStats } from '../../core/productionHistory'
 import type { StudyDay } from '../../core/vocabStats'
 import type { WritingRecord } from '../../core/writing'
 import DayHeatmap from './DayHeatmap'
@@ -117,6 +118,7 @@ export default function StatsPanel({
   const month = useMemo(() => summarizeRange(input, monthFrom, tk), [input, monthFrom, tk])
   // 「累计」= 到逻辑今天为止的全部记录（记录本身有上限：活动 400 天 / 练习 500 条）。
   const all = useMemo(() => summarizeRange(input, '0000-01-01', tk), [input, tk])
+  const production = useMemo(() => productionStats(productionRecords(writingHistory)), [writingHistory])
 
   const [weeks, setWeeks] = useState(13)
   const [day, setDay] = useState<string | null>(null)
@@ -258,6 +260,15 @@ export default function StatsPanel({
       </div>
       <div className="muted">
         {(Object.keys(PRACTICE_LABEL) as PracticeKind[]).map((k) => `${PRACTICE_LABEL[k]} ${pct(kindSums[k])}`).join(' · ')}
+      </div>
+
+      <div className="side-label">奶牛工棚</div>
+      <div className="stat-line">
+        <span className="stat-name">产出</span>
+        <span className="stat-cat">{unit(production.attempts, '次')}</span>
+        <span className="stat-cat">重写 {unit(production.rewrites, '次')}</span>
+        <span className="stat-cat">目标块命中 {production.targetAttempts ? `${Math.round(production.hitRate * 100)}%` : '—'}</span>
+        <span className="stat-cat">均分 {production.attempts ? Math.round(production.avgScore) : '—'}</span>
       </div>
 
       <div className="side-label">

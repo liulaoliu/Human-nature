@@ -282,6 +282,7 @@ export default function ReaderApp() {
     setWritingHistory: services.setWritingHistory,
     recordActivity,
     flash,
+    speak,
   })
 
   // 派生统计簇（会话累计 / 背词 / 到期预测 / 按文章产出 / AI 候选 / 待选过滤）：

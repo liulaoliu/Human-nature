@@ -21,12 +21,15 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
   const model = {
     open: true,
     articleTitle: 'A',
+    articleIdentity: 'A',
+    sessionMode: 'skim',
     openProduction: noop,
     close: noop,
     stage: 'setup',
     settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
     updateSettings: noop,
     start: noop,
+    startYogurtPairs: noop,
     restart: noop,
     current: null,
     prompts: [],
@@ -36,10 +39,12 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     feedback: null,
     previousFeedback: null,
     hits: [],
+    setHitUsed: noop,
     round: 1,
     rewrite: noop,
     grade: noop,
     next: noop,
+    skip: noop,
     generating: false,
     grading: false,
     error: '',
@@ -50,6 +55,20 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     pendingPrompt: '',
     poolInfo: null,
     history: [],
+    allHistory: [],
+    progress: [],
+    stats: {
+      attempts: 0,
+      sessions: 0,
+      rewrites: 0,
+      modes: {},
+      targetAttempts: 0,
+      targetHits: 0,
+      targetMisses: 0,
+      hitRate: 0,
+      avgScore: 0,
+    },
+    sessionId: 's1',
     cancelRun: noop,
     ...over,
   } as unknown as ReturnType<typeof useProductionSession>
@@ -110,28 +129,31 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(screen.getByLabelText('每题目标块数')).toBeTruthy()
   })
 
-  it('三种模式可切；风味酸奶显示中英两个粘贴框，不走主题', () => {
+  it('三种模式可切；风味酸奶先拆句预览，再开始逐句', () => {
     const updateSettings = vi.fn()
-    const start = vi.fn()
+    const startYogurtPairs = vi.fn()
     const model = props({
-      start,
+      startYogurtPairs,
       updateSettings,
       settings: {
         ...DEFAULT_PRODUCTION_SETTINGS,
         mode: 'yogurt',
-        sourceText: '你好。',
-        referenceText: 'Hello.',
+        sourceText: '你好。第二句。',
+        referenceText: 'Hello. Second sentence.',
       },
     })
     render(<ProductionPanel model={model} />)
     expect(screen.getByRole('button', { name: /全脂/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /脱脂奶/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /风味酸奶/ })).toBeTruthy()
-    expect((screen.getByLabelText('风味酸奶中文原文') as HTMLTextAreaElement).value).toBe('你好。')
-    expect((screen.getByLabelText('风味酸奶英文参考译文') as HTMLTextAreaElement).value).toBe('Hello.')
+    expect((screen.getByLabelText('风味酸奶原文') as HTMLTextAreaElement).value).toBe('你好。第二句。')
+    expect((screen.getByLabelText('风味酸奶参考译文') as HTMLTextAreaElement).value).toBe('Hello. Second sentence.')
     expect(screen.queryByLabelText('产出主题')).toBeNull()
-    fireEvent.click(screen.getByRole('button', { name: '生成逐句拷打' }))
-    expect(start).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '拆句预览' }))
+    expect(screen.getByLabelText('第1对原文')).toBeTruthy()
+    expect(screen.getByLabelText('第2对参考译文')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '开始逐句拷打' }))
+    expect(startYogurtPairs).toHaveBeenCalled()
   })
 
   it('答题页先不暴露英文目标块；提交后显示目标和重写入口', () => {

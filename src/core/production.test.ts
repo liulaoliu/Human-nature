@@ -2,20 +2,27 @@ import { describe, expect, it } from 'vitest'
 import { defaultReviewState } from '../types/document'
 import { sentenceFixture, vocabItem } from './testFixtures'
 import {
-  buildProductionPackPrompt,
   buildProductionTargets,
-  buildTopicPackPrompt,
-  buildYogurtPrompts,
   checkProductionTargets,
+  clozeSentence,
+  shuffledWords,
   DEFAULT_PRODUCTION_SETTINGS,
-  makeProductionTask,
   normalizeProductionSettings,
-  parseProductionPack,
-  parseTopicPack,
   productionDocLemmas,
   targetUsed,
   type ProductionTarget,
 } from './production'
+import {
+  buildProductionPackPrompt,
+  buildTopicPackPrompt,
+  buildYogurtPrompts,
+  buildYogurtPromptsFromPairs,
+  makeProductionTask,
+  parseProductionPack,
+  parseTopicPack,
+  validateProductionPack,
+  validateTopicPack,
+} from './productionPrompts'
 
 const target = (over: Partial<ProductionTarget> = {}): ProductionTarget => ({
   id: 'v1|self|word',
@@ -154,6 +161,7 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
       topic: '远程办公',
       angle: 'work',
       tone: 'formal',
+      level: 'b2',
       articleTitle: 'A',
       targets: allowed,
       promptCount: 2,
@@ -171,6 +179,7 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
       topic: '',
       angle: 'daily',
       tone: 'neutral',
+      level: 'b2',
       articleTitle: 'A',
       targets: allowed,
       promptCount: 2,
@@ -186,6 +195,7 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
       topic: '迟到解释',
       angle: 'work',
       tone: 'neutral',
+      level: 'b2',
       articleTitle: 'A',
       promptCount: 3,
     })
@@ -196,6 +206,7 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
       topic: '',
       angle: 'daily',
       tone: 'neutral',
+      level: 'b2',
       articleTitle: 'A',
       promptCount: 3,
       randomTopic: true,
@@ -241,14 +252,40 @@ describe('风味酸奶：中英对照拆句', () => {
     expect(buildYogurtPrompts('', 'Hello.')).toBeNull()
     expect(buildYogurtPrompts('你好。', '')).toBeNull()
   })
+
+  it('英译中方向 + 整段连写', () => {
+    const result = buildYogurtPromptsFromPairs(
+      [
+        { source: 'Hello.', reference: '你好。' },
+        { source: 'Goodbye.', reference: '再见。' },
+      ],
+      'en-zh',
+      '',
+      true,
+    )
+    expect(result?.prompts).toHaveLength(3)
+    expect(result?.prompts[0]).toMatchObject({ answerLang: 'zh', reference: '你好。' })
+    expect(result?.prompts[2].goal).toBe('整段英译中')
+    expect(result?.prompts[2].zh).toContain('Hello.')
+  })
 })
 
 describe('targetUsed / checkProductionTargets：目标块硬校验', () => {
   it('单词允许常见词形后缀，词组按连续文本匹配', () => {
     expect(targetUsed('I am running daily.', target())).toBe(true)
-    expect(targetUsed('I ran daily.', target())).toBe(false)
+    expect(targetUsed('I ran daily.', target())).toBe(true)
     expect(targetUsed('We need to run out of time.', target({ kind: 'phrase', text: 'run out' }))).toBe(true)
+    expect(targetUsed('We run quickly out of time.', target({ kind: 'phrase', text: 'run out' }))).toBe(true)
     expect(targetUsed('run-out', target({ kind: 'phrase', text: 'run out' }))).toBe(false)
+  })
+
+  it('挖空 / 词序提示只改展示，不破坏原句', () => {
+    const model = 'I will follow up with the client.'
+    const out = clozeSentence(model, [target({ kind: 'phrase', text: 'follow up' })])
+    expect(out).toContain('_____')
+    expect(out).not.toContain('follow up')
+    expect(model).toBe('I will follow up with the client.')
+    expect(shuffledWords(model, 'p1').sort()).toEqual(model.split(' ').sort())
   })
 
   it('逐项命中；全中 exact', () => {
@@ -318,6 +355,47 @@ describe('ProductionSettings / task / doc lemmas', () => {
     expect(task.mustUse).toEqual([])
     expect(task.focus).toBe('逐句翻译')
     expect(task.rubric).toHaveLength(3)
+  })
+
+  it('AI 题目包硬校验：数量 / 每题目标数 / 不重复', () => {
+    const t1 = target()
+    const t2 = target({ id: 't2', text: 'curb' })
+    const good = [
+      { id: 'p1', zh: '一', goal: '', targets: [t1] },
+      { id: 'p2', zh: '二', goal: '', targets: [t2] },
+    ]
+    expect(validateProductionPack(good, 2, 1)).toEqual({ ok: true, reason: '' })
+    expect(validateProductionPack(good.slice(0, 1), 2, 1).ok).toBe(false)
+    expect(validateProductionPack([{ ...good[0], targets: [t1, t2] }], 1, 1).ok).toBe(false)
+    expect(validateProductionPack([good[0], { ...good[1], targets: [t1] }], 2, 1).ok).toBe(false)
+    expect(validateTopicPack(good, 2).ok).toBe(true)
+    expect(validateTopicPack(good, 3).ok).toBe(false)
+  })
+
+  it('进度范围：weak / due / mistakes 用 attempts 现算的进度筛选', () => {
+    const weak = vocabItem({ id: 'v1', word: 'run', lemma: 'run', meaning: '跑' })
+    const strong = vocabItem({ id: 'v2', word: 'curb', lemma: 'curb', meaning: '抑制' })
+    const progress = [
+      { key: 'word:run', kind: 'word' as const, text: 'run', attempts: 2, hits: 0, misses: 2, lastAt: '2026-11-01T00:00:00.000Z', dueAt: '2026-11-01T00:00:00.000Z' },
+      { key: 'word:curb', kind: 'word' as const, text: 'curb', attempts: 2, hits: 2, misses: 0, lastAt: '2026-11-01T00:00:00.000Z', dueAt: '2027-01-01T00:00:00.000Z' },
+    ]
+    const opts = {
+      items: [weak, strong],
+      articleIdentity: 'A',
+      docLemmas: new Set<string>(),
+      types: ['word' as const],
+      limit: 2,
+      weakRatio: 0,
+      progress,
+      nowIso: '2026-11-05T00:00:00.000Z',
+      rng: () => 0,
+    }
+    expect(buildProductionTargets({ ...opts, scope: 'weak' }).targets.map((t) => t.text)).toEqual(['run'])
+    expect(buildProductionTargets({ ...opts, scope: 'mistakes' }).targets.map((t) => t.text)).toEqual(['run'])
+    expect(buildProductionTargets({ ...opts, scope: 'due' }).targets.map((t) => t.text)).toEqual(['run'])
+    expect(buildProductionTargets({ ...opts, scope: 'recent' }).targets.map((t) => t.text)).toEqual(
+      expect.arrayContaining(['run', 'curb']),
+    )
   })
 
   it('正文词 + 语言点词都算本篇 lemma', () => {

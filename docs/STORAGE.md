@@ -220,9 +220,11 @@ learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v1
 - `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError / production`；
   `goldenError` 是错因复习里的 AI 订正记录，照常进历史/备份/导出，但 `filterWritingErrorRecords`
   会跳过它，避免「改错产生新错因、再改」自己长卡。
-- **奶牛工棚 MVP 复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存主题 /
-  中文情境 / 目标块 / 命中情况，`feedback_json` 仍是 v2 批改；不新开表。等到需要按目标块排期
-  （`production_progress`）再单独迁移，避免现在为了一个功能复制一套历史/导出/备份链路。
+- **奶牛工棚复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存模式 / 主题 /
+  中文情境 / 参考译文 / 目标块 / 命中 / sessionId，`feedback_json` 仍是 v2 批改；不新开 attempts 表。
+  目标块 due/weak/recent/mistakes 进度由这些 attempts **现算**，不额外存 `production_progress`：
+  attempts 是 append-only 的事实，多存一份派生状态只会多一个要迁移和对账的源。
+  未提交的当前会话草稿在 `reader:productionDraft`（按文章校验），刷新/重进工棚可恢复。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
   保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
   `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。

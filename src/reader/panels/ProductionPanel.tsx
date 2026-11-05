@@ -1,25 +1,38 @@
 import { useState } from 'react'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
-  isProductionTask,
-  productionHits,
   PRODUCTION_ANGLE_LABEL,
   PRODUCTION_ANGLES,
+  PRODUCTION_LEVEL_LABEL,
+  PRODUCTION_LEVELS,
   PRODUCTION_MODE_DESC,
   PRODUCTION_MODE_LABEL,
   PRODUCTION_MODES,
   PRODUCTION_PROMPT_COUNTS,
+  PRODUCTION_SCOPES,
+  PRODUCTION_SCOPE_LABEL,
   PRODUCTION_TARGETS_PER_PROMPT,
   PRODUCTION_TARGET_TYPES,
   PRODUCTION_TONE_LABEL,
   PRODUCTION_TONES,
+  PRODUCTION_VARIANT_LABEL,
+  PRODUCTION_VARIANTS,
   PRODUCTION_WEAK_RATIOS,
+  clozeSentence,
+  shuffledWords,
   type ProductionTargetKind,
 } from '../../core/production'
+import {
+  isProductionTask,
+  pairYogurtTexts,
+  productionHits,
+  type YogurtPair,
+} from '../../core/productionPrompts'
 import { writingRecordLabel } from '../../core/writing'
 import type { useProductionSession } from '../hooks/useProductionSession'
 import GoldenFeedback from './golden/GoldenFeedback'
 import RoundSizeSelect from './RoundSizeSelect'
+import ProductionHistoryPanel from './ProductionHistoryPanel'
 
 export interface ProductionPanelProps {
   model: ReturnType<typeof useProductionSession>
@@ -41,32 +54,121 @@ const TARGET_TYPE_LABEL: Record<ProductionTargetKind, string> = {
  */
 export default function ProductionPanel({ model }: ProductionPanelProps) {
   const [pasteText, setPasteText] = useState('')
+  const [yogurtPairs, setYogurtPairs] = useState<YogurtPair[] | null>(null)
+  const [pairWarning, setPairWarning] = useState('')
+  const [pairError, setPairError] = useState('')
+  const [historyOpen, setHistoryOpen] = useState(false)
   const articleTitle = model.articleTitle
   const { settings, updateSettings } = model
   const pastePrompt = model.pendingPrompt
-  const isYogurt = settings.mode === 'yogurt'
-  const isSkim = settings.mode === 'skim'
-  const isFull = settings.mode === 'full'
+  const activeMode = model.stage === 'playing' ? model.sessionMode : settings.mode
+  const isYogurt = activeMode === 'yogurt'
+  const isSkim = activeMode === 'skim'
+  const isFull = activeMode === 'full'
   const useChunks = isYogurt ? false : isFull ? settings.fullUseChunks : settings.skimUseChunks
   const showPaste = !!model.pasteKind && !(isYogurt && model.pasteKind === 'pack')
   const canStart = isYogurt
-    ? !!settings.sourceText.trim() && !!settings.referenceText.trim()
+    ? !!settings.sourceText.trim() &&
+      !!settings.referenceText.trim() &&
+      (!yogurtPairs || yogurtPairs.some((p) => p.source.trim() || p.reference.trim()))
     : isSkim
       ? !!settings.topic.trim() && (!useChunks || !!settings.types.length)
       : !useChunks || !!settings.types.length
+
+  const sourceLabel = settings.yogurtDirection === 'en-zh' ? '原文（英文）' : '原文（中文）'
+  const referenceLabel = settings.yogurtDirection === 'en-zh' ? '参考译文（中文）' : '参考译文（英文）'
 
   const toggleType = (kind: ProductionTargetKind, on: boolean) => {
     const types = on ? [...new Set([...settings.types, kind])] : settings.types.filter((t) => t !== kind)
     updateSettings({ types })
   }
 
+  const invalidatePairs = () => {
+    setYogurtPairs(null)
+    setPairWarning('')
+    setPairError('')
+  }
+
+  const previewYogurt = () => {
+    const result = pairYogurtTexts(settings.sourceText, settings.referenceText, settings.yogurtSplit)
+    if (!result) {
+      setPairError('两边都要有内容，才能拆句')
+      return
+    }
+    setYogurtPairs(result.pairs)
+    setPairWarning(result.warning)
+    setPairError('')
+  }
+
+  const updatePair = (index: number, patch: Partial<YogurtPair>) => {
+    setYogurtPairs((prev) => prev?.map((p, i) => (i === index ? { ...p, ...patch } : p)) ?? null)
+  }
+
+  const movePair = (index: number, delta: number) => {
+    setYogurtPairs((prev) => {
+      if (!prev) return prev
+      const next = [...prev]
+      const to = index + delta
+      if (to < 0 || to >= next.length) return prev
+      ;[next[index], next[to]] = [next[to], next[index]]
+      return next
+    })
+  }
+
+  const deletePair = (index: number) => {
+    setYogurtPairs((prev) => prev?.filter((_, i) => i !== index) ?? null)
+  }
+
+  const mergeNextPair = (index: number) => {
+    setYogurtPairs((prev) => {
+      if (!prev || index + 1 >= prev.length) return prev
+      const next = [...prev]
+      next[index] = {
+        source: `${next[index].source} ${next[index + 1].source}`.trim(),
+        reference: `${next[index].reference} ${next[index + 1].reference}`.trim(),
+      }
+      next.splice(index + 1, 1)
+      return next
+    })
+  }
+
+  const splitPair = (index: number) => {
+    setYogurtPairs((prev) => {
+      if (!prev) return prev
+      const pair = prev[index]
+      const result = pairYogurtTexts(pair.source, pair.reference, 'sentence')
+      if (!result || (result.sourceCount <= 1 && result.referenceCount <= 1)) return prev
+      const next = [...prev]
+      next.splice(index, 1, ...result.pairs)
+      return next
+    })
+  }
+
+  if (historyOpen) {
+    return (
+      <ProductionHistoryPanel
+        records={model.allHistory}
+        progress={model.progress}
+        articleIdentity={model.articleIdentity}
+        articleTitle={articleTitle}
+        onBack={() => setHistoryOpen(false)}
+      />
+    )
+  }
+
   return (
     <div className="study production">
       <div className="bar study-bar">
-        <button onClick={model.close} title="结束本组；已提交的作答会留在历史里">
-          结束
+        <button
+          onClick={model.close}
+          title={model.stage === 'playing' ? '暂停这一组；未提交草稿会保留，下次回到这里继续' : '关闭工棚'}
+        >
+          {model.stage === 'playing' ? '暂停' : '关闭'}
         </button>
         <b>🐄 D老师奶牛工棚</b>
+        <button onClick={() => setHistoryOpen(true)} title="看产出历史、两稿对比和目标块趋势">
+          历史
+        </button>
         <span className="muted">
           {model.stage === 'setup' ? '选草料' : model.stage === 'playing' ? '挤奶中' : '收工'}
           {articleTitle ? ` · ${articleTitle}` : ''}
@@ -96,25 +198,117 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
 
           {isYogurt ? (
             <div className="production-field">
-              <span className="muted">中文原文</span>
+              <div className="bar">
+                <select
+                  aria-label="风味酸奶方向"
+                  value={settings.yogurtDirection}
+                  onChange={(e) => {
+                    updateSettings({ yogurtDirection: e.target.value as typeof settings.yogurtDirection })
+                    invalidatePairs()
+                  }}
+                >
+                  <option value="zh-en">中 → 英</option>
+                  <option value="en-zh">英 → 中</option>
+                </select>
+                <select
+                  aria-label="风味酸奶拆句方式"
+                  value={settings.yogurtSplit}
+                  onChange={(e) => {
+                    updateSettings({ yogurtSplit: e.target.value as typeof settings.yogurtSplit })
+                    invalidatePairs()
+                  }}
+                >
+                  <option value="sentence">按句号拆</option>
+                  <option value="line">按换行拆</option>
+                </select>
+                <button onClick={previewYogurt}>预览配对</button>
+                <label className="check-inline">
+                  <input
+                    type="checkbox"
+                    checked={settings.yogurtParagraph}
+                    onChange={(e) => updateSettings({ yogurtParagraph: e.target.checked })}
+                  />
+                  最后加整段连写
+                </label>
+              </div>
+              <span className="muted">{sourceLabel}</span>
               <textarea
-                aria-label="风味酸奶中文原文"
+                aria-label="风味酸奶原文"
                 rows={7}
                 value={settings.sourceText}
-                onChange={(e) => updateSettings({ sourceText: e.target.value })}
-                placeholder="把在网上看到、值得背的中文段落粘到这里…"
+                onChange={(e) => {
+                  updateSettings({ sourceText: e.target.value })
+                  invalidatePairs()
+                }}
+                placeholder={
+                  settings.yogurtDirection === 'en-zh'
+                    ? '把值得背的英文原句 / 段落粘到这里…'
+                    : '把在网上看到、值得背的中文段落粘到这里…'
+                }
               />
-              <span className="muted">英文参考译文（答完 / 批改前不会显示）</span>
+              <span className="muted">{referenceLabel}（答完 / 批改前不会显示）</span>
               <textarea
-                aria-label="风味酸奶英文参考译文"
+                aria-label="风味酸奶参考译文"
                 rows={7}
                 value={settings.referenceText}
-                onChange={(e) => updateSettings({ referenceText: e.target.value })}
-                placeholder="把 Google 翻译 / 其他参考译文粘到这里…"
+                onChange={(e) => {
+                  updateSettings({ referenceText: e.target.value })
+                  invalidatePairs()
+                }}
+                placeholder={
+                  settings.yogurtDirection === 'en-zh'
+                    ? '把 Google 翻译 / 其他中文参考译文粘到这里…'
+                    : '把 Google 翻译 / 其他英文参考译文粘到这里…'
+                }
               />
               <span className="muted">
-                可以按段落粘贴；句数对不上时按顺序配对，末尾多出的内容并入最后一题。逐句练习在本机拆，不需要 AI。
+                可以按段落粘贴；先拆句预览，再手动合并 / 拆开 / 调整顺序。逐句练习在本机完成，不需要 AI 出题。
               </span>
+              {pairError && <div className="production-error">{pairError}</div>}
+              {pairWarning && <div className="production-notice">{pairWarning}</div>}
+              {yogurtPairs && (
+                <div className="production-pairs">
+                  {yogurtPairs.map((pair, i) => (
+                    <div className="production-pair" key={`${i}-${pair.source.slice(0, 8)}`}>
+                      <div className="muted">第 {i + 1} 对</div>
+                      <textarea
+                        aria-label={`第${i + 1}对原文`}
+                        rows={2}
+                        value={pair.source}
+                        onChange={(e) => updatePair(i, { source: e.target.value })}
+                        placeholder={sourceLabel}
+                      />
+                      <textarea
+                        aria-label={`第${i + 1}对参考译文`}
+                        rows={2}
+                        value={pair.reference}
+                        onChange={(e) => updatePair(i, { reference: e.target.value })}
+                        placeholder={referenceLabel}
+                      />
+                      <div className="bar">
+                        <button onClick={() => movePair(i, -1)} disabled={i === 0}>
+                          上移
+                        </button>
+                        <button onClick={() => movePair(i, 1)} disabled={i === yogurtPairs.length - 1}>
+                          下移
+                        </button>
+                        <button onClick={() => mergeNextPair(i)} disabled={i === yogurtPairs.length - 1}>
+                          合并下一对
+                        </button>
+                        <button onClick={() => splitPair(i)}>拆成两句</button>
+                        <button onClick={() => deletePair(i)}>删除</button>
+                      </div>
+                    </div>
+                  ))}
+                  <button
+                    onClick={() =>
+                      setYogurtPairs((prev) => [...(prev ?? []), { source: '', reference: '' }])
+                    }
+                  >
+                    ＋ 加一对
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <>
@@ -195,14 +389,41 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                       </option>
                     ))}
                   </select>
+                  <select
+                    aria-label="产出难度"
+                    value={settings.level}
+                    onChange={(e) => updateSettings({ level: e.target.value as typeof settings.level })}
+                  >
+                    {PRODUCTION_LEVELS.map((level) => (
+                      <option key={level} value={level}>
+                        {PRODUCTION_LEVEL_LABEL[level]}
+                      </option>
+                    ))}
+                  </select>
+                  {useChunks && (
+                    <select
+                      aria-label="产出题型"
+                      value={settings.variant}
+                      onChange={(e) => updateSettings({ variant: e.target.value as typeof settings.variant })}
+                    >
+                      {PRODUCTION_VARIANTS.map((variant) => (
+                        <option key={variant} value={variant}>
+                          {PRODUCTION_VARIANT_LABEL[variant]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   {useChunks && (
                     <select
                       aria-label="目标词块范围"
                       value={settings.scope}
                       onChange={(e) => updateSettings({ scope: e.target.value as typeof settings.scope })}
                     >
-                      <option value="article">本篇（有上下文）</option>
-                      <option value="all">全库（练迁移）</option>
+                      {PRODUCTION_SCOPES.map((scope) => (
+                        <option key={scope} value={scope}>
+                          {PRODUCTION_SCOPE_LABEL[scope]}
+                        </option>
+                      ))}
                     </select>
                   )}
                 </div>
@@ -261,18 +482,37 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
             </>
           )}
 
-          {model.error && <div className="production-error">{model.error}</div>}
+          {model.error && (
+            <div className="production-error">
+              {model.error}{' '}
+              <button
+                onClick={() => void (model.stage === 'playing' ? model.grade() : model.start())}
+                title="用同一份设置再试一次"
+              >
+                重试
+              </button>
+            </div>
+          )}
 
           <div className="bar">
             <button
               className="primary"
-              onClick={() => void model.start()}
+              onClick={() => {
+                if (isYogurt) {
+                  if (yogurtPairs) model.startYogurtPairs(yogurtPairs, pairWarning)
+                  else previewYogurt()
+                } else {
+                  void model.start()
+                }
+              }}
               disabled={model.generating || !canStart}
             >
               {model.generating
                 ? 'D老师出题中…'
                 : isYogurt
-                  ? '生成逐句拷打'
+                  ? yogurtPairs
+                    ? '开始逐句拷打'
+                    : '拆句预览'
                   : settings.mode === 'full'
                     ? '全脂随机出题'
                     : '按主题出题'}
@@ -364,6 +604,25 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
           <div className="production-prompt">
             <div className="production-zh">{model.current.zh}</div>
             {model.current.goal && <div className="muted">目标：{model.current.goal}</div>}
+            {settings.variant === 'cloze' && model.current.model && model.current.targets.length > 0 && (
+              <div className="production-cloze">
+                <b>挖空提示：</b>
+                {clozeSentence(model.current.model, model.current.targets)}
+              </div>
+            )}
+            {settings.variant === 'reorder' && model.current.model && model.current.targets.length > 0 && (
+              <div className="production-wordbank">
+                <b>词序提示：</b>
+                {shuffledWords(model.current.model, model.current.id).join(' · ')}
+              </div>
+            )}
+            {model.speak && (
+              <div className="bar">
+                <button onClick={() => model.speak?.(model.current?.zh ?? '')} title="朗读题干；先听再写">
+                  🔊 听题干
+                </button>
+              </div>
+            )}
           </div>
 
           {!model.feedback && (
@@ -399,7 +658,9 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                     ? model.current.targets.length
                       ? '先自己写一版英文，不要先看答案…'
                       : isYogurt
-                        ? '先自己翻译这句；参考译文在批改前不会出现…'
+                        ? model.current.answerLang === 'zh'
+                          ? '先自己翻成中文；参考译文在批改前不会出现…'
+                          : '先自己翻译这句；参考译文在批改前不会出现…'
                         : isFull
                           ? '按随机主题自己写一版英文，不要先看答案…'
                           : '围绕主题自己写一版英文，不要先看答案…'
@@ -420,6 +681,9 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                   {model.grading ? '批改中…' : model.round === 1 ? '批改这一稿' : '提交重写并批改'}
                 </button>
                 {model.grading && <button onClick={model.cancelRun}>取消</button>}
+                <button onClick={model.skip} title="不保存这一题的批改，直接进入下一题">
+                  跳过这题
+                </button>
               </div>
             </>
           )}
@@ -439,7 +703,13 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                   {model.hits.map((h) => (
                     <span key={h.id} className={h.used ? 'ok' : 'bad'}>
                       {h.text}：{h.used ? '用上了' : '没用上'}
-                      {h.meaning ? `（${h.meaning}）` : ''}
+                      {h.meaning ? `（${h.meaning}）` : ''}{' '}
+                      <button
+                        onClick={() => model.setHitUsed(h.id, !h.used)}
+                        title="本地词形匹配漏判时手工纠正"
+                      >
+                        {h.used ? '标为没用' : '标为用了'}
+                      </button>
                     </span>
                   ))}
                 </div>
@@ -454,11 +724,24 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                     下一题
                   </button>
                 )}
+                <button onClick={model.skip} title="不继续重写，直接进入下一题">
+                  跳过这题
+                </button>
               </div>
             </div>
           )}
 
-          {model.error && <div className="production-error">{model.error}</div>}
+          {model.error && (
+            <div className="production-error">
+              {model.error}{' '}
+              <button
+                onClick={() => void (model.stage === 'playing' ? model.grade() : model.start())}
+                title="用同一份设置再试一次"
+              >
+                重试
+              </button>
+            </div>
+          )}
 
           {showPaste && (
             <div className="production-paste">
