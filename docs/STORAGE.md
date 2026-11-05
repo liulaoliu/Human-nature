@@ -224,9 +224,10 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
 - **奶牛工棚复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存模式 / 主题 /
   中文情境 / 参考译文 / 目标块 / 命中 / sessionId，`feedback_json` 仍是 v2 批改；不新开 attempts 表。
   目标块 due/weak/recent/mistakes 进度由这些 attempts **归并**后写 `production_progress`（v13，key/kind/text/attempts/hits/misses/streak/last_at/due_at/updated_at）：
-  attempts 仍是 append-only 事实源；进度表是派生聚合，用于跨设备恢复和启动时少扫历史。前端先按 attempts 重算再落表，避免导入/手工纠正后表漂移。
+  attempts 仍是 append-only 事实源；进度表是派生聚合，用于跨设备恢复和启动时少扫历史。前端首次加载或记录被删/手工改命中时全量回算，新增 attempts 只增量叠加；落表以 payload 为准清掉孤儿行，显式空数组会清空表，整份保存未带该字段则不动。
   未提交的当前会话草稿在 `reader:productionDraft`（按文章校验、最多 5 篇），刷新/重进工棚可恢复；
-  整库备份会带上它，覆盖导入替换、合并导入按文章取较新草稿。
+  整库备份会带上它，覆盖导入替换、合并导入按文章取较新草稿；同一浏览器保存时也只接受较新 `at`，旧标签页的迟到草稿不会覆盖新稿。
+  旧记录迁移前把原历史写到 `reader:productionLegacyBackup`，归组明细写到 `reader:productionLegacyReport`（不属于学习记录，不进 SQLite）。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
   保存 `status(active/paused/mastered)`、`streak`、`reviews`、`due_at` 和卡片内容；
   `answer_events` 仍写一条 `source='golden' / kind='error-fix'` 作审计，但到期判断以状态表为准。
