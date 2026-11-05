@@ -377,11 +377,11 @@
 .idrills b { display: block; margin-bottom: 6px; }
 .idrills-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
 .idrills-head b { margin-bottom: 0; }
-.idrill-limit { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.round-size { display: flex; align-items: center; gap: 6px; font-size: 12px; }
 .idrills .bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .idrill-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .idrill-row > .muted { flex: 0 0 auto; font-size: 12px; min-width: 62px; }
-.idrill-start {
+.round-start {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -392,7 +392,7 @@
   border-radius: var(--radius);
   background: var(--panel-2);
 }
-.idrill-start b { margin: 0; }
-.idrill-start .idrill-limit { font-size: 12px; }
+.round-start b { margin: 0; }
+.round-start .round-size { font-size: 12px; }
 .intensive-tip { margin-top: 8px; line-height: 1.6; }
 

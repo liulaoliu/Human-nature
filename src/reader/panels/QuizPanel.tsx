@@ -1,8 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { formatAnswerInput, maskAnswer, QUIZ_KIND_LABEL, type QuizQuestion } from '../../core/quiz'
 import type { VocabItem } from '../../types/document'
 import { fmtDur } from '../format'
 import { QUIZ_SCOPE_LABEL, type QuizScope } from './QuizSetupPanel'
+import RoundStartPrompt from './RoundStartPrompt'
+import { COMMON_ROUND_OPTIONS } from './RoundSizeSelect'
 
 export interface QuizResultRow {
   id: string
@@ -52,7 +54,10 @@ export interface QuizPanelProps {
   onSubmit: () => void
   onNext: () => void
   onRetryWrong: () => void
-  onRestart: () => void
+  /** 再来一轮：按上一轮模式复现，只换数量。 */
+  onRestart: (limit?: number) => void
+  /** 「再来一轮」弹窗的默认数量；不传 = 用本轮实际题数。 */
+  restartLimit?: number
   onSelectOption: (option: string) => void
   onInputChange: (value: string) => void
   /** 确认拼错判定，继续下一题（该词已进重学队列）。 */
@@ -84,12 +89,15 @@ export default function QuizPanel({
   onNext,
   onRetryWrong,
   onRestart,
+  restartLimit,
   onSelectOption,
   onInputChange,
   onAckSpellMiss,
   onRelearn,
 }: QuizPanelProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [restartOpen, setRestartOpen] = useState(false)
+  const [restartSize, setRestartSize] = useState(restartLimit ?? queueLength)
 
   // 换题后把焦点送回输入框（词形辨析是点选项，不聚焦）
   useEffect(() => {
@@ -98,7 +106,16 @@ export default function QuizPanel({
     }
   }, [question, checked])
 
+  // 新一轮已经开始：结算页的「再来一轮」选择器要收掉，别带到下一轮结束。
+  useEffect(() => {
+    if (question) setRestartOpen(false)
+  }, [question])
+
   const correct = results.filter((r) => r.correct).length
+  const openRestart = () => {
+    setRestartSize(restartLimit ?? queueLength)
+    setRestartOpen(true)
+  }
 
   return (
     <div className="study quiz">
@@ -279,11 +296,26 @@ export default function QuizPanel({
                     🔁 继续鞭打错题 {wrongIds.length}
                   </button>
                 )}
-                <button className={wrongIds.length ? '' : 'primary'} onClick={onRestart}>
+                <button className={wrongIds.length ? '' : 'primary'} onClick={openRestart}>
                   再来一轮
                 </button>
                 <button onClick={onClose}>回到阅读</button>
               </div>
+              {restartOpen && (
+                <RoundStartPrompt
+                  title="再来一轮"
+                  hint="沿用上一轮的题型/范围；已经考过的题会跳过"
+                  ariaLabel="再来一轮"
+                  value={restartSize}
+                  options={COMMON_ROUND_OPTIONS}
+                  onChange={setRestartSize}
+                  onStart={() => {
+                    setRestartOpen(false)
+                    onRestart(restartSize)
+                  }}
+                  onCancel={() => setRestartOpen(false)}
+                />
+              )}
             </div>
           )
         })()

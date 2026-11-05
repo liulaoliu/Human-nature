@@ -2,6 +2,7 @@ import type { StudyDeck } from '../../core/entryKind'
 import type { StudyMode } from '../../core/vocab'
 import { fmtDur } from '../format'
 import type { StudyScope } from '../hooks/useStudyPool'
+import RoundSizeSelect from './RoundSizeSelect'
 
 export interface StudyToolbarProps {
   index: number
@@ -117,18 +118,15 @@ export default function StudyToolbar({
       <button onClick={onStartArticleAll} disabled={navLocked} title="把这篇文章的生词整套过一遍（不分新学/复习、忽略新词配额）">
         本篇全部
       </button>
-      <select
-        value={String(newLimit)}
-        onChange={(e) => onNewLimitChange(Number(e.target.value))}
+      <RoundSizeSelect
+        ariaLabel="每天新词上限"
+        value={newLimit}
+        options={[0, 10, 20, 30, 50]}
+        onChange={onNewLimitChange}
         disabled={navLocked}
+        formatLabel={(n) => (n === 0 ? '新词不限' : `新词 ${n}/天`)}
         title="每天最多引入多少新词（下一轮生效）"
-      >
-        <option value="0">新词不限</option>
-        <option value="10">新词 10/天</option>
-        <option value="20">新词 20/天</option>
-        <option value="30">新词 30/天</option>
-        <option value="50">新词 50/天</option>
-      </select>
+      />
       <label className="check-inline" title="看中文拼英文（会屏掉自动朗读，避免剧透）">
         <input
           type="checkbox"
@@ -138,18 +136,15 @@ export default function StudyToolbar({
         />
         拼写
       </label>
-      <select
-        value={String(groupSize)}
-        onChange={(e) => onGroupSizeChange(Number(e.target.value))}
+      <RoundSizeSelect
+        ariaLabel="学习每组词数"
+        value={groupSize}
+        options={[0, 5, 10, 20, 50]}
+        onChange={onGroupSizeChange}
         disabled={navLocked || mode !== 'learn'}
+        formatLabel={(n) => (n === 0 ? '每组跟本篇' : `每组 ${n} 词`)}
         title="学习模式每组多少词：学完一组停下来，把这一组全部词拼写一遍（本篇范围默认整篇一组；换档下一组生效）"
-      >
-        <option value="0">每组跟本篇</option>
-        <option value="5">每组 5 词</option>
-        <option value="10">每组 10 词</option>
-        <option value="20">每组 20 词</option>
-        <option value="50">每组 50 词</option>
-      </select>
+      />
       <select
         value={String(drillAfter)}
         onChange={(e) => onDrillAfterChange(Number(e.target.value))}

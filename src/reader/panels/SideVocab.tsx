@@ -10,6 +10,7 @@ import BackupHealth from './BackupHealth'
 import LearningSnapshots from './LearningSnapshots'
 import { fmtDur } from '../format'
 import { calendarDayKey } from '../../core/activity'
+import RoundSizeSelect from './RoundSizeSelect'
 
 export interface SideVocabStats {
   totals: { picked: number; seconds: number }
@@ -300,16 +301,13 @@ export default function SideVocab({
         >
           速读
         </button>
-        <select
-          value={String(listenCount)}
-          onChange={(e) => onListenCountChange(Number(e.target.value))}
+        <RoundSizeSelect
+          ariaLabel="听力理解题数"
+          value={listenCount}
+          options={[5, 8, 10, 15]}
+          onChange={onListenCountChange}
           title="听力理解题出题数量（点「理解题」用）"
-        >
-          <option value="5">5 题</option>
-          <option value="8">8 题</option>
-          <option value="10">10 题</option>
-          <option value="15">15 题</option>
-        </select>
+        />
         <button
           onClick={onLanguagePrompt}
           disabled={!hasDoc}

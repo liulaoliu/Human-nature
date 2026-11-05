@@ -6,6 +6,7 @@ import {
   type DrillLimits,
   type QuizDrillKind,
 } from '../../core/intensiveDrill'
+import RoundStartPrompt from './RoundStartPrompt'
 
 interface DrillItem {
   kind: DrillKind
@@ -152,33 +153,17 @@ export default function DrillLauncher({
           </div>
 
           {pending && row.items.some((item) => item.kind === pending.item.kind) && (
-            <div
-              className="idrill-start"
-              role="group"
-              aria-label={`${pending.item.name}：开始前选择题数`}
-            >
-              <b>{pending.item.label}</b>
-              <span className="muted">开始前选题数（会记住）</span>
-              <label className="idrill-limit">
-                <span className="muted">本次</span>
-                <select
-                  aria-label={`${pending.item.name}每次题数`}
-                  value={String(pending.limit)}
-                  onChange={(e) => change(Number(e.target.value))}
-                  disabled={busy}
-                >
-                  {DRILL_LIMIT_OPTIONS.map((n) => (
-                    <option key={n} value={n}>
-                      {n} 题
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button className="primary" onClick={start} disabled={startDisabled}>
-                开始
-              </button>
-              <button onClick={() => setPending(null)}>取消</button>
-            </div>
+            <RoundStartPrompt
+              title={pending.item.label}
+              hint="开始前选题数（会记住）"
+              ariaLabel={pending.item.name}
+              value={pending.limit}
+              options={DRILL_LIMIT_OPTIONS}
+              onChange={change}
+              onStart={start}
+              onCancel={() => setPending(null)}
+              disabled={startDisabled}
+            />
           )}
         </Fragment>
       ))}

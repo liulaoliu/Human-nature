@@ -1,4 +1,5 @@
 import { ARTICLE_KINDS, QUIZ_KIND_LABEL, type QuizKind } from '../../core/quiz'
+import RoundSizeSelect, { COMMON_ROUND_OPTIONS } from './RoundSizeSelect'
 
 /** 考试范围。 */
 export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
@@ -111,15 +112,14 @@ export default function QuizSetupPanel({
           </div>
         </div>
         <div className="quiz-field">
-          <span className="muted">题量</span>
-          <div className="bar">
-            <select value={String(limit)} onChange={(e) => onLimitChange(Number(e.target.value))}>
-              <option value="10">10 题</option>
-              <option value="20">20 题</option>
-              <option value="50">50 题</option>
-              <option value="0">全部</option>
-            </select>
-          </div>
+          <RoundSizeSelect
+            label="题量"
+            ariaLabel="考试本轮题数"
+            value={limit}
+            options={COMMON_ROUND_OPTIONS}
+            onChange={onLimitChange}
+            title="这一轮最多考几题；「全部」= 当前范围/题型下所有题"
+          />
         </div>
         <div className="quiz-field">
           <span className="muted">答题</span>

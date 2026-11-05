@@ -154,7 +154,13 @@ export default function SessionHost({
           onSubmit={() => quiz.check()}
           onNext={quiz.next}
           onRetryWrong={quiz.retryWrong}
-          onRestart={quiz.start}
+          onRestart={(limit) => {
+            // 刷新恢复的会话没有 lastRound：按当前是不是文章测验回退到对应的开局。
+            if (quiz.lastRound) quiz.restart(limit)
+            else if (quiz.articleRun) quiz.startArticle(limit)
+            else quiz.start({ limit })
+          }}
+          restartLimit={quiz.lastRound?.limit ?? quiz.queue?.length ?? quiz.limit}
           onAckSpellMiss={quiz.ackSpellMiss}
           onRelearn={quiz.relearnSpellMiss}
           onSelectOption={(opt) => {

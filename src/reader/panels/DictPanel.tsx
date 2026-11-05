@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react'
 import { isClozeBlankCorrect, type ClozePart, type ClozeQuestion, type DiffToken } from '../../core/dictation'
+import RoundSizeSelect from './RoundSizeSelect'
 
 /** 拼写比对用的归一化：小写、去标点（撇号保留）。 */
 const normWord = (s: string) => s.toLowerCase().normalize('NFKC').replace(/[^a-z0-9']/g, '')
@@ -246,18 +247,14 @@ export default function DictPanel({
             </select>
           </>
         )}
-        <select
-          value={String(maxQuestions)}
-          onChange={(e) => onStart({ max: Number(e.target.value) })}
+        <RoundSizeSelect
+          ariaLabel="听写每轮题数"
+          value={maxQuestions}
+          options={[0, 5, 10, 20, 30, 50]}
+          onChange={(n) => onStart({ max: n })}
+          formatLabel={(n) => (n === 0 ? '不限题数' : `每轮 ${n} 题`)}
           title="每轮最多做几题；做不完下次从断点继续，避免一开就是几十题"
-        >
-          <option value="0">不限题数</option>
-          <option value="5">每轮 5 题</option>
-          <option value="10">每轮 10 题</option>
-          <option value="20">每轮 20 题</option>
-          <option value="30">每轮 30 题</option>
-          <option value="50">每轮 50 题</option>
-        </select>
+        />
         <span className="muted">
           {Math.min(index + 1, queue.length)} / {queue.length}
           {grandTotal > queue.length

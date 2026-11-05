@@ -176,7 +176,7 @@ describe('QuizPanel：结算', () => {
     expect(screen.getByRole('button', { name: '🔁 继续鞭打错题 2' })).toBeTruthy()
   })
 
-  it('没有错题时不显示继续鞭打，再来一轮为主按钮', () => {
+  it('没有错题时不显示继续鞭打，再来一轮先选数量再开始', () => {
     const onRestart = vi.fn()
     const onClose = vi.fn()
     render(
@@ -191,9 +191,51 @@ describe('QuizPanel：结算', () => {
     )
     expect(screen.queryByRole('button', { name: /继续鞭打/ })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '再来一轮' }))
+    // 还没开考：先展开数量选择，默认沿用本轮实际题数（queueLength = 5）
+    expect(onRestart).not.toHaveBeenCalled()
+    expect((screen.getByLabelText('再来一轮每次题数') as HTMLSelectElement).value).toBe('5')
+    fireEvent.click(screen.getByRole('button', { name: '开始' }))
+    expect(onRestart).toHaveBeenCalledWith(5)
+
     fireEvent.click(screen.getByRole('button', { name: '回到阅读' }))
-    expect(onRestart).toHaveBeenCalled()
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('再来一轮可以用新数量（15 → 30），取消不开始', () => {
+    const onRestart = vi.fn()
+    const { rerender } = render(
+      <QuizPanel
+        {...props({
+          question: null,
+          queueLength: 15,
+          restartLimit: 15,
+          results: [{ id: 'a', itemId: 'v1', correct: true }],
+          onRestart,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '再来一轮' }))
+    const select = screen.getByLabelText('再来一轮每次题数') as HTMLSelectElement
+    expect(select.value).toBe('15')
+    fireEvent.change(select, { target: { value: '30' } })
+    fireEvent.click(screen.getByRole('button', { name: '开始' }))
+    expect(onRestart).toHaveBeenCalledWith(30)
+
+    rerender(
+      <QuizPanel
+        {...props({
+          question: null,
+          queueLength: 15,
+          restartLimit: 15,
+          results: [{ id: 'a', itemId: 'v1', correct: true }],
+          onRestart,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '再来一轮' }))
+    fireEvent.click(screen.getByRole('button', { name: '取消' }))
+    expect(onRestart).toHaveBeenCalledTimes(1)
+    expect(screen.queryByLabelText('再来一轮每次题数')).toBeNull()
   })
 
   it('没有作答时正确率不显示，直接给 0/0', () => {
