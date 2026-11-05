@@ -271,15 +271,12 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           },
           onOpenProduction: () => {
             setPlanOpen(false)
-            props.production.updateSettings({
-              scope:
-                productionCounts.due > 0 || productionCounts.newTargets > 0
-                  ? 'due'
-                  : productionCounts.weak > 0
-                    ? 'weak'
-                    : 'all',
-            })
-            props.production.openProduction()
+            if (productionCounts.due > 0 || productionCounts.newTargets > 0) {
+              props.production.openDueProduction()
+            } else {
+              if (productionCounts.weak > 0) props.production.updateSettings({ scope: 'weak' })
+              props.production.openProduction()
+            }
           },
         }}
         intensive={{
