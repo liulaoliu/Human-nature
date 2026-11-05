@@ -64,6 +64,15 @@ describe('createQuizCheck：答题后朗读', () => {
   })
 })
 
+describe('createQuizCheck：答过的题记入本轮历史', () => {
+  it('判分后通知 onAnswered，交给下一轮去重', () => {
+    const onAnswered = vi.fn()
+    const p = params({ onAnswered })
+    createQuizCheck(p)('我每天跑步。')
+    expect(onAnswered).toHaveBeenCalledWith(articleQuestion)
+  })
+})
+
 describe('createQuizCheck：文章题不写词级账本', () => {
   it('只记活动 / 答题事件，不写 SRS、错题本、已学', () => {
     const p = params()

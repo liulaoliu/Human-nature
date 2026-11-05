@@ -26,6 +26,8 @@ export interface QuizCheckParams {
   markStudied: (itemId: string) => void
   recordActivity: (cat: ActivityCat, n?: number) => void
   recordAnswer?: (event: AnswerEventInput) => void
+  /** 这一题已经答过（下一轮用它跳过旧题；判分逻辑本身不关心）。 */
+  onAnswered?: (q: QuizQuestion) => void
   addMistake: (entry: MistakeEntry) => void
   dropMistake: (id: string) => void
   speak: (text: string) => void
@@ -56,6 +58,7 @@ export function createQuizCheck(params: QuizCheckParams): (answerOverride?: stri
     markStudied,
     recordActivity,
     recordAnswer,
+    onAnswered,
     addMistake,
     dropMistake,
     speak,
@@ -104,6 +107,7 @@ export function createQuizCheck(params: QuizCheckParams): (answerOverride?: stri
       correct: ok,
       questionId: q.id,
     })
+    onAnswered?.(q)
     // 答完朗读一下（看词选义读英文单词；其余读答案词形）。
     // 语法标记的答案是「可数 / 不可数」这类中文标签，读出来像在念选项，不是学习内容。
     if (speakAfter && q.kind !== 'mark') speak(q.kind === 'meaning' ? q.word : q.answer)

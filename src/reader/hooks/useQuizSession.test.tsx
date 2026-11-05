@@ -303,6 +303,70 @@ describe('useQuizSession：精读拷打的每次项数（记忆 / 词块）', ()
   })
 })
 
+describe('useQuizSession：新一轮沿用上一轮并跳过考过的题', () => {
+  const manyWords = (n: number) =>
+    Array.from({ length: n }, (_, i) =>
+      word({ id: `w${i}`, word: `word${i}`, lemma: `word${i}`, meaning: `意思${i}` }),
+    )
+
+  it('记住上一轮的实际题数；restart 只换数量', () => {
+    render(<Harness library={lib(manyWords(10))} />)
+    act(() => api!.startDrill(['spell'], 'all', { limit: 3 }))
+    expect(api!.lastRound).toMatchObject({ source: 'vocab', scope: 'all', limit: 3, kinds: ['spell'] })
+    expect(api!.queue).toHaveLength(3)
+
+    act(() => api!.restart(5))
+    expect(api!.queue).toHaveLength(5)
+    expect(api!.lastRound?.limit).toBe(5)
+  })
+
+  it('词级：答过的词下一轮跳过，不拿旧题凑数', () => {
+    render(<Harness library={lib(manyWords(6))} />)
+    act(() => api!.startDrill(['spell'], 'all', { limit: 2 }))
+    const answered = api!.queue![0]
+    act(() => api!.setInput(answered.answer))
+    act(() => api!.check())
+    act(() => api!.next())
+
+    act(() => api!.restart(2))
+    expect(api!.queue).toHaveLength(2)
+    expect(api!.queue!.every((q) => q.itemId !== answered.itemId)).toBe(true)
+  })
+
+  it('全考过：自动重开一轮，不会把当前范围卡死', () => {
+    render(<Harness library={lib(manyWords(2))} />)
+    act(() => api!.startDrill(['spell'], 'all', { limit: 2 }))
+    for (let i = 0; i < 2; i++) {
+      const q = api!.queue![i]
+      act(() => api!.setInput(q.answer))
+      act(() => api!.check())
+      act(() => api!.next())
+    }
+    flash.mockClear()
+
+    act(() => api!.restart(2))
+    expect(flash).toHaveBeenCalledWith('这一范围的新题已经考完，已重新开始一轮（会包含已考题）')
+    expect(api!.queue).toHaveLength(2)
+  })
+
+  it('文章测验 restart 仍然走文章级，不会掉成词级考试', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [],
+      sentences: Array.from({ length: 6 }, (_, i) =>
+        sentenceFixture(`s${i}`, `This is sentence number ${i}.`, { translation: `这是第 ${i} 句。` }),
+      ),
+    }
+    render(<Harness library={lib([word()])} doc={doc} />)
+    act(() => api!.startArticleDrill(['translate'], 1))
+    expect(api!.articleRun).toBe(true)
+    expect(api!.lastRound?.source).toBe('article')
+
+    act(() => api!.restart(2))
+    expect(api!.articleRun).toBe(true)
+    expect(api!.queue).toHaveLength(2)
+  })
+})
+
 describe('useQuizSession：拷打前先学一遍（预习卡）', () => {
   it('记忆拷打：先出预习卡，点「开始」才真正开考', () => {
     render(<Harness library={lib([word({ examples: [{ text: 'I run daily.' }] })])} />)

@@ -1,6 +1,7 @@
 import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
 import { buildArticleQuestions } from '../../core/articleQuiz'
 import { isArticleKind, shuffleQuiz, type QuizKind, type QuizQuestion } from '../../core/quiz'
+import { useQuizRoundHistory, type QuizRoundSpec } from './useQuizRoundHistory'
 import {
   buildQuizSet,
   poolFor,
@@ -9,6 +10,8 @@ import {
 } from '../../core/quizPool'
 import { buildWarmupCards, type DrillWarmupCard } from '../../core/quizWarmup'
 import type { Sentence, VocabItem } from '../../types/document'
+
+export type { QuizRoundSpec } from './useQuizRoundHistory'
 
 /** 预习态：题目已经出好，等人看完再开考。 */
 export interface DrillWarmupState {
@@ -31,6 +34,7 @@ export interface UseQuizStartsParams {
   poolCtx: PoolContext
   kinds: QuizKind[]
   setKinds: Dispatch<SetStateAction<QuizKind[]>>
+  scope: QuizScope
   setScope: Dispatch<SetStateAction<QuizScope>>
   limit: number
   unique: boolean
@@ -44,8 +48,8 @@ export interface QuizStarts {
   warmup: DrillWarmupState | null
   beginWarmup: () => void
   cancelWarmup: () => void
-  start: () => void
-  startArticle: () => void
+  start: (opts?: { limit?: number; scope?: QuizScope; kinds?: QuizKind[] }) => void
+  startArticle: (limit?: number) => void
   startItems: (ids: string[], kindsArg?: QuizKind[], opts?: { limit?: number }) => void
   startDrill: (
     ks: QuizKind[],
@@ -54,6 +58,12 @@ export interface QuizStarts {
   ) => void
   /** `limit` 省略 = 用考试设置里的题量；精读面板会传各自入口的数。 */
   startArticleDrill: (ks: QuizKind[], limit?: number) => void
+  /** 上一轮的模式 / 范围 / 题型 / 实际题数（结算页「再来一轮」用）。 */
+  lastRound: QuizRoundSpec | null
+  /** 按上一轮完整复现；只换 `limit`。 */
+  restart: (limit?: number) => void
+  /** 答完一题后记入本轮历史，下一轮跳过。 */
+  markAnswered: (q: QuizQuestion) => void
 }
 
 /**
@@ -61,6 +71,9 @@ export interface QuizStarts {
  *
  * 这里不碰进行中的答题状态，只决定「这一轮考哪些题」；预习卡也归它（题已经出好，
  * 只是等人看完再入队）。判分、完成结算仍在 `useQuizSession` 的其它子 hook。
+ *
+ * 「同一轮不重复」的口径：按 `quizHistory` 的 key 记已经答过的题（词级按词条、
+ * 文章级按题目），下一轮只从没答过的里面抽；新题不够就只考剩下的，不拿旧题凑数。
  */
 export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
   const {
@@ -71,6 +84,7 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
     poolCtx,
     kinds,
     setKinds,
+    scope,
     setScope,
     limit,
     unique,
@@ -81,28 +95,56 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
   } = params
 
   const [warmup, setWarmup] = useState<DrillWarmupState | null>(null)
+  const { lastRound, markAnswered, prepare, remember } = useQuizRoundHistory(flash)
+
+  /** track 里包含文章标识：换文章不继承上一篇的「考过」。 */
+  const trackKey = useCallback(
+    (source: 'vocab' | 'article', scopeArg: QuizScope, ks: QuizKind[]) =>
+      `${poolCtx.articleIdentity}|${source}|${source === 'article' ? '' : scopeArg}|${[...ks].sort().join(',')}`,
+    [poolCtx.articleIdentity],
+  )
+
+  /** 用当前设置出一份考卷（洗牌 + 限量 + 跳过已考）。 */
+  const start = useCallback(
+    (opts?: { limit?: number; scope?: QuizScope; kinds?: QuizKind[] }) => {
+      const nextScope = opts?.scope ?? scope
+      const nextKinds = opts?.kinds ?? kinds
+      const sourcePool = nextScope === scope ? pool : poolFor(studyable, nextScope, poolCtx)
+      const qs = buildQuizSet(sourcePool, nextKinds, unique)
+      if (!qs.length) {
+        flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
+        return
+      }
+      const take = opts?.limit ?? limit
+      const key = trackKey('vocab', nextScope, nextKinds)
+      const picked = prepare(key, qs, take)
+      setKinds(nextKinds)
+      setScope(nextScope)
+      remember({ source: 'vocab', scope: nextScope, kinds: nextKinds, limit: take, key }, picked, take)
+      begin(picked)
+    },
+    [pool, scope, kinds, studyable, poolCtx, unique, limit, begin, flash, setKinds, setScope, trackKey, prepare, remember],
+  )
 
   /** 文章级测验：按当前文章出题（英译中/中译英/功能词填空/句子排序/结构语法）。 */
-  const startArticle = useCallback(() => {
-    const sents = doc?.sentences ?? []
-    const ks = articleKinds.filter(isArticleKind)
-    const qs = buildArticleQuestions(sents, { kinds: ks })
-    if (!qs.length) {
-      flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
-      return
-    }
-    begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length), { article: true })
-  }, [doc, articleKinds, limit, begin, flash])
-
-  /** 用当前设置出一份考卷（洗牌 + 限量）。 */
-  const start = useCallback(() => {
-    const qs = buildQuizSet(pool, kinds, unique)
-    if (!qs.length) {
-      flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
-      return
-    }
-    begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length))
-  }, [pool, kinds, unique, limit, begin, flash])
+  const startArticle = useCallback(
+    (limitArg?: number) => {
+      const sents = doc?.sentences ?? []
+      const ks = articleKinds.filter(isArticleKind)
+      const qs = buildArticleQuestions(sents, { kinds: ks })
+      if (!qs.length) {
+        flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
+        return
+      }
+      const take = limitArg ?? limit
+      const key = trackKey('article', 'article', ks)
+      const picked = prepare(key, qs, take)
+      setArticleKinds(ks)
+      remember({ source: 'article', scope: 'article', kinds: ks, limit: take, key }, picked, take)
+      begin(picked, { article: true })
+    },
+    [doc, articleKinds, limit, begin, flash, setArticleKinds, trackKey, prepare, remember],
+  )
 
   /** 从指定词条开一轮考试（错题本「重练词汇」/ 错题包围战 用）。可指定题型。 */
   const startItems = useCallback(
@@ -115,9 +157,15 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       }
       if (kindsArg) setKinds(kindsArg)
       const take = opts?.limit ?? 0
-      begin(take > 0 ? shuffleQuiz(qs).slice(0, take) : qs)
+      const picked = take > 0 ? shuffleQuiz(qs).slice(0, take) : qs
+      remember(
+        { source: 'items', scope: 'all', kinds: kindsArg ?? kinds, limit: take, ids: [...ids], key: '' },
+        picked,
+        take,
+      )
+      begin(picked)
     },
-    [libraryItems, kinds, unique, begin, flash, setKinds],
+    [libraryItems, kinds, unique, begin, flash, setKinds, remember],
   )
 
   /**
@@ -135,11 +183,12 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
         flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
         return
       }
+      const take = opts?.limit ?? limit
+      const key = trackKey('vocab', scopeArg, ks)
+      const picked = prepare(key, qs, take)
       setKinds(ks)
       setScope(scopeArg)
-      // 精读面板每种拷打可以单独指定「每次几项」；其它入口仍用考试设置的题量。
-      const take = opts?.limit ?? limit
-      const picked = shuffleQuiz(qs).slice(0, take > 0 ? take : qs.length)
+      remember({ source: 'vocab', scope: scopeArg, kinds: ks, limit: take, key }, picked, take)
       if (opts?.warmup) {
         const cards = buildWarmupCards(libraryItems, picked, opts.warmup)
         setWarmup({
@@ -153,7 +202,20 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       }
       begin(picked)
     },
-    [studyable, poolCtx, unique, limit, begin, flash, setKinds, setScope, libraryItems],
+    [
+      studyable,
+      poolCtx,
+      unique,
+      limit,
+      begin,
+      flash,
+      setKinds,
+      setScope,
+      libraryItems,
+      trackKey,
+      prepare,
+      remember,
+    ],
   )
 
   /** 看完预习卡，开始拷打。 */
@@ -171,17 +233,46 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
   const startArticleDrill = useCallback(
     (ks: QuizKind[], limitArg?: number) => {
       const sents = doc?.sentences ?? []
-      const qs = buildArticleQuestions(sents, { kinds: ks.filter(isArticleKind) })
+      const articleKs = ks.filter(isArticleKind)
+      const qs = buildArticleQuestions(sents, { kinds: articleKs })
       if (!qs.length) {
         flash('文章测验没题可出（缺译文 / 语言点，或句子太少）')
         return
       }
-      setArticleKinds(ks)
       const take = limitArg ?? limit
-      begin(shuffleQuiz(qs).slice(0, take > 0 ? take : qs.length), { article: true })
+      const key = trackKey('article', 'article', articleKs)
+      const picked = prepare(key, qs, take)
+      setArticleKinds(ks)
+      remember({ source: 'article', scope: 'article', kinds: ks, limit: take, key }, picked, take)
+      begin(picked, { article: true })
     },
-    [doc, limit, begin, flash, setArticleKinds],
+    [doc, limit, begin, flash, setArticleKinds, trackKey, prepare, remember],
   )
 
-  return { warmup, beginWarmup, cancelWarmup, start, startArticle, startItems, startDrill, startArticleDrill }
+  /** 按上一轮的来源 / 范围 / 题型再来一轮，只换数量。 */
+  const restart = useCallback(
+    (limitArg?: number) => {
+      const spec = lastRound
+      if (!spec) return
+      const take = limitArg ?? spec.limit
+      if (spec.source === 'article') startArticleDrill(spec.kinds, take)
+      else if (spec.source === 'items' && spec.ids) startItems(spec.ids, spec.kinds, { limit: take })
+      else start({ limit: take, scope: spec.scope, kinds: spec.kinds })
+    },
+    [lastRound, start, startArticleDrill, startItems],
+  )
+
+  return {
+    warmup,
+    beginWarmup,
+    cancelWarmup,
+    start,
+    startArticle,
+    startItems,
+    startDrill,
+    startArticleDrill,
+    lastRound,
+    restart,
+    markAnswered,
+  }
 }
