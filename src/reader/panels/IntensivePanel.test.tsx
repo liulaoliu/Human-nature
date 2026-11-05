@@ -164,13 +164,22 @@ describe('IntensivePanel：看板与阶段', () => {
 })
 
 describe('IntensivePanel：拷打与复述', () => {
-  it('七种入口都先展开数量选择，确认后才开考；默认 10', () => {
+  it('记忆 / 词块直接进预习页；其它拷打先展开数量选择，确认后才开考', () => {
     const onDrill = vi.fn()
     const onSiege = vi.fn()
     render(<IntensivePanel {...props({ onDrill, onSiege })} />)
+
+    // 有「先看一遍」页的两档：数量在预习页选，这里不再弹数量。
+    for (const [label, kind] of [
+      ['🥊 记忆拷打', 'memory'],
+      ['🧩 词块拷打', 'chunk'],
+    ] as const) {
+      fireEvent.click(screen.getByRole('button', { name: label }))
+      expect(onDrill).toHaveBeenLastCalledWith(kind, 10)
+      expect(screen.queryByRole('button', { name: '开始' })).toBeNull()
+    }
+
     const buttons: [string, string, string][] = [
-      ['🥊 记忆拷打', 'memory', '记忆拷打'],
-      ['🧩 词块拷打', 'chunk', '词块拷打'],
       ['🇬🇧 英英释义', 'deep', '英英释义'],
       ['🏷 语法标记', 'mark', '语法标记'],
       ['🧠 语法·结构', 'grammar', '语法·结构'],
@@ -197,49 +206,49 @@ describe('IntensivePanel：拷打与复述', () => {
     expect((screen.getByRole('button', { name: /错题包围战/ }) as HTMLButtonElement).disabled).toBe(false)
   })
 
-  it('每种入口用自己的保存值；改数量后只记这个入口，开始传新值', () => {
+  it('没有预习页的拷打各用自己的保存值；改数量后只记这个入口', () => {
     const onDrill = vi.fn()
     const onDrillLimitChange = vi.fn()
-    const drillLimits = { ...DEFAULT_DRILL_LIMITS, memory: 20, chunk: 5 }
+    const drillLimits = { ...DEFAULT_DRILL_LIMITS, deep: 20, grammar: 5 }
     const { rerender } = render(
       <IntensivePanel {...props({ onDrill, onDrillLimitChange, drillLimits })} />,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: '🥊 记忆拷打' }))
-    const memorySelect = screen.getByLabelText('记忆拷打每次题数') as HTMLSelectElement
-    expect(memorySelect.value).toBe('20')
-    fireEvent.change(memorySelect, { target: { value: '30' } })
-    expect(onDrillLimitChange).toHaveBeenCalledWith('memory', 30)
+    fireEvent.click(screen.getByRole('button', { name: '🇬🇧 英英释义' }))
+    const deepSelect = screen.getByLabelText('英英释义每次题数') as HTMLSelectElement
+    expect(deepSelect.value).toBe('20')
+    fireEvent.change(deepSelect, { target: { value: '30' } })
+    expect(onDrillLimitChange).toHaveBeenCalledWith('deep', 30)
     fireEvent.click(screen.getByRole('button', { name: '开始' }))
-    expect(onDrill).toHaveBeenCalledWith('memory', 30)
+    expect(onDrill).toHaveBeenCalledWith('deep', 30)
 
-    fireEvent.click(screen.getByRole('button', { name: '🧩 词块拷打' }))
-    expect((screen.getByLabelText('词块拷打每次题数') as HTMLSelectElement).value).toBe('5')
+    fireEvent.click(screen.getByRole('button', { name: '🧠 语法·结构' }))
+    expect((screen.getByLabelText('语法·结构每次题数') as HTMLSelectElement).value).toBe('5')
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    expect(screen.queryByLabelText('词块拷打每次题数')).toBeNull()
+    expect(screen.queryByLabelText('语法·结构每次题数')).toBeNull()
 
-    // 父层把新值存回来后，记忆拷打再次打开显示 30；词块仍是 5。
+    // 父层把新值存回来后，英英释义再次打开显示 30；语法·结构仍是 5。
     rerender(
       <IntensivePanel
-        {...props({ onDrill, onDrillLimitChange, drillLimits: { ...drillLimits, memory: 30 } })}
+        {...props({ onDrill, onDrillLimitChange, drillLimits: { ...drillLimits, deep: 30 } })}
       />,
     )
-    fireEvent.click(screen.getByRole('button', { name: '🥊 记忆拷打' }))
-    expect((screen.getByLabelText('记忆拷打每次题数') as HTMLSelectElement).value).toBe('30')
+    fireEvent.click(screen.getByRole('button', { name: '🇬🇧 英英释义' }))
+    expect((screen.getByLabelText('英英释义每次题数') as HTMLSelectElement).value).toBe('30')
     fireEvent.click(screen.getByRole('button', { name: '取消' }))
-    fireEvent.click(screen.getByRole('button', { name: '🧩 词块拷打' }))
-    expect((screen.getByLabelText('词块拷打每次题数') as HTMLSelectElement).value).toBe('5')
+    fireEvent.click(screen.getByRole('button', { name: '🧠 语法·结构' }))
+    expect((screen.getByLabelText('语法·结构每次题数') as HTMLSelectElement).value).toBe('5')
   })
 
   it('跑批中题数下拉和开始按钮也锁住（避免中途改设置）', () => {
     const { rerender } = render(<IntensivePanel {...props()} />)
-    fireEvent.click(screen.getByRole('button', { name: '🥊 记忆拷打' }))
-    expect((screen.getByLabelText('记忆拷打每次题数') as HTMLSelectElement).disabled).toBe(false)
+    fireEvent.click(screen.getByRole('button', { name: '🇬🇧 英英释义' }))
+    expect((screen.getByLabelText('英英释义每次题数') as HTMLSelectElement).disabled).toBe(false)
 
     rerender(<IntensivePanel {...props({ batchRunning: true })} />)
-    expect((screen.getByLabelText('记忆拷打每次题数') as HTMLSelectElement).disabled).toBe(true)
+    expect((screen.getByLabelText('英英释义每次题数') as HTMLSelectElement).disabled).toBe(true)
     expect((screen.getByRole('button', { name: '开始' }) as HTMLButtonElement).disabled).toBe(true)
-    expect((screen.getByRole('button', { name: '🥊 记忆拷打' }) as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByRole('button', { name: '🇬🇧 英英释义' }) as HTMLButtonElement).disabled).toBe(true)
   })
 
   it('复述：空文本不能存；保存后清空输入', () => {

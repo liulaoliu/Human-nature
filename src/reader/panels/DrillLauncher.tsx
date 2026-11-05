@@ -111,7 +111,15 @@ export default function DrillLauncher({
 }: DrillLauncherProps) {
   const [pending, setPending] = useState<{ item: DrillItem; limit: number } | null>(null)
 
-  const open = (item: DrillItem) => setPending({ item, limit: limits[item.kind] })
+  const open = (item: DrillItem) => {
+    // 记忆 / 词块有「先看一遍」页：数量放到那一页选，这里直接进去。
+    if (item.kind === 'memory' || item.kind === 'chunk') {
+      setPending(null)
+      onDrill(item.kind, limits[item.kind])
+      return
+    }
+    setPending({ item, limit: limits[item.kind] })
+  }
   const change = (n: number) => {
     if (!pending) return
     setPending({ ...pending, limit: n })
@@ -131,7 +139,9 @@ export default function DrillLauncher({
     <div className="idrills">
       <div className="idrills-head">
         <b>快速拷打</b>
-        <span className="muted">点开先选本次题数（默认 {DEFAULT_DRILL_LIMIT} 题，七种各自记住）</span>
+        <span className="muted">
+          记忆 / 词块在预习页选题数；其它拷打点开先选（默认 {DEFAULT_DRILL_LIMIT} 题，各自记住）
+        </span>
       </div>
 
       {ROWS.map((row) => (

@@ -15,6 +15,8 @@ export interface QuizRoundSpec {
   limit: number
   /** source = 'items' 时的词条 id。 */
   ids?: string[]
+  /** 记忆 / 词块：下一轮仍先进「先看一遍」预习页。 */
+  warmup?: 'memory' | 'chunk'
   /** 本轮的去重 track；items 轮为空（错题重练不跳过）。 */
   key: string
 }

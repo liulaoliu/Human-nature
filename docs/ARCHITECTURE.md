@@ -118,9 +118,10 @@ types ← core ← adapters ← reader
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` + `src/reader/apply/*` | 六个表格型任务在 core；自动标词（要离线词典）在 `apply/autoVocab`，查词（要来源句）在 `apply/analysis`；`useApplyTaskResult` 只负责保住函数身份 |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` + `src/core/quizHistory.ts` | 范围 × 题型 → 候选词与题量；下一轮只从「没答过」里抽：词级按 `itemId`、文章级按题目 id，新题不够只考剩下的，不拿旧题凑数；全考完后自动清空本轮记录、重新开一轮（不会卡死）。错题重练 / 包围战不过滤 |
 | 考试再来一轮 / 本轮数量 | `src/reader/hooks/useQuizStarts.ts` | 每轮记 `lastRound`（来源 / 范围 / 题型 / 实际题数）；`restart(limit)` 完整复现上一轮、只换数量，文章测验不会掉成词级；结算页先选数量再开 |
-| 各模块的本轮数量选择器 | `src/reader/panels/RoundSizeSelect.tsx` + `RoundStartPrompt.tsx` | 统一档位文案 / `0 = 全部` / 自定义单位；精读七种拷打、考试设置、结算「再来一轮」、听写、听力、背单词的新词配额 / 每组词数共用；各模块只负责状态和「开始」动作 |
+| 记忆 / 词块「先看一遍」 | `src/reader/hooks/useDrillWarmup.ts` | 预习状态、候选池、本轮题数都在这里；改数量按同一 track 重抽卡，看完才 `begin()`；结算「再来一轮」重新出预习卡，不直接开考 |
+| 各模块的本轮数量选择器 | `src/reader/panels/RoundSizeSelect.tsx` + `RoundStartPrompt.tsx` | 统一档位文案 / `0 = 全部` / 自定义单位；精读七种拷打（记忆 / 词块在预习页）、考试设置、结算「再来一轮」、听写、听力、背单词的新词配额 / 每组词数共用；各模块只负责状态和「开始」动作 |
 | 精读七种拷打各自的每次题数 | `src/core/intensiveDrill.ts` | 七种入口（记忆 / 词块 / 英英释义 / 语法标记 / 语法·结构 / 听力 / 错题包围战）、档位 5/10/15/20/30、默认 10；坏数据逐项回默认。七种各存各的，统一在 `reader:drillLimits`，设置存取在 `hooks/useQuizSettings` |
-| 精读面板的阶段 / 拷打入口 | `src/reader/hooks/useIntensiveActions.ts` + `panels/DrillLauncher.tsx` | 阶段→工具、拷打→题型两张表；`DrillLauncher` 点开入口先选本次题数（各记各的），确认后把结果传给 `startDrill` / `startArticleDrill` / `startSiege`；记忆 / 词块仍带预习卡 |
+| 精读面板的阶段 / 拷打入口 | `src/reader/hooks/useIntensiveActions.ts` + `panels/DrillLauncher.tsx` | 阶段→工具、拷打→题型两张表；记忆 / 词块直接进预习页（数量也在预习页选），其它入口由 `DrillLauncher` 先弹数量，确认后传给 `startDrill` / `startArticleDrill` / `startSiege` |
 | 考试判分落库 | `src/reader/quiz/createQuizCheck.ts` | 对/错 → SRS、错题本、活动、答题事件、朗读、自动切题；无 React 状态，主 hook 传当前快照 |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
@@ -288,9 +289,11 @@ types ← core ← adapters ← reader
    把这一阶段永远卡在 99%，`精通` 等级锁死。
 6. **闭卷回忆要先学一遍**。记忆拷打 / 词块拷打是回忆题，直接开考等于让用户猜，猜错还会被当成
    「没记住」写进 SRS 和错题本。`useQuizSession.startDrill(kinds, scope, { warmup, limit })` 先出一道
-   `DrillWarmup` 预习卡（词 + 释义 + 词块），点「开始拷打」才 `begin()`；`limit` 是用户在这次入口选的数。
+   `DrillWarmup` 预习卡（词 + 释义 + 词块），点「开始拷打」才 `begin()`；**本轮题数就在预习页选**，
+   改数量会按同一候选池重新抽卡（`setWarmupLimit`），确认后把最终题目入队。
    卡片内容由**题目反推**（`core/quizWarmup` 的 `buildWarmupCards`），不另写一套「考哪些词」的筛选。
-   英英释义 / 语法标记 / 听力这些不涉及「没见过」的题型不加预习。
+   记忆 / 词块的结算页点「再来一轮」也回到这张预习卡，而不是直接开考或在结算页另弹数量。
+   英英释义 / 语法标记 / 听力这些不涉及「没见过」的题型不加预习，仍在入口处选数量。
 7. **三条路各自一个 hook**（2026-10-28）。`useAiPack` 原来 471 行，同时管文件、剪贴板、轮询和队列；
    现在只剩 187 行共享编排：
    - `useAiAgentPack`（98 行）：导出 / 导入 `ai-jobs-*.json`；

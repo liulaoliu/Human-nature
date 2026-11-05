@@ -1,6 +1,7 @@
-import { useCallback, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { buildArticleQuestions } from '../../core/articleQuiz'
 import { isArticleKind, shuffleQuiz, type QuizKind, type QuizQuestion } from '../../core/quiz'
+import { useDrillWarmup, type DrillWarmupState } from './useDrillWarmup'
 import { useQuizRoundHistory, type QuizRoundSpec } from './useQuizRoundHistory'
 import {
   buildQuizSet,
@@ -8,21 +9,10 @@ import {
   type PoolContext,
   type QuizScope,
 } from '../../core/quizPool'
-import { buildWarmupCards, type DrillWarmupCard } from '../../core/quizWarmup'
 import type { Sentence, VocabItem } from '../../types/document'
 
+export type { DrillWarmupState } from './useDrillWarmup'
 export type { QuizRoundSpec } from './useQuizRoundHistory'
-
-/** 预习态：题目已经出好，等人看完再开考。 */
-export interface DrillWarmupState {
-  /** memory = 记忆拷打（词·搭配），chunk = 词块拷打（词块·搭配） */
-  kind: 'memory' | 'chunk'
-  title: string
-  cards: DrillWarmupCard[]
-  /** 点「开始拷打」时才真正进队列 */
-  questions: QuizQuestion[]
-  article: boolean
-}
 
 export interface UseQuizStartsParams {
   doc: { sentences: Sentence[] } | null
@@ -48,6 +38,8 @@ export interface QuizStarts {
   warmup: DrillWarmupState | null
   beginWarmup: () => void
   cancelWarmup: () => void
+  /** 预习页改本轮题数：重新抽卡 / 重建题目，不直接开考。 */
+  setWarmupLimit: (limit: number) => void
   start: (opts?: { limit?: number; scope?: QuizScope; kinds?: QuizKind[] }) => void
   startArticle: (limit?: number) => void
   startItems: (ids: string[], kindsArg?: QuizKind[], opts?: { limit?: number }) => void
@@ -94,8 +86,13 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
     flash,
   } = params
 
-  const [warmup, setWarmup] = useState<DrillWarmupState | null>(null)
   const { lastRound, markAnswered, prepare, remember } = useQuizRoundHistory(flash)
+  const { warmup, beginWarmup, cancelWarmup, setWarmupLimit, showWarmup } = useDrillWarmup({
+    libraryItems,
+    begin,
+    prepare,
+    remember,
+  })
 
   /** track 里包含文章标识：换文章不继承上一篇的「考过」。 */
   const trackKey = useCallback(
@@ -188,18 +185,11 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       const picked = prepare(key, qs, take)
       setKinds(ks)
       setScope(scopeArg)
-      remember({ source: 'vocab', scope: scopeArg, kinds: ks, limit: take, key }, picked, take)
       if (opts?.warmup) {
-        const cards = buildWarmupCards(libraryItems, picked, opts.warmup)
-        setWarmup({
-          kind: opts.warmup,
-          title: opts.warmup === 'chunk' ? '词块拷打 · 先看一遍' : '记忆拷打 · 先看一遍',
-          cards,
-          questions: picked,
-          article: false,
-        })
+        showWarmup({ picked, qs, key, scope: scopeArg, kinds: ks, kind: opts.warmup, take })
         return
       }
+      remember({ source: 'vocab', scope: scopeArg, kinds: ks, limit: take, key }, picked, take)
       begin(picked)
     },
     [
@@ -211,23 +201,12 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       flash,
       setKinds,
       setScope,
-      libraryItems,
       trackKey,
       prepare,
       remember,
+      showWarmup,
     ],
   )
-
-  /** 看完预习卡，开始拷打。 */
-  const beginWarmup = useCallback(() => {
-    const w = warmup
-    if (!w) return
-    setWarmup(null)
-    begin(w.questions, { article: w.article })
-  }, [warmup, begin])
-
-  /** 关掉预习卡（本轮不考）。 */
-  const cancelWarmup = useCallback(() => setWarmup(null), [])
 
   /** 精读工作流：用指定文章级题型开一轮（结构/语法、中译英、功能词、排序）。 */
   const startArticleDrill = useCallback(
@@ -255,17 +234,19 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       const spec = lastRound
       if (!spec) return
       const take = limitArg ?? spec.limit
-      if (spec.source === 'article') startArticleDrill(spec.kinds, take)
+      if (spec.warmup) startDrill(spec.kinds, spec.scope, { warmup: spec.warmup, limit: take })
+      else if (spec.source === 'article') startArticleDrill(spec.kinds, take)
       else if (spec.source === 'items' && spec.ids) startItems(spec.ids, spec.kinds, { limit: take })
       else start({ limit: take, scope: spec.scope, kinds: spec.kinds })
     },
-    [lastRound, start, startArticleDrill, startItems],
+    [lastRound, start, startDrill, startArticleDrill, startItems],
   )
 
   return {
     warmup,
     beginWarmup,
     cancelWarmup,
+    setWarmupLimit,
     start,
     startArticle,
     startItems,

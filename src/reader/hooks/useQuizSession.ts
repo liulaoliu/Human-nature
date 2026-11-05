@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo } from 'react'
 import { countQuestions, shuffleQuiz, type QuizKind, type QuizQuestion } from '../../core/quiz'
 import { poolFor, poolSizes, studyableItems } from '../../core/quizPool'
 import type { Sentence, VocabLibrary } from '../../types/document'
@@ -157,6 +157,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     warmup,
     beginWarmup,
     cancelWarmup,
+    setWarmupLimit,
     start,
     startArticle,
     startItems,
@@ -182,6 +183,18 @@ export function useQuizSession(params: UseQuizSessionParams) {
     begin,
     flash,
   })
+
+  // 从「再来一轮」重新进预习页时，先把上一轮已完成的队列清掉；否则预习页和结算页会同时存在。
+  useEffect(() => {
+    if (!warmup) return
+    clearAdvance()
+    allRef.current = []
+    setQueue(null)
+    setArticleRun(false)
+    setSpellMiss(null)
+    resetProgress()
+    resetDrill()
+  }, [warmup, clearAdvance, allRef, setQueue, setArticleRun, setSpellMiss, resetProgress, resetDrill])
 
   /** 判分：对 → SRS good，错 → SRS again（记 lapse）。 */
   const check = createQuizCheck({
@@ -283,6 +296,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     warmup,
     beginWarmup,
     cancelWarmup,
+    setWarmupLimit,
     // 派生
     poolSizes: poolSizesNow,
     availableCount,

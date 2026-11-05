@@ -14,7 +14,17 @@ const memoryCards = [
 
 describe('DrillWarmup：拷打前先看一遍', () => {
   it('把要考的词和词块摊开，并给出数量', () => {
-    render(<DrillWarmup title="词块拷打 · 先看一遍" kind="chunk" cards={chunkCards} onStart={vi.fn()} onCancel={vi.fn()} />)
+    render(
+      <DrillWarmup
+        title="词块拷打 · 先看一遍"
+        kind="chunk"
+        cards={chunkCards}
+        limit={2}
+        onLimitChange={vi.fn()}
+        onStart={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
     screen.getByText('词块拷打 · 先看一遍')
     screen.getByText('这轮要考 2 个词')
     screen.getByText('/rʌn/')
@@ -24,15 +34,54 @@ describe('DrillWarmup：拷打前先看一遍', () => {
   })
 
   it('记忆档给例句当语境', () => {
-    render(<DrillWarmup title="记忆拷打 · 先看一遍" kind="memory" cards={memoryCards} onStart={vi.fn()} onCancel={vi.fn()} />)
+    render(
+      <DrillWarmup
+        title="记忆拷打 · 先看一遍"
+        kind="memory"
+        cards={memoryCards}
+        limit={1}
+        onLimitChange={vi.fn()}
+        onStart={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
     screen.getByText('I run daily.')
     screen.getByText(/第一次见的词答错/)
+  })
+
+  it('本轮题数就在预习页选：默认当前值，改动走回调', () => {
+    const onLimitChange = vi.fn()
+    render(
+      <DrillWarmup
+        title="t"
+        kind="chunk"
+        cards={chunkCards}
+        limit={2}
+        onLimitChange={onLimitChange}
+        onStart={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
+    const select = screen.getByLabelText('词块拷打本轮题数') as HTMLSelectElement
+    expect(select.value).toBe('2')
+    fireEvent.change(select, { target: { value: '10' } })
+    expect(onLimitChange).toHaveBeenCalledWith(10)
   })
 
   it('两条按钮都能往下走：开始 → onStart，取消 → onCancel', () => {
     const onStart = vi.fn()
     const onCancel = vi.fn()
-    render(<DrillWarmup title="t" kind="memory" cards={memoryCards} onStart={onStart} onCancel={onCancel} />)
+    render(
+      <DrillWarmup
+        title="t"
+        kind="memory"
+        cards={memoryCards}
+        limit={1}
+        onLimitChange={vi.fn()}
+        onStart={onStart}
+        onCancel={onCancel}
+      />,
+    )
     fireEvent.click(screen.getByText('取消'))
     expect(onCancel).toHaveBeenCalledTimes(1)
     for (const btn of screen.getAllByText('看完了，开始拷打')) fireEvent.click(btn)
@@ -40,7 +89,17 @@ describe('DrillWarmup：拷打前先看一遍', () => {
   })
 
   it('没有词条信息时不空白一片（说明原因）', () => {
-    render(<DrillWarmup title="t" kind="memory" cards={[]} onStart={vi.fn()} onCancel={vi.fn()} />)
+    render(
+      <DrillWarmup
+        title="t"
+        kind="memory"
+        cards={[]}
+        limit={1}
+        onLimitChange={vi.fn()}
+        onStart={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    )
     screen.getByText(/这轮没有可预习的词/)
   })
 })

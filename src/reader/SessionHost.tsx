@@ -127,12 +127,20 @@ export default function SessionHost({
           title={quiz.warmup.title}
           kind={quiz.warmup.kind}
           cards={quiz.warmup.cards}
+          limit={quiz.warmup.limit}
+          onLimitChange={(n) => {
+            const w = quiz.warmup
+            if (!w) return
+            // 记忆 / 词块各自的「本轮题数」在这里改，也在这里落盘；预习页重建后再开始。
+            quiz.setDrillLimit(w.kind, n)
+            quiz.setWarmupLimit(n)
+          }}
           onStart={quiz.beginWarmup}
           onCancel={quiz.cancelWarmup}
         />
       )}
 
-      {quiz.queue && (
+      {!quiz.warmup && quiz.queue && (
         <QuizPanel
           question={quiz.index < quiz.queue.length ? quiz.queue[quiz.index] : null}
           scope={quiz.scope}
@@ -161,6 +169,7 @@ export default function SessionHost({
             else quiz.start({ limit })
           }}
           restartLimit={quiz.lastRound?.limit ?? quiz.queue?.length ?? quiz.limit}
+          restartWithPreview={!!quiz.lastRound?.warmup}
           onAckSpellMiss={quiz.ackSpellMiss}
           onRelearn={quiz.relearnSpellMiss}
           onSelectOption={(opt) => {

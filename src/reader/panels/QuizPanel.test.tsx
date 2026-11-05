@@ -201,6 +201,23 @@ describe('QuizPanel：结算', () => {
     expect(onClose).toHaveBeenCalled()
   })
 
+  it('记忆 / 词块：再来一轮直接回预习页，不在结算页选题数', () => {
+    const onRestart = vi.fn()
+    render(
+      <QuizPanel
+        {...props({
+          question: null,
+          results: [{ id: 'a', itemId: 'v1', correct: true }],
+          restartWithPreview: true,
+          onRestart,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '再来一轮' }))
+    expect(onRestart).toHaveBeenCalledWith()
+    expect(screen.queryByLabelText('再来一轮每次题数')).toBeNull()
+  })
+
   it('再来一轮可以用新数量（15 → 30），取消不开始', () => {
     const onRestart = vi.fn()
     const { rerender } = render(

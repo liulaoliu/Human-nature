@@ -399,6 +399,42 @@ describe('useQuizSession：拷打前先学一遍（预习卡）', () => {
     expect(api!.queue).toHaveLength(1)
   })
 
+  it('预习页改本轮题数：重新抽卡，不直接开考', () => {
+    const many = Array.from({ length: 10 }, (_, i) =>
+      word({ id: `w${i}`, word: `word${i}`, lemma: `word${i}`, meaning: `意思${i}` }),
+    )
+    render(<Harness library={lib(many)} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory', limit: 2 }))
+    expect(api!.warmup?.limit).toBe(2)
+    expect(api!.warmup?.cards).toHaveLength(2)
+
+    act(() => api!.setWarmupLimit(5))
+    expect(api!.warmup?.limit).toBe(5)
+    expect(api!.warmup?.cards).toHaveLength(5)
+    expect(api!.warmup?.questions).toHaveLength(5)
+    expect(api!.queue).toBeNull()
+  })
+
+  it('预习式拷打再来一轮：重新进预习页，不直接开考', () => {
+    const many = Array.from({ length: 4 }, (_, i) =>
+      word({ id: `w${i}`, word: `word${i}`, lemma: `word${i}`, meaning: `意思${i}` }),
+    )
+    render(<Harness library={lib(many)} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory', limit: 2 }))
+    act(() => api!.beginWarmup())
+    for (let i = 0; i < 2; i++) {
+      const q = api!.queue![i]
+      act(() => api!.setInput(q.answer))
+      act(() => api!.check())
+      act(() => api!.next())
+    }
+
+    act(() => api!.restart())
+    expect(api!.warmup).not.toBeNull()
+    expect(api!.warmup?.limit).toBe(2)
+    expect(api!.queue).toBeNull()
+  })
+
   it('预习卡内容来自题目对应的词条：词块拷打给词组/习语', () => {
     const it = word({
       phrases: ['run out — 用完'],

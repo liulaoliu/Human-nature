@@ -1,9 +1,14 @@
 import type { DrillWarmupCard } from '../../core/quizWarmup'
+import { DRILL_LIMIT_OPTIONS } from '../../core/intensiveDrill'
+import RoundSizeSelect from './RoundSizeSelect'
 
 export interface DrillWarmupProps {
   title: string
   kind: 'memory' | 'chunk'
   cards: DrillWarmupCard[]
+  /** 本轮实际题数（可在本页调整，改完重新抽卡） */
+  limit: number
+  onLimitChange: (n: number) => void
   /** 看完，开始拷打 */
   onStart: () => void
   /** 本轮不考 */
@@ -17,7 +22,8 @@ export interface DrillWarmupProps {
  * 第一次见到的词只能靠猜 —— 猜错记进错题本，等于把「没见过」当成「没记住」，
  * 词块更是连「该有哪些搭配」都不知道。先过一遍再看，分数才反映记忆。
  */
-export default function DrillWarmup({ title, kind, cards, onStart, onCancel }: DrillWarmupProps) {
+export default function DrillWarmup({ title, kind, cards, limit, onLimitChange, onStart, onCancel }: DrillWarmupProps) {
+  const drillName = kind === 'chunk' ? '词块拷打' : '记忆拷打'
   return (
     <div className="study drill-warm">
       <div className="bar study-bar">
@@ -26,6 +32,14 @@ export default function DrillWarmup({ title, kind, cards, onStart, onCancel }: D
         </button>
         <b>{title}</b>
         <span className="muted">这轮要考 {cards.length} 个词</span>
+        <RoundSizeSelect
+          label="本轮"
+          ariaLabel={`${drillName}本轮题数`}
+          value={limit}
+          options={DRILL_LIMIT_OPTIONS}
+          onChange={onLimitChange}
+          title="改数量会重新抽这轮要看的词"
+        />
         <button className="primary" onClick={onStart}>
           看完了，开始拷打
         </button>

@@ -58,6 +58,8 @@ export interface QuizPanelProps {
   onRestart: (limit?: number) => void
   /** 「再来一轮」弹窗的默认数量；不传 = 用本轮实际题数。 */
   restartLimit?: number
+  /** 记忆 / 词块：再来一轮先进「先看一遍」预习页，不在结算页选题数。 */
+  restartWithPreview?: boolean
   onSelectOption: (option: string) => void
   onInputChange: (value: string) => void
   /** 确认拼错判定，继续下一题（该词已进重学队列）。 */
@@ -90,6 +92,7 @@ export default function QuizPanel({
   onRetryWrong,
   onRestart,
   restartLimit,
+  restartWithPreview,
   onSelectOption,
   onInputChange,
   onAckSpellMiss,
@@ -113,6 +116,11 @@ export default function QuizPanel({
 
   const correct = results.filter((r) => r.correct).length
   const openRestart = () => {
+    // 记忆中 / 词块：直接回到预习页，数量和内容都在那一页选 / 看。
+    if (restartWithPreview) {
+      onRestart()
+      return
+    }
     setRestartSize(restartLimit ?? queueLength)
     setRestartOpen(true)
   }
