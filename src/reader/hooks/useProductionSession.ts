@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ActivityCat } from '../../core/activity'
 import type {
   ProductionMode,
@@ -13,18 +13,20 @@ import type { ProductionProgress } from '../../core/productionHistory'
 import {
   deriveProductionProgress,
   productionRecords,
-  productionStats,
 } from '../../core/productionHistory'
 import type { VocabLibrary } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
 import type { runAiBatch } from '../../adapters/aiRun'
-import type { ProductionDraft } from '../../core/productionDraft'
 import { useProductionAi } from './useProductionAi'
 import { useProductionAttempt } from './useProductionAttempt'
-import { useProductionDraft } from './useProductionDraft'
 import { useProductionErrors } from './useProductionErrors'
 import { useProductionFollowUp } from './useProductionFollowUp'
 import { useProductionLegacyMigration } from './useProductionLegacyMigration'
+import { useProductionDraftLifecycle } from './useProductionDraftLifecycle'
+import { useProductionDueAutoStart } from './useProductionDueAutoStart'
+import { useProductionSessionControls } from './useProductionSessionControls'
+import { useProductionSessionActions } from './useProductionSessionActions'
+import { useProductionHistoryView } from './useProductionHistoryView'
 import { useProductionProgressSync } from './useProductionProgressSync'
 import { useProductionPacks, type ProductionStartPayload } from './useProductionPacks'
 import { useProductionSettings } from './useProductionSettings'
@@ -81,12 +83,8 @@ export function useProductionSession({
   now = () => new Date(),
 }: UseProductionSessionParams) {
   const { settings, update: updateSettings } = useProductionSettings()
-  const remoteDraftRef = useRef<(draft: ProductionDraft) => void>(() => {})
-  const lastDraftAtRef = useRef('')
-  const { load: loadDraft, save: saveDraft, clear: clearDraft } = useProductionDraft(
-    articleIdentity,
-    (draft) => remoteDraftRef.current(draft),
-  )
+  const clearDraftRef = useRef<() => void>(() => {})
+  const applySessionRef = useRef<(payload: ProductionStartPayload) => void>(() => {})
   const [open, setOpen] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
   const [stage, setStage] = useState<ProductionStage>('setup')
@@ -115,7 +113,7 @@ export function useProductionSession({
       setIndex((i) => i + 1)
     },
     onDone: () => {
-      clearDraft()
+      clearDraftRef.current()
       setStage('done')
     },
     setWritingHistory,
@@ -126,31 +124,9 @@ export function useProductionSession({
     flash,
     now,
   })
-  remoteDraftRef.current = (draft: ProductionDraft) => {
-    if (!open || draft.at <= lastDraftAtRef.current) return
-    setSessionId(draft.sessionId)
-    setSessionMode(draft.mode)
-    setSessionTopic(draft.sessionTopic)
-    setPrompts(draft.prompts)
-    setIndex(draft.index)
-    attempt.restore({
-      answer: draft.answer,
-      feedback: draft.feedback,
-      previousFeedback: draft.previousFeedback,
-      hits: draft.hits,
-      round: draft.round,
-    })
-    lastDraftAtRef.current = draft.at
-    setNotice(draft.notice)
-    setStage('playing')
-    setAiError('')
-    flash('已同步另一标签页的工棚草稿')
-  }
-
-  useProductionLegacyMigration({ records: writingHistory, setRecords: setWritingHistory, flash })
+  const legacyMigration = useProductionLegacyMigration({ records: writingHistory, setRecords: setWritingHistory, flash })
   const {
     reset: resetAttempt,
-    restore: restoreAttempt,
     cancelGrading: cancelGradingAttempt,
     applyFeedbackPaste: applyAttemptFeedbackPaste,
     copyPromptAgain: copyAttemptPromptAgain,
@@ -171,81 +147,32 @@ export function useProductionSession({
     callAi,
     flash,
   })
-  const stats = useMemo(() => productionStats(allHistory), [allHistory])
-  const history = useMemo(
-    () =>
-      allHistory
-        .filter((r) => !articleIdentity || r.articleId === articleIdentity)
-        .slice(0, 8),
-    [allHistory, articleIdentity],
-  )
+  const { stats, history } = useProductionHistoryView(allHistory, articleIdentity)
 
-  const snapshotDraft = useCallback((): ProductionDraft | null => {
-    if (stage !== 'playing' || !prompts.length) return null
-    return {
-      version: 1,
-      sessionId,
-      articleId: articleIdentity || 'manual',
-      at: now().toISOString(),
-      mode: sessionMode,
-      sessionTopic,
-      prompts,
-      index,
-      answer: attempt.answer,
-      feedback: attempt.feedback,
-      previousFeedback: attempt.previousFeedback,
-      hits: attempt.hits,
-      round: attempt.round,
-      notice,
-    }
-  }, [
+  const { saveNow, clearDraft, openProduction } = useProductionDraftLifecycle({
+    open,
+    setOpen,
     stage,
+    setStage,
     prompts,
+    setPrompts,
+    index,
+    setIndex,
     sessionId,
+    setSessionId,
+    sessionMode,
+    setSessionMode,
+    sessionTopic,
+    setSessionTopic,
+    notice,
+    setNotice,
+    setAiError,
+    attempt,
     articleIdentity,
     now,
-    sessionMode,
-    sessionTopic,
-    index,
-    attempt.answer,
-    attempt.feedback,
-    attempt.previousFeedback,
-    attempt.hits,
-    attempt.round,
-    notice,
-  ])
-
-  useEffect(() => {
-    if (!open) return
-    const draft = snapshotDraft()
-    if (!draft) return
-    lastDraftAtRef.current = draft.at
-    const timer = setTimeout(() => saveDraft(draft), 250)
-    return () => clearTimeout(timer)
-  }, [open, snapshotDraft, saveDraft])
-
-  const applyPrompts = useCallback(
-    (next: ProductionPrompt[], pool: ProductionTargetPool, nextNotice = '') => {
-      setPrompts(next)
-      setPoolInfo(pool)
-      setIndex(0)
-      resetAttempt()
-      setStage('playing')
-      setNotice(nextNotice)
-      setAiError('')
-    },
-    [resetAttempt],
-  )
-
-  const applySession = useCallback(
-    (payload: ProductionStartPayload) => {
-      setSessionId(payload.sessionId)
-      setSessionMode(payload.mode)
-      setSessionTopic(payload.topic)
-      applyPrompts(payload.prompts, payload.pool, payload.notice)
-    },
-    [applyPrompts],
-  )
+    flash,
+  })
+  clearDraftRef.current = clearDraft
 
   const packs = useProductionPacks({
     settings,
@@ -260,119 +187,63 @@ export function useProductionSession({
     callAi,
     copy,
     clearDraft,
-    onStart: applySession,
+    onStart: (payload) => applySessionRef.current(payload),
   })
 
-  const {
-    start: startPacks,
-    reset: resetPacks,
-    packPasteKind,
-    applyPacketPaste,
-    copyPromptAgain: copyPackPromptAgain,
-  } = packs
+  const { start: startPacks, reset: resetPacks } = packs
 
-  useEffect(() => {
-    if (!open || !autoStart || stage !== 'setup' || settings.scope !== 'due') return
-    setAutoStart(false)
-    const useChunks =
-      settings.mode === 'full' ? settings.fullUseChunks : settings.skimUseChunks
-    if (!useChunks) {
-      flash('到期队列需要先打开本机词块；已保留在选草料页')
-      return
-    }
-    void startPacks()
-  }, [
+  const { applySession, applyPaste, copyPromptAgain } = useProductionSessionActions({
+    setPrompts,
+    setPoolInfo,
+    setIndex,
+    resetAttempt,
+    setStage,
+    setNotice,
+    setAiError,
+    setSessionId,
+    setSessionMode,
+    setSessionTopic,
+    packPasteKind: packs.packPasteKind,
+    applyPacketPaste: packs.applyPacketPaste,
+    attemptPasteKind: attempt.pasteKind,
+    applyAttemptFeedbackPaste,
+    copyPackPromptAgain: packs.copyPromptAgain,
+    copyAttemptPromptAgain,
+  })
+  applySessionRef.current = applySession
+
+  useProductionDueAutoStart({
     open,
     autoStart,
+    setAutoStart,
     stage,
-    settings.scope,
-    settings.mode,
-    settings.fullUseChunks,
-    settings.skimUseChunks,
-    startPacks,
+    scope: settings.scope,
+    mode: settings.mode,
+    fullUseChunks: settings.fullUseChunks,
+    skimUseChunks: settings.skimUseChunks,
+    start: startPacks,
     flash,
-  ])
+  })
 
-  const applyPaste = useCallback(
-    (raw: string) => {
-      if (packPasteKind) applyPacketPaste(raw)
-      else if (attempt.pasteKind === 'feedback') applyAttemptFeedbackPaste(raw)
-    },
-    [packPasteKind, applyPacketPaste, attempt.pasteKind, applyAttemptFeedbackPaste],
-  )
-
-  const copyPromptAgain = useCallback(async () => {
-    if (packPasteKind) {
-      await copyPackPromptAgain()
-      return
-    }
-    await copyAttemptPromptAgain()
-  }, [packPasteKind, copyPackPromptAgain, copyAttemptPromptAgain])
-
-  const restart = useCallback(() => {
-    clearDraft()
-    resetPacks()
-    setStage('setup')
-    setPrompts([])
-    setPoolInfo(null)
-    setIndex(0)
-    resetAttempt()
-    setAutoStart(false)
-    setNotice('')
-    setAiError('')
-  }, [resetAttempt, clearDraft, resetPacks])
-
-  const openDueProduction = useCallback(() => {
-    updateSettings({ scope: 'due' })
-    setAutoStart(true)
-    setOpen(true)
-  }, [updateSettings])
-
-  const openProduction = useCallback(() => {
-    if (!open && !prompts.length && stage === 'setup') {
-      const draft = loadDraft()
-      if (draft) {
-        setSessionId(draft.sessionId)
-        setSessionMode(draft.mode)
-        setSessionTopic(draft.sessionTopic)
-        setPrompts(draft.prompts)
-        setIndex(draft.index)
-        restoreAttempt({
-          answer: draft.answer,
-          feedback: draft.feedback,
-          previousFeedback: draft.previousFeedback,
-          hits: draft.hits,
-          round: draft.round,
-        })
-        lastDraftAtRef.current = draft.at
-        setNotice(draft.notice)
-        setStage('playing')
-        setAiError('')
-      }
-    }
-    setOpen(true)
-  }, [open, prompts.length, stage, loadDraft, restoreAttempt])
-
-  const close = useCallback(() => {
-    const draft = snapshotDraft()
-    if (draft) {
-      lastDraftAtRef.current = draft.at
-      saveDraft(draft)
-    }
-    if (stage === 'done') clearDraft()
-    cancel()
-    resetPacks()
-    cancelGradingAttempt()
-    setAiError('')
-    setAutoStart(false)
-    setOpen(false)
-  }, [cancel, snapshotDraft, saveDraft, stage, clearDraft, resetPacks, cancelGradingAttempt])
-
-  const cancelRun = useCallback(() => {
-    cancel()
-    resetPacks()
-    cancelGradingAttempt()
-  }, [cancel, resetPacks, cancelGradingAttempt])
+  const { openDueProduction, close, restart, cancelRun } = useProductionSessionControls({
+    updateSettings,
+    setAutoStart,
+    setOpen,
+    setStage,
+    setPrompts,
+    setIndex,
+    setPoolInfo,
+    setNotice,
+    setAiError,
+    saveNow,
+    clearDraft,
+    resetAttempt,
+    resetPacks,
+    cancelAi: cancel,
+    cancelGrading: cancelGradingAttempt,
+    openProduction,
+    stage,
+  })
 
   return {
     open,
@@ -418,6 +289,7 @@ export function useProductionSession({
     sessionId,
     sessionMode,
     followUp,
+    legacyMigration,
     cancelRun,
   }
 }
