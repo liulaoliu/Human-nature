@@ -364,12 +364,30 @@ export function validateTopicPack(prompts: readonly ProductionPrompt[], expected
     : { ok: false, reason: `应出 ${expectedCount} 道题，实际 ${prompts.length} 道` }
 }
 
+/** 跳过题也留档：不伪造 AI 分数，只记「跳过（未提交）」和已写的草稿。 */
+export const SKIPPED_PRODUCTION_SUMMARY = '跳过（未提交）'
+
+export function skippedProductionFeedback(): WritingFeedback {
+  return {
+    version: 2,
+    scores: [],
+    total: 0,
+    max: 0,
+    issues: [],
+    recommendations: [],
+    polished: '',
+    summary: SKIPPED_PRODUCTION_SUMMARY,
+  }
+}
+
 export interface ProductionTask extends ImitationTask {
   kind: 'production'
   mode: ProductionMode
   topic: string
   goal: string
   promptId: string
+  /** 用户主动跳过、没有 AI 批改；统计与进度应忽略这一稿。 */
+  skipped?: boolean
   /** 同一组训练；历史里用它把第 1 / 2 稿并排。 */
   sessionId?: string
   /** 风味酸奶的方向：默认中→英；英→中时参考答案是中文。 */

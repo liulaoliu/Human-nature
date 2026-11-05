@@ -94,4 +94,29 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
     expect(groupProductionAttempts(list)[0].records).toHaveLength(2)
     expect(productionHistoryMarkdown(list)).toContain('跟同事说明进度')
   })
+
+  it('跳过稿进历史但不计入真实产出 / 平均分', () => {
+    const real = record()
+    const skipped = record({
+      text: '',
+      feedback: {
+        version: 2,
+        scores: [],
+        total: 0,
+        max: 0,
+        issues: [],
+        recommendations: [],
+        polished: '',
+        summary: '跳过（未提交）',
+      },
+      task: {
+        ...(real.task as unknown as Record<string, unknown>),
+        skipped: true,
+        hits: [],
+      } as unknown as WritingRecord['task'],
+    })
+    const list = [real, skipped]
+    expect(productionStats(list)).toMatchObject({ attempts: 1, avgScore: 80, targetAttempts: 1 })
+    expect(productionHistoryMarkdown(list)).toContain('跳过（未提交，无 AI 批改）')
+  })
 })

@@ -280,6 +280,9 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
 
     act(() => restored.result.current.skip())
     expect(restored.result.current.stage).toBe('done')
+    expect(restored.getRecords()).toHaveLength(1)
+    expect((restored.getRecords()[0].task as { skipped?: boolean }).skipped).toBe(true)
+    expect(restored.getRecords()[0].text).toBe('draft answer')
   })
 
   it('手工纠正目标块命中会写回已保存的一稿', async () => {

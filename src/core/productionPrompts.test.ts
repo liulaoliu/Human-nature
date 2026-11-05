@@ -6,6 +6,7 @@ import {
   buildTopicPackPrompt,
   makeProductionTask,
   parseProductionPack,
+  skippedProductionFeedback,
   validateProductionPack,
 } from './productionPrompts'
 
@@ -57,6 +58,16 @@ describe('productionPrompts：出题 / 解析 / 批改契约', () => {
     expect(task.sessionId).toBe('s1')
     expect(task.rubric[0].dimension).toBe('英文原意')
     expect(buildProductionFeedbackPrompt(task, '你好')).toContain('英译中')
+  })
+
+  it('跳过稿用空分数 + 明确摘要，不伪造批改', () => {
+    expect(skippedProductionFeedback()).toMatchObject({
+      version: 2,
+      total: 0,
+      max: 0,
+      issues: [],
+      summary: '跳过（未提交）',
+    })
   })
 
   it('出题提示词带候选目标块；全脂提示随机主题', () => {

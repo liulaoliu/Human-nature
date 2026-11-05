@@ -140,7 +140,7 @@ export default function ProductionHistoryPanel({
                   <b>{task?.task || g.title}</b>
                   <span className="muted">
                     {task?.mode ? PRODUCTION_MODE_LABEL[task.mode] : '产出'} · {g.records.length} 稿 ·{' '}
-                    {last?.feedback.total}/{last?.feedback.max}
+                    {task?.skipped ? '跳过' : `${last?.feedback.total}/${last?.feedback.max}`}
                   </span>
                 </button>
               )
@@ -157,7 +157,7 @@ export default function ProductionHistoryPanel({
                     <div className="bar">
                       <b>第 {task?.round ?? 1} 稿</b>
                       <span className="muted">
-                        {rec.feedback.total}/{rec.feedback.max}
+                        {task?.skipped ? '跳过（未提交）' : `${rec.feedback.total}/${rec.feedback.max}`}
                       </span>
                     </div>
                     {task?.reference && (

@@ -7,6 +7,7 @@ import type {
 import {
   isProductionTask,
   productionHits,
+  skippedProductionFeedback,
   type ProductionTask,
 } from './productionPrompts'
 import type { WritingRecord } from './writing'
@@ -64,6 +65,29 @@ export function productionRecords(history: readonly WritingRecord[]): WritingRec
 
 export function productionTaskOf(record: WritingRecord): ProductionTask | null {
   return isProductionTask(record.task) ? record.task : null
+}
+
+export interface SkippedProductionRecordInput {
+  task: ProductionTask
+  text: string
+  at: string
+  articleId: string
+  articleTitle: string
+  round: number
+}
+
+/** 跳过题留档：保留已写草稿与题面，但不伪造 AI 分数。 */
+export function makeSkippedProductionRecord(input: SkippedProductionRecordInput): WritingRecord {
+  return {
+    at: input.at,
+    articleId: input.articleId,
+    articleTitle: input.articleTitle,
+    model: input.task.model,
+    text: input.text,
+    feedback: skippedProductionFeedback(),
+    task: { ...input.task, round: input.round, skipped: true } as ProductionTask,
+    source: 'production',
+  }
 }
 
 /** 记录里这次判分的目标块；老记录没有 hits 时返回空，不猜。 */
@@ -152,6 +176,7 @@ export function productionStats(records: readonly WritingRecord[]): ProductionSt
   const production = productionRecords(records)
   const modes: Record<string, number> = {}
   const sessions = new Set<string>()
+  let attempts = 0
   let rewrites = 0
   let score = 0
   let scored = 0
@@ -159,6 +184,9 @@ export function productionStats(records: readonly WritingRecord[]): ProductionSt
   let targetHits = 0
   for (const rec of production) {
     const task = productionTaskOf(rec)
+    // 跳过稿只进历史，不算一次真实产出，也不拉低平均分。
+    if (task?.skipped) continue
+    attempts++
     const mode = task?.mode ?? 'unknown'
     modes[mode] = (modes[mode] ?? 0) + 1
     if (task?.sessionId) sessions.add(task.sessionId)
@@ -172,7 +200,7 @@ export function productionStats(records: readonly WritingRecord[]): ProductionSt
     targetHits += hits.filter((h) => h.used).length
   }
   return {
-    attempts: production.length,
+    attempts,
     sessions: sessions.size,
     rewrites,
     modes,
@@ -317,7 +345,8 @@ export function productionHistoryMarkdown(records: readonly WritingRecord[]): st
     lines.push('')
     if (task?.topic) lines.push(`- 主题：${task.topic}`)
     if (task?.task) lines.push(`- 题目：${task.task}`)
-    lines.push(`- 分数：${rec.feedback.total}/${rec.feedback.max}`)
+    if (task?.skipped) lines.push('- 状态：跳过（未提交，无 AI 批改）')
+    else lines.push(`- 分数：${rec.feedback.total}/${rec.feedback.max}`)
     if (task?.reference) lines.push(`- 参考译文：${task.reference}`)
     lines.push('', '**作答**', '', rec.text || '（空）', '')
     if (hits.length) {

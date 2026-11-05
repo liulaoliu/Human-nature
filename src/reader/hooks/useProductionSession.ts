@@ -16,6 +16,7 @@ import {
 import { addWritingRecord, writingRecordKey, type WritingFeedback, type WritingRecord } from '../../core/writing'
 import {
   deriveProductionProgress,
+  makeSkippedProductionRecord,
   productionRecords,
   productionStats,
 } from '../../core/productionHistory'
@@ -360,8 +361,19 @@ export function useProductionSession({
     resetAnswer()
   }, [feedback, round, index, prompts.length, flash, resetAnswer, clearDraft])
 
-  /** 跳过当前题：不伪造 AI 批改记录，但保留整组草稿继续下一题。 */
+  /** 跳过当前题：没有批改时也留一条「跳过」历史，不伪造分数。 */
   const skip = useCallback(() => {
+    if (current && !feedback) {
+      const rec = makeSkippedProductionRecord({
+        task: makeProductionTask(current, sessionTopic, sessionMode, sessionId),
+        text: answer.trim(),
+        at: now().toISOString(),
+        articleId: articleIdentity,
+        articleTitle,
+        round,
+      })
+      setWritingHistory((history) => addWritingRecord(history, rec))
+    }
     if (index + 1 >= prompts.length) {
       clearDraft()
       setStage('done')
@@ -369,7 +381,7 @@ export function useProductionSession({
     }
     setIndex((i) => i + 1)
     resetAnswer()
-  }, [index, prompts.length, resetAnswer, clearDraft])
+  }, [current, feedback, sessionTopic, sessionMode, sessionId, now, articleIdentity, articleTitle, answer, round, setWritingHistory, index, prompts.length, resetAnswer, clearDraft])
 
   const restart = useCallback(() => {
     clearDraft()
