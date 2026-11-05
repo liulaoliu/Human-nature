@@ -19,7 +19,7 @@ import { PRODUCTION_MODE_LABEL } from '../../core/production'
 
 export interface ProductionHistoryPanelProps {
   records: WritingRecord[]
-  progress: ProductionProgress[]
+  progress: readonly ProductionProgress[]
   articleIdentity: string
   articleTitle: string
   onBack: () => void

@@ -10,6 +10,9 @@ import {
   productionRecords,
   productionReviewCounts,
   productionStats,
+  assignLegacyProductionSessionIds,
+  mergeProductionProgress,
+  normalizeProductionProgress,
 } from './productionHistory'
 
 const target: ProductionTarget = {
@@ -175,6 +178,47 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
     const list = [real, skipped]
     expect(productionStats(list)).toMatchObject({ attempts: 1, avgScore: 80, targetAttempts: 1 })
     expect(productionHistoryMarkdown(list)).toContain('跳过（未提交，无 AI 批改）')
+  })
+
+  it('进度表守卫：坏行丢弃，合并取更新的一行', () => {
+    const rows = normalizeProductionProgress([
+      {
+        key: 'word:run',
+        kind: 'word',
+        text: 'run',
+        meaning: '跑',
+        attempts: 2,
+        hits: 1,
+        misses: 1,
+        streak: 0,
+        lastAt: '2026-11-01T00:00:00.000Z',
+        dueAt: '2026-11-02T00:00:00.000Z',
+        updatedAt: '2026-11-01T00:00:00.000Z',
+      },
+      { kind: 'word', text: '' },
+    ])
+    expect(rows).toHaveLength(1)
+    const merged = mergeProductionProgress(rows, [
+      { ...rows[0], attempts: 3, hits: 2, updatedAt: '2026-11-03T00:00:00.000Z' },
+    ])
+    expect(merged[0].attempts).toBe(3)
+  })
+
+  it('旧记录迁移：同文章/日期/模式/主题补同一个 sessionId', () => {
+    const real = record()
+    const base = {
+      ...(real.task as unknown as Record<string, unknown>),
+      sessionId: undefined,
+    } as unknown as WritingRecord['task']
+    const a = record({ task: base })
+    const b = record({ at: '2026-11-01T11:00:00.000Z', task: { ...base, round: 2 } as unknown as WritingRecord['task'] })
+    const old = [a, b]
+    const { records, changed } = assignLegacyProductionSessionIds(old)
+    expect(changed).toBe(2)
+    const ids = records.map((r) => (r.task as { sessionId?: string }).sessionId)
+    expect(ids[0]).toBeTruthy()
+    expect(ids[0]).toBe(ids[1])
+    expect(ids[0]).toContain('legacy:A|2026-11-01|full|工作')
   })
 
   it('旧记录没有 sessionId 时标成 legacy 分组', () => {

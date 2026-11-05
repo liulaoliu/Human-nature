@@ -5,7 +5,7 @@ import ProductionHistoryPanel from './ProductionHistoryPanel'
 export interface ProductionHistoryViewProps {
   open: boolean
   records: WritingRecord[]
-  progress: ProductionProgress[]
+  progress: readonly ProductionProgress[]
   articleIdentity: string
   articleTitle: string
   onBack: () => void

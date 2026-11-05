@@ -36,6 +36,78 @@ export interface ProductionProgress {
   dueAt: string
   lastArticleId?: string
   lastMode?: ProductionMode
+  updatedAt?: string
+}
+
+export const PRODUCTION_PROGRESS_CAP = 5000
+
+function isoOr(value: unknown, fallback: string): string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : fallback
+}
+
+function nonNeg(v: unknown): number {
+  const n = Number(v)
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0
+}
+
+/** 外部输入（localStorage / SQLite / 备份）→ 目标块进度；坏行丢弃。 */
+export function normalizeProductionProgress(raw: unknown): ProductionProgress[] {
+  if (!Array.isArray(raw)) return []
+  const now = new Date().toISOString()
+  const byKey = new Map<string, ProductionProgress>()
+  for (const item of raw) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const r = item as Record<string, unknown>
+    const kind = r.kind
+    if (kind !== 'word' && kind !== 'phrase' && kind !== 'idiom') continue
+    const text = typeof r.text === 'string' ? r.text.trim() : ''
+    if (!text) continue
+    const key =
+      typeof r.key === 'string' && r.key.trim()
+        ? r.key.trim()
+        : productionTargetKey(kind, text)
+    const mode = r.lastMode
+    const row: ProductionProgress = {
+      key,
+      kind,
+      text,
+      meaning: typeof r.meaning === 'string' ? r.meaning.trim() : '',
+      attempts: nonNeg(r.attempts),
+      hits: nonNeg(r.hits),
+      misses: nonNeg(r.misses),
+      streak: nonNeg(r.streak),
+      lastAt: isoOr(r.lastAt, now),
+      dueAt: isoOr(r.dueAt, now),
+      ...(typeof r.itemId === 'string' && r.itemId ? { itemId: r.itemId } : {}),
+      ...(typeof r.lastArticleId === 'string' && r.lastArticleId
+        ? { lastArticleId: r.lastArticleId }
+        : {}),
+      ...(mode === 'full' || mode === 'skim' || mode === 'yogurt' ? { lastMode: mode } : {}),
+      ...(typeof r.updatedAt === 'string' && Number.isFinite(Date.parse(r.updatedAt))
+        ? { updatedAt: r.updatedAt }
+        : {}),
+    }
+    const old = byKey.get(key)
+    if (!old || (row.updatedAt ?? row.lastAt) >= (old.updatedAt ?? old.lastAt)) byKey.set(key, row)
+  }
+  return [...byKey.values()]
+    .sort((a, b) => (b.updatedAt ?? b.lastAt).localeCompare(a.updatedAt ?? a.lastAt))
+    .slice(0, PRODUCTION_PROGRESS_CAP)
+}
+
+/** 合并备份：同一目标块取更新的一行；不累加，避免同一批 attempts 被算两次。 */
+export function mergeProductionProgress(
+  current: readonly ProductionProgress[],
+  incoming: readonly ProductionProgress[],
+): ProductionProgress[] {
+  const map = new Map(current.map((p) => [p.key, p]))
+  for (const row of incoming) {
+    const old = map.get(row.key)
+    if (!old || (row.updatedAt ?? row.lastAt) >= (old.updatedAt ?? old.lastAt)) map.set(row.key, row)
+  }
+  return [...map.values()]
+    .sort((a, b) => (b.updatedAt ?? b.lastAt).localeCompare(a.updatedAt ?? a.lastAt))
+    .slice(0, PRODUCTION_PROGRESS_CAP)
 }
 
 export interface ProductionStats {
@@ -62,6 +134,30 @@ export function productionTargetKey(kind: ProductionTargetKind, text: string): s
 
 export function productionRecords(history: readonly WritingRecord[]): WritingRecord[] {
   return history.filter((r) => r.source === 'production')
+}
+
+export interface LegacyProductionMigration {
+  records: WritingRecord[]
+  changed: number
+}
+
+/**
+ * 旧产出稿没有 sessionId：按「文章 + 学习日 + 模式 + 主题」补一个确定性 id，
+ * 让两稿 / 多题至少能归到同一组。迁移前由调用方备份原历史。
+ */
+export function assignLegacyProductionSessionIds(
+  history: readonly WritingRecord[],
+): LegacyProductionMigration {
+  let changed = 0
+  const records = history.map((rec) => {
+    if (rec.source !== 'production') return rec
+    const task = productionTaskOf(rec)
+    if (!task || task.sessionId) return rec
+    const sessionId = `legacy:${rec.articleId}|${rec.at.slice(0, 10)}|${task.mode}|${task.topic}`
+    changed++
+    return { ...rec, task: { ...rec.task, sessionId } as typeof rec.task }
+  })
+  return { records, changed }
 }
 
 export function productionTaskOf(record: WritingRecord): ProductionTask | null {
@@ -142,6 +238,7 @@ export function deriveProductionProgress(records: readonly WritingRecord[]): Pro
         dueAt: hit.used ? addDays(rec.at, DUE_DAYS[Math.min(streak - 1, DUE_DAYS.length - 1)]) : rec.at,
         lastArticleId: rec.articleId,
         lastMode: task.mode,
+        updatedAt: rec.at,
       })
     }
   }

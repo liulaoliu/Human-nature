@@ -1,24 +1,17 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ActivityCat } from '../../core/activity'
-import {
-  checkProductionTargets,
-  type ProductionMode,
-  type ProductionPrompt,
-  type ProductionTargetHit,
-  type ProductionTargetPool,
+import type {
+  ProductionMode,
+  ProductionPrompt,
+  ProductionTargetPool,
 } from '../../core/production'
-import {
-  buildProductionFeedbackPrompt,
-  makeProductionTask,
-  parseProductionFeedback,
-  type ProductionTask,
-} from '../../core/productionPrompts'
-import { addWritingRecord, writingRecordKey, type WritingFeedback, type WritingRecord } from '../../core/writing'
+
+import type { WritingRecord } from '../../core/writing'
 import type { AnswerEvent } from '../../core/answerEvents'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
+import type { ProductionProgress } from '../../core/productionHistory'
 import {
   deriveProductionProgress,
-  makeSkippedProductionRecord,
   productionRecords,
   productionStats,
 } from '../../core/productionHistory'
@@ -27,21 +20,16 @@ import type { ReaderDoc } from './useReaderDoc'
 import type { runAiBatch } from '../../adapters/aiRun'
 import type { ProductionDraft } from '../../core/productionDraft'
 import { useProductionAi } from './useProductionAi'
+import { useProductionAttempt } from './useProductionAttempt'
 import { useProductionDraft } from './useProductionDraft'
 import { useProductionErrors } from './useProductionErrors'
 import { useProductionFollowUp } from './useProductionFollowUp'
+import { useProductionLegacyMigration } from './useProductionLegacyMigration'
+import { useProductionProgressSync } from './useProductionProgressSync'
 import { useProductionPacks, type ProductionStartPayload } from './useProductionPacks'
 import { useProductionSettings } from './useProductionSettings'
 
 export type ProductionStage = 'setup' | 'playing' | 'done'
-
-interface FeedbackPending {
-  prompt: string
-  answer: string
-  task: ProductionTask
-  hits: ProductionTargetHit[]
-  round: number
-}
 
 export interface UseProductionSessionParams {
   doc: ReaderDoc | null
@@ -53,6 +41,8 @@ export interface UseProductionSessionParams {
   /** 错因复习：产出批改的 must-fix 也写进同一套错因卡。 */
   writingErrorProgress?: readonly WritingErrorProgress[]
   setWritingErrorProgress?: Dispatch<SetStateAction<WritingErrorProgress[]>>
+  productionProgress?: readonly ProductionProgress[]
+  setProductionProgress?: Dispatch<SetStateAction<ProductionProgress[]>>
   answerEvents?: readonly AnswerEvent[]
   recordActivity: (cat: ActivityCat, n?: number) => void
   flash: (message: string) => void
@@ -80,6 +70,8 @@ export function useProductionSession({
   setWritingHistory,
   writingErrorProgress,
   setWritingErrorProgress,
+  productionProgress,
+  setProductionProgress,
   answerEvents,
   recordActivity,
   flash,
@@ -89,34 +81,96 @@ export function useProductionSession({
   now = () => new Date(),
 }: UseProductionSessionParams) {
   const { settings, update: updateSettings } = useProductionSettings()
-  const { load: loadDraft, save: saveDraft, clear: clearDraft } = useProductionDraft(articleIdentity)
+  const remoteDraftRef = useRef<(draft: ProductionDraft) => void>(() => {})
+  const lastDraftAtRef = useRef('')
+  const { load: loadDraft, save: saveDraft, clear: clearDraft } = useProductionDraft(
+    articleIdentity,
+    (draft) => remoteDraftRef.current(draft),
+  )
   const [open, setOpen] = useState(false)
+  const [autoStart, setAutoStart] = useState(false)
   const [stage, setStage] = useState<ProductionStage>('setup')
   const [prompts, setPrompts] = useState<ProductionPrompt[]>([])
   const [index, setIndex] = useState(0)
-  const [answer, setAnswer] = useState('')
-  const [feedback, setFeedback] = useState<WritingFeedback | null>(null)
-  const [previousFeedback, setPreviousFeedback] = useState<WritingFeedback | null>(null)
-  const [hits, setHits] = useState<ProductionTargetHit[]>([])
-  const [round, setRound] = useState(1)
-  const [grading, setGrading] = useState(false)
-  const [error, setError] = useState('')
   const [notice, setNotice] = useState('')
-  const [pasteKind, setPasteKind] = useState<'feedback' | ''>('')
-  const [pendingFeedback, setPendingFeedback] = useState<FeedbackPending | null>(null)
+  const [aiError, setAiError] = useState('')
   const [poolInfo, setPoolInfo] = useState<ProductionTargetPool | null>(null)
   const [sessionTopic, setSessionTopic] = useState('')
   const [sessionMode, setSessionMode] = useState<ProductionMode>(settings.mode)
   const [sessionId, setSessionId] = useState('')
-  const [lastRecordKey, setLastRecordKey] = useState('')
-  const ai = useProductionAi({ runAi, aiStatus, onCopyError: setError })
+  const ai = useProductionAi({ runAi, aiStatus, onCopyError: setAiError })
   const { ensureAi, callAi, copy, cancel } = ai
 
   const current = prompts[index] ?? null
+  const attempt = useProductionAttempt({
+    current,
+    sessionTopic,
+    sessionMode,
+    sessionId,
+    articleIdentity,
+    articleTitle,
+    hasNext: index + 1 < prompts.length,
+    onNext: () => {
+      setNotice('')
+      setIndex((i) => i + 1)
+    },
+    onDone: () => {
+      clearDraft()
+      setStage('done')
+    },
+    setWritingHistory,
+    recordActivity,
+    ensureAi,
+    callAi,
+    copy,
+    flash,
+    now,
+  })
+  remoteDraftRef.current = (draft: ProductionDraft) => {
+    if (!open || draft.at <= lastDraftAtRef.current) return
+    setSessionId(draft.sessionId)
+    setSessionMode(draft.mode)
+    setSessionTopic(draft.sessionTopic)
+    setPrompts(draft.prompts)
+    setIndex(draft.index)
+    attempt.restore({
+      answer: draft.answer,
+      feedback: draft.feedback,
+      previousFeedback: draft.previousFeedback,
+      hits: draft.hits,
+      round: draft.round,
+    })
+    lastDraftAtRef.current = draft.at
+    setNotice(draft.notice)
+    setStage('playing')
+    setAiError('')
+    flash('已同步另一标签页的工棚草稿')
+  }
+
+  useProductionLegacyMigration({ records: writingHistory, setRecords: setWritingHistory, flash })
+  const {
+    reset: resetAttempt,
+    restore: restoreAttempt,
+    cancelGrading: cancelGradingAttempt,
+    applyFeedbackPaste: applyAttemptFeedbackPaste,
+    copyPromptAgain: copyAttemptPromptAgain,
+  } = attempt
   const allHistory = useMemo(() => productionRecords(writingHistory), [writingHistory])
   useProductionErrors({ records: allHistory, writingErrorProgress, setWritingErrorProgress, answerEvents, now })
-  const progress = useMemo(() => deriveProductionProgress(allHistory), [allHistory])
-  const followUp = useProductionFollowUp({ current, answer, feedback, ensureAi, callAi, flash })
+  useProductionProgressSync({ records: allHistory, stored: productionProgress, setStored: setProductionProgress })
+  const derivedProgress = useMemo(() => deriveProductionProgress(allHistory), [allHistory])
+  const progress = useMemo(
+    () => (productionProgress && productionProgress.length ? productionProgress : derivedProgress),
+    [productionProgress, derivedProgress],
+  )
+  const followUp = useProductionFollowUp({
+    current,
+    answer: attempt.answer,
+    feedback: attempt.feedback,
+    ensureAi,
+    callAi,
+    flash,
+  })
   const stats = useMemo(() => productionStats(allHistory), [allHistory])
   const history = useMemo(
     () =>
@@ -137,11 +191,11 @@ export function useProductionSession({
       sessionTopic,
       prompts,
       index,
-      answer,
-      feedback,
-      previousFeedback,
-      hits,
-      round,
+      answer: attempt.answer,
+      feedback: attempt.feedback,
+      previousFeedback: attempt.previousFeedback,
+      hits: attempt.hits,
+      round: attempt.round,
       notice,
     }
   }, [
@@ -153,11 +207,11 @@ export function useProductionSession({
     sessionMode,
     sessionTopic,
     index,
-    answer,
-    feedback,
-    previousFeedback,
-    hits,
-    round,
+    attempt.answer,
+    attempt.feedback,
+    attempt.previousFeedback,
+    attempt.hits,
+    attempt.round,
     notice,
   ])
 
@@ -165,35 +219,22 @@ export function useProductionSession({
     if (!open) return
     const draft = snapshotDraft()
     if (!draft) return
+    lastDraftAtRef.current = draft.at
     const timer = setTimeout(() => saveDraft(draft), 250)
     return () => clearTimeout(timer)
   }, [open, snapshotDraft, saveDraft])
-
-  const resetAnswer = useCallback(() => {
-    setAnswer('')
-    setFeedback(null)
-    setPreviousFeedback(null)
-    setHits([])
-    setRound(1)
-    setPasteKind('')
-    setPendingFeedback(null)
-    setError('')
-    setNotice('')
-    setLastRecordKey('')
-  }, [])
 
   const applyPrompts = useCallback(
     (next: ProductionPrompt[], pool: ProductionTargetPool, nextNotice = '') => {
       setPrompts(next)
       setPoolInfo(pool)
       setIndex(0)
-      resetAnswer()
+      resetAttempt()
       setStage('playing')
-      setPasteKind('')
-      setError('')
       setNotice(nextNotice)
+      setAiError('')
     },
-    [resetAnswer],
+    [resetAttempt],
   )
 
   const applySession = useCallback(
@@ -222,189 +263,70 @@ export function useProductionSession({
     onStart: applySession,
   })
 
-  const applyFeedback = useCallback(
-    (parsed: NonNullable<ReturnType<typeof parseProductionFeedback>>, pending: FeedbackPending) => {
-      const rec: WritingRecord = {
-        at: now().toISOString(),
-        articleId: articleIdentity || 'manual',
-        ...(articleTitle ? { articleTitle } : {}),
-        model: pending.task.model,
-        text: pending.answer,
-        feedback: parsed.feedback,
-        // `WritingRecord.task` 的静态形状是 ImitationTask；production 的 hits 作为
-        // 附加快照随 JSON 落盘，历史页用 `isProductionTask` 运行时守卫读取。
-        task: { ...pending.task, hits: pending.hits, round: pending.round } as typeof pending.task,
-        source: 'production',
-      }
-      const key = writingRecordKey(rec)
-      setWritingHistory((h) =>
-        h.some((r) => writingRecordKey(r) === key) ? h : addWritingRecord(h, rec),
-      )
-      setLastRecordKey(key)
-      recordActivity('write', 1)
-      setFeedback(parsed.feedback)
-      setPreviousFeedback(parsed.feedback)
-      setHits(pending.hits)
-      setRound(pending.round)
-      setPasteKind('')
-      setPendingFeedback(null)
-      setError('')
-    },
-    [articleIdentity, articleTitle, now, setWritingHistory, recordActivity],
-  )
+  const {
+    start: startPacks,
+    reset: resetPacks,
+    packPasteKind,
+    applyPacketPaste,
+    copyPromptAgain: copyPackPromptAgain,
+  } = packs
 
-  /** 本地词形匹配漏判时，允许用户手工纠正命中，并写回刚保存的那一稿。 */
-  const setHitUsed = useCallback(
-    (id: string, used: boolean) => {
-      const next = hits.map((h) => (h.id === id ? { ...h, used } : h))
-      setHits(next)
-      if (!lastRecordKey) return
-      setWritingHistory((history) =>
-        history.map((rec) =>
-          writingRecordKey(rec) === lastRecordKey
-            ? {
-                ...rec,
-                task: { ...rec.task, hits: next } as typeof rec.task,
-              }
-            : rec,
-        ),
-      )
-    },
-    [hits, lastRecordKey, setWritingHistory],
-  )
-
-  const grade = useCallback(async () => {
-    if (!current) {
-      flash('这一题还没有题面')
+  useEffect(() => {
+    if (!open || !autoStart || stage !== 'setup' || settings.scope !== 'due') return
+    setAutoStart(false)
+    const useChunks =
+      settings.mode === 'full' ? settings.fullUseChunks : settings.skimUseChunks
+    if (!useChunks) {
+      flash('到期队列需要先打开本机词块；已保留在选草料页')
       return
     }
-    const text = answer.trim()
-    if (!text) {
-      flash('先写一句英文再批改')
-      return
-    }
-    const task = makeProductionTask(current, sessionTopic, sessionMode, sessionId)
-    const nextHits = checkProductionTargets(text, current.targets)
-    const prompt = buildProductionFeedbackPrompt(
-      task,
-      text,
-      round > 1 && previousFeedback?.issues.length ? previousFeedback.issues : undefined,
-    )
-    const pending: FeedbackPending = { prompt, answer: text, task, hits: nextHits, round }
-    setPendingFeedback(pending)
-    setError('')
-
-    if (!(await ensureAi())) {
-      setPasteKind('feedback')
-      if (await copy(prompt)) flash('已复制批改提示词；把 AI 返回的 JSON 粘到下面')
-      return
-    }
-
-    setGrading(true)
-    try {
-      const raw = await callAi('feedback', prompt)
-      const parsed = parseProductionFeedback(raw, text)
-      if (!parsed) {
-        setError('没解析出批改结果：需要 v2 JSON（version / scores / issues / polished / summary）')
-        return
-      }
-      applyFeedback(parsed, pending)
-    } catch (e) {
-      setError(String((e as Error)?.message || e))
-      setPasteKind('feedback')
-    } finally {
-      setGrading(false)
-    }
-  }, [current, answer, sessionTopic, round, previousFeedback, sessionMode, sessionId, ensureAi, copy, callAi, flash, applyFeedback])
-
-  const applyFeedbackPaste = useCallback(
-    (raw: string) => {
-      if (!pendingFeedback) return
-      const parsed = parseProductionFeedback(raw, pendingFeedback.answer)
-      if (!parsed) {
-        setError('没解析出批改结果：需要 v2 JSON（version / scores / issues / polished / summary）')
-        return
-      }
-      applyFeedback(parsed, pendingFeedback)
-    },
-    [pendingFeedback, applyFeedback],
-  )
+    void startPacks()
+  }, [
+    open,
+    autoStart,
+    stage,
+    settings.scope,
+    settings.mode,
+    settings.fullUseChunks,
+    settings.skimUseChunks,
+    startPacks,
+    flash,
+  ])
 
   const applyPaste = useCallback(
     (raw: string) => {
-      if (packs.packPasteKind) packs.applyPacketPaste(raw)
-      else if (pasteKind === 'feedback') applyFeedbackPaste(raw)
+      if (packPasteKind) applyPacketPaste(raw)
+      else if (attempt.pasteKind === 'feedback') applyAttemptFeedbackPaste(raw)
     },
-    [packs, pasteKind, applyFeedbackPaste],
+    [packPasteKind, applyPacketPaste, attempt.pasteKind, applyAttemptFeedbackPaste],
   )
 
   const copyPromptAgain = useCallback(async () => {
-    if (packs.packPasteKind) {
-      await packs.copyPromptAgain()
+    if (packPasteKind) {
+      await copyPackPromptAgain()
       return
     }
-    if (pendingFeedback?.prompt) await copy(pendingFeedback.prompt)
-  }, [packs, pendingFeedback, copy])
-
-  const rewrite = useCallback(() => {
-    if (!feedback || round >= 2) return
-    setPreviousFeedback(feedback)
-    setFeedback(null)
-    setHits([])
-    setRound(2)
-    setPasteKind('')
-    setError('')
-  }, [feedback, round])
-
-  const next = useCallback(() => {
-    if (!feedback) {
-      flash('先重写一版并批改，再进下一题')
-      return
-    }
-    if (round < 2) {
-      flash('先按批改意见重写一版，再进下一题')
-      return
-    }
-    if (index + 1 >= prompts.length) {
-      clearDraft()
-      setStage('done')
-      return
-    }
-    setIndex((i) => i + 1)
-    resetAnswer()
-  }, [feedback, round, index, prompts.length, flash, resetAnswer, clearDraft])
-
-  /** 跳过当前题：没有批改时也留一条「跳过」历史，不伪造分数。 */
-  const skip = useCallback(() => {
-    if (current && !feedback) {
-      const rec = makeSkippedProductionRecord({
-        task: makeProductionTask(current, sessionTopic, sessionMode, sessionId),
-        text: answer.trim(),
-        at: now().toISOString(),
-        articleId: articleIdentity,
-        articleTitle,
-        round,
-      })
-      setWritingHistory((history) => addWritingRecord(history, rec))
-    }
-    if (index + 1 >= prompts.length) {
-      clearDraft()
-      setStage('done')
-      return
-    }
-    setIndex((i) => i + 1)
-    resetAnswer()
-  }, [current, feedback, sessionTopic, sessionMode, sessionId, now, articleIdentity, articleTitle, answer, round, setWritingHistory, index, prompts.length, resetAnswer, clearDraft])
+    await copyAttemptPromptAgain()
+  }, [packPasteKind, copyPackPromptAgain, copyAttemptPromptAgain])
 
   const restart = useCallback(() => {
     clearDraft()
-    packs.reset()
+    resetPacks()
     setStage('setup')
     setPrompts([])
     setPoolInfo(null)
     setIndex(0)
-    resetAnswer()
-  }, [resetAnswer, clearDraft, packs])
+    resetAttempt()
+    setAutoStart(false)
+    setNotice('')
+    setAiError('')
+  }, [resetAttempt, clearDraft, resetPacks])
+
+  const openDueProduction = useCallback(() => {
+    updateSettings({ scope: 'due' })
+    setAutoStart(true)
+    setOpen(true)
+  }, [updateSettings])
 
   const openProduction = useCallback(() => {
     if (!open && !prompts.length && stage === 'setup') {
@@ -415,38 +337,42 @@ export function useProductionSession({
         setSessionTopic(draft.sessionTopic)
         setPrompts(draft.prompts)
         setIndex(draft.index)
-        setAnswer(draft.answer)
-        setFeedback(draft.feedback)
-        setPreviousFeedback(draft.previousFeedback)
-        setHits(draft.hits)
-        setRound(draft.round)
+        restoreAttempt({
+          answer: draft.answer,
+          feedback: draft.feedback,
+          previousFeedback: draft.previousFeedback,
+          hits: draft.hits,
+          round: draft.round,
+        })
+        lastDraftAtRef.current = draft.at
         setNotice(draft.notice)
         setStage('playing')
-        setPasteKind('')
-        setError('')
+        setAiError('')
       }
     }
     setOpen(true)
-  }, [open, prompts.length, stage, loadDraft])
+  }, [open, prompts.length, stage, loadDraft, restoreAttempt])
 
   const close = useCallback(() => {
     const draft = snapshotDraft()
-    if (draft) saveDraft(draft)
+    if (draft) {
+      lastDraftAtRef.current = draft.at
+      saveDraft(draft)
+    }
     if (stage === 'done') clearDraft()
     cancel()
-    packs.reset()
-    setGrading(false)
-    setPasteKind('')
-    setPendingFeedback(null)
+    resetPacks()
+    cancelGradingAttempt()
+    setAiError('')
+    setAutoStart(false)
     setOpen(false)
-    setError('')
-  }, [cancel, snapshotDraft, saveDraft, stage, clearDraft, packs])
+  }, [cancel, snapshotDraft, saveDraft, stage, clearDraft, resetPacks, cancelGradingAttempt])
 
   const cancelRun = useCallback(() => {
     cancel()
-    packs.reset()
-    setGrading(false)
-  }, [cancel, packs])
+    resetPacks()
+    cancelGradingAttempt()
+  }, [cancel, resetPacks, cancelGradingAttempt])
 
   return {
     open,
@@ -454,6 +380,7 @@ export function useProductionSession({
     articleIdentity,
     speak,
     openProduction,
+    openDueProduction,
     close,
     stage,
     settings,
@@ -464,25 +391,25 @@ export function useProductionSession({
     current,
     prompts,
     index,
-    answer,
-    setAnswer,
-    feedback,
-    previousFeedback,
-    hits,
-    setHitUsed,
-    round,
-    rewrite,
-    grade,
-    next,
-    skip,
+    answer: attempt.answer,
+    setAnswer: attempt.setAnswer,
+    feedback: attempt.feedback,
+    previousFeedback: attempt.previousFeedback,
+    hits: attempt.hits,
+    setHitUsed: attempt.setHitUsed,
+    round: attempt.round,
+    rewrite: attempt.rewrite,
+    grade: attempt.grade,
+    next: attempt.next,
+    skip: attempt.skip,
     generating: packs.generating,
-    grading,
-    error: packs.packError || error,
+    grading: attempt.grading,
+    error: packs.packError || aiError || attempt.error,
     notice,
-    pasteKind: packs.packPasteKind || pasteKind,
+    pasteKind: packs.packPasteKind || attempt.pasteKind,
     applyPaste,
     copyPromptAgain,
-    pendingPrompt: packs.packPasteKind ? packs.pendingPrompt : (pendingFeedback?.prompt ?? ''),
+    pendingPrompt: packs.packPasteKind ? packs.pendingPrompt : attempt.pendingPrompt,
     poolInfo,
     history,
     allHistory,

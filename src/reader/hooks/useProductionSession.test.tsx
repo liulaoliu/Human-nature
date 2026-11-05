@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { useState } from 'react'
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLibrary } from '../../core/vocab'
 import { sentenceFixture, vocabItem } from '../../core/testFixtures'
@@ -94,6 +94,23 @@ function setup(configured = true) {
 }
 
 describe('useProductionSession：出题 → 作答 → 批改 → 重写', () => {
+  it('今日计划到期入口会先切 due 范围并自动出题', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        scope: 'due',
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    act(() => h.result.current.openDueProduction())
+    await waitFor(() => expect(h.result.current.stage).toBe('playing'))
+    expect(h.result.current.settings.scope).toBe('due')
+  })
+
   it('AI 出中文题；作答后批改落 writingHistory，重写后才进下一题', async () => {
     const h = setup()
     act(() => h.result.current.openProduction())
