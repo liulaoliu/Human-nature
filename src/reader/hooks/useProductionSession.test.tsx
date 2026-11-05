@@ -205,6 +205,50 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     )
   })
 
+  it('全脂关掉本机词块：AI 随机定主题，不挂目标块', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        fullUseChunks: false,
+        promptCount: 3,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    expect(h.result.current.stage).toBe('playing')
+    expect(h.result.current.current?.targets).toEqual([])
+    expect(h.runAi).toHaveBeenCalledWith(
+      [expect.objectContaining({ task: 'production_topic' })],
+      expect.anything(),
+    )
+  })
+
+  it('脱脂奶打开本机词块：和全脂一样带目标块硬校验', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'skim',
+        topic: '迟到解释',
+        skimUseChunks: true,
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    expect(h.result.current.stage).toBe('playing')
+    expect(h.result.current.current?.targets).toHaveLength(1)
+    expect(h.runAi).toHaveBeenCalledWith(
+      [expect.objectContaining({ task: 'production_pack' })],
+      expect.anything(),
+    )
+  })
+
   it('风味酸奶：本地拆句，不调 AI 出题；批改时把参考译文作为范句', async () => {
     const h = setup()
     act(() =>

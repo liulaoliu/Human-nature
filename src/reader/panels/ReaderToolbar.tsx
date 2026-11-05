@@ -389,9 +389,9 @@ export default function ReaderToolbar({
           <button
             className="tb-production"
             onClick={onOpenProduction}
-            title="D老师奶牛工棚：全脂随机抽词块 / 脱脂奶按主题 / 风味酸奶逐句翻译；先写英文再批改重写"
+            title="D老师🐄 奶牛工棚：全脂随机主题 / 脱脂奶按主题 / 风味酸奶逐句翻译；可选带本机词块，先写英文再批改重写"
           >
-            🐄 奶牛工棚
+            D老师🐄 奶牛工棚
           </button>
         )}
         {!editing && (

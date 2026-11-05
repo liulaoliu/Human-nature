@@ -85,6 +85,31 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(start).toHaveBeenCalled()
   })
 
+  it('全脂可关本机词块；脱脂奶可开本机词块', () => {
+    const { rerender } = render(
+      <ProductionPanel
+        model={props({
+          settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'full', fullUseChunks: false },
+        })}
+      />,
+    )
+    expect(screen.queryByLabelText('每题目标块数')).toBeNull()
+
+    rerender(
+      <ProductionPanel
+        model={props({
+          settings: {
+            ...DEFAULT_PRODUCTION_SETTINGS,
+            mode: 'skim',
+            topic: '工作沟通',
+            skimUseChunks: true,
+          },
+        })}
+      />,
+    )
+    expect(screen.getByLabelText('每题目标块数')).toBeTruthy()
+  })
+
   it('三种模式可切；风味酸奶显示中英两个粘贴框，不走主题', () => {
     const updateSettings = vi.fn()
     const start = vi.fn()

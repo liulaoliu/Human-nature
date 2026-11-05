@@ -192,6 +192,16 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
     expect(prompt).toContain('迟到解释')
     expect(prompt).toContain('每题只给一个中文句子')
     expect(prompt).not.toContain('targetIds')
+    const random = buildTopicPackPrompt({
+      topic: '',
+      angle: 'daily',
+      tone: 'neutral',
+      articleTitle: 'A',
+      promptCount: 3,
+      randomTopic: true,
+    })
+    expect(random).toContain('主题：随机自选')
+    expect(random).not.toContain('参考文章')
     const parsed = parseTopicPack(
       '{"prompts":[{"zh":"解释你为什么迟到了。","goal":"解释原因"}]}',
       3,
@@ -269,6 +279,9 @@ describe('ProductionSettings / task / doc lemmas', () => {
     expect(
       normalizeProductionSettings({ mode: 'yogurt', sourceText: '中文', referenceText: 'English' }),
     ).toMatchObject({ mode: 'yogurt', sourceText: '中文', referenceText: 'English' })
+    expect(
+      normalizeProductionSettings({ fullUseChunks: false, skimUseChunks: true }),
+    ).toMatchObject({ fullUseChunks: false, skimUseChunks: true })
   })
 
   it('任务复用仿写 rubric，mustUse = 目标块', () => {

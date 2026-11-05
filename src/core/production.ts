@@ -33,8 +33,8 @@ export const PRODUCTION_MODE_LABEL: Record<ProductionMode, string> = {
   yogurt: '风味酸奶',
 }
 export const PRODUCTION_MODE_DESC: Record<ProductionMode, string> = {
-  full: '不设主题；按配置随机抽词 / 词组，AI 随机出中文情境。',
-  skim: '先写主题；AI 只根据主题出中文句子，不强制目标块。',
+  full: '不写主题；AI 随机定主题，可选从本机词库抽词 / 词组。',
+  skim: '先写主题；可选带上本机词 / 词组 / 习语，不选就纯主题出句。',
   yogurt: '粘贴中文原文和英文参考译文；按句拆开，逐句翻译，批改后再重写。',
 }
 
@@ -104,6 +104,10 @@ export interface ProductionSettings {
   promptCount: number
   targetsPerPrompt: number
   weakRatio: number
+  /** 全脂是否带本机词块；关掉就是纯随机主题。 */
+  fullUseChunks: boolean
+  /** 脱脂奶是否带本机词块；默认关，选中后和全脂一样用目标块硬校验。 */
+  skimUseChunks: boolean
   /** 风味酸奶草稿：中文原文 / 英文参考译文。体量不大，跟设置一起留在本机。 */
   sourceText: string
   referenceText: string
@@ -119,6 +123,8 @@ export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
   promptCount: 5,
   targetsPerPrompt: 2,
   weakRatio: 30,
+  fullUseChunks: true,
+  skimUseChunks: false,
   sourceText: '',
   referenceText: '',
 }
@@ -134,6 +140,8 @@ export function normalizeProductionSettings(raw: unknown): ProductionSettings {
   if (typeof o.topic === 'string') out.topic = o.topic.trim().slice(0, 200)
   if (typeof o.sourceText === 'string') out.sourceText = o.sourceText.slice(0, 50000)
   if (typeof o.referenceText === 'string') out.referenceText = o.referenceText.slice(0, 50000)
+  if (typeof o.fullUseChunks === 'boolean') out.fullUseChunks = o.fullUseChunks
+  if (typeof o.skimUseChunks === 'boolean') out.skimUseChunks = o.skimUseChunks
   if (typeof o.angle === 'string' && (PRODUCTION_ANGLES as string[]).includes(o.angle)) {
     out.angle = o.angle as ProductionAngle
   }
@@ -296,7 +304,7 @@ export function buildProductionPackPrompt(input: BuildProductionPackInput): stri
     .join('\n')
   const full = input.mode === 'full'
   const topicLine = full
-    ? '主题：不限（随机挑选日常生活 / 工作 / 学习 / 社交场景，不要围绕单一主题）'
+    ? '主题：随机自选（随机挑选日常生活 / 工作 / 学习 / 社交主题，不要围绕单一主题）'
     : `主题：${input.topic}`
   return [
     '你是英语产出训练的出题老师。请写中文情境提示，让学生用英文表达。',
@@ -346,17 +354,21 @@ export interface BuildTopicPackInput {
   tone: ProductionTone
   articleTitle: string
   promptCount: number
+  /** 全脂关掉本机词块时：让 AI 自己随机定主题。 */
+  randomTopic?: boolean
 }
 
-/** 脱脂奶：只给主题，让 AI 出中文句子；不强制目标块。 */
+/** 只给主题（或让 AI 随机定主题），让 AI 出中文句子；不强制目标块。 */
 export function buildTopicPackPrompt(input: BuildTopicPackInput): string {
   return [
     '你是英语产出训练的出题老师。请围绕主题写中文句子，让学生翻译成英文。',
     '',
-    `主题：${input.topic}`,
+    input.randomTopic
+      ? '主题：随机自选（请自己挑一个具体的生活 / 工作 / 学习主题，不要问用户；不同题可以来自不同场景）'
+      : `主题：${input.topic}`,
     `角度：${PRODUCTION_ANGLE_LABEL[input.angle]}`,
     `语气：${PRODUCTION_TONE_LABEL[input.tone]}`,
-    input.articleTitle ? `参考文章：${input.articleTitle}` : '',
+    input.articleTitle && !input.randomTopic ? `参考文章：${input.articleTitle}` : '',
     '',
     '必须遵守：',
     `- 出 ${input.promptCount} 道题；每题只给一个中文句子 / 一个具体沟通情境；`,
@@ -597,7 +609,13 @@ export function makeProductionTask(
             { dimension: '语法与自然度', weight: 35, description: '语法、时态、冠词、介词和语序是否自然' },
             { dimension: '表达地道', weight: 25, description: '用词和搭配是否像正常英文，而不是逐字硬翻' },
           ],
-    focus: yogurt ? '逐句翻译' : hasTargets ? prompt.targets.map((t) => t.text).join(' / ') : '主题翻译',
+    focus: yogurt
+      ? '逐句翻译'
+      : hasTargets
+        ? prompt.targets.map((t) => t.text).join(' / ')
+        : mode === 'full'
+          ? '随机主题'
+          : '主题翻译',
   }
 }
 

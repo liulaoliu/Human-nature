@@ -29,7 +29,7 @@ import { useProductionSettings } from './useProductionSettings'
 export type ProductionStage = 'setup' | 'playing' | 'done'
 
 interface PacketPending {
-  mode: 'full' | 'skim'
+  kind: 'topic' | 'target'
   prompt: string
   allowed: ProductionTarget[]
   maxPrompts: number
@@ -151,11 +151,13 @@ export function useProductionSession({
     }
 
     const topic = settings.topic.trim()
-    if (mode === 'skim') {
-      if (!topic) {
-        flash('脱脂奶需要先写一个主题')
-        return
-      }
+    if (mode === 'skim' && !topic) {
+      flash('脱脂奶需要先写一个主题')
+      return
+    }
+    const useChunks = mode === 'full' ? settings.fullUseChunks : settings.skimUseChunks
+
+    if (!useChunks) {
       const count = settings.promptCount
       const prompt = buildTopicPackPrompt({
         topic,
@@ -163,10 +165,12 @@ export function useProductionSession({
         tone: settings.tone,
         articleTitle,
         promptCount: count,
+        randomTopic: mode === 'full',
       })
-      setSessionTopic(topic)
+      const topicLabel = mode === 'full' ? `${PRODUCTION_MODE_LABEL.full}随机` : topic
+      setSessionTopic(topicLabel)
       setPendingPacket({
-        mode: 'skim',
+        kind: 'topic',
         prompt,
         allowed: [],
         maxPrompts: count,
@@ -175,7 +179,7 @@ export function useProductionSession({
       setError('')
       if (!(await ensureAi())) {
         setPasteKind('pack')
-        if (await copy(prompt)) flash('已复制脱脂奶出题提示词；把 AI 返回的 JSON 粘到下面')
+        if (await copy(prompt)) flash('已复制出题提示词；把 AI 返回的 JSON 粘到下面')
         return
       }
       setGenerating(true)
@@ -183,7 +187,7 @@ export function useProductionSession({
         const raw = await callAi('production_topic', prompt)
         const parsed = parseTopicPack(raw, count)
         if (!parsed) {
-          setError('AI 没有返回可用的脱脂奶题目。需要 JSON：{"prompts":[{"zh","goal"}]}')
+          setError('AI 没有返回可用的题目。需要 JSON：{"prompts":[{"zh","goal"}]}')
           return
         }
         applyPrompts(parsed, { targets: [], total: 0, weak: 0 })
@@ -247,7 +251,7 @@ export function useProductionSession({
       promptCount: count,
       targetsPerPrompt: per,
     })
-    setPendingPacket({ mode: 'full', prompt, allowed: pool.targets, maxPrompts: count, pool })
+    setPendingPacket({ kind: 'target', prompt, allowed: pool.targets, maxPrompts: count, pool })
     setError('')
 
     if (!(await ensureAi())) {
@@ -277,12 +281,12 @@ export function useProductionSession({
     (raw: string) => {
       if (!pendingPacket) return
       const parsed =
-        pendingPacket.mode === 'skim'
+        pendingPacket.kind === 'topic'
           ? parseTopicPack(raw, pendingPacket.maxPrompts)
           : parseProductionPack(raw, pendingPacket.allowed, pendingPacket.maxPrompts)
       if (!parsed) {
         setError(
-          pendingPacket.mode === 'skim'
+          pendingPacket.kind === 'topic'
             ? '没解析出题目：检查 JSON 里的 prompts / zh / goal'
             : '没解析出题目：检查 JSON 里的 prompts / zh / targetIds，且 targetIds 必须来自候选清单',
         )

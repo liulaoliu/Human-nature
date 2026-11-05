@@ -46,12 +46,14 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
   const pastePrompt = model.pendingPrompt
   const isYogurt = settings.mode === 'yogurt'
   const isSkim = settings.mode === 'skim'
+  const isFull = settings.mode === 'full'
+  const useChunks = isYogurt ? false : isFull ? settings.fullUseChunks : settings.skimUseChunks
   const showPaste = !!model.pasteKind && !(isYogurt && model.pasteKind === 'pack')
   const canStart = isYogurt
     ? !!settings.sourceText.trim() && !!settings.referenceText.trim()
     : isSkim
-      ? !!settings.topic.trim()
-      : !!settings.types.length
+      ? !!settings.topic.trim() && (!useChunks || !!settings.types.length)
+      : !useChunks || !!settings.types.length
 
   const toggleType = (kind: ProductionTargetKind, on: boolean) => {
     const types = on ? [...new Set([...settings.types, kind])] : settings.types.filter((t) => t !== kind)
@@ -137,9 +139,36 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 </div>
               ) : (
                 <div className="production-field">
-                  <span className="muted">全脂不用主题：D老师会按下面的配置随机抽词块、随机出不同场景。</span>
+                  <span className="muted">
+                    {useChunks
+                      ? '全脂：AI 随机定主题，并从本机词库随机抽目标块，出不同场景。'
+                      : '全脂：AI 随机定主题，不使用本机词块。'}
+                  </span>
                 </div>
               )}
+
+              <div className="production-field">
+                <label className="check-inline">
+                  <input
+                    type="checkbox"
+                    aria-label={isFull ? '全脂使用本机词块' : '脱脂奶使用本机词块'}
+                    checked={isFull ? settings.fullUseChunks : settings.skimUseChunks}
+                    onChange={(e) =>
+                      updateSettings(
+                        isFull ? { fullUseChunks: e.target.checked } : { skimUseChunks: e.target.checked },
+                      )
+                    }
+                  />
+                  带本机词块
+                </label>
+                <span className="muted">
+                  {useChunks
+                    ? '会从本机词 / 词组 / 习语里抽目标块，选句时要求用上。'
+                    : isFull
+                      ? '不查词库；纯随机主题，适合先放松地产出。'
+                      : '不查词库；只围绕主题写。打开后就和全脂一样抽本机词块。'}
+                </span>
+              </div>
 
               <div className="production-field">
                 <span className="muted">角度 / 语气</span>
@@ -166,7 +195,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                       </option>
                     ))}
                   </select>
-                  {!isSkim && (
+                  {useChunks && (
                     <select
                       aria-label="目标词块范围"
                       value={settings.scope}
@@ -179,7 +208,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 </div>
               </div>
 
-              {!isSkim && (
+              {useChunks && (
                 <div className="production-field">
                   <span className="muted">目标块类型</span>
                   <div className="bar">
@@ -207,7 +236,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                     options={PRODUCTION_PROMPT_COUNTS}
                     onChange={(n) => updateSettings({ promptCount: n })}
                   />
-                  {!isSkim && (
+                  {useChunks && (
                     <>
                       <RoundSizeSelect
                         ariaLabel="每题目标块数"
@@ -271,7 +300,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 onChange={(e) => setPasteText(e.target.value)}
                 placeholder={
                   model.pasteKind === 'pack'
-                    ? isSkim
+                    ? !useChunks
                       ? '{"prompts":[{"zh":"...","goal":"..."}]}'
                       : '{"prompts":[{"zh":"...","goal":"...","targetIds":["..."]}]}'
                     : '{"version":2,...}'
@@ -324,7 +353,9 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 ? `目标块 ${model.current.targets.length} 个（答完再看具体是哪些）`
                 : isYogurt
                   ? '风味酸奶 · 参考译文答完再看'
-                  : '主题翻译 · 不限定目标块'}
+                  : isFull
+                    ? '全脂随机主题 · 不限定目标块'
+                    : '主题翻译 · 不限定目标块'}
             </span>
           </div>
 
@@ -369,7 +400,9 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                       ? '先自己写一版英文，不要先看答案…'
                       : isYogurt
                         ? '先自己翻译这句；参考译文在批改前不会出现…'
-                        : '围绕主题自己写一版英文，不要先看答案…'
+                        : isFull
+                          ? '按随机主题自己写一版英文，不要先看答案…'
+                          : '围绕主题自己写一版英文，不要先看答案…'
                     : model.current.targets.length
                       ? '按批改意见重写一版；目标块仍然要用上。'
                       : isYogurt
