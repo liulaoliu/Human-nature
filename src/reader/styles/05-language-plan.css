@@ -381,5 +381,18 @@
 .idrills .bar { display: flex; gap: 6px; flex-wrap: wrap; }
 .idrill-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
 .idrill-row > .muted { flex: 0 0 auto; font-size: 12px; min-width: 62px; }
+.idrill-start {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+}
+.idrill-start b { margin: 0; }
+.idrill-start .idrill-limit { font-size: 12px; }
 .intensive-tip { margin-top: 8px; line-height: 1.6; }
 

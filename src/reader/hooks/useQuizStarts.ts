@@ -46,13 +46,14 @@ export interface QuizStarts {
   cancelWarmup: () => void
   start: () => void
   startArticle: () => void
-  startItems: (ids: string[], kindsArg?: QuizKind[]) => void
+  startItems: (ids: string[], kindsArg?: QuizKind[], opts?: { limit?: number }) => void
   startDrill: (
     ks: QuizKind[],
     scopeArg?: QuizScope,
     opts?: { warmup?: 'memory' | 'chunk'; limit?: number },
   ) => void
-  startArticleDrill: (ks: QuizKind[]) => void
+  /** `limit` 省略 = 用考试设置里的题量；精读面板会传各自入口的数。 */
+  startArticleDrill: (ks: QuizKind[], limit?: number) => void
 }
 
 /**
@@ -105,7 +106,7 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
 
   /** 从指定词条开一轮考试（错题本「重练词汇」/ 错题包围战 用）。可指定题型。 */
   const startItems = useCallback(
-    (ids: string[], kindsArg?: QuizKind[]) => {
+    (ids: string[], kindsArg?: QuizKind[], opts?: { limit?: number }) => {
       const items = libraryItems.filter((it) => ids.includes(it.id))
       const qs = buildQuizSet(items, kindsArg ?? kinds, unique)
       if (!qs.length) {
@@ -113,7 +114,8 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
         return
       }
       if (kindsArg) setKinds(kindsArg)
-      begin(qs)
+      const take = opts?.limit ?? 0
+      begin(take > 0 ? shuffleQuiz(qs).slice(0, take) : qs)
     },
     [libraryItems, kinds, unique, begin, flash, setKinds],
   )
@@ -135,7 +137,7 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
       }
       setKinds(ks)
       setScope(scopeArg)
-      // 精读面板的记忆 / 词块拷打可以单独指定「每次几项」；其它入口仍用考试设置的题量。
+      // 精读面板每种拷打可以单独指定「每次几项」；其它入口仍用考试设置的题量。
       const take = opts?.limit ?? limit
       const picked = shuffleQuiz(qs).slice(0, take > 0 ? take : qs.length)
       if (opts?.warmup) {
@@ -167,7 +169,7 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
 
   /** 精读工作流：用指定文章级题型开一轮（结构/语法、中译英、功能词、排序）。 */
   const startArticleDrill = useCallback(
-    (ks: QuizKind[]) => {
+    (ks: QuizKind[], limitArg?: number) => {
       const sents = doc?.sentences ?? []
       const qs = buildArticleQuestions(sents, { kinds: ks.filter(isArticleKind) })
       if (!qs.length) {
@@ -175,7 +177,8 @@ export function useQuizStarts(params: UseQuizStartsParams): QuizStarts {
         return
       }
       setArticleKinds(ks)
-      begin(shuffleQuiz(qs).slice(0, limit > 0 ? limit : qs.length), { article: true })
+      const take = limitArg ?? limit
+      begin(shuffleQuiz(qs).slice(0, take > 0 ? take : qs.length), { article: true })
     },
     [doc, limit, begin, flash, setArticleKinds],
   )

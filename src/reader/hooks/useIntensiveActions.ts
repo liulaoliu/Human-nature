@@ -1,7 +1,7 @@
 import { useCallback } from 'react'
-import type { DrillKind } from '../panels/IntensivePanel'
 import type { QuizKind } from '../../core/quiz'
 import type { IntensiveStageKey } from '../../core/intensive'
+import type { DrillLimits, QuizDrillKind } from '../../core/intensiveDrill'
 
 /**
  * 精读工作流面板上的两个入口动作 —— 「跳到对应工具」和「就地拷打一篇」。
@@ -27,14 +27,14 @@ export interface IntensiveActionsDeps {
     scope?: 'article' | 'all',
     opts?: { warmup?: 'memory' | 'chunk'; limit?: number },
   ) => void
-  /** 记忆 / 词块拷打每次几项（设置存本机，默认 10）。 */
-  drillLimit: number
-  /** 文章级测验（句子题，不写 SRS） */
-  startQuizArticleDrill: (kinds: QuizKind[]) => void
+  /** 七种拷打各自记住的每次题数（默认 10）。 */
+  drillLimits: DrillLimits
+  /** 文章级测验（句子题，不写 SRS）；limit 省略 = 用考试设置的题量 */
+  startQuizArticleDrill: (kinds: QuizKind[], limit?: number) => void
 }
 
-/** 拷打类型 → 题型（与 `startQuizDrill` 的 `QuizKind` 对齐，语法那档走文章级） */
-const DRILL_KINDS: Record<DrillKind, QuizKind[]> = {
+/** 走考试引擎的六种 → 题型（语法那档走文章级，错题包围战单独处理） */
+const DRILL_KINDS: Record<QuizDrillKind, QuizKind[]> = {
   memory: ['spell', 'meaning', 'choice'],
   chunk: ['usage', 'cloze', 'collocation', 'prep', 'idiom'],
   deep: ['define', 'defineChoice'],
@@ -51,8 +51,10 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
     runAiLocal,
     startQuizDrill,
     startQuizArticleDrill,
-    drillLimit,
+    drillLimits,
   } = deps
+  /** 语法·结构也走文章级测验；阶段入口没有选择题数的界面，沿用这个入口记住的数。 */
+  const grammarLimit = drillLimits.grammar
 
   /**
    * 某个阶段「跳到对应工具」。
@@ -74,24 +76,32 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       else if (key === 'produce') openWriting()
       // 语法专项的按钮写着「练结构 / 语法」，就该去练：和「快速拷打 → 语法」同一套文章级题型
       //（句子题，不写 SRS）。之前这里落到 `runAiLocal()`，点下去只是补语言点，等于没练。
-      else if (key === 'grammar') startQuizArticleDrill(DRILL_KINDS.grammar)
+      else if (key === 'grammar') startQuizArticleDrill(DRILL_KINDS.grammar, grammarLimit)
     },
-    [openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill],
+    [openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill, grammarLimit],
   )
 
-  /** 快捷「拷打」（只针对本篇） */
+  /**
+   * 快捷「拷打」（只针对本篇；错题包围战走它自己的入口）。
+   *
+   * `limit` 由面板上的数量选择器传入；每种入口各存各的，默认 10。
+   */
   const startIntensiveDrill = useCallback(
-    (kind: DrillKind) => {
+    (kind: QuizDrillKind, limit: number) => {
       const kinds = DRILL_KINDS[kind]
-      if (kind === 'grammar') startQuizArticleDrill(kinds)
+      if (kind === 'grammar') {
+        startQuizArticleDrill(kinds, limit)
+        return
+      }
       // 记忆 / 词块两档是闭卷回忆：先摊开这轮要考的词（词 + 释义 / 词块）再开考。
       // 直接上来就考，第一次见的词只能靠猜 —— 猜错还会被当成「没记住」记进错题本。
-      // 每次几项也在这两档上单独生效（面板里可调，默认 10），不跟普通考试共用 20 的题量。
-      else if (kind === 'memory' || kind === 'chunk')
-        startQuizDrill(kinds, 'article', { warmup: kind, limit: drillLimit })
-      else startQuizDrill(kinds, 'article')
+      if (kind === 'memory' || kind === 'chunk') {
+        startQuizDrill(kinds, 'article', { warmup: kind, limit })
+        return
+      }
+      startQuizDrill(kinds, 'article', { limit })
     },
-    [startQuizDrill, startQuizArticleDrill, drillLimit],
+    [startQuizDrill, startQuizArticleDrill],
   )
 
   return { openIntensiveStage, startIntensiveDrill }

@@ -273,7 +273,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           onDeleteRetell: deleteRetell,
           onStage: openIntensiveStage,
           onDrill: startIntensiveDrill,
-          drillLimit: quizApi.drillLimit,
+          drillLimits: quizApi.drillLimits,
           onDrillLimitChange: quizApi.setDrillLimit,
           onSiege: startSiege,
           scrollKey: props.panelScrollKey,

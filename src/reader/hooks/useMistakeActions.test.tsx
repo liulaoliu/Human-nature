@@ -116,16 +116,27 @@ describe('useMistakeActions：错题包围战', () => {
     expect(startQuizItems).toHaveBeenCalledWith(
       ['v1'],
       ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
+      { limit: 40 },
     )
     expect(flash).toHaveBeenCalledWith('错题包围战：1 个欠揍的词，打到全对')
   })
 
-  it('最多收 40 个词', () => {
+  it('最多收 40 个词（侧栏入口不传数量）', () => {
     const libraryItems = Array.from({ length: 50 }, (_, i) => item({ id: `v${i}`, word: `w${i}`, lemma: `w${i}` }))
     const mistakes = libraryItems.map((it, i) => mistake({ id: `m${i}`, itemId: it.id }))
     const { result, startQuizItems, flash } = setup({ libraryItems, mistakes })
     act(() => result.current.startSiege())
     expect((startQuizItems.mock.calls[0][0] as string[]).length).toBe(40)
     expect(flash).toHaveBeenCalledWith('错题包围战：40 个欠揍的词，打到全对')
+  })
+
+  it('精读面板传 N：最多挑 N 个词，题目也封顶 N', () => {
+    const libraryItems = Array.from({ length: 50 }, (_, i) => item({ id: `v${i}`, word: `w${i}`, lemma: `w${i}` }))
+    const mistakes = libraryItems.map((it, i) => mistake({ id: `m${i}`, itemId: it.id }))
+    const { result, startQuizItems, flash } = setup({ libraryItems, mistakes })
+    act(() => result.current.startSiege(5))
+    expect((startQuizItems.mock.calls[0][0] as string[]).length).toBe(5)
+    expect(startQuizItems.mock.calls[0][2]).toEqual({ limit: 5 })
+    expect(flash).toHaveBeenCalledWith('错题包围战：5 个欠揍的词，打到全对')
   })
 })

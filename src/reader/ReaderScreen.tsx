@@ -140,7 +140,7 @@ export interface ReaderScreenProps {
   lastPicked: { word: string; sid: string } | null
   bubblePos: { top: number; left: number } | null
   articleRef: ArticleP['articleRef']
-  startIntensiveDrill: (kind: Parameters<OverlayP['intensive']['onDrill']>[0]) => void
+  startIntensiveDrill: OverlayP['intensive']['onDrill']
   openIntensiveStage: OverlayP['intensive']['onStage']
   dictTools: SidebarP['dictTools']
   dictReady: boolean

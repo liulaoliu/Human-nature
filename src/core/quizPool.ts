@@ -22,22 +22,6 @@ export type QuizScope = 'all' | 'article' | 'unmastered' | 'due' | 'lapses'
 /** 范围的取值表（持久化设置用它校验）。 */
 export const QUIZ_SCOPES: readonly QuizScope[] = ['all', 'article', 'unmastered', 'due', 'lapses']
 
-/** 记忆 / 词块拷打默认每次考几项（可在精读面板调整，设置存本机）。 */
-export const DEFAULT_DRILL_LIMIT = 10
-
-/** 精读面板「每次拷打」下拉的可选档位。 */
-export const DRILL_LIMIT_OPTIONS = [5, 10, 15, 20, 30] as const
-
-/**
- * 把外部输入（localStorage / 下拉框）收敛到合法档位。
- * 只认 `DRILL_LIMIT_OPTIONS` 里的正整数，其余一律回默认 10：
- * 这样下拉框永远有对应选项，坏数据也不会变成 0 题（= 全部）或负数。
- */
-export function normalizeDrillLimit(raw: unknown): number {
-  const n = typeof raw === 'number' ? raw : Number(raw)
-  return (DRILL_LIMIT_OPTIONS as readonly number[]).includes(n) ? n : DEFAULT_DRILL_LIMIT
-}
-
 export interface PoolContext {
   /** 当前文章的 identity（词条的 source.fileName 用它认「本篇的词」）。 */
   articleIdentity: string

@@ -9,7 +9,7 @@ export interface UseMistakeActionsParams {
   mistakes: MistakeEntry[]
   /** 全库词条（包围战按错题 / lapses / 优先从里面挑） */
   libraryItems: VocabItem[]
-  startQuizItems: (ids: string[], kinds?: QuizKind[]) => void
+  startQuizItems: (ids: string[], kinds?: QuizKind[], opts?: { limit?: number }) => void
   startListenQuestions: (questions: ListeningQuestion[]) => void
   startDictItems: (items: { id: string; text: string }[]) => void
   setQuizLoopWrong: (on: boolean) => void
@@ -21,7 +21,8 @@ export interface UseMistakeActionsResult {
   retryMistakeVocab: () => void
   retryMistakeListen: () => void
   retryMistakeDict: () => void
-  startSiege: () => void
+  /** 不传 = 侧栏入口，仍最多 40 个词；精读面板会传用户选的数。 */
+  startSiege: (limit?: number) => void
 }
 
 /**
@@ -71,20 +72,25 @@ export function useMistakeActions({
   }, [mistakes, startDictItems, flash])
 
   /** 错题包围战：错题 + 优先重排 + 常错 + 学不稳 一起围剿，打到全对。 */
-  const startSiege = useCallback(() => {
-    const picked = buildSiege(libraryItems, mistakes, { scope: 'all', limit: 40 })
-    if (!picked.length) {
-      flash('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
-      return
-    }
-    setQuizLoopWrong(true)
-    setQuizScope('lapses')
-    startQuizItems(
-      picked.map((x) => x.item.id),
-      ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
-    )
-    flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
-  }, [libraryItems, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash])
+  const startSiege = useCallback(
+    (limit = 40) => {
+      const max = limit > 0 ? limit : 40
+      const picked = buildSiege(libraryItems, mistakes, { scope: 'all', limit: max })
+      if (!picked.length) {
+        flash('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
+        return
+      }
+      setQuizLoopWrong(true)
+      setQuizScope('lapses')
+      startQuizItems(
+        picked.map((x) => x.item.id),
+        ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
+        { limit: max },
+      )
+      flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
+    },
+    [libraryItems, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash],
+  )
 
   return { retryMistakeVocab, retryMistakeListen, retryMistakeDict, startSiege }
 }

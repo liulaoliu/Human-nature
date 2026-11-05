@@ -625,7 +625,7 @@ export default function ReaderApp() {
     runAiLocal,
     startQuizDrill: services.startQuizDrill,
     startQuizArticleDrill: services.startQuizArticleDrill,
-    drillLimit: services.quizApi.drillLimit,
+    drillLimits: services.quizApi.drillLimits,
   })
 
   /**

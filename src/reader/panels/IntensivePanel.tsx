@@ -1,11 +1,10 @@
 import { useRef, useState } from 'react'
 import { AI_BATCH_NAME } from '../labels'
-import { DRILL_LIMIT_OPTIONS } from '../../core/quizPool'
 import type { IntensivePlan, IntensiveStageKey } from '../../core/intensive'
+import type { DrillKind, DrillLimits, QuizDrillKind } from '../../core/intensiveDrill'
 import type { OutputBoard } from '../../core/output'
 import { usePanelScrollMemory } from '../hooks/usePanelScrollMemory'
-
-export type DrillKind = 'memory' | 'chunk' | 'deep' | 'mark' | 'grammar' | 'listen'
+import DrillLauncher from './DrillLauncher'
 
 export interface IntensivePanelProps {
   onClose: () => void
@@ -36,13 +35,13 @@ export interface IntensivePanelProps {
   onDeleteRetell: (at: string) => void
   /** 阶段行右侧按钮：按阶段跳到对应工具 */
   onStage: (key: IntensiveStageKey) => void
-  /** 快捷「拷打」 */
-  onDrill: (kind: DrillKind) => void
-  /** 记忆 / 词块拷打每次考几项（用户可调，持久化，默认 10）。 */
-  drillLimit: number
-  onDrillLimitChange: (n: number) => void
+  /** 快捷「拷打」：确认数量后开考 */
+  onDrill: (kind: QuizDrillKind, limit: number) => void
+  /** 七种拷打各自记住的每次题数（默认 10）。 */
+  drillLimits: DrillLimits
+  onDrillLimitChange: (kind: DrillKind, limit: number) => void
   /** 「错题包围战」：错题 + 优先 + 学不稳 一起围剿（打到全对）。 */
-  onSiege: () => void
+  onSiege: (limit: number) => void
   /** 滚动位置记忆键（文章标识）；不传 = 不记。 */
   scrollKey?: string
 }
@@ -75,7 +74,7 @@ export default function IntensivePanel({
   onDeleteRetell,
   onStage,
   onDrill,
-  drillLimit,
+  drillLimits,
   onDrillLimitChange,
   onSiege,
   scrollKey = '',
@@ -200,67 +199,14 @@ export default function IntensivePanel({
           ))}
         </div>
 
-        <div className="idrills">
-          <div className="idrills-head">
-            <b>快速拷打（只针对本篇）</b>
-            <label
-              className="idrill-limit"
-              title="记忆 / 词块拷打每次考几题；选完会记住，下次开考仍用这个数"
-            >
-              <span className="muted">记忆 / 词块每次</span>
-              <select
-                aria-label="记忆 / 词块拷打每次题数"
-                value={String(drillLimit)}
-                onChange={(e) => onDrillLimitChange(Number(e.target.value))}
-                disabled={busy}
-              >
-                {DRILL_LIMIT_OPTIONS.map((n) => (
-                  <option key={n} value={n}>
-                    {n} 题
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="idrill-row">
-            <span className="muted">词 · 搭配</span>
-            <button onClick={() => onDrill('memory')} disabled={!hasDoc || busy} title="拼写 + 看词选义 + 词形辨析：把词变成长期记忆">
-              🥊 记忆拷打
-            </button>
-            <button onClick={() => onDrill('chunk')} disabled={!hasDoc || busy} title="搭配填空 + 例句填空 + 搭配默写 + 介词填空 + 习语填空：逼你把词组用出来">
-              🧩 词块拷打
-            </button>
-            <button onClick={() => onDrill('deep')} disabled={!hasDoc || busy} title="英英释义 → 写单词 / 选单词：用英文理解英文，记得更牢">
-              🇬🇧 英英释义
-            </button>
-            <button onClick={() => onDrill('mark')} disabled={!hasDoc || busy} title="判断可数/不可数、及物/不及物、可分级/不可分级">
-              🏷 语法标记
-            </button>
-          </div>
-          <div className="idrill-row">
-            <span className="muted">句 · 语法 · 听</span>
-            <button onClick={() => onDrill('grammar')} disabled={!hasDoc || busy} title="中译英 + 结构/语法 + 功能词 + 排序：练语态时态与句式">
-              🧠 语法·结构
-            </button>
-            <button onClick={() => onDrill('listen')} disabled={!hasDoc || busy} title="听力填空：听音填词，检验听力">
-              🎧 听力拷打
-            </button>
-          </div>
-          <div className="idrill-row">
-            <span className="muted">总攻</span>
-            <button
-              className="danger"
-              onClick={onSiege}
-              disabled={busy}
-              title="把错题本 + 优先重排 + 学不稳的词一起拉出来混编轰炸，自动「反复鞭打」直到全对"
-            >
-              🧨 错题包围战（打到全对）
-            </button>
-          </div>
-          <div className="muted intensive-tip">
-            拷打只针对<b>本篇</b>的词/句；答对会推进该词的 SRS，答错进错题本。隔天再回「背单词」清到期即可。
-          </div>
-        </div>
+        <DrillLauncher
+          hasDoc={hasDoc}
+          busy={busy}
+          limits={drillLimits}
+          onLimitChange={onDrillLimitChange}
+          onDrill={onDrill}
+          onSiege={onSiege}
+        />
 
         <div className="iretell">
           <b>✍️ 复述打卡（用自己的话讲一遍）</b>

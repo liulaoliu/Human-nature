@@ -4,10 +4,11 @@ import { act, render } from '@testing-library/react'
 import { useQuizSession } from './useQuizSession'
 import { buildWarmupCards } from '../../core/quizWarmup'
 import { createLibrary } from '../../core/vocab'
-import { vocabItem } from '../../core/testFixtures'
+import { sentenceFixture, vocabItem } from '../../core/testFixtures'
 import { installFakeStorage } from '../testStorage'
 import type { VocabLibrary } from '../../types/document'
 import type { QuizKind } from '../../core/quiz'
+import type { ReaderDoc } from './useReaderDoc'
 
 /**
  * 考试会话的接线测试（出题/判分/错题/失败提示）。
@@ -28,10 +29,12 @@ const speak = vi.fn()
 
 function Harness({
   library,
+  doc,
   onRelearn,
   onKinds,
 }: {
   library: VocabLibrary
+  doc?: ReaderDoc | null
   onRelearn?: (ids: string[]) => void
   onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
 }) {
@@ -39,7 +42,7 @@ function Harness({
     library,
     articleIdentity: 'A',
     docLemmas: new Set<string>(),
-    doc: null,
+    doc: doc ?? null,
     closeOthers,
     speak,
     flash,
@@ -277,6 +280,26 @@ describe('useQuizSession：精读拷打的每次项数（记忆 / 词块）', ()
     render(<Harness library={lib(manyWords(25))} />)
     act(() => api!.startDrill(['spell'], 'all'))
     expect(api!.queue).toHaveLength(20)
+  })
+
+  it('startItems 传 limit：错题包围战最多只取 N 题', () => {
+    const items = manyWords(8)
+    render(<Harness library={lib(items)} />)
+    act(() => api!.startItems(items.map((w) => w.id), ['spell'], { limit: 3 }))
+    expect(api!.queue).toHaveLength(3)
+  })
+
+  it('startArticleDrill 传 limit：语法·结构最多只取 N 题', () => {
+    const doc: ReaderDoc = {
+      paragraphs: [],
+      sentences: Array.from({ length: 6 }, (_, i) =>
+        sentenceFixture(`s${i}`, `This is sentence number ${i}.`, { translation: `这是第 ${i} 句。` }),
+      ),
+    }
+    render(<Harness library={lib([word()])} doc={doc} />)
+    act(() => api!.startArticleDrill(['translate'], 2))
+    expect(api!.queue).toHaveLength(2)
+    expect(api!.articleRun).toBe(true)
   })
 })
 

@@ -4,15 +4,17 @@
 // 从 `useQuizSession` 拆出来：那边只管「一轮考试怎么跑」，设置存哪儿、坏数据怎么回
 // 默认值放在这里。候选取词规则见 `core/quizPool`。
 // ============================================================
-import type { Dispatch, SetStateAction } from 'react'
+import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import { useLocalStorageState, persistentBool, persistentBoolTrue, persistentEnum, persistentNumber } from './useLocalStorageState'
 import { isArticleKind, isQuizKind, type QuizKind } from '../../core/quiz'
+import { QUIZ_SCOPES, type QuizScope } from '../../core/quizPool'
 import {
-  DEFAULT_DRILL_LIMIT,
+  DEFAULT_DRILL_LIMITS,
   normalizeDrillLimit,
-  QUIZ_SCOPES,
-  type QuizScope,
-} from '../../core/quizPool'
+  parseDrillLimits,
+  type DrillKind,
+  type DrillLimits,
+} from '../../core/intensiveDrill'
 
 /** 默认词级题型：拼写 / 例句填空 / 搭配填空。 */
 export const DEFAULT_QUIZ_KINDS: QuizKind[] = ['spell', 'cloze', 'usage']
@@ -40,10 +42,19 @@ function useKinds(key: string, fallback: QuizKind[], keep: (k: QuizKind) => bool
   })
 }
 
-/** 记忆 / 词块拷打项数：存成字符串，读回先过档位守卫（坏值回默认 10）。 */
-const persistentDrillLimit = {
-  parse: (raw: string) => normalizeDrillLimit(raw),
-  serialize: (value: number) => String(value),
+/**
+ * 七种拷打的每次题数：存成一个 JSON 对象，读回逐项过档位守卫。
+ * 坏 JSON 回整套默认；某一项坏了只回这一项，不影响其它入口。
+ */
+const persistentDrillLimits = {
+  parse: (raw: string): DrillLimits => {
+    try {
+      return parseDrillLimits(JSON.parse(raw))
+    } catch {
+      return { ...DEFAULT_DRILL_LIMITS }
+    }
+  },
+  serialize: (value: DrillLimits) => JSON.stringify(value),
 }
 
 export interface QuizSettings {
@@ -53,9 +64,9 @@ export interface QuizSettings {
   setScope: Dispatch<SetStateAction<QuizScope>>
   limit: number
   setLimit: Dispatch<SetStateAction<number>>
-  /** 记忆 / 词块拷打每次几项（精读面板可调，默认 10）。 */
-  drillLimit: number
-  setDrillLimit: Dispatch<SetStateAction<number>>
+  /** 七种拷打各自每次几项（精读面板点开入口时可调，默认 10）。 */
+  drillLimits: DrillLimits
+  setDrillLimit: (kind: DrillKind, limit: number) => void
   /** 答题后自动切下一题。 */
   auto: boolean
   setAuto: Dispatch<SetStateAction<boolean>>
@@ -80,10 +91,17 @@ export function useQuizSettings(): QuizSettings {
     persistentEnum(QUIZ_SCOPES, 'article'),
   )
   const [limit, setLimit] = useLocalStorageState('reader:quizLimit', 20, persistentNumber)
-  const [drillLimit, setDrillLimit] = useLocalStorageState(
-    'reader:quizDrillLimit',
-    DEFAULT_DRILL_LIMIT,
-    persistentDrillLimit,
+  const [drillLimits, setDrillLimits] = useLocalStorageState(
+    'reader:drillLimits',
+    { ...DEFAULT_DRILL_LIMITS },
+    persistentDrillLimits,
+  )
+  const setDrillLimit = useCallback(
+    (kind: DrillKind, limit: number) => {
+      const next = normalizeDrillLimit(limit)
+      setDrillLimits((prev) => (prev[kind] === next ? prev : { ...prev, [kind]: next }))
+    },
+    [setDrillLimits],
   )
   const [auto, setAuto] = useLocalStorageState('reader:quizAuto', false, persistentBool)
   const [unique, setUnique] = useLocalStorageState('reader:quizUnique', true, persistentBoolTrue)
@@ -98,7 +116,7 @@ export function useQuizSettings(): QuizSettings {
     setScope,
     limit,
     setLimit,
-    drillLimit,
+    drillLimits,
     setDrillLimit,
     auto,
     setAuto,
