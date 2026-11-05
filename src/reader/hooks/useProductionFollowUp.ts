@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ProductionPrompt } from '../../core/production'
 import type { WritingFeedback } from '../../core/writing'
 
+export const PRODUCTION_FOLLOW_UP_CAP = 8
+
 export interface ProductionFollowUpItem {
   q: string
   a: string
@@ -49,7 +51,7 @@ export function useProductionFollowUp({
       setError('')
       try {
         const prior = items
-          .slice(-2)
+          .slice(-4)
           .map((it) => `学生问：${it.q}\n你答：${it.a}`)
           .join('\n\n')
         const issues = feedback.issues
@@ -73,7 +75,7 @@ export function useProductionFollowUp({
         const out = await callAi('feedback', prompt)
         const a = out.trim()
         if (!a) throw new Error('AI 没有返回回答')
-        setItems((prev) => [...prev, { q, a }])
+        setItems((prev) => [...prev, { q, a }].slice(-PRODUCTION_FOLLOW_UP_CAP))
       } catch (e) {
         setError(String((e as Error)?.message || e))
       } finally {

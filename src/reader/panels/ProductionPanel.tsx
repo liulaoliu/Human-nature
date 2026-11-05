@@ -33,6 +33,7 @@ import GoldenFeedback from './golden/GoldenFeedback'
 import RoundSizeSelect from './RoundSizeSelect'
 import ProductionHistoryView from './ProductionHistoryView'
 import ProductionReview from './ProductionReview'
+import VoiceInputButton from './VoiceInputButton'
 import ProductionHint from './ProductionHint'
 
 export interface ProductionPanelProps {
@@ -677,6 +678,13 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
                 disabled={model.grading || model.generating}
               />
               <div className="bar">
+                <VoiceInputButton
+                  lang={model.current.answerLang === 'zh' ? 'zh-CN' : 'en-US'}
+                  label="🎙 语音写答案"
+                  onText={(text) =>
+                    model.setAnswer(`${model.answer}${model.answer.trim() ? ' ' : ''}${text}`)
+                  }
+                />
                 <button
                   className="primary"
                   onClick={() => void model.grade()}

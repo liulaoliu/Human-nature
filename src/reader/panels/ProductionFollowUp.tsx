@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type { ProductionFollowUpItem } from '../hooks/useProductionFollowUp'
+import VoiceInputButton from './VoiceInputButton'
 
 export interface ProductionFollowUpProps {
   items: ProductionFollowUpItem[]
@@ -29,6 +30,11 @@ export default function ProductionFollowUp({ items, asking, error, onAsk }: Prod
             if (e.key === 'Enter') submit()
           }}
           placeholder="例如：为什么这里必须用 a？还能更自然吗？"
+        />
+        <VoiceInputButton
+          lang="zh-CN"
+          label="🎙 语音提问"
+          onText={(t) => setText(`${text}${text.trim() ? ' ' : ''}${t}`)}
         />
         <button onClick={submit} disabled={asking || !text.trim()}>
           {asking ? '回答中…' : '问'}

@@ -343,3 +343,16 @@
   align-items: flex-start;
   padding-top: 36px;
 }
+
+.voice-input {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.voice-input button.voice-listening {
+  border-color: #d9534f;
+  color: #d9534f;
+}
+.voice-error {
+  font-size: 11px;
+}
