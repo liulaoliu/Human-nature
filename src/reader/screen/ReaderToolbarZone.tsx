@@ -88,6 +88,7 @@ export default function ReaderToolbarZone(props: ReaderScreenProps) {
         onToggleAll: readingAll ? stopReadAll : startReadAll,
         onSpeedRead: openSpeedRead,
         onOpenGolden: props.golden.openGolden,
+        onOpenProduction: props.production.openProduction,
         onOpenBack: openBack,
         onOpenIntensive: () => setIntensiveOpen(true),
         onOpenJournal: () => setJournalOpen(true),

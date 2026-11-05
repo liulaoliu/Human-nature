@@ -62,7 +62,6 @@ function props(over: Partial<IntensivePanelProps> = {}): IntensivePanelProps {
     drillLimits: { ...DEFAULT_DRILL_LIMITS },
     onDrillLimitChange: noop,
     onSiege: noop,
-    onOpenProduction: noop,
     ...over,
   }
 }
@@ -199,13 +198,6 @@ describe('IntensivePanel：拷打与复述', () => {
     expect((screen.getByLabelText('错题包围战每次题数') as HTMLSelectElement).value).toBe('10')
     fireEvent.click(screen.getByRole('button', { name: '开始' }))
     expect(onSiege).toHaveBeenCalledWith(10)
-  })
-
-  it('D老师奶牛工棚入口走回调', () => {
-    const onOpenProduction = vi.fn()
-    render(<IntensivePanel {...props({ onOpenProduction })} />)
-    fireEvent.click(screen.getByRole('button', { name: '进去挤奶' }))
-    expect(onOpenProduction).toHaveBeenCalled()
   })
 
   it('没文章时六种拷打禁用，错题包围战仍可开', () => {

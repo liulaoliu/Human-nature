@@ -43,6 +43,7 @@ export interface ReaderToolbarHostProps {
     onToggleAll: () => void
     onSpeedRead: () => void
     onOpenGolden: () => void
+    onOpenProduction: () => void
     onOpenBack: () => void
     onOpenIntensive: () => void
     onOpenJournal: () => void
@@ -171,6 +172,7 @@ export default function ReaderToolbarHost({
       onToggleReadAll={reading.onToggleAll}
       onSpeedRead={reading.onSpeedRead}
       onOpenGolden={reading.onOpenGolden}
+      onOpenProduction={reading.onOpenProduction}
       onOpenBack={reading.onOpenBack}
       onOpenIntensive={reading.onOpenIntensive}
       onOpenJournal={reading.onOpenJournal}

@@ -12,6 +12,9 @@ import { useProductionSession } from './useProductionSession'
 const packRaw = JSON.stringify({
   prompts: [{ zh: '跟同事说明你下午会跟进。', goal: '说明进度', targetIds: ['v1|self|word'] }],
 })
+const topicPackRaw = JSON.stringify({
+  prompts: [{ zh: '解释你为什么迟到了。', goal: '解释原因' }],
+})
 const feedbackRaw = JSON.stringify({
   version: 2,
   scores: [{ dimension: '意思', score: 40, max: 40 }],
@@ -49,7 +52,18 @@ const library: VocabLibrary = {
 function setup(configured = true) {
   let records: WritingRecord[] = []
   const runAi = vi.fn(async (jobs: { task: string }[]) => ({
-    results: [{ id: 'x', task: jobs[0].task, raw: jobs[0].task === 'feedback' ? feedbackRaw : packRaw }],
+    results: [
+      {
+        id: 'x',
+        task: jobs[0].task,
+        raw:
+          jobs[0].task === 'feedback'
+            ? feedbackRaw
+            : jobs[0].task === 'production_topic'
+              ? topicPackRaw
+              : packRaw,
+      },
+    ],
     failed: [],
     dropped: 0,
   }))
@@ -81,7 +95,7 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     act(() => h.result.current.openProduction())
     act(() =>
       h.result.current.updateSettings({
-        topic: '工作沟通',
+        mode: 'full',
         scope: 'all',
         types: ['word'],
         promptCount: 3,
@@ -128,7 +142,7 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     act(() => h.result.current.openProduction())
     act(() =>
       h.result.current.updateSettings({
-        topic: '工作沟通',
+        mode: 'full',
         scope: 'all',
         types: ['word'],
         promptCount: 3,
@@ -151,5 +165,72 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     act(() => h.result.current.applyPaste(feedbackRaw))
     expect(h.getRecords()).toHaveLength(1)
     expect(h.getRecords()[0].text).toBe('I run daily.')
+  })
+
+  it('脱脂奶：没写主题不开始', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'skim',
+        topic: '',
+        scope: 'all',
+        types: ['word'],
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    expect(h.result.current.stage).toBe('setup')
+    expect(h.flash).toHaveBeenCalledWith(expect.stringContaining('脱脂奶'))
+  })
+
+  it('脱脂奶：有主题时 AI 出纯主题句，不挂目标块', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'skim',
+        topic: '迟到解释',
+        promptCount: 3,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    expect(h.result.current.stage).toBe('playing')
+    expect(h.result.current.current?.zh).toContain('迟到')
+    expect(h.result.current.current?.targets).toEqual([])
+    expect(h.runAi).toHaveBeenCalledWith(
+      [expect.objectContaining({ task: 'production_topic' })],
+      expect.anything(),
+    )
+  })
+
+  it('风味酸奶：本地拆句，不调 AI 出题；批改时把参考译文作为范句', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'yogurt',
+        sourceText: '第一句。第二句。',
+        referenceText: 'First sentence. Second sentence.',
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    expect(h.result.current.stage).toBe('playing')
+    expect(h.result.current.prompts).toHaveLength(2)
+    expect(h.result.current.current?.reference).toBe('First sentence.')
+    expect(h.runAi).not.toHaveBeenCalled()
+
+    act(() => h.result.current.setAnswer('First sentence.'))
+    await act(async () => {
+      await h.result.current.grade()
+    })
+    expect(h.runAi).toHaveBeenCalledTimes(1)
+    expect(h.getRecords()).toHaveLength(1)
+    expect(h.getRecords()[0].task).toMatchObject({
+      mode: 'yogurt',
+      reference: 'First sentence.',
+    })
   })
 })

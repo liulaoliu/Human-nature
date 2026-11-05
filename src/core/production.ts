@@ -18,6 +18,25 @@ import {
 
 export type ProductionScope = 'article' | 'all'
 export type ProductionTargetKind = 'word' | 'phrase' | 'idiom'
+/**
+ * 三种吃法：
+ * - full（全脂）：不设主题，按配置随机抽词块，AI 随机出情境；
+ * - skim（脱脂奶）：围绕一个主题出情境，同样要求用上目标块；
+ * - yogurt（风味酸奶）：用户粘贴中英对照，按句拆开逐句翻译。
+ */
+export type ProductionMode = 'full' | 'skim' | 'yogurt'
+
+export const PRODUCTION_MODES: readonly ProductionMode[] = ['full', 'skim', 'yogurt']
+export const PRODUCTION_MODE_LABEL: Record<ProductionMode, string> = {
+  full: '全脂',
+  skim: '脱脂奶',
+  yogurt: '风味酸奶',
+}
+export const PRODUCTION_MODE_DESC: Record<ProductionMode, string> = {
+  full: '不设主题；按配置随机抽词 / 词组，AI 随机出中文情境。',
+  skim: '先写主题；AI 只根据主题出中文句子，不强制目标块。',
+  yogurt: '粘贴中文原文和英文参考译文；按句拆开，逐句翻译，批改后再重写。',
+}
 
 export const PRODUCTION_TARGET_TYPES: readonly ProductionTargetKind[] = ['word', 'phrase', 'idiom']
 export const PRODUCTION_SCOPES: readonly ProductionScope[] = ['article', 'all']
@@ -63,6 +82,8 @@ export interface ProductionPrompt {
   zh: string
   goal: string
   targets: ProductionTarget[]
+  /** 风味酸奶：这一句的英文参考译文（答完 / 批改后才给用户看） */
+  reference?: string
 }
 
 export interface ProductionTargetHit {
@@ -74,6 +95,7 @@ export interface ProductionTargetHit {
 }
 
 export interface ProductionSettings {
+  mode: ProductionMode
   topic: string
   angle: ProductionAngle
   tone: ProductionTone
@@ -82,9 +104,13 @@ export interface ProductionSettings {
   promptCount: number
   targetsPerPrompt: number
   weakRatio: number
+  /** 风味酸奶草稿：中文原文 / 英文参考译文。体量不大，跟设置一起留在本机。 */
+  sourceText: string
+  referenceText: string
 }
 
 export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
+  mode: 'full',
   topic: '',
   angle: 'daily',
   tone: 'neutral',
@@ -93,6 +119,8 @@ export const DEFAULT_PRODUCTION_SETTINGS: ProductionSettings = {
   promptCount: 5,
   targetsPerPrompt: 2,
   weakRatio: 30,
+  sourceText: '',
+  referenceText: '',
 }
 
 /** 外部输入（localStorage / 旧备份）守卫：坏字段逐项回默认，不炸整页。 */
@@ -100,7 +128,12 @@ export function normalizeProductionSettings(raw: unknown): ProductionSettings {
   const out = { ...DEFAULT_PRODUCTION_SETTINGS, types: [...DEFAULT_PRODUCTION_SETTINGS.types] }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out
   const o = raw as Record<string, unknown>
+  if (typeof o.mode === 'string' && (PRODUCTION_MODES as string[]).includes(o.mode)) {
+    out.mode = o.mode as ProductionMode
+  }
   if (typeof o.topic === 'string') out.topic = o.topic.trim().slice(0, 200)
+  if (typeof o.sourceText === 'string') out.sourceText = o.sourceText.slice(0, 50000)
+  if (typeof o.referenceText === 'string') out.referenceText = o.referenceText.slice(0, 50000)
   if (typeof o.angle === 'string' && (PRODUCTION_ANGLES as string[]).includes(o.angle)) {
     out.angle = o.angle as ProductionAngle
   }
@@ -246,6 +279,7 @@ export function buildProductionTargets(opts: BuildProductionTargetsOptions): Pro
 }
 
 export interface BuildProductionPackInput {
+  mode: Exclude<ProductionMode, 'yogurt'>
   topic: string
   angle: ProductionAngle
   tone: ProductionTone
@@ -260,17 +294,25 @@ export function buildProductionPackPrompt(input: BuildProductionPackInput): stri
   const targetLines = input.targets
     .map((t) => `- ${t.id} | ${t.kind} | ${t.text}${t.meaning ? ` | ${t.meaning}` : ''}`)
     .join('\n')
+  const full = input.mode === 'full'
+  const topicLine = full
+    ? '主题：不限（随机挑选日常生活 / 工作 / 学习 / 社交场景，不要围绕单一主题）'
+    : `主题：${input.topic}`
   return [
-    '你是英语产出训练的出题老师。请根据主题，写中文情境提示，让学生用英文表达。',
+    '你是英语产出训练的出题老师。请写中文情境提示，让学生用英文表达。',
     '',
-    `主题：${input.topic}`,
+    topicLine,
+    `模式：${PRODUCTION_MODE_LABEL[input.mode]}`,
     `角度：${PRODUCTION_ANGLE_LABEL[input.angle]}`,
     `语气：${PRODUCTION_TONE_LABEL[input.tone]}`,
-    input.articleTitle ? `参考文章：${input.articleTitle}` : '',
+    !full && input.articleTitle ? `参考文章：${input.articleTitle}` : '',
     '',
     '必须遵守：',
     `- 出 ${input.promptCount} 道题；每道题必须分配 ${input.targetsPerPrompt} 个目标块；`,
     '- 只能从下面候选清单里选 targetIds，不能编造；目标块不重复使用；',
+    full
+      ? '- 这是「全脂」随机模式：不要围绕一个主题；每道题换一个不同场景；目标块随机挑，不要总挑清单最前面的。'
+      : '- 这是「脱脂奶」主题模式：所有题都围绕上述主题，但每道题的情境仍要具体、不同。',
     '- zh 必须是自然的中文情境 / 沟通目标，不能出现英文目标词，不能逐字提示英文句式；',
     '- goal 用中文说明这句话要达成什么（如「委婉拒绝」「说明进度」「表达不同意见」）；',
     '- 题目之间尽量覆盖不同情境，不要 5 道题都在说同一件事；',
@@ -298,6 +340,66 @@ function asString(v: unknown, max: number): string {
 /**
  * 解析 AI 题目包。只认候选清单里的目标 id；坏题 / 无目标 / 中文为空直接丢。
  */
+export interface BuildTopicPackInput {
+  topic: string
+  angle: ProductionAngle
+  tone: ProductionTone
+  articleTitle: string
+  promptCount: number
+}
+
+/** 脱脂奶：只给主题，让 AI 出中文句子；不强制目标块。 */
+export function buildTopicPackPrompt(input: BuildTopicPackInput): string {
+  return [
+    '你是英语产出训练的出题老师。请围绕主题写中文句子，让学生翻译成英文。',
+    '',
+    `主题：${input.topic}`,
+    `角度：${PRODUCTION_ANGLE_LABEL[input.angle]}`,
+    `语气：${PRODUCTION_TONE_LABEL[input.tone]}`,
+    input.articleTitle ? `参考文章：${input.articleTitle}` : '',
+    '',
+    '必须遵守：',
+    `- 出 ${input.promptCount} 道题；每题只给一个中文句子 / 一个具体沟通情境；`,
+    '- 句子难度接近 B1–B2，长短交错；不要五道题都在说同一件事；',
+    '- 中文里不要出现英文答案，不要逐字提示英文句式；',
+    '- goal 用中文说明这句话要达成什么（如「解释原因」「提出请求」「表达不同意见」）；',
+    '- 只输出 JSON，不要 Markdown、不要解释。',
+    '',
+    '输出格式：',
+    '{"prompts":[{"zh":"中文句子 / 情境","goal":"中文沟通目标"}]}',
+  ]
+    .filter(Boolean)
+    .join('\n')
+}
+
+/** 解析脱脂奶题目包；不要求 targetIds。 */
+export function parseTopicPack(raw: string, maxPrompts = 12): ProductionPrompt[] | null {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(stripFence(raw))
+  } catch {
+    return null
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null
+  const promptsRaw = (parsed as Record<string, unknown>).prompts
+  if (!Array.isArray(promptsRaw)) return null
+  const prompts: ProductionPrompt[] = []
+  for (const [i, item] of promptsRaw.entries()) {
+    if (i >= maxPrompts) break
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue
+    const o = item as Record<string, unknown>
+    const zh = asString(o.zh, 600)
+    if (!zh) continue
+    prompts.push({
+      id: `topic-${i + 1}`,
+      zh,
+      goal: asString(o.goal, 300),
+      targets: [],
+    })
+  }
+  return prompts.length ? prompts : null
+}
+
 export function parseProductionPack(
   raw: string,
   allowed: readonly ProductionTarget[],
@@ -338,6 +440,63 @@ export function parseProductionPack(
     })
   }
   return prompts.length ? prompts : null
+}
+
+function splitSentences(text: string): string[] {
+  const normalized = text.replace(/\r\n?/g, '\n').trim()
+  if (!normalized) return []
+  const out: string[] = []
+  for (const line of normalized.split('\n')) {
+    const matches = line.match(/[^。！？!?；;.]+[。！？!?；;.]?/g) ?? []
+    for (const part of matches) {
+      const s = part.trim()
+      if (s) out.push(s)
+    }
+  }
+  return out
+}
+
+export interface YogurtPromptResult {
+  prompts: ProductionPrompt[]
+  /** 句数对不上时的提示；对得上就是空字符串 */
+  warning: string
+  sourceCount: number
+  referenceCount: number
+}
+
+/**
+ * 风味酸奶：把用户粘贴的中文原文 + 英文参考译文拆成逐句练习。
+ *
+ * 不依赖 AI；句数对不上时按顺序配对，末尾多出的内容并入最后一题，并返回 warning。
+ * 英文参考只挂在 prompt 上，界面在作答 / 批改前不显示。
+ */
+export function buildYogurtPrompts(source: string, reference: string): YogurtPromptResult | null {
+  const src = splitSentences(source)
+  const ref = splitSentences(reference)
+  if (!src.length || !ref.length) return null
+  // 以较短的一侧为准；最后一句把另一侧多出来的内容并进来。
+  const n = Math.min(src.length, ref.length)
+  const prompts: ProductionPrompt[] = []
+  for (let i = 0; i < n; i++) {
+    const last = i === n - 1
+    // 多出来的一侧并进最后一题，避免出现「有中文没英文」的空题。
+    const zh = last ? src.slice(i).join(' ') : (src[i] ?? '')
+    const en = last ? ref.slice(i).join(' ') : (ref[i] ?? '')
+    if (!zh) continue
+    prompts.push({
+      id: `yogurt-${i + 1}`,
+      zh,
+      goal: '逐句翻译',
+      targets: [],
+      reference: en,
+    })
+  }
+  if (!prompts.length) return null
+  const warning =
+    src.length === ref.length
+      ? ''
+      : `中文 ${src.length} 句 / 英文 ${ref.length} 句，句数不一致；已按顺序配对，末尾多出的内容并入最后一题。`
+  return { prompts, warning, sourceCount: src.length, referenceCount: ref.length }
 }
 
 function escapeRegExp(s: string): string {
@@ -390,30 +549,55 @@ export function checkProductionTargets(answer: string, targets: readonly Product
 
 export interface ProductionTask extends ImitationTask {
   kind: 'production'
+  mode: ProductionMode
   topic: string
   goal: string
   promptId: string
   targets: ProductionTarget[]
+  /** 风味酸奶的英文参考译文；批改提示词里会作为「范句」交给 AI */
+  reference?: string
   hits?: ProductionTargetHit[]
 }
 
 /** 出评分任务：复用仿写批改的 rubric / mustUse / focus 口径。 */
-export function makeProductionTask(prompt: ProductionPrompt, topic: string): ProductionTask {
+export function makeProductionTask(
+  prompt: ProductionPrompt,
+  topic: string,
+  mode: ProductionMode = 'skim',
+): ProductionTask {
+  const yogurt = mode === 'yogurt'
+  const hasTargets = prompt.targets.length > 0
   return {
     kind: 'production',
+    mode,
     task: prompt.zh,
-    model: '（自由表达，没有唯一范句）',
+    model: yogurt
+      ? prompt.reference?.trim() || '（没有粘贴英文参考译文）'
+      : '（自由表达，没有唯一范句）',
     goal: prompt.goal,
     promptId: prompt.id,
     topic,
     targets: prompt.targets,
+    ...(yogurt && prompt.reference ? { reference: prompt.reference } : {}),
     mustUse: prompt.targets.map((t) => t.text),
-    rubric: [
-      { dimension: '意思到位', weight: 40, description: '中文情境想表达的意思是否完整、准确' },
-      { dimension: '目标词块', weight: 30, description: '目标词 / 词组 / 习语是否用上且搭配正确' },
-      { dimension: '语法与自然度', weight: 30, description: '语法、时态、冠词、介词和语序是否自然' },
-    ],
-    focus: prompt.targets.map((t) => t.text).join(' / '),
+    rubric: yogurt
+      ? [
+          { dimension: '原文意思', weight: 40, description: '中文原文的意思是否完整、准确，没有漏译 / 加戏' },
+          { dimension: '英文自然度', weight: 30, description: '语法、搭配、时态和语序是否自然' },
+          { dimension: '参考译文差距', weight: 30, description: '和参考译文相比，哪些表达更准确 / 更地道，哪些地方差距大' },
+        ]
+      : hasTargets
+        ? [
+            { dimension: '意思到位', weight: 40, description: '中文情境想表达的意思是否完整、准确' },
+            { dimension: '目标词块', weight: 30, description: '目标词 / 词组 / 习语是否用上且搭配正确' },
+            { dimension: '语法与自然度', weight: 30, description: '语法、时态、冠词、介词和语序是否自然' },
+          ]
+        : [
+            { dimension: '意思到位', weight: 40, description: '中文句子想表达的意思是否完整、准确' },
+            { dimension: '语法与自然度', weight: 35, description: '语法、时态、冠词、介词和语序是否自然' },
+            { dimension: '表达地道', weight: 25, description: '用词和搭配是否像正常英文，而不是逐字硬翻' },
+          ],
+    focus: yogurt ? '逐句翻译' : hasTargets ? prompt.targets.map((t) => t.text).join(' / ') : '主题翻译',
   }
 }
 

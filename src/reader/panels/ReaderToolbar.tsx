@@ -53,6 +53,7 @@ export interface ReaderToolbarProps {
   onToggleReadAll: () => void
   onSpeedRead: () => void
   onOpenGolden: () => void
+  onOpenProduction: () => void
   onOpenBack: () => void
   onOpenIntensive: () => void
   onOpenJournal: () => void
@@ -141,6 +142,7 @@ export default function ReaderToolbar({
   onToggleReadAll,
   onSpeedRead,
   onOpenGolden,
+  onOpenProduction,
   onOpenBack,
   onOpenIntensive,
   onOpenJournal,
@@ -381,6 +383,15 @@ export default function ReaderToolbar({
             title="D老师小课堂：挑金句 → 填空 / 拼句 / 小结 → 逆向回顾；学完能直接拿去写"
           >
             🖋 D老师小课堂
+          </button>
+        )}
+        {!editing && (
+          <button
+            className="tb-production"
+            onClick={onOpenProduction}
+            title="D老师奶牛工棚：全脂随机抽词块 / 脱脂奶按主题 / 风味酸奶逐句翻译；先写英文再批改重写"
+          >
+            🐄 奶牛工棚
           </button>
         )}
         {!editing && (

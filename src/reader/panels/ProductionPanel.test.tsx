@@ -24,7 +24,7 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     openProduction: noop,
     close: noop,
     stage: 'setup',
-    settings: { ...DEFAULT_PRODUCTION_SETTINGS, topic: '工作沟通' },
+    settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
     updateSettings: noop,
     start: noop,
     restart: noop,
@@ -43,6 +43,7 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     generating: false,
     grading: false,
     error: '',
+    notice: '',
     pasteKind: '',
     applyPaste: noop,
     copyPromptAgain: noop,
@@ -56,15 +57,55 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
 }
 
 describe('ProductionPanel：奶牛工棚', () => {
-  it('设置页显示主题 / 类型 / 数量；点开始走回调', () => {
+  it('全脂不显示主题，显示目标块配置；点开始走回调', () => {
     const start = vi.fn()
-    const model = props({ start })
+    const model = props({
+      start,
+      settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'full' },
+    })
     render(<ProductionPanel model={model} />)
     expect(screen.getByText('🐄 D老师奶牛工棚')).toBeTruthy()
-    expect((screen.getByLabelText('产出主题') as HTMLInputElement).value).toBe('工作沟通')
+    expect(screen.queryByLabelText('产出主题')).toBeNull()
     expect(screen.getByLabelText('本轮题目数')).toBeTruthy()
     expect(screen.getByLabelText('每题目标块数')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: '让 D老师出题' }))
+    fireEvent.click(screen.getByRole('button', { name: '全脂随机出题' }))
+    expect(start).toHaveBeenCalled()
+  })
+
+  it('脱脂奶显示主题，不要求目标块', () => {
+    const start = vi.fn()
+    const model = props({
+      start,
+      settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
+    })
+    render(<ProductionPanel model={model} />)
+    expect((screen.getByLabelText('产出主题') as HTMLInputElement).value).toBe('工作沟通')
+    expect(screen.queryByLabelText('每题目标块数')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '按主题出题' }))
+    expect(start).toHaveBeenCalled()
+  })
+
+  it('三种模式可切；风味酸奶显示中英两个粘贴框，不走主题', () => {
+    const updateSettings = vi.fn()
+    const start = vi.fn()
+    const model = props({
+      start,
+      updateSettings,
+      settings: {
+        ...DEFAULT_PRODUCTION_SETTINGS,
+        mode: 'yogurt',
+        sourceText: '你好。',
+        referenceText: 'Hello.',
+      },
+    })
+    render(<ProductionPanel model={model} />)
+    expect(screen.getByRole('button', { name: /全脂/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /脱脂奶/ })).toBeTruthy()
+    expect(screen.getByRole('button', { name: /风味酸奶/ })).toBeTruthy()
+    expect((screen.getByLabelText('风味酸奶中文原文') as HTMLTextAreaElement).value).toBe('你好。')
+    expect((screen.getByLabelText('风味酸奶英文参考译文') as HTMLTextAreaElement).value).toBe('Hello.')
+    expect(screen.queryByLabelText('产出主题')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: '生成逐句拷打' }))
     expect(start).toHaveBeenCalled()
   })
 
@@ -103,6 +144,29 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(screen.getByText(/follow up：用上了/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '按批改意见重写一版' }))
     expect(rewrite).toHaveBeenCalled()
+  })
+
+  it('风味酸奶没配 AI 时，批改粘回框仍然显示', () => {
+    const current = {
+      id: 'yogurt-1',
+      zh: '你好。',
+      goal: '逐句翻译',
+      targets: [],
+      reference: 'Hello.',
+    }
+    render(
+      <ProductionPanel
+        model={props({
+          stage: 'playing',
+          settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'yogurt' },
+          current,
+          prompts: [current],
+          pasteKind: 'feedback',
+          pendingPrompt: 'grade prompt',
+        })}
+      />,
+    )
+    expect(screen.getByText('把 AI 返回的批改 JSON 粘到这里')).toBeTruthy()
   })
 
   it('第二稿后可以进下一题；完成页能再来一组', () => {

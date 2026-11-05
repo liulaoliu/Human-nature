@@ -71,6 +71,7 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
     onToggleReadAll: noop,
     onSpeedRead: noop,
     onOpenGolden: noop,
+    onOpenProduction: noop,
     onOpenBack: noop,
     onOpenIntensive: noop,
     onOpenJournal: noop,
@@ -248,6 +249,7 @@ describe('ReaderToolbar：阅读操作', () => {
     const callbacks = {
       onSpeedRead: vi.fn(),
       onOpenGolden: vi.fn(),
+      onOpenProduction: vi.fn(),
       onOpenBack: vi.fn(),
       onOpenIntensive: vi.fn(),
       onOpenJournal: vi.fn(),
@@ -258,6 +260,7 @@ describe('ReaderToolbar：阅读操作', () => {
     renderInRouter(<ReaderToolbar {...props({ hasDoc: true, savedId: 'saved:1', ...callbacks })} />)
     fireEvent.click(screen.getByRole('button', { name: '⚡ 速读' }))
     fireEvent.click(screen.getByRole('button', { name: '🖋 D老师小课堂' }))
+    fireEvent.click(screen.getByRole('button', { name: '🐄 奶牛工棚' }))
     fireEvent.click(screen.getByRole('button', { name: '🔁 回译' }))
     fireEvent.click(screen.getByRole('button', { name: '🎯 精读' }))
     fireEvent.click(screen.getByRole('button', { name: '📅 日志' }))

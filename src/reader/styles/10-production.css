@@ -1,15 +1,4 @@
 /* D老师奶牛工棚：产出训练 */
-.iproduction {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px dashed var(--accent);
-  border-radius: var(--radius);
-  background: var(--panel-2);
-}
 .production {
   display: flex;
   flex-direction: column;
@@ -33,10 +22,62 @@
   border-radius: var(--radius);
   background: var(--panel-2);
 }
+.production-modes {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.production-mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.production-mode.active {
+  border-color: var(--accent);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
 .production-field {
   display: flex;
   flex-direction: column;
   gap: 6px;
+}
+.production-field textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--input-bg, var(--panel));
+  color: inherit;
+  font: inherit;
+  line-height: 1.65;
+  resize: vertical;
+}
+.production-notice {
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+  color: var(--dim);
+  white-space: pre-wrap;
+}
+.production-reference {
+  padding: 8px 10px;
+  border-left: 3px solid var(--green);
+  background: var(--panel-2);
+  line-height: 1.65;
+}
+@media (max-width: 720px) {
+  .production-modes {
+    grid-template-columns: 1fr;
+  }
 }
 .production-topic {
   width: 100%;

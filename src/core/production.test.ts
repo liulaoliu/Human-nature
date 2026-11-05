@@ -4,11 +4,14 @@ import { sentenceFixture, vocabItem } from './testFixtures'
 import {
   buildProductionPackPrompt,
   buildProductionTargets,
+  buildTopicPackPrompt,
+  buildYogurtPrompts,
   checkProductionTargets,
   DEFAULT_PRODUCTION_SETTINGS,
   makeProductionTask,
   normalizeProductionSettings,
   parseProductionPack,
+  parseTopicPack,
   productionDocLemmas,
   targetUsed,
   type ProductionTarget,
@@ -147,6 +150,7 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
 
   it('出题提示词包含候选清单，要求中文不出现英文目标词', () => {
     const prompt = buildProductionPackPrompt({
+      mode: 'skim',
       topic: '远程办公',
       angle: 'work',
       tone: 'formal',
@@ -159,6 +163,73 @@ describe('parseProductionPack：只认候选清单里的目标块', () => {
     expect(prompt).toContain('v1|self|word')
     expect(prompt).toContain('run')
     expect(prompt).toContain('不能出现英文目标词')
+  })
+
+  it('全脂模式不用主题，提示 AI 随机换场景', () => {
+    const prompt = buildProductionPackPrompt({
+      mode: 'full',
+      topic: '',
+      angle: 'daily',
+      tone: 'neutral',
+      articleTitle: 'A',
+      targets: allowed,
+      promptCount: 2,
+      targetsPerPrompt: 1,
+    })
+    expect(prompt).toContain('全脂')
+    expect(prompt).toContain('不要围绕一个主题')
+    expect(prompt).not.toContain('参考文章')
+  })
+
+  it('脱脂奶只围绕主题出句，不要求 targetIds', () => {
+    const prompt = buildTopicPackPrompt({
+      topic: '迟到解释',
+      angle: 'work',
+      tone: 'neutral',
+      articleTitle: 'A',
+      promptCount: 3,
+    })
+    expect(prompt).toContain('迟到解释')
+    expect(prompt).toContain('每题只给一个中文句子')
+    expect(prompt).not.toContain('targetIds')
+    const parsed = parseTopicPack(
+      '{"prompts":[{"zh":"解释你为什么迟到了。","goal":"解释原因"}]}',
+      3,
+    )
+    expect(parsed).toHaveLength(1)
+    expect(parsed?.[0]).toMatchObject({
+      zh: '解释你为什么迟到了。',
+      targets: [],
+    })
+  })
+})
+
+describe('风味酸奶：中英对照拆句', () => {
+  it('中英句数一致：一句一题，参考译文挂在 prompt 上', () => {
+    const result = buildYogurtPrompts(
+      '第一句。第二句！\n第三句？',
+      'First sentence. Second sentence!\nThird sentence?',
+    )
+    expect(result?.warning).toBe('')
+    expect(result?.prompts).toHaveLength(3)
+    expect(result?.prompts[1]).toMatchObject({
+      id: 'yogurt-2',
+      zh: '第二句！',
+      reference: 'Second sentence!',
+      targets: [],
+    })
+  })
+
+  it('句数不一致：按顺序配，末尾并入最后一题并提示', () => {
+    const result = buildYogurtPrompts('一。二。三。', 'One. Two.')
+    expect(result?.prompts).toHaveLength(2)
+    expect(result?.prompts[1].zh).toBe('二。 三。')
+    expect(result?.warning).toContain('句数不一致')
+  })
+
+  it('缺一边就返回 null', () => {
+    expect(buildYogurtPrompts('', 'Hello.')).toBeNull()
+    expect(buildYogurtPrompts('你好。', '')).toBeNull()
   })
 })
 
@@ -195,15 +266,44 @@ describe('ProductionSettings / task / doc lemmas', () => {
         weakRatio: 31,
       }),
     ).toEqual({ ...DEFAULT_PRODUCTION_SETTINGS, topic: 'x', types: ['word'] })
+    expect(
+      normalizeProductionSettings({ mode: 'yogurt', sourceText: '中文', referenceText: 'English' }),
+    ).toMatchObject({ mode: 'yogurt', sourceText: '中文', referenceText: 'English' })
   })
 
   it('任务复用仿写 rubric，mustUse = 目标块', () => {
     const task = makeProductionTask(
       { id: 'p1', zh: '说明进度', goal: '汇报', targets: [target()] },
       '工作',
+      'skim',
     )
     expect(task.mustUse).toEqual(['run'])
     expect(task.task).toBe('说明进度')
+    expect(task.mode).toBe('skim')
+    expect(task.rubric).toHaveLength(3)
+  })
+
+  it('脱脂奶没有目标块时，rubric 不出现目标词块项', () => {
+    const task = makeProductionTask(
+      { id: 'topic-1', zh: '解释原因。', goal: '解释', targets: [] },
+      '迟到',
+      'skim',
+    )
+    expect(task.rubric.map((r) => r.dimension)).toEqual(['意思到位', '语法与自然度', '表达地道'])
+    expect(task.focus).toBe('主题翻译')
+    expect(task.mustUse).toEqual([])
+  })
+
+  it('风味酸奶任务把参考译文塞进 model，目标块为空', () => {
+    const task = makeProductionTask(
+      { id: 'yogurt-1', zh: '你好。', goal: '逐句翻译', targets: [], reference: 'Hello.' },
+      '风味酸奶',
+      'yogurt',
+    )
+    expect(task.model).toBe('Hello.')
+    expect(task.reference).toBe('Hello.')
+    expect(task.mustUse).toEqual([])
+    expect(task.focus).toBe('逐句翻译')
     expect(task.rubric).toHaveLength(3)
   })
 
