@@ -261,7 +261,6 @@ export default function ReaderApp() {
     askedIdsRef,
     setSessions,
     mistakes,
-    setIntensiveOpen: panels.setIntensiveOpen,
     setSpeedReadOpen: panels.setSpeedReadOpen,
     warmTexts,
     warmTimings,
@@ -620,7 +619,6 @@ export default function ReaderApp() {
 
   /** 精读工作流的两个入口动作（阶段→工具、拷打→题型两张表都在同名 hook） */
   const { openIntensiveStage, startIntensiveDrill } = useIntensiveActions({
-    setIntensiveOpen: panels.setIntensiveOpen,
     openSpeedRead: services.openSpeedRead,
     startStudy: services.startStudy,
     openWriting: services.openWriting,

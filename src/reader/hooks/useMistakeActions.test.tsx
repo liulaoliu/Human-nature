@@ -22,7 +22,6 @@ function setup(over: Partial<UseMistakeActionsParams> = {}) {
   const startQuizItems = vi.fn()
   const startListenQuestions = vi.fn()
   const startDictItems = vi.fn()
-  const setIntensiveOpen = vi.fn()
   const setQuizLoopWrong = vi.fn()
   const setQuizScope = vi.fn()
   const flash = vi.fn()
@@ -32,7 +31,6 @@ function setup(over: Partial<UseMistakeActionsParams> = {}) {
     startQuizItems,
     startListenQuestions,
     startDictItems,
-    setIntensiveOpen,
     setQuizLoopWrong,
     setQuizScope,
     flash,
@@ -44,7 +42,6 @@ function setup(over: Partial<UseMistakeActionsParams> = {}) {
     startQuizItems,
     startListenQuestions,
     startDictItems,
-    setIntensiveOpen,
     setQuizLoopWrong,
     setQuizScope,
     flash,
@@ -99,23 +96,21 @@ describe('useMistakeActions：错题重练', () => {
 
 describe('useMistakeActions：错题包围战', () => {
   it('没有可围剿的词：提示并留在面板里', () => {
-    const { result, startQuizItems, setIntensiveOpen, flash } = setup({
+    const { result, startQuizItems, flash } = setup({
       libraryItems: [item()],
       mistakes: [],
     })
     act(() => result.current.startSiege())
     expect(startQuizItems).not.toHaveBeenCalled()
-    expect(setIntensiveOpen).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
   })
 
-  it('有错词：关面板、开反复鞭打、按 lapses 范围出题', () => {
-    const { result, startQuizItems, setIntensiveOpen, setQuizLoopWrong, setQuizScope, flash } = setup({
+  it('有错词：开反复鞭打、按 lapses 范围出题（面板交给路由关）', () => {
+    const { result, startQuizItems, setQuizLoopWrong, setQuizScope, flash } = setup({
       libraryItems: [item()],
       mistakes: [mistake({ itemId: 'v1', count: 2 })],
     })
     act(() => result.current.startSiege())
-    expect(setIntensiveOpen).toHaveBeenCalledWith(false)
     expect(setQuizLoopWrong).toHaveBeenCalledWith(true)
     expect(setQuizScope).toHaveBeenCalledWith('lapses')
     expect(startQuizItems).toHaveBeenCalledWith(

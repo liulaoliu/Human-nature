@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { IntensivePlan } from '../../core/intensive'
 import type { OutputBoard } from '../../core/output'
+import { clearPanelScrollMemory } from '../hooks/usePanelScrollMemory'
 import IntensivePanel, { type IntensivePanelProps } from './IntensivePanel'
 
 const plan: IntensivePlan = {
@@ -29,6 +30,10 @@ const board: OutputBoard = {
     { key: 'retell', label: '复述', value: '2 条', level: 100, detail: '达标', good: true },
   ],
 }
+
+afterEach(() => {
+  clearPanelScrollMemory()
+})
 
 function props(over: Partial<IntensivePanelProps> = {}): IntensivePanelProps {
   const noop = vi.fn()
@@ -232,5 +237,19 @@ describe('IntensivePanel：拷打与复述', () => {
     expect(onClose).not.toHaveBeenCalled()
     fireEvent.click(container.querySelector('.plan-overlay') as HTMLElement)
     expect(onClose).toHaveBeenCalled()
+  })
+
+  it('关掉再打开：恢复同一篇文章的面板滚动位置', () => {
+    const first = render(<IntensivePanel {...props({ scrollKey: 'same-article' })} />)
+    const panel = first.container.querySelector('.plan-panel') as HTMLElement
+    panel.scrollTop = 240
+    first.unmount()
+
+    const second = render(<IntensivePanel {...props({ scrollKey: 'same-article' })} />)
+    expect((second.container.querySelector('.plan-panel') as HTMLElement).scrollTop).toBe(240)
+    second.unmount()
+
+    const other = render(<IntensivePanel {...props({ scrollKey: 'another-article' })} />)
+    expect((other.container.querySelector('.plan-panel') as HTMLElement).scrollTop).toBe(0)
   })
 })

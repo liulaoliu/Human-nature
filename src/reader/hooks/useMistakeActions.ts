@@ -12,7 +12,6 @@ export interface UseMistakeActionsParams {
   startQuizItems: (ids: string[], kinds?: QuizKind[]) => void
   startListenQuestions: (questions: ListeningQuestion[]) => void
   startDictItems: (items: { id: string; text: string }[]) => void
-  setIntensiveOpen: (open: boolean) => void
   setQuizLoopWrong: (on: boolean) => void
   setQuizScope: (scope: 'lapses') => void
   flash: (message: string) => void
@@ -35,7 +34,6 @@ export function useMistakeActions({
   startQuizItems,
   startListenQuestions,
   startDictItems,
-  setIntensiveOpen,
   setQuizLoopWrong,
   setQuizScope,
   flash,
@@ -79,7 +77,6 @@ export function useMistakeActions({
       flash('错题本是空的 —— 先做几轮「考试 / 拷打」攒点错题吧')
       return
     }
-    setIntensiveOpen(false)
     setQuizLoopWrong(true)
     setQuizScope('lapses')
     startQuizItems(
@@ -87,7 +84,7 @@ export function useMistakeActions({
       ['spell', 'meaning', 'choice', 'usage', 'collocation', 'prep', 'idiom', 'cloze'],
     )
     flash(`错题包围战：${picked.length} 个欠揍的词，打到全对`)
-  }, [libraryItems, mistakes, startQuizItems, setIntensiveOpen, setQuizLoopWrong, setQuizScope, flash])
+  }, [libraryItems, mistakes, startQuizItems, setQuizLoopWrong, setQuizScope, flash])
 
   return { retryMistakeVocab, retryMistakeListen, retryMistakeDict, startSiege }
 }

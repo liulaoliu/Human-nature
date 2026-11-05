@@ -202,7 +202,7 @@ export default function ReaderScreen(props: ReaderScreenProps) {
       toolbar={<ReaderToolbarZone {...props} />}
       sidebar={<ReaderSidebarZone {...props} />}
     >
-      <ReaderBodyZone {...props} />
+      <ReaderBodyZone {...props} panelScrollKey={scrollKey} />
     </ReaderShell>
   )
 }

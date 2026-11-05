@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { AI_BATCH_NAME } from '../labels'
 import { DRILL_LIMIT_OPTIONS } from '../../core/quizPool'
 import type { IntensivePlan, IntensiveStageKey } from '../../core/intensive'
 import type { OutputBoard } from '../../core/output'
+import { usePanelScrollMemory } from '../hooks/usePanelScrollMemory'
 
 export type DrillKind = 'memory' | 'chunk' | 'deep' | 'mark' | 'grammar' | 'listen'
 
@@ -42,6 +43,8 @@ export interface IntensivePanelProps {
   onDrillLimitChange: (n: number) => void
   /** 「错题包围战」：错题 + 优先 + 学不稳 一起围剿（打到全对）。 */
   onSiege: () => void
+  /** 滚动位置记忆键（文章标识）；不传 = 不记。 */
+  scrollKey?: string
 }
 
 const STATUS_TEXT: Record<string, string> = { todo: '未开始', doing: '进行中', done: '已完成' }
@@ -75,7 +78,10 @@ export default function IntensivePanel({
   drillLimit,
   onDrillLimitChange,
   onSiege,
+  scrollKey = '',
 }: IntensivePanelProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+  usePanelScrollMemory(panelRef, scrollKey)
   const [retellDraft, setRetellDraft] = useState('')
   // 跑批进行中：整个面板的动作先锁住，避免重复提交 / 中途切会话。
   const busy = batchRunning
@@ -86,7 +92,7 @@ export default function IntensivePanel({
     // 跑批中：点遮罩不关（一不留神就点没了，还以为是跑批失败）。真要收起来走「隐藏」按钮，
     // 跑批在后台继续，再打开面板能看到进度和「取消」。
     <div className="plan-overlay" onClick={busy ? undefined : onClose}>
-      <div className="plan-panel intensive-panel" onClick={(e) => e.stopPropagation()}>
+      <div className="plan-panel intensive-panel" ref={panelRef} onClick={(e) => e.stopPropagation()}>
         <div className="bar plan-head">
           <b>🎯 精读工作流</b>
           <span className={'ilevel ilevel-' + plan.level}>{plan.levelLabel}</span>

@@ -21,7 +21,6 @@ type OutputParams = Omit<UseQuickWritingBackParams, 'studyPool' | 'closeSessions
  */
 export interface UseSessionServicesParams extends StudyParams, OutputParams {
   mistakes: MistakeEntry[]
-  setIntensiveOpen: (open: boolean) => void
   setSpeedReadOpen: (open: boolean) => void
   setSessions: (updater: (prev: PickSession[]) => PickSession[]) => void
   /** 听写要的音频预热与待选合并（其余听写入参直接从上面两组沿用）。 */
@@ -44,7 +43,6 @@ export function useSessionServices(params: UseSessionServicesParams) {
     doc,
     library,
     flash,
-    setIntensiveOpen,
     setSpeedReadOpen,
     setSessions,
     mistakes,
@@ -164,7 +162,6 @@ export function useSessionServices(params: UseSessionServicesParams) {
     startQuizItems,
     startListenQuestions,
     startDictItems,
-    setIntensiveOpen,
     setQuizLoopWrong,
     setQuizScope,
     flash,

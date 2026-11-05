@@ -2,9 +2,11 @@ import { useEffect, useReducer, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   articlePath,
+  flowPath,
   isFlowName,
   isOverlayFlow,
   panelPath,
+  type BooleanPanelName,
   type FlowName,
   type PanelName,
   type ReaderRoute,
@@ -38,15 +40,29 @@ function activeFlow(flows: FlowControls): FlowName | '' {
  * 浮层会话（语言点）如果正盖在一个布尔面板上（速读 / 计划…），地址里要把底下那层留着
  * （`/p/speed/lang`），否则 `useRoutedPanels` 看到 `panel` 变成会话就会把速读关掉 ——
  * 用户反馈的「速读里点语言点，直接跳回阅读主界面」就是这个。
+ *
+ * 整页会话从布尔面板点开时（精读面板里的记忆拷打 / 速读…），地址里带 `?back=<面板>`：
+ * 会话仍然占满正文，但关掉后会回到点它之前那一页，而不是掉到文章主界面。
  */
-function openPath(slug: string, panel: PanelName | '', flow: FlowName): string {
+function openPath(
+  slug: string,
+  panel: PanelName | '',
+  flow: FlowName,
+  back: BooleanPanelName | '' = '',
+): string {
   if (isOverlayFlow(flow) && panel && !isFlowName(panel)) return panelPath(slug, panel, flow)
-  return panelPath(slug, flow)
+  const returnTo = panel && !isFlowName(panel) ? panel : back
+  return flowPath(slug, flow, returnTo)
 }
 
-/** 关掉会话后回到哪：底下还压着布尔面板就回它，否则回文章 / 列表。 */
-function underFlowPath(slug: string, panel: PanelName | ''): string {
-  return panel && !isFlowName(panel) ? panelPath(slug, panel) : articlePath(slug)
+/** 关掉会话后回到哪：底下还压着布尔面板就回它，否则回 `?back=` 记的面板 / 文章。 */
+function underFlowPath(
+  slug: string,
+  panel: PanelName | '',
+  back: BooleanPanelName | '' = '',
+): string {
+  if (panel && !isFlowName(panel)) return panelPath(slug, panel)
+  return back ? panelPath(slug, back) : articlePath(slug)
 }
 
 /**
@@ -116,7 +132,7 @@ export function useRoutedFlows(
         }
       } else if (active) {
         // 刷新时从本机恢复出来的会话（考试队列之类）：把它写进 URL，别让它没有地址
-        navigate(openPath(slugRef.current, routePanel, active))
+        navigate(openPath(slugRef.current, routePanel, active, route.back))
       }
       return
     }
@@ -141,12 +157,13 @@ export function useRoutedFlows(
       if (active && routeFlow !== active) {
         // 用户点了按钮 → 新增一层历史（返回键才能回到点之前那一页）
         pendingRef.current = null
-        navigate(openPath(slugRef.current, routePanel, active))
+        navigate(openPath(slugRef.current, routePanel, active, route.back))
       } else if (!active && routeFlow) {
         // 用户在页面里点了「退出」→ 换掉这一层，别留一个已关掉的面板在历史里。
-        // 浮层下面还压着面板（速读里的语言点）就回到那一层，不是直接回文章。
+        // 浮层下面还压着面板（速读里的语言点）就回到那一层；从布尔面板点开的整页会话
+        // 回 `?back=` 记的面板（精读里的拷打退出后回精读）。
         pendingRef.current = null
-        navigate(underFlowPath(slugRef.current, routePanel), { replace: true })
+        navigate(underFlowPath(slugRef.current, routePanel, route.back), { replace: true })
       }
     }
 
@@ -162,7 +179,7 @@ export function useRoutedFlows(
         bump()
       } else {
         pendingRef.current = null
-        navigate(underFlowPath(slugRef.current, routePanel), { replace: true })
+        navigate(underFlowPath(slugRef.current, routePanel, route.back), { replace: true })
       }
     }
   })

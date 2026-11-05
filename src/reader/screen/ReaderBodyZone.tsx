@@ -11,7 +11,7 @@ import { bodyMode } from './bodyMode'
  * 正文槽位：会话面板路由 + 各类覆盖层 + 新建文章 + 正文。
  * 纯映射/条件渲染，不读存储、不发请求。
  */
-export default function ReaderBodyZone(props: ReaderScreenProps) {
+export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollKey?: string }) {
   const {
     bookError,
     book,
@@ -276,6 +276,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps) {
           drillLimit: quizApi.drillLimit,
           onDrillLimitChange: quizApi.setDrillLimit,
           onSiege: startSiege,
+          scrollKey: props.panelScrollKey,
         }}
         goal={{
           open: goalOpen,

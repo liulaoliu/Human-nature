@@ -84,7 +84,6 @@ function setup(over: Record<string, unknown> = {}) {
     askedIdsRef: { current: [] },
     setSessions: vi.fn(),
     mistakes: [],
-    setIntensiveOpen: vi.fn(),
     setSpeedReadOpen,
     warmTexts: vi.fn(),
     warmTimings: vi.fn(),

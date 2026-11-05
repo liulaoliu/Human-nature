@@ -64,6 +64,14 @@ export interface ReaderRoute {
    * 结果一开语言点就掉回阅读主界面（2026-10-26 用户反馈）。
    */
   overlay: FlowName | ''
+  /**
+   * 整页会话是从哪个布尔面板点开的（`/p/quiz?back=intensive`）。
+   *
+   * 整页会话不能真的叠在布尔面板上（两个全屏界面抢地址），但用户关掉会话时应该回到
+   * 「点它之前那一页」。所以只把返回目标记在 query 里，`useRoutedFlows` 关闭时 replace 回它。
+   * 只认 `BooleanPanelName`，坏值 / 非会话路由一律忽略。
+   */
+  back?: BooleanPanelName
   /** `/p/golden` 的子视图 / 记录定位；没有 query 时不写这个字段 */
   golden?: GoldenRouteState
 }
@@ -143,6 +151,10 @@ export function isFlowName(name: PanelName | ''): name is FlowName {
   return !!name && (FLOW_NAMES as string[]).includes(name)
 }
 
+export function isBooleanPanelName(name: string): name is BooleanPanelName {
+  return (BOOLEAN_PANELS as string[]).includes(name)
+}
+
 /**
  * 能**叠在别的面板之上**的会话：目前只有语言点编辑。
  *
@@ -176,18 +188,30 @@ export function parseReaderRoute(pathname: string, search = ''): ReaderRoute {
     })
   // /p/<panel>：没有文章时也能开的面板
   if (parts[0] === 'p') {
-    return withGoldenQuery({ slug: '', ...parsePanels(parts.slice(1)) }, search)
+    return withQuery({ slug: '', ...parsePanels(parts.slice(1)) }, search)
   }
   if (parts[0] !== 'a') return { slug: '', panel: '', overlay: '' }
   const slug = parts[1] ?? ''
   const panels = parts[2] === 'p' ? parsePanels(parts.slice(3)) : { panel: '' as const, overlay: '' as const }
-  return withGoldenQuery({ slug, ...panels }, search)
+  return withQuery({ slug, ...panels }, search)
 }
 
-function withGoldenQuery(route: ReaderRoute, search: string): ReaderRoute {
-  if (route.panel !== 'golden') return route
+/** 整页会话的返回目标：只认布尔面板名，其他值当没写。 */
+function parseBackPanel(search: string): BooleanPanelName | undefined {
+  const raw = new URLSearchParams(search).get('back')
+  return raw && isBooleanPanelName(raw) ? raw : undefined
+}
+
+function withQuery(route: ReaderRoute, search: string): ReaderRoute {
+  let next = route
+  // 只有整页会话需要「关掉后回哪个面板」；布尔面板自己的 query（生词筛选）不归这里管。
+  if (isFlowName(route.panel)) {
+    const back = parseBackPanel(search)
+    if (back) next = { ...next, back }
+  }
+  if (next.panel !== 'golden') return next
   const golden = parseGoldenQuery(search)
-  return golden ? { ...route, golden } : route
+  return golden ? { ...next, golden } : next
 }
 
 /** `p/` 后面的段：`<panel>` 或 `<布尔面板>/<浮层>`。认不出的一律当没有，别把页面搞崩。 */
@@ -215,6 +239,19 @@ export function panelPath(slug: string, panel: PanelName, overlay: PanelName | '
   // 没打开文章时面板也能开（计划 / 日志 / 统计 / 生词本 / 背单词）→ /reader/p/<panel>
   const base = slug ? `${READER_BASE}/a/${slug}/p/${panel}` : `${READER_BASE}/p/${panel}`
   return overlay && isOverlayFlow(overlay) && !isFlowName(panel) ? `${base}/${overlay}` : base
+}
+
+/**
+ * 整页会话路径 + 「关掉后回哪个布尔面板」。
+ *
+ *   flowPath('x', 'quiz', 'intensive') → `/reader/a/x/p/quiz?back=intensive`
+ *
+ * 用 query 而不是把两段都写进 path：整页会话不能真的叠在布尔面板上，否则 URL → 状态时
+ * 两个全屏界面会同时打开。返回目标只影响关闭动作，不影响当前渲染哪一页。
+ */
+export function flowPath(slug: string, flow: FlowName, back: BooleanPanelName | '' = ''): string {
+  const base = panelPath(slug, flow)
+  return back ? `${base}?back=${encodeURIComponent(back)}` : base
 }
 
 /** 面板名 → `useReaderPanels` 里那一对布尔值 / setter。 */

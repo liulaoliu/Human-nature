@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   articlePath,
+  flowPath,
   goldenPanelPath,
   isFlowName,
   isOverlayFlow,
@@ -106,6 +107,42 @@ describe('route：浮层叠在面板上（速读里的语言点）', () => {
   })
 })
 
+describe('route：整页会话的返回面板（?back=）', () => {
+  it('flowPath 把返回目标写进 query，parseReaderRoute 解得回来', () => {
+    expect(flowPath('my-article', 'quiz', 'intensive')).toBe(
+      '/reader/a/my-article/p/quiz?back=intensive',
+    )
+    expect(flowPath('my-article', 'quiz')).toBe('/reader/a/my-article/p/quiz')
+    expect(parseReaderRoute('/reader/a/my-article/p/quiz', '?back=intensive')).toEqual({
+      slug: 'my-article',
+      panel: 'quiz',
+      overlay: '',
+      back: 'intensive',
+    })
+  })
+
+  it('只认布尔面板；坏值 / 布尔面板上的 back 一律忽略', () => {
+    expect(parseReaderRoute('/reader/p/quiz', '?back=nope')).toEqual({
+      slug: '',
+      panel: 'quiz',
+      overlay: '',
+    })
+    expect(parseReaderRoute('/reader/p/speed', '?back=intensive')).toEqual({
+      slug: '',
+      panel: 'speed',
+      overlay: '',
+    })
+  })
+
+  it('back 与 golden 子视图 query 可以共存', () => {
+    expect(parseReaderRoute('/reader/p/golden', '?back=intensive&gv=history')).toMatchObject({
+      panel: 'golden',
+      back: 'intensive',
+      golden: { view: 'history' },
+    })
+  })
+})
+
 describe('route：golden 子视图 / 历史详情', () => {
   it('errors / history / recordKey / scope 往返，recordKey 会编码', () => {
     const state = {
@@ -124,7 +161,7 @@ describe('route：golden 子视图 / 历史详情', () => {
     })
   })
 
-  it('只有 golden 面板带 query；坏 gv 当没有，gr 单独保留', () => {
+  it('非 golden 面板不认 golden 子视图 query；坏 gv 当没有，gr 单独保留', () => {
     expect(parseReaderRoute('/reader/p/golden', '?gv=errors')).toMatchObject({
       panel: 'golden',
       golden: { view: 'errors' },

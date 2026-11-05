@@ -5,7 +5,6 @@ import { useIntensiveActions } from './useIntensiveActions'
 
 function setup() {
   const deps = {
-    setIntensiveOpen: vi.fn(),
     openSpeedRead: vi.fn(),
     startStudy: vi.fn(),
     openWriting: vi.fn(),
@@ -19,10 +18,9 @@ function setup() {
 }
 
 describe('useIntensiveActions（精读工作流入口）', () => {
-  it('通读 / 达标拷打 / 产出 分别打开速读、背单词、仿写，并先收起面板', () => {
+  it('通读 / 达标拷打 / 产出 分别打开速读、背单词、仿写，面板留给路由关', () => {
     const { deps, result } = setup()
     act(() => result.current.openIntensiveStage('skim'))
-    expect(deps.setIntensiveOpen).toHaveBeenCalledWith(false)
     expect(deps.openSpeedRead).toHaveBeenCalled()
 
     act(() => result.current.openIntensiveStage('recall'))
@@ -38,8 +36,6 @@ describe('useIntensiveActions（精读工作流入口）', () => {
       act(() => result.current.openIntensiveStage(stage))
       expect(deps.runAiLocal).toHaveBeenCalledTimes(1)
       expect(deps.startQuizArticleDrill).not.toHaveBeenCalled()
-      // 就地跑批：面板不关，进度和「取消」留在眼前（关掉再跑 = 点了没反应）
-      expect(deps.setIntensiveOpen).not.toHaveBeenCalled()
     }
   })
 
@@ -67,7 +63,6 @@ describe('useIntensiveActions（精读工作流入口）', () => {
 
   it('记忆 / 词块拷打按面板设置的数量出题（其它拷打不受影响）', () => {
     const deps = {
-      setIntensiveOpen: vi.fn(),
       openSpeedRead: vi.fn(),
       startStudy: vi.fn(),
       openWriting: vi.fn(),
@@ -122,9 +117,10 @@ describe('useIntensiveActions（精读工作流入口）', () => {
     expect(deps.startQuizDrill).not.toHaveBeenCalled()
   })
 
-  it('任何一档都会先收起面板（不然盖住考题）', () => {
-    const { deps, result } = setup()
+  it('任何一档都不在动作里收面板（返回目标由路由的 ?back= 负责）', () => {
+    const { result } = setup()
     act(() => result.current.startIntensiveDrill('listen'))
-    expect(deps.setIntensiveOpen).toHaveBeenCalledWith(false)
+    // 没有可断言的关闭调用：动作签名里已经不再接收 setIntensiveOpen。
+    expect(result.current.startIntensiveDrill).toBeTypeOf('function')
   })
 })

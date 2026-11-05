@@ -111,6 +111,7 @@ types ← core ← adapters ← reader
 | 顶栏按钮区分几行 | `src/core/toolbarRows.ts` | 四组控件（文章 / 视图 / 动作 / 统计）→ 4 / 3 / 2 行：从尾部并（统计最矮，跟动作并）。`ReaderToolbar` 只按 plan 铺行，不改顺序；合并行插 `.tb-sep` 竖线，档位存 `reader:toolbarRows` |
 | 文章键（「同一篇」怎么认） | `src/core/docSignature.ts` 的 `articleKey` = `标识@正文签名` | 签名只由句子文本算（djb2，句间有分隔）。**凡按文章记东西，键里都要带它**：标识可能是书名 / 空标题 / 「未命名」。滚动进度 / 速读游标与本页清单 / 听写游标 / 听力题缓存**一律用 `articleKey`**，不许各自拼 |
 | 阅读页滚动到哪 | `src/core/scrollProgress.ts`（比例口径、脏值兜底）+ `src/state/scrollPrefs.ts`（`articleKey` 存，内存优先） | 存比例不存像素：换字号/衬线/译文后还能回到同一段；`ReaderShell` 只拿 hook，不碰 localStorage（R3） |
+| 精读面板滚动到哪 | `src/reader/hooks/usePanelScrollMemory.ts` | 去考试 / 速读再回来还停在原位；只存内存、按 `articleKey` 分开，卸载保存 / 挂载恢复，不挂 scroll 监听、不写 localStorage；最多记 20 篇（淘汰最久没用） |
 | 速读「读到第几句」 | `src/core/speedRead.ts` 的 `speedCursorKey(articleKey)` | 只按标识存会串篇（空标题 / 同名 / 「未命名」共用一个标识）；读完最后一句退出即清零 |
 | 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势；R3 存量豁免只剩 `core/stateBackup` 一条 |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
@@ -449,6 +450,7 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 /reader/a/<slug>                   读某一篇
 /reader/a/<slug>/p/<panel>         读某一篇 + 开面板 / 整页会话
 /reader/a/<slug>/p/<panel>/<浮层>  读某一篇 + 面板 + 盖在它上面的浮层（`/p/speed/lang`）
+/reader/a/<slug>/p/<会话>?back=<面板>  从布尔面板点开的整页会话（关掉后回该面板）
 /reader/p/<panel>                  没有文章时也能开的（计划/日志/统计/生词本/背单词…）
 ```
 
@@ -472,6 +474,12 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 `useRoutedPanels` 随即关掉速读，表现就是「一开语言点就掉回阅读主界面」（2026-10-26 用户反馈）。
 整页会话（背单词 / 考试…）自己就占满正文，**不往上叠**，`panelPath` 会忽略这种浮层。
 
+**从布尔面板点开的整页会话用 `?back=<面板>` 记返回目标**（`route.ts` 的 `flowPath` /
+`parseReaderRoute`）。例如精读面板里点「记忆拷打」→
+`/reader/a/<slug>/p/quiz?back=intensive`：考试仍占满正文，但页面内退出 / 浏览器返回 /
+深链接打不开时都回到 `/p/intensive`，而不是掉到文章主界面。`back` 只认布尔面板名，
+坏值忽略；它不影响当前渲染哪一页，只决定 `useRoutedFlows` 关闭时 replace 回哪一层。
+
 懒加载面板在 `ReaderOverlaysHost` 里**每个面板各包一层** `PanelBoundary + Suspense`
 （`panels/PanelBoundary.tsx`）：某个 chunk 加载失败或渲染抛错时，只换掉这一块并给「重试 / 关闭」，
 不要把整个 `Suspense` 放在外层——那样一个面板坏掉会连带其它面板，异常还会冒到整棵树把阅读页打白。
@@ -485,7 +493,9 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 - `route.ts` 的 `useRoutedPanels`：布尔面板 ↔ URL；
 - `hooks/useRoutedFlows.ts`：会话状态 ↔ URL。规则是
   **点按钮打开 → push 一层；浏览器返回 → 关会话；页面内点退出 → replace 掉这一层**。
-  深链接打开失败（没词可背 / 没文章）会退回文章页，别停在空界面。
+  从布尔面板点开的会话在 URL 里带 `?back=<面板>`，退出 / 打开失败回该面板；
+  没有 `back` 才退回文章页，别停在空界面。**动作 hook 不要自己先关面板**：
+  先 `setIntensiveOpen(false)` 会把历史层换成文章页，`back` 就没了（2026-11-05 用户反馈）。
 
 **正文槽位**的四种状态由 `screen/bodyMode.ts` 的纯函数判定（`composer` / `loading` / `missing` / `article`）：
 只有用户主动点「新建」才进 Composer；URL 指向文章但索引/正文还没到时显示 loading，

@@ -16,8 +16,6 @@ import type { IntensiveStageKey } from '../../core/intensive'
  * 写歪了不会报错，只会「点了没反应」或「考错题」，所以放在一处、配测试。
  */
 export interface IntensiveActionsDeps {
-  /** 关掉面板（跳转前先收起来，免得盖住目标工具） */
-  setIntensiveOpen: (open: boolean) => void
   openSpeedRead: () => void
   startStudy: () => void
   openWriting: () => void
@@ -47,7 +45,6 @@ const DRILL_KINDS: Record<DrillKind, QuizKind[]> = {
 
 export function useIntensiveActions(deps: IntensiveActionsDeps) {
   const {
-    setIntensiveOpen,
     openSpeedRead,
     startStudy,
     openWriting,
@@ -57,7 +54,13 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
     drillLimit,
   } = deps
 
-  /** 某个阶段「跳到对应工具」 */
+  /**
+   * 某个阶段「跳到对应工具」。
+   *
+   * 不在这里关面板：整页会话由 `useRoutedFlows` 负责打开，路由会记住 `?back=intensive`，
+   * 关掉会话后自动回精读面板。自己先 `setIntensiveOpen(false)` 会把这一层历史换成文章页，
+   * 返回目标就丢了（2026-11-05 用户反馈）。
+   */
   const openIntensiveStage = useCallback(
     (key: IntensiveStageKey) => {
       // 标词 / 词块 / 理解三档是「就地跑批」——面板留着不关，跑批进度、第几轮、
@@ -66,7 +69,6 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
         void runAiLocal()
         return
       }
-      setIntensiveOpen(false)
       if (key === 'skim') openSpeedRead()
       else if (key === 'recall') startStudy()
       else if (key === 'produce') openWriting()
@@ -74,13 +76,12 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
       //（句子题，不写 SRS）。之前这里落到 `runAiLocal()`，点下去只是补语言点，等于没练。
       else if (key === 'grammar') startQuizArticleDrill(DRILL_KINDS.grammar)
     },
-    [setIntensiveOpen, openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill],
+    [openSpeedRead, startStudy, openWriting, runAiLocal, startQuizArticleDrill],
   )
 
   /** 快捷「拷打」（只针对本篇） */
   const startIntensiveDrill = useCallback(
     (kind: DrillKind) => {
-      setIntensiveOpen(false)
       const kinds = DRILL_KINDS[kind]
       if (kind === 'grammar') startQuizArticleDrill(kinds)
       // 记忆 / 词块两档是闭卷回忆：先摊开这轮要考的词（词 + 释义 / 词块）再开考。
@@ -90,7 +91,7 @@ export function useIntensiveActions(deps: IntensiveActionsDeps) {
         startQuizDrill(kinds, 'article', { warmup: kind, limit: drillLimit })
       else startQuizDrill(kinds, 'article')
     },
-    [setIntensiveOpen, startQuizDrill, startQuizArticleDrill, drillLimit],
+    [startQuizDrill, startQuizArticleDrill, drillLimit],
   )
 
   return { openIntensiveStage, startIntensiveDrill }

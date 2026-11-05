@@ -28,7 +28,7 @@ function setup(initialPath: string, initialFlows: FlowControls, initialReady = t
 
   function Probe() {
     const loc = useLocation()
-    seen = loc.pathname
+    seen = loc.pathname + loc.search
     return null
   }
   function NavCapture() {
@@ -45,7 +45,7 @@ function setup(initialPath: string, initialFlows: FlowControls, initialReady = t
 
   const hook = renderHook(() => {
     const loc = useLocation()
-    const route = parseReaderRoute(loc.pathname)
+    const route = parseReaderRoute(loc.pathname, loc.search)
     useRoutedFlows(route, route.slug, flows, ready)
   }, { wrapper })
 
@@ -116,6 +116,39 @@ describe('useRoutedFlows：URL → 状态（返回键）', () => {
   })
 })
 
+describe('useRoutedFlows：从布尔面板打开的整页会话（?back=）', () => {
+  it('精读面板里开考试 → URL 记住 back；页面内退出回精读，不回文章', async () => {
+    const flows = idle()
+    const h = setup('/reader/a/my-article/p/intensive', flows)
+
+    flows.quiz.active = true
+    h.update(flows)
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/quiz?back=intensive'))
+
+    flows.quiz.active = false
+    h.update(flows)
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/intensive'))
+  })
+
+  it('浏览器返回精读那一层 → 关掉考试，不再额外导航', async () => {
+    const flows = idle()
+    flows.quiz.active = true
+    const h = setup('/reader/a/my-article/p/quiz?back=intensive', flows)
+
+    h.go('/reader/a/my-article/p/intensive')
+    await waitFor(() => expect(flows.quiz.close).toHaveBeenCalledTimes(1))
+    expect(h.path()).toBe('/reader/a/my-article/p/intensive')
+  })
+
+  it('深链接打不开 → 退回 back 面板，不留空界面', async () => {
+    const flows = idle()
+    const h = setup('/reader/a/my-article/p/quiz?back=intensive', flows)
+
+    await waitFor(() => expect(flows.quiz.open).toHaveBeenCalled())
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/intensive'))
+  })
+})
+
 describe('useRoutedFlows：浮层会话（速读里的语言点）', () => {
   it('速读里打开语言点 → push 一层 /p/speed/lang，底下的速读留在地址里', async () => {
     const flows = idle()
@@ -156,14 +189,18 @@ describe('useRoutedFlows：浮层会话（速读里的语言点）', () => {
     await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/speed'))
   })
 
-  it('整页会话不往面板上叠：速读里开背单词仍然是整页 /p/study', async () => {
+  it('整页会话不往路径上叠，但用 back 记住底下的速读', async () => {
     const flows = idle()
     const h = setup('/reader/a/my-article/p/speed', flows)
 
     flows.study.active = true
     h.update(flows)
 
-    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/study'))
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/study?back=speed'))
+
+    flows.study.active = false
+    h.update(flows)
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/speed'))
   })
 })
 
