@@ -104,8 +104,9 @@ export function createQuizCheck(params: QuizCheckParams): (answerOverride?: stri
       correct: ok,
       questionId: q.id,
     })
-    // 答完朗读一下（看词选义读英文单词；其余读答案词形）
-    if (speakAfter) speak(q.kind === 'meaning' ? q.word : q.answer)
+    // 答完朗读一下（看词选义读英文单词；其余读答案词形）。
+    // 语法标记的答案是「可数 / 不可数」这类中文标签，读出来像在念选项，不是学习内容。
+    if (speakAfter && q.kind !== 'mark') speak(q.kind === 'meaning' ? q.word : q.answer)
     // 开了「自动下一题」：答对快切、答错稍停（看答案）后自动切；拼写错必须先确认
     if (autoRun && !(!ok && spellingKind && !isArticle)) scheduleAdvance(ok ? 650 : 1400)
   }

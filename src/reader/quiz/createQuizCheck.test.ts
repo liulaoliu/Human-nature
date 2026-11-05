@@ -44,6 +44,26 @@ function params(over: Partial<QuizCheckParams> = {}): QuizCheckParams {
   }
 }
 
+describe('createQuizCheck：答题后朗读', () => {
+  it('语法标记不朗读选中的「可数 / 不可数」——选项标签不是学习内容', () => {
+    const p = params({
+      queue: [{ ...articleQuestion, id: 'a1:mark', kind: 'mark', prompt: 'letter 可数吗？', answer: '可数', accept: ['可数'] }],
+      speakAfter: true,
+    })
+    createQuizCheck(p)('可数')
+    expect(p.speak).not.toHaveBeenCalled()
+  })
+
+  it('其它题型仍按原规则朗读（看词选义读单词）', () => {
+    const p = params({
+      queue: [{ ...articleQuestion, id: 'a1:meaning', kind: 'meaning', word: 'run', answer: '跑', accept: ['跑'] }],
+      speakAfter: true,
+    })
+    createQuizCheck(p)('跑')
+    expect(p.speak).toHaveBeenCalledWith('run')
+  })
+})
+
 describe('createQuizCheck：文章题不写词级账本', () => {
   it('只记活动 / 答题事件，不写 SRS、错题本、已学', () => {
     const p = params()
