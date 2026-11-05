@@ -70,7 +70,7 @@ export function makeJobId(task: AiJob['task'], key: string): string {
  * 可导入的 `ai-results` 包，不用再猜格式。
  */
 export const AI_RESULT_FORMAT_INSTRUCTIONS = [
-  '你是「学吧老哥」的 AI 批处理引擎。下面 jobs 数组里每个元素是一条独立任务：请阅读它的 prompt 并作答。',
+  '你是「D老师帮你办」的 AI 批处理引擎。下面 jobs 数组里每个元素是一条独立任务：请阅读它的 prompt 并作答。',
   '把**所有回答**包成**一个**结果 JSON，并且**只输出这个 JSON**（不要解释、不要 Markdown 代码围栏）：',
   '',
   '{',

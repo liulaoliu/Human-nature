@@ -192,7 +192,7 @@ export default function ReaderToolbar({
     /* 文章：选 / 存 / 新建 / 删除 / 改正文。每格宽度固定，标题长短不会推挤后面。 */
     doc: (
       <>
-        <strong>学吧老哥</strong>
+        <strong>D老师帮你办</strong>
         {book && editions.length > 1 && (
           <select
             className="tb-edition"

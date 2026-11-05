@@ -234,8 +234,8 @@ export default function App() {
           onImport={(f) => void importBackup(f)}
           onSaveProject={() => void saveToProjectFile()}
         />
-        <Link className="navlink accent" to="/reader" title="打开 学吧老哥 / 生词本">
-          学吧老哥 · 生词本 <span className="arrow">→</span>
+        <Link className="navlink accent" to="/reader" title="打开 D老师帮你办 / 生词本">
+          D老师帮你办 · 生词本 <span className="arrow">→</span>
         </Link>
       </header>
 

@@ -42,8 +42,8 @@ export function Empty({ onPick, backup }: { onPick: (f: File) => void; backup?: 
           }}
         />
       </label>
-      <Link className="navlink accent empty-nav" to="/reader" title="打开 学吧老哥 / 生词本">
-        学吧老哥 · 生词本 <span className="arrow">→</span>
+      <Link className="navlink accent empty-nav" to="/reader" title="打开 D老师帮你办 / 生词本">
+        D老师帮你办 · 生词本 <span className="arrow">→</span>
       </Link>
       <p className="tip">
         浏览器不给 <code>file://</code> 页面麦克风权限。如果点录音没反应，在项目目录跑{' '}

@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const SYSTEM_PROMPT =
-  '你是「学吧老哥」的 AI 批处理引擎。用户会给你一条已经写好的提示词，' +
+  '你是「D老师帮你办」的 AI 批处理引擎。用户会给你一条已经写好的提示词，' +
   '请严格按提示词要求输出结果。只输出结果本身，不要解释、不要 Markdown 代码围栏。'
 
 function readJson(path) {

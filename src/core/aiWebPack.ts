@@ -21,7 +21,7 @@ export function buildWebPackPrompt(
   meta?: { batchIndex?: number; batchCount?: number; remaining?: number },
 ): string {
   const head: string[] = []
-  head.push('你是英语学习工具「学吧老哥」的批处理引擎。')
+  head.push('你是英语学习工具「D老师帮你办」的批处理引擎。')
   if (meta && meta.batchCount && meta.batchCount > 1) {
     head.push(
       `现在给你**第 ${meta.batchIndex} / ${meta.batchCount} 批**共 ${jobs.length} 个任务（每个任务是一段已经写好的提示词）。只处理本批。`,
