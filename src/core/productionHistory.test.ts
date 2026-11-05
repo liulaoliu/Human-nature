@@ -213,8 +213,19 @@ describe('productionHistory：从 attempts 派生进度 / 统计', () => {
     const a = record({ task: base })
     const b = record({ at: '2026-11-01T11:00:00.000Z', task: { ...base, round: 2 } as unknown as WritingRecord['task'] })
     const old = [a, b]
-    const { records, changed } = assignLegacyProductionSessionIds(old)
+    const { records, changed, groups } = assignLegacyProductionSessionIds(old)
     expect(changed).toBe(2)
+    expect(groups).toEqual([
+      expect.objectContaining({
+        articleId: 'A',
+        day: '2026-11-01',
+        mode: 'full',
+        topic: '工作',
+        count: 2,
+        firstAt: '2026-11-01T10:00:00.000Z',
+        lastAt: '2026-11-01T11:00:00.000Z',
+      }),
+    ])
     const ids = records.map((r) => (r.task as { sessionId?: string }).sessionId)
     expect(ids[0]).toBeTruthy()
     expect(ids[0]).toBe(ids[1])

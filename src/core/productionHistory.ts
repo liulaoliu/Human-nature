@@ -136,9 +136,21 @@ export function productionRecords(history: readonly WritingRecord[]): WritingRec
   return history.filter((r) => r.source === 'production')
 }
 
+export interface LegacyProductionGroup {
+  sessionId: string
+  articleId: string
+  day: string
+  mode: ProductionMode
+  topic: string
+  count: number
+  firstAt: string
+  lastAt: string
+}
+
 export interface LegacyProductionMigration {
   records: WritingRecord[]
   changed: number
+  groups: LegacyProductionGroup[]
 }
 
 /**
@@ -149,15 +161,28 @@ export function assignLegacyProductionSessionIds(
   history: readonly WritingRecord[],
 ): LegacyProductionMigration {
   let changed = 0
+  const groups = new Map<string, LegacyProductionGroup>()
   const records = history.map((rec) => {
     if (rec.source !== 'production') return rec
     const task = productionTaskOf(rec)
     if (!task || task.sessionId) return rec
-    const sessionId = `legacy:${rec.articleId}|${rec.at.slice(0, 10)}|${task.mode}|${task.topic}`
+    const day = rec.at.slice(0, 10)
+    const sessionId = `legacy:${rec.articleId}|${day}|${task.mode}|${task.topic}`
     changed++
+    const prev = groups.get(sessionId)
+    groups.set(sessionId, {
+      sessionId,
+      articleId: rec.articleId,
+      day,
+      mode: task.mode,
+      topic: task.topic,
+      count: (prev?.count ?? 0) + 1,
+      firstAt: prev && prev.firstAt < rec.at ? prev.firstAt : rec.at,
+      lastAt: prev && prev.lastAt > rec.at ? prev.lastAt : rec.at,
+    })
     return { ...rec, task: { ...rec.task, sessionId } as typeof rec.task }
   })
-  return { records, changed }
+  return { records, changed, groups: [...groups.values()] }
 }
 
 export function productionTaskOf(record: WritingRecord): ProductionTask | null {

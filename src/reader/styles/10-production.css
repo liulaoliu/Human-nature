@@ -356,3 +356,19 @@
 .voice-error {
   font-size: 11px;
 }
+
+.production-legacy {
+  margin: 8px 0;
+  padding: 8px 10px;
+  border: 1px solid #e5dccb;
+  border-radius: 8px;
+  background: #fffaf0;
+  font-size: 12px;
+}
+.production-legacy summary {
+  cursor: pointer;
+}
+.production-legacy ul {
+  margin: 6px 0;
+  padding-left: 18px;
+}

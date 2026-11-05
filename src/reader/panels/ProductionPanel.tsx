@@ -80,6 +80,7 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
   const isFull = activeMode === 'full'
   const useChunks = isYogurt ? false : isFull ? settings.fullUseChunks : settings.skimUseChunks
   const showPaste = !!model.pasteKind && !(isYogurt && model.pasteKind === 'pack')
+  const legacyReport = model.legacyMigration?.report
   const canStart = isYogurt
     ? !!settings.sourceText.trim() &&
       !!settings.referenceText.trim() &&
@@ -185,6 +186,27 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
             <b>把想说的话，真的写成英文。</b>
             <span className="muted">三种吃法：全脂随机、脱脂奶按主题、风味酸奶逐句翻译；批改后再重写一版。</span>
           </div>
+
+          {legacyReport && (
+            <details className="production-legacy">
+              <summary>
+                旧产出记录已归组：{legacyReport.changed} 条 /{' '}
+                {legacyReport.groups.length} 组（原历史有本机备份）
+              </summary>
+              <ul>
+                {legacyReport.groups.slice(0, 6).map((group) => (
+                  <li key={group.sessionId}>
+                    {group.articleId} · {group.day} · {group.mode} · {group.topic || '未命名主题'} ·{' '}
+                    {group.count} 条
+                  </li>
+                ))}
+              </ul>
+              {legacyReport.groups.length > 6 && (
+                <p className="muted">还有 {legacyReport.groups.length - 6} 组未展开。</p>
+              )}
+              <p className="muted">备份键：{legacyReport.backupKey}</p>
+            </details>
+          )}
 
           <div className="production-modes" role="group" aria-label="选择训练模式">
             {PRODUCTION_MODES.map((mode) => (
