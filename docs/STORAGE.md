@@ -96,7 +96,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 12`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态，v12 恢复**节流版**学习记录快照；v5 的旧快照表当时退役，v6 的文章上一版也退役，只保留版本号）。
+schema 版本：`PRAGMA user_version = 13`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态，v12 恢复**节流版**学习记录快照，v13 加奶牛工棚目标块进度；v5 的旧快照表当时退役，v6 的文章上一版也退役，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -210,6 +210,7 @@ writing_error_progress(id PK, rule, key, article_id, sentence_id, exam_id,
                      updated_at)                                         -- 错因复习状态（v11）
 learning_derived_baseline(id=1, payload JSON, at)                         -- v7 迁移前的历史聚合基线
 learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v12 学习记录快照（gzip，最近 12 版）
+production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) -- v13 目标块进度
 ```
 
 - 事实来源就是这些表；`GET /api/store/learning` 读全量，`PUT /api/store/learning` 整份替换（首次补库用），
@@ -222,8 +223,8 @@ learning_snapshots(at PK, reason, payload BLOB, bytes)                     -- v1
   会跳过它，避免「改错产生新错因、再改」自己长卡。
 - **奶牛工棚复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存模式 / 主题 /
   中文情境 / 参考译文 / 目标块 / 命中 / sessionId，`feedback_json` 仍是 v2 批改；不新开 attempts 表。
-  目标块 due/weak/recent/mistakes 进度由这些 attempts **现算**，不额外存 `production_progress`：
-  attempts 是 append-only 的事实，多存一份派生状态只会多一个要迁移和对账的源。
+  目标块 due/weak/recent/mistakes 进度由这些 attempts **归并**后写 `production_progress`（v13，key/kind/text/attempts/hits/misses/streak/last_at/due_at/updated_at）：
+  attempts 仍是 append-only 事实源；进度表是派生聚合，用于跨设备恢复和启动时少扫历史。前端先按 attempts 重算再落表，避免导入/手工纠正后表漂移。
   未提交的当前会话草稿在 `reader:productionDraft`（按文章校验、最多 5 篇），刷新/重进工棚可恢复；
   整库备份会带上它，覆盖导入替换、合并导入按文章取较新草稿。
 - 错因复习有自己的状态表：`writing_error_progress` 一行一张卡（`id = errfix:<rule>|<key>`），
