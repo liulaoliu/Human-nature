@@ -60,3 +60,13 @@ describe('useProductionDraft：多标签页草稿', () => {
     expect(onRemote).not.toHaveBeenCalled()
   })
 })
+
+it('本地已有较新草稿时，旧 save 不覆盖', () => {
+  const { result } = renderHook(() => useProductionDraft('A'))
+  const newer = { ...draft, at: '2026-11-06T00:00:00.000Z', answer: 'newer' }
+  const older = { ...draft, at: '2026-11-05T00:00:00.000Z', answer: 'older' }
+  localStorage.setItem(PRODUCTION_DRAFT_KEY, JSON.stringify({ A: newer }))
+  act(() => result.current.save(older))
+  const stored = JSON.parse(localStorage.getItem(PRODUCTION_DRAFT_KEY) ?? '{}') as Record<string, { answer: string }>
+  expect(stored.A.answer).toBe('newer')
+})

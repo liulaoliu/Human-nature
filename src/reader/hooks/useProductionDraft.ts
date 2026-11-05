@@ -61,7 +61,10 @@ export function useProductionDraft(
   const load = useCallback(() => readMap()[key] ?? null, [key])
   const save = useCallback((draft: ProductionDraft) => {
     try {
-      const map = { ...readMap(), [draft.articleId]: draft }
+      const map = readMap()
+      const old = map[draft.articleId]
+      const winner = old && old.at > draft.at ? old : draft
+      map[draft.articleId] = winner
       const trimmed = Object.fromEntries(
         Object.entries(map)
           .sort(([, a], [, b]) => b.at.localeCompare(a.at))
@@ -69,7 +72,7 @@ export function useProductionDraft(
       )
       if (!writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(trimmed))) {
         reportStorageFailure(PRODUCTION_DRAFT_KEY, new Error('write failed'))
-      } else {
+      } else if (winner === draft) {
         channelRef.current?.postMessage({ type: 'save', draft })
       }
     } catch (error) {
