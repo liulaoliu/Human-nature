@@ -230,3 +230,27 @@ describe('parseBackupPayload（导入运行时守卫）', () => {
     expect(parsed.goldenDrills?.[0].mastered).toBe(true)
   })
 })
+
+describe('backupParse：奶工棚进度 / 草稿', () => {
+  it('保留 productionProgress 和 productionDraft 交给导入侧守卫', () => {
+    const parsed = parseBackupPayload({
+      productionProgress: [
+        {
+          key: 'word:run',
+          kind: 'word',
+          text: 'run',
+          meaning: '跑',
+          attempts: 1,
+          hits: 1,
+          misses: 0,
+          streak: 1,
+          lastAt: '2026-11-01T00:00:00.000Z',
+          dueAt: '2026-11-02T00:00:00.000Z',
+        },
+      ],
+      productionDraft: { A: { version: 1, articleId: 'A' } },
+    })
+    expect(parsed.productionProgress?.[0]).toMatchObject({ key: 'word:run', attempts: 1 })
+    expect(parsed.productionDraft).toEqual({ A: { version: 1, articleId: 'A' } })
+  })
+})

@@ -297,6 +297,41 @@ function writeAnswerEvents(db: DatabaseSync, data: LearningData): void {
   }
 }
 
+function writeProductionProgress(db: DatabaseSync, data: LearningData): void {
+  const insert = db.prepare(`
+    INSERT OR REPLACE INTO production_progress
+      (key, item_id, kind, text, meaning, attempts, hits, misses, streak,
+       last_at, due_at, last_article_id, last_mode, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `)
+  for (const r of list<unknown>(data.productionProgress)) {
+    if (!isRecord(r)) continue
+    const key = text(r.key)
+    const kind = r.kind
+    const body = text(r.text)
+    if (!key || !body) continue
+    if (kind !== 'word' && kind !== 'phrase' && kind !== 'idiom') continue
+    const lastAt = text(r.lastAt) ?? nowIso()
+    const dueAt = text(r.dueAt) ?? lastAt
+    insert.run(
+      key,
+      text(r.itemId),
+      kind,
+      body,
+      text(r.meaning) ?? '',
+      num(r.attempts),
+      num(r.hits),
+      num(r.misses),
+      num(r.streak),
+      lastAt,
+      dueAt,
+      text(r.lastArticleId),
+      text(r.lastMode),
+      text(r.updatedAt) ?? lastAt,
+    )
+  }
+}
+
 const WRITERS: Record<string, (db: DatabaseSync, data: LearningData) => void> = {
   practice: writePractice,
   mistakes: writeMistakes,
@@ -313,6 +348,7 @@ const WRITERS: Record<string, (db: DatabaseSync, data: LearningData) => void> = 
   answerEvents: writeAnswerEvents,
   goldenDrills: writeGoldenDrills,
   writingErrorProgress: writeWritingErrorProgress,
+  productionProgress: writeProductionProgress,
 }
 
 /** 清掉指定 section 对应的表（答题事件是 append-only，永远不清）。 */
@@ -327,6 +363,8 @@ export function clearLearningSections(db: DatabaseSync, sections: string[]): voi
     if (section === 'goldenDrills') continue
     // 错因复习状态同理：只 upsert；暂停/掌握是改行，不靠清表删除。
     if (section === 'writingErrorProgress') continue
+    // 目标块进度也是长期资产：只 upsert，不清表。
+    if (section === 'productionProgress') continue
     for (const table of LEARNING_SECTION_TABLES[section] ?? []) tables.add(table)
   }
   for (const table of tables) db.prepare(`DELETE FROM ${table}`).run()

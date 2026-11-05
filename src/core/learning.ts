@@ -25,6 +25,8 @@ import type { WritingRecord } from './writing'
 import { normalizeWritingRecord } from './writing'
 import type { WritingErrorProgress } from './writingErrorProgress'
 import { normalizeWritingErrorProgress } from './writingErrorProgress'
+import type { ProductionProgress } from './productionHistory'
+import { normalizeProductionProgress } from './productionHistory'
 
 /** 复述打卡：用自己的话复述的留档（按篇）。 */
 export interface RetellRecord {
@@ -68,6 +70,8 @@ export interface LearningData {
   goldenDrills: GoldenDrillRecord[]
   /** 错因复习：每张 errfix 卡的到期 / 暂停 / 掌握状态（v11） */
   writingErrorProgress: WritingErrorProgress[]
+  /** 奶牛工棚：目标块产出进度（v13；从 attempts 聚合，单独表存） */
+  productionProgress: ProductionProgress[]
 }
 
 /** 学习记录里可以单独增量同步的部分。 */
@@ -98,6 +102,7 @@ export const LEARNING_KEYS = {
   answerEvents: 'reader:answerEvents',
   goldenDrills: 'reader:goldenDrills',
   writingErrorProgress: 'reader:writingErrorProgress',
+  productionProgress: 'reader:productionProgress',
 } as const satisfies Record<LearningSection, string>
 
 export const LEARNING_SECTIONS: LearningSection[] = Object.keys(LEARNING_KEYS) as LearningSection[]
@@ -120,6 +125,7 @@ export function emptyLearning(): LearningData {
     answerEvents: [],
     goldenDrills: [],
     writingErrorProgress: [],
+    productionProgress: [],
   }
 }
 
@@ -204,6 +210,7 @@ export function normalizeLearning(raw: unknown): LearningData {
   out.answerEvents = normalizeAnswerEvents(raw.answerEvents).slice(-ANSWER_EVENT_CAP)
   out.goldenDrills = normalizeGoldenDrills(raw.goldenDrills)
   out.writingErrorProgress = normalizeWritingErrorProgress(raw.writingErrorProgress)
+  out.productionProgress = normalizeProductionProgress(raw.productionProgress)
   return out
 }
 
@@ -224,6 +231,7 @@ export function hasLearningData(data: LearningData): boolean {
     Object.keys(data.kindStats).length > 0 ||
     data.answerEvents.length > 0 ||
     data.goldenDrills.length > 0 ||
-    data.writingErrorProgress.length > 0
+    data.writingErrorProgress.length > 0 ||
+    data.productionProgress.length > 0
   )
 }

@@ -598,6 +598,30 @@ describe('sqliteStore：学习记录', () => {
     expect(store.loadLearning().writingErrorProgress).toHaveLength(1)
   })
 
+  it('目标块进度增量同步幂等：只 upsert，不被空数组清掉', async () => {
+    const store = openStore(tempDb())
+    const row = {
+      key: 'word:run',
+      kind: 'word',
+      text: 'run',
+      meaning: '跑',
+      attempts: 2,
+      hits: 1,
+      misses: 1,
+      streak: 0,
+      lastAt: '2026-11-01T00:00:00.000Z',
+      dueAt: '2026-11-02T00:00:00.000Z',
+      updatedAt: '2026-11-01T00:00:00.000Z',
+    }
+    store.saveLearningPartial({ productionProgress: [row] })
+    store.saveLearningPartial({ productionProgress: [row] })
+    expect(store.loadLearning().productionProgress).toHaveLength(1)
+    expect(store.loadLearning().productionProgress[0]).toMatchObject({ key: 'word:run', attempts: 2 })
+
+    store.saveLearning({ ...learning, productionProgress: [] })
+    expect(store.loadLearning().productionProgress).toHaveLength(1)
+  })
+
   it('partial 拒绝未知 section，避免拼错字段静默丢数据', async () => {
     const store = openStore(tempDb())
     expect(() => store.saveLearningPartial({ practise: [] })).toThrow('未知学习记录 section')
@@ -712,7 +736,7 @@ describe('sqliteStore：学习记录', () => {
 
     const store = openStore(path)
     const check = new DatabaseSync(path, { readOnly: true })
-    expect(Number(check.prepare('PRAGMA user_version').get().user_version)).toBe(12)
+    expect(Number(check.prepare('PRAGMA user_version').get().user_version)).toBe(SCHEMA_VERSION)
     expect(Number(check.prepare('SELECT COUNT(*) AS n FROM learning_snapshots_v5').get().n)).toBe(1)
     const cols = check.prepare('PRAGMA table_info(learning_snapshots)').all().map((r) => String(r.name))
     check.close()

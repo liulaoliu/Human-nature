@@ -5,10 +5,10 @@
  * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
  * v4 旧词条文章 id，v7 答题事件与聚合基线，v8 回译存档；
  * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号；
- * v12 重新引入**节流版**学习记录快照（见 `SCHEMA_V12`）。
+ * v12 重新引入**节流版**学习记录快照（见 `SCHEMA_V12`）；v13 加奶牛工棚目标块进度。
  */
 
-export const SCHEMA_VERSION = 12
+export const SCHEMA_VERSION = 13
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -471,4 +471,33 @@ CREATE TABLE IF NOT EXISTS learning_snapshots (
   bytes INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_learning_snapshots_at ON learning_snapshots(at DESC);
+`
+
+/**
+ * v13：奶牛工棚目标块进度。
+ *
+ * attempts 仍以写作记录为事实；这张表是从 attempts 归并出来的可跨设备进度，
+ * 供到期 / 薄弱 / 新目标筛选和启动加速。`key` = `<kind>:<normalized text>`。
+ */
+export const SCHEMA_V13 = `
+CREATE TABLE IF NOT EXISTS production_progress (
+  key TEXT PRIMARY KEY,
+  item_id TEXT,
+  kind TEXT NOT NULL,
+  text TEXT NOT NULL,
+  meaning TEXT NOT NULL DEFAULT '',
+  attempts INTEGER NOT NULL DEFAULT 0,
+  hits INTEGER NOT NULL DEFAULT 0,
+  misses INTEGER NOT NULL DEFAULT 0,
+  streak INTEGER NOT NULL DEFAULT 0,
+  last_at TEXT NOT NULL,
+  due_at TEXT NOT NULL,
+  last_article_id TEXT,
+  last_mode TEXT,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_production_progress_due
+  ON production_progress(due_at);
+CREATE INDEX IF NOT EXISTS idx_production_progress_updated
+  ON production_progress(updated_at DESC);
 `

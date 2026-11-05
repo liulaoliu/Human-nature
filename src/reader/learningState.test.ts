@@ -79,6 +79,7 @@ describe('学习记录 localStorage 同步缓存', () => {
       answerEvents: [],
       goldenDrills: [],
       writingErrorProgress: [],
+    productionProgress: [],
     })
 
     await hydrateLearningFromServer()
@@ -108,6 +109,7 @@ describe('学习记录 localStorage 同步缓存', () => {
       answerEvents: [],
       goldenDrills: [],
       writingErrorProgress: [],
+    productionProgress: [],
     })
 
     await hydrateLearningFromServer()

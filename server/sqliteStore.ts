@@ -13,6 +13,7 @@ import {
   SCHEMA_V9,
   SCHEMA_V11,
   SCHEMA_V12,
+  SCHEMA_V13,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
 import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
@@ -287,6 +288,7 @@ function ensureSchema(db: DatabaseSync): number {
       db.exec(SCHEMA_V8)
       db.exec(SCHEMA_V9)
       db.exec(SCHEMA_V11)
+      db.exec(SCHEMA_V13)
       // 历史只有聚合值：先存成 baseline，之后的事件才可逐题对账/重建。
       saveDerivedBaseline(db, nowIso())
       db.exec('PRAGMA user_version = 7')
@@ -316,6 +318,10 @@ function ensureSchema(db: DatabaseSync): number {
       db.exec('PRAGMA user_version = 12')
     })
     version = 12
+  }
+  if (version < 13) {
+    tx(db, () => { db.exec(SCHEMA_V13); db.exec('PRAGMA user_version = 13') })
+    version = 13
   }
   return version
 }

@@ -39,6 +39,7 @@ export interface LearningOut {
   answerEvents: LearningAnswerEvent[]
   goldenDrills: LearningGoldenDrill[]
   writingErrorProgress: LearningWritingErrorProgress[]
+  productionProgress: LearningProductionProgress[]
 }
 
 export interface LearningPractice {
@@ -154,6 +155,23 @@ export interface LearningGoldenDrill {
   completedAt?: string
 }
 
+export interface LearningProductionProgress {
+  key: string
+  kind: string
+  text: string
+  meaning: string
+  attempts: number
+  hits: number
+  misses: number
+  streak: number
+  lastAt: string
+  dueAt: string
+  itemId?: string
+  lastArticleId?: string
+  lastMode?: string
+  updatedAt?: string
+}
+
 export interface LearningWritingErrorProgress {
   id: string
   rule: string
@@ -192,6 +210,7 @@ export function emptyLearning(): LearningOut {
     answerEvents: [],
     goldenDrills: [],
     writingErrorProgress: [],
+    productionProgress: [],
   }
 }
 
@@ -229,6 +248,7 @@ function assertLearning(data: unknown): asserts data is Record<string, unknown> 
     'answerEvents',
     'goldenDrills',
     'writingErrorProgress',
+    'productionProgress',
   ]) {
     if (rec[key] !== undefined && !Array.isArray(rec[key])) {
       throw new Error(`学习记录 ${key} 必须是数组`)
@@ -677,6 +697,31 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       if (Number(r.summary_seen) !== 0) rec.summarySeen = true
       if (r.completed_at !== null && r.completed_at !== undefined) rec.completedAt = String(r.completed_at)
       return rec
+    })
+
+  out.productionProgress = db
+    .prepare(
+      'SELECT key, item_id, kind, text, meaning, attempts, hits, misses, streak, last_at, due_at, last_article_id, last_mode, updated_at FROM production_progress ORDER BY updated_at DESC, key ASC',
+    )
+    .all()
+    .map((r): LearningProductionProgress => {
+      const row: LearningProductionProgress = {
+        key: String(r.key),
+        kind: String(r.kind ?? 'word'),
+        text: String(r.text ?? ''),
+        meaning: String(r.meaning ?? ''),
+        attempts: Number(r.attempts) || 0,
+        hits: Number(r.hits) || 0,
+        misses: Number(r.misses) || 0,
+        streak: Number(r.streak) || 0,
+        lastAt: String(r.last_at ?? ''),
+        dueAt: String(r.due_at ?? ''),
+      }
+      if (r.item_id !== null && r.item_id !== undefined) row.itemId = String(r.item_id)
+      if (r.last_article_id !== null && r.last_article_id !== undefined) row.lastArticleId = String(r.last_article_id)
+      if (r.last_mode !== null && r.last_mode !== undefined) row.lastMode = String(r.last_mode)
+      if (r.updated_at !== null && r.updated_at !== undefined) row.updatedAt = String(r.updated_at)
+      return row
     })
 
   out.writingErrorProgress = db

@@ -18,6 +18,7 @@ import {
   mergeWritingHistory,
 } from '../../core/mergeBackup'
 import { mergeWritingErrorProgress } from '../../core/writingErrorProgress'
+import { mergeProductionProgress } from '../../core/productionHistory'
 import { parseBackupPayload } from '../../core/backupParse'
 import {
   mergeProductionDraftMaps,
@@ -45,7 +46,7 @@ export function createBackupIO({
   setSaved,
   setWritingHistory,
 }: ExportParams) {
-  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, writingErrorProgress, readDone } =
+  const { sessions, studyDays, activity, practice, mistakes, retells, studiedDays, skimmed, kindStats, answerEvents, goldenDrills, writingErrorProgress, productionProgress, readDone } =
     learning
   const {
     setSessions,
@@ -60,6 +61,7 @@ export function createBackupIO({
     setAnswerEvents,
     setGoldenDrills,
     setWritingErrorProgress,
+    setProductionProgress,
     setBackTranslations,
     setReadDone,
     setReadGoal,
@@ -104,6 +106,7 @@ export function createBackupIO({
       if (parsed.answerEvents) setAnswerEvents(parsed.answerEvents)
       if (parsed.goldenDrills) setGoldenDrills(parsed.goldenDrills)
       if (parsed.writingErrorProgress) setWritingErrorProgress(parsed.writingErrorProgress)
+      if (parsed.productionProgress) setProductionProgress(parsed.productionProgress)
       if (parsed.readDone) setReadDone(parsed.readDone)
       if (typeof parsed.readGoal === 'number') setReadGoal(parsed.readGoal)
       if (typeof parsed.goalMemo === 'string') setGoalMemo(parsed.goalMemo)
@@ -166,6 +169,9 @@ export function createBackupIO({
       if (parsed.goldenDrills) setGoldenDrills(mergeGoldenDrills(goldenDrills, parsed.goldenDrills))
       if (parsed.writingErrorProgress) {
         setWritingErrorProgress(mergeWritingErrorProgress(writingErrorProgress, parsed.writingErrorProgress))
+      }
+      if (parsed.productionProgress) {
+        setProductionProgress(mergeProductionProgress(productionProgress, parsed.productionProgress))
       }
       if (parsed.readDone) setReadDone(mergeReadDone(readDone, parsed.readDone))
       if (parsed.productionDraft !== undefined) {

@@ -23,6 +23,7 @@ export const LEARNING_SECTION_TABLES: Record<string, string[]> = {
   answerEvents: ['answer_events'],
   goldenDrills: ['golden_drill_records'],
   writingErrorProgress: ['writing_error_progress'],
+  productionProgress: ['production_progress'],
 }
 
 export const LEARNING_SECTIONS = Object.keys(LEARNING_SECTION_TABLES)

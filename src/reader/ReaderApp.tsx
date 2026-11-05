@@ -282,6 +282,8 @@ export default function ReaderApp() {
     setWritingHistory: services.setWritingHistory,
     writingErrorProgress: learningData.writingErrorProgress,
     setWritingErrorProgress: learningSetters.setWritingErrorProgress,
+    productionProgress: learningData.productionProgress,
+    setProductionProgress: learningSetters.setProductionProgress,
     answerEvents: learningData.answerEvents,
     recordActivity,
     flash,

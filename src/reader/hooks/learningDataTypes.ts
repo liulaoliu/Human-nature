@@ -9,6 +9,7 @@ import type { MistakeEntry } from '../../core/mistakes'
 import type { PracticeRecord } from '../../core/practice'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
+import type { ProductionProgress } from '../../core/productionHistory'
 
 export interface UseLearningDataParams {
   articleIdentity: string | null
@@ -33,6 +34,7 @@ export interface LearningCollections {
   answerEvents: AnswerEvent[]
   goldenDrills: GoldenDrillRecord[]
   writingErrorProgress: WritingErrorProgress[]
+  productionProgress: ProductionProgress[]
   backTranslations: BackTranslationRecord[]
   retells: RetellRecord[]
   readDone: ReadDone[]
@@ -54,6 +56,9 @@ export interface LearningSetters {
   setGoldenDrills: (v: GoldenDrillRecord[] | ((prev: GoldenDrillRecord[]) => GoldenDrillRecord[])) => void
   setWritingErrorProgress: (
     v: WritingErrorProgress[] | ((prev: WritingErrorProgress[]) => WritingErrorProgress[]),
+  ) => void
+  setProductionProgress: (
+    v: ProductionProgress[] | ((prev: ProductionProgress[]) => ProductionProgress[]),
   ) => void
   setBackTranslations: (v: BackTranslationRecord[] | ((prev: BackTranslationRecord[]) => BackTranslationRecord[])) => void
   setRetells: (v: RetellRecord[]) => void
@@ -78,6 +83,7 @@ export type LearningCollectionSetters = {
   setAnswerEvents: Dispatch<SetStateAction<AnswerEvent[]>>
   setGoldenDrills: Dispatch<SetStateAction<GoldenDrillRecord[]>>
   setWritingErrorProgress: Dispatch<SetStateAction<WritingErrorProgress[]>>
+  setProductionProgress: Dispatch<SetStateAction<ProductionProgress[]>>
   setBackTranslations: Dispatch<SetStateAction<BackTranslationRecord[]>>
   setRetells: Dispatch<SetStateAction<RetellRecord[]>>
   setReadGoal: Dispatch<SetStateAction<number>>

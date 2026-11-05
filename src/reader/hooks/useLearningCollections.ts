@@ -10,6 +10,7 @@ import { LEARNING_KEYS } from '../../core/learning'
 import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import { normalizeWritingErrorProgress } from '../../core/writingErrorProgress'
+import { normalizeProductionProgress } from '../../core/productionHistory'
 import type { MistakeEntry } from '../../core/mistakes'
 import type { PracticeRecord } from '../../core/practice'
 import type { PickSession, StudyDay } from '../../core/vocabStats'
@@ -80,6 +81,19 @@ export function useLearningCollections() {
       },
     },
   )
+  const [productionProgress, setProductionProgress] = useLocalStorageState<ReturnType<typeof normalizeProductionProgress>>(
+    LEARNING_KEYS.productionProgress,
+    [],
+    {
+      parse: (raw) => {
+        try {
+          return normalizeProductionProgress(JSON.parse(raw))
+        } catch {
+          return []
+        }
+      },
+    },
+  )
   const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [])
   const [backTranslations, setBackTranslations] = useLocalStorageState<BackTranslationRecord[]>(
     LEARNING_KEYS.backTranslations,
@@ -121,6 +135,7 @@ export function useLearningCollections() {
       answerEvents,
       goldenDrills,
       writingErrorProgress,
+      productionProgress,
       backTranslations,
       retells,
       readGoal,
@@ -138,6 +153,7 @@ export function useLearningCollections() {
       answerEvents,
       goldenDrills,
       writingErrorProgress,
+      productionProgress,
       backTranslations,
       retells,
       readGoal,
@@ -158,6 +174,7 @@ export function useLearningCollections() {
       setAnswerEvents,
       setGoldenDrills,
       setWritingErrorProgress,
+      setProductionProgress,
       setBackTranslations,
       setRetells,
       setReadGoal,
@@ -175,6 +192,7 @@ export function useLearningCollections() {
       setAnswerEvents,
       setGoldenDrills,
       setWritingErrorProgress,
+      setProductionProgress,
       setBackTranslations,
       setRetells,
       setReadGoal,
@@ -201,6 +219,8 @@ export function useLearningCollections() {
     setGoldenDrills,
     writingErrorProgress,
     setWritingErrorProgress,
+    productionProgress,
+    setProductionProgress,
     retells,
     setRetells,
     backTranslations,
