@@ -253,6 +253,18 @@
    规矩：悬浮卡用 `position:fixed` + 视口坐标（不参与布局），靠近底部时 `translateY(-100%)` 向上翻，
    加 `pointer-events:none`，滚动/改窗口大小时直接收起；别再改回 `absolute` + `:hover` 显示。
    历史行和错因行共用 `WritingHoverCard`，改一处两边生效。
+39. **服务端测试里不能静态 `import 'node:sqlite'`**（2026-11-06）。
+   现象：`server/sqliteStore.test.ts` 写 `import { DatabaseSync } from 'node:sqlite'`，
+   `vitest` 报 `Error: Failed to load url sqlite (resolved id: sqlite). Does the file exist?`
+   根因：vite 的解析在这个入口下把 `node:` 前缀丢了，当成普通包名找。
+   规矩：测试里也走 `createRequire(import.meta.url)('node:sqlite')` 拿构造函数，
+   类型用 `import type { DatabaseSync as SqliteDatabase } from 'node:sqlite'`；与
+   `server/sqliteStore.ts:65-75` 的写法保持一致。顺带：`tsconfig.server.json` 吃不下 `src/` 的模块
+   （NodeNext 要求显式扩展名、lib 只有 ES2022），服务端测试别 import 前端常量，
+   两边共用的白名单用**契约测试**盯（`server/learningContract.test.ts`）。
+40. **别用 PowerShell 文本往返改仓库里的中文源码**（2026-11-06）。
+   `Get-Content -Raw` + `Set-Content` 会把 UTF-8 当 ANSI 读回，中文变 `鏈嶅姟绔`，行结构也会被合并。
+   规矩：改 `.ts / .md` 只用编辑器（或 read + edit），保持 UTF-8 无 BOM；pwsh 只用来跑命令、查状态。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 
