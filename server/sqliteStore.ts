@@ -241,7 +241,7 @@ function backfillArticleColumns(db: DatabaseSync): void {
  *
  * 只改能唯一对上的标题；同名文章、找不到的标题保持原样，不猜。
  */
-function ensureSchema(db: DatabaseSync): number {
+export function ensureSchema(db: DatabaseSync): number {
   const row = db.prepare('PRAGMA user_version').get()
   let version = Number(row?.user_version ?? 0)
   if (version > SCHEMA_VERSION) {
