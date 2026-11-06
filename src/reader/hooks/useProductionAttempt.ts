@@ -209,14 +209,15 @@ export function useProductionAttempt({
   ])
 
   const applyFeedbackPaste = useCallback(
-    (raw: string) => {
-      if (!pendingFeedback) return
+    (raw: string): boolean => {
+      if (!pendingFeedback) return false
       const parsed = parseProductionFeedback(raw, pendingFeedback.answer)
       if (!parsed) {
         setError('没解析出批改结果：需要 v2 JSON（version / scores / issues / polished / summary）')
-        return
+        return false
       }
       applyFeedback(parsed, pendingFeedback)
+      return true
     },
     [pendingFeedback, applyFeedback],
   )

@@ -121,12 +121,12 @@ export function useProductionPacks({
   )
 
   const applyPacketPaste = useCallback(
-    (raw: string) => {
-      if (!pendingPacket) return
+    (raw: string): boolean => {
+      if (!pendingPacket) return false
       const parsed = parsePacketPaste(pendingPacket, raw, settings.variant !== 'translate')
       if (!parsed.ok) {
         setPackError(parsed.error)
-        return
+        return false
       }
       setPasteKind('')
       setPendingPacket(null)
@@ -139,6 +139,7 @@ export function useProductionPacks({
         topic: pendingPacket.topic,
         notice: '',
       })
+      return true
     },
     [pendingPacket, onStart, settings.variant],
   )

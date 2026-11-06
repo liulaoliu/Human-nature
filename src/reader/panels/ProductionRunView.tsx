@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { useProductionSession } from '../hooks/useProductionSession'
+import { useGoldenPasteBox } from '../hooks/useGoldenPasteBox'
 import GoldenFeedback from './golden/GoldenFeedback'
+import GoldenPasteBox from './golden/GoldenPasteBox'
 import ProductionHint from './ProductionHint'
 import ProductionReview from './ProductionReview'
 import VoiceInputButton from './VoiceInputButton'
+import YogurtPairEditor from './production/YogurtPairEditor'
 
 type ProductionModel = ReturnType<typeof useProductionSession>
 
@@ -17,18 +20,43 @@ export interface ProductionRunViewProps {
 /**
  * 挤奶：题干 / 挖空提示 / 作答 / 批改反馈 / 第二稿重写。
  *
+ * 风味酸奶多一列左侧断句列表：做完一半发现这句该拆开，直接在这里改，
+ * 题号跟着同一句走（`remapYogurtPrompts`），不会被踢回第一题。
  * 判分和目标块硬校验都在 `core/production`，这里只画。
  */
 export default function ProductionRunView({ model, current }: ProductionRunViewProps) {
   const { settings } = model
   const isYogurt = model.sessionMode === 'yogurt'
   const isFull = model.sessionMode === 'full'
-  const [pasteText, setPasteText] = useState('')
+  const yogurt = model.yogurt
+  const [editing, setEditing] = useState(false)
+  const paste = useGoldenPasteBox()
   const pastePrompt = model.pendingPrompt
   const showPaste = !!model.pasteKind && !(isYogurt && model.pasteKind === 'pack')
+  const activeRef = useRef<HTMLLIElement | null>(null)
+  const pasteOpen = paste.setOpen
 
-  return (
-    <div className="production-body">
+  // 没配 AI 时「批改」会退化成复制提示词：这里自动展开粘回框，和本句仿写一致。
+  useEffect(() => {
+    if (model.pasteKind) pasteOpen(true)
+  }, [model.pasteKind, pasteOpen])
+
+  useEffect(() => {
+    // jsdom 里没有 scrollIntoView，用可选调用兜住
+    activeRef.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [model.index, editing])
+
+  const toggleEdit = () => {
+    if (editing) {
+      setEditing(false)
+      return
+    }
+    yogurt.beginEdit()
+    setEditing(true)
+  }
+
+  const body = (
+    <>
       <div className="production-progress">
         <span>
           第 {model.index + 1} / {model.prompts.length} 题 · 第 {model.round} 稿
@@ -155,26 +183,78 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
         </div>
       )}
 
-      {showPaste && (
-        <div className="production-paste">
-          <div className="muted">
-            {model.pasteKind === 'pack' ? '把 AI 返回的题目 JSON 粘到这里' : '把 AI 返回的批改 JSON 粘到这里'}
-          </div>
-          <textarea
-            rows={6}
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-          />
-          <div className="bar">
-            <button className="primary" onClick={() => model.applyPaste(pasteText)} disabled={!pasteText.trim()}>
-              应用 AI 返回
-            </button>
-            <button onClick={() => void model.copyPromptAgain()} disabled={!pastePrompt}>
-              复制提示词
-            </button>
-          </div>
-        </div>
+      {(showPaste || !!pastePrompt) && (
+        <GoldenPasteBox
+          label={
+            model.pasteKind === 'pack'
+              ? '把 AI 返回的题目 JSON 粘到这里（或在这里粘贴别处拿到的批改）'
+              : '把 AI 返回的批改 JSON 粘到这里'
+          }
+          value={paste.text}
+          onChange={paste.setText}
+          onApply={() =>
+            paste.apply((text) => {
+              if (!model.applyPaste(text)) return false
+              if (pastePrompt) void model.copyPromptAgain()
+              return true
+            })
+          }
+          placeholder={'{"version":2,"scores":[…],"issues":[…],"polished":"…","summary":"…"}'}
+          open={paste.open}
+          onOpenChange={paste.setOpen}
+        />
       )}
+    </>
+  )
+
+  if (!isYogurt) return <div className="production-body">{body}</div>
+
+  return (
+    <div className="production-body production-run">
+      <aside className="production-side">
+        <div className="bar">
+          <b>断句</b>
+          <span className="muted">
+            {model.index + 1} / {yogurt.sessionPairs.length}
+          </span>
+          <button onClick={toggleEdit}>{editing ? '收起编辑器' : '改断句'}</button>
+        </div>
+        <ol className="production-sentences">
+          {yogurt.sessionPairs.map((pair, i) => {
+            const state = i < model.index ? '已交' : i === model.index ? '当前' : '待做'
+            return (
+              <li
+                key={`${i}-${pair.source.slice(0, 8)}`}
+                ref={i === model.index ? activeRef : null}
+              >
+                <span className={'production-sentence' + (i === model.index ? ' on' : '')}>
+                  <span className="muted">{i + 1}</span>
+                  <span className="production-sentence-text">{pair.source || '（空）'}</span>
+                  <span className={'production-sentence-state' + (i < model.index ? ' done' : '')}>
+                    {state}
+                  </span>
+                </span>
+              </li>
+            )
+          })}
+        </ol>
+        {yogurt.sessionPairs.length < model.prompts.length && (
+          <p className="muted">最后还有一道整段连写（第 {model.prompts.length} 题）。</p>
+        )}
+        {editing && (
+          <YogurtPairEditor
+            yogurt={yogurt}
+            sourceLabel="原文"
+            referenceLabel="参考译文"
+            onApply={() => {
+              if (yogurt.apply()) setEditing(false)
+            }}
+            applyLabel="应用断句，继续这一题"
+            onCancel={() => setEditing(false)}
+          />
+        )}
+      </aside>
+      <div className="production-main">{body}</div>
     </div>
   )
 }

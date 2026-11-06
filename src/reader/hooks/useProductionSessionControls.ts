@@ -7,6 +7,7 @@ export interface UseProductionSessionControlsParams {
   setAutoStart: Dispatch<SetStateAction<boolean>>
   setOpen: Dispatch<SetStateAction<boolean>>
   setStage: Dispatch<SetStateAction<ProductionStage>>
+  setPaused: Dispatch<SetStateAction<boolean>>
   setPrompts: Dispatch<SetStateAction<ProductionPrompt[]>>
   setIndex: Dispatch<SetStateAction<number>>
   setPoolInfo: Dispatch<SetStateAction<ProductionTargetPool | null>>
@@ -31,6 +32,7 @@ export function useProductionSessionControls({
   setAutoStart,
   setOpen,
   setStage,
+  setPaused,
   setPrompts,
   setIndex,
   setPoolInfo,
@@ -56,6 +58,7 @@ export function useProductionSessionControls({
     setAutoStart(false)
     setNotice('')
     setAiError('')
+    setPaused(false)
   }, [
     clearDraft,
     resetPacks,
@@ -67,6 +70,7 @@ export function useProductionSessionControls({
     setAutoStart,
     setNotice,
     setAiError,
+    setPaused,
   ])
 
   const openDueProduction = useCallback(() => {
@@ -83,6 +87,7 @@ export function useProductionSessionControls({
     cancelGrading()
     setAiError('')
     setAutoStart(false)
+    setPaused(false)
     setOpen(false)
   }, [
     saveNow,
@@ -93,8 +98,22 @@ export function useProductionSessionControls({
     cancelGrading,
     setAiError,
     setAutoStart,
+    setPaused,
     setOpen,
   ])
+
+  /**
+   * 暂停 ≠ 关闭：草稿照存、题号不动，但人退回「工棚主界面」（选草料那一屏），
+   * 想改断句、改设置、看历史都行，点「继续这一组」原样回到第几题。
+   */
+  const pause = useCallback(() => {
+    saveNow()
+    cancelAi()
+    cancelGrading()
+    setPaused(true)
+  }, [saveNow, cancelAi, cancelGrading, setPaused])
+
+  const resume = useCallback(() => setPaused(false), [setPaused])
 
   const cancelRun = useCallback(() => {
     cancelAi()
@@ -102,5 +121,5 @@ export function useProductionSessionControls({
     cancelGrading()
   }, [cancelAi, resetPacks, cancelGrading])
 
-  return { openProduction, openDueProduction, close, restart, cancelRun }
+  return { openProduction, openDueProduction, close, restart, cancelRun, pause, resume }
 }

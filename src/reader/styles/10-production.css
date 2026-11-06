@@ -372,3 +372,79 @@
   margin: 6px 0;
   padding-left: 18px;
 }
+
+/* 风味酸奶：左边常驻断句列表，右边照旧作答（窄屏回落单列） */
+.production-run {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  width: min(1120px, 100%);
+}
+.production-side {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel-2);
+  position: sticky;
+  top: 0;
+  max-height: 100%;
+  overflow: auto;
+}
+.production-side .bar {
+  margin-bottom: 0;
+}
+.production-main {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.production-sentences {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.production-sentence {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 6px;
+  align-items: baseline;
+  width: 100%;
+  padding: 4px 6px;
+  border-radius: 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.production-sentence.on {
+  background: var(--hover);
+  color: var(--fg);
+}
+.production-sentence-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.production-sentence-state {
+  font-size: 11px;
+}
+.production-sentence-state.done {
+  color: #3a8a3a;
+}
+@media (max-width: 760px) {
+  .production-run {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+  }
+  .production-side {
+    position: static;
+    max-height: 40vh;
+  }
+}

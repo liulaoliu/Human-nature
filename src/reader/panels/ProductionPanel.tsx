@@ -46,27 +46,41 @@ export default function ProductionPanel({ model, route, onNavigate }: Production
       />
     )
 
+  // 暂停 = 留在工棚里，退回主界面（选草料）；只有「关闭」才回阅读正文。
+  const paused = model.stage === 'playing' && model.paused
+  const onLeftButton = model.stage === 'playing' && !model.paused ? model.pause : model.close
+
   return (
     <div className="study production">
       <div className="bar study-bar">
         <button
-          onClick={model.close}
-          title={model.stage === 'playing' ? '暂停这一组；未提交草稿会保留，下次回到这里继续' : '关闭工棚'}
+          onClick={onLeftButton}
+          title={
+            model.stage === 'playing' && !model.paused
+              ? '暂停这一组：退回工棚主界面，作答和断句都留着'
+              : '关闭工棚，回到正文'
+          }
         >
-          {model.stage === 'playing' ? '暂停' : '关闭'}
+          {model.stage === 'playing' && !model.paused ? '暂停' : '关闭'}
         </button>
         <b>🐄 D老师奶牛工棚</b>
         <button onClick={openHistory} title="看产出历史、两稿对比和目标块趋势（地址会带 ?ph=1）">
           历史
         </button>
         <span className="muted">
-          {model.stage === 'setup' ? '选草料' : model.stage === 'playing' ? '挤奶中' : '收工'}
+          {paused
+            ? `已暂停 · 第 ${model.index + 1} / ${model.prompts.length} 题`
+            : model.stage === 'setup'
+              ? '选草料'
+              : model.stage === 'playing'
+                ? '挤奶中'
+                : '收工'}
           {articleTitle ? ` · ${articleTitle}` : ''}
         </span>
       </div>
 
-      {model.stage === 'setup' && <ProductionSetupView model={model} />}
-      {model.stage === 'playing' && model.current && (
+      {(model.stage === 'setup' || paused) && <ProductionSetupView model={model} />}
+      {model.stage === 'playing' && !paused && model.current && (
         <ProductionRunView model={model} current={model.current} />
       )}
       {model.stage === 'done' && <ProductionDoneView model={model} />}

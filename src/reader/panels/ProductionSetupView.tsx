@@ -20,14 +20,10 @@ import {
   PRODUCTION_WEAK_RATIOS,
   type ProductionTargetKind,
 } from '../../core/production'
-import {
-  isProductionTask,
-  pairYogurtTexts,
-  productionHits,
-  type YogurtPair,
-} from '../../core/productionPrompts'
+import { isProductionTask, productionHits } from '../../core/productionPrompts'
 import { writingRecordLabel } from '../../core/writing'
 import type { useProductionSession } from '../hooks/useProductionSession'
+import YogurtPairEditor from './production/YogurtPairEditor'
 import RoundSizeSelect from './RoundSizeSelect'
 
 type ProductionModel = ReturnType<typeof useProductionSession>
@@ -48,6 +44,12 @@ export type ProductionSetupModel = Pick<
   | 'applyPaste'
   | 'copyPromptAgain'
   | 'cancelRun'
+  | 'yogurt'
+  | 'paused'
+  | 'resume'
+  | 'index'
+  | 'prompts'
+  | 'round'
 >
 
 const TOPIC_PRESETS = ['工作沟通', '旅行见闻', '表达观点', '生活小事']
@@ -69,9 +71,9 @@ export interface ProductionSetupViewProps {
  */
 export default function ProductionSetupView({ model }: ProductionSetupViewProps) {
   const [pasteText, setPasteText] = useState('')
-  const [yogurtPairs, setYogurtPairs] = useState<YogurtPair[] | null>(null)
-  const [pairWarning, setPairWarning] = useState('')
-  const [pairError, setPairError] = useState('')
+  /** 逐句对子放在会话里：挤奶屏左侧的断句列表和这里用的是同一份。 */
+  const yogurt = model.yogurt
+  const yogurtPairs = yogurt.pairs
   const { settings, updateSettings } = model
   const pastePrompt = model.pendingPrompt
   const activeMode = settings.mode
@@ -97,65 +99,10 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
     updateSettings({ types })
   }
 
-  const invalidatePairs = () => {
-    setYogurtPairs(null)
-    setPairWarning('')
-    setPairError('')
-  }
+  const invalidatePairs = yogurt.reset
 
   const previewYogurt = () => {
-    const result = pairYogurtTexts(settings.sourceText, settings.referenceText, settings.yogurtSplit)
-    if (!result) {
-      setPairError('两边都要有内容，才能拆句')
-      return
-    }
-    setYogurtPairs(result.pairs)
-    setPairWarning(result.warning)
-    setPairError('')
-  }
-
-  const updatePair = (index: number, patch: Partial<YogurtPair>) => {
-    setYogurtPairs((prev) => prev?.map((p, i) => (i === index ? { ...p, ...patch } : p)) ?? null)
-  }
-
-  const movePair = (index: number, delta: number) => {
-    setYogurtPairs((prev) => {
-      if (!prev) return prev
-      const next = [...prev]
-      const to = index + delta
-      if (to < 0 || to >= next.length) return prev
-      ;[next[index], next[to]] = [next[to], next[index]]
-      return next
-    })
-  }
-
-  const deletePair = (index: number) => {
-    setYogurtPairs((prev) => prev?.filter((_, i) => i !== index) ?? null)
-  }
-
-  const mergeNextPair = (index: number) => {
-    setYogurtPairs((prev) => {
-      if (!prev || index + 1 >= prev.length) return prev
-      const next = [...prev]
-      next[index] = {
-        source: `${next[index].source} ${next[index + 1].source}`.trim(),
-        reference: `${next[index].reference} ${next[index + 1].reference}`.trim(),
-      }
-      next.splice(index + 1, 1)
-      return next
-    })
-  }
-
-  const splitPair = (index: number) => {
-    setYogurtPairs((prev) => {
-      if (!prev) return prev
-      const pair = prev[index]
-      const result = pairYogurtTexts(pair.source, pair.reference, 'sentence')
-      if (!result || (result.sourceCount <= 1 && result.referenceCount <= 1)) return prev
-      const next = [...prev]
-      next.splice(index, 1, ...result.pairs)
-      return next
-    })
+    yogurt.preview()
   }
 
   return (
@@ -164,6 +111,13 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         <b>把想说的话，真的写成英文。</b>
         <span className="muted">三种吃法：全脂随机、脱脂奶按主题、风味酸奶逐句翻译；批改后再重写一版。</span>
       </div>
+
+      {model.paused && (
+        <div className="production-notice">
+          这一组已暂停：停在 {model.index + 1} / {model.prompts.length} 题（第 {model.round} 稿）。
+          作答、批改、断句都还在；点「继续这一组」原样回去，也可以在这里改断句再继续。
+        </div>
+      )}
 
       {legacyReport && (
         <details className="production-legacy">
@@ -268,51 +222,7 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
           <span className="muted">
             可以按段落粘贴；先拆句预览，再手动合并 / 拆开 / 调整顺序。逐句练习在本机完成，不需要 AI 出题。
           </span>
-          {pairError && <div className="production-error">{pairError}</div>}
-          {pairWarning && <div className="production-notice">{pairWarning}</div>}
-          {yogurtPairs && (
-            <div className="production-pairs">
-              {yogurtPairs.map((pair, i) => (
-                <div className="production-pair" key={`${i}-${pair.source.slice(0, 8)}`}>
-                  <div className="muted">第 {i + 1} 对</div>
-                  <textarea
-                    aria-label={`第${i + 1}对原文`}
-                    rows={2}
-                    value={pair.source}
-                    onChange={(e) => updatePair(i, { source: e.target.value })}
-                    placeholder={sourceLabel}
-                  />
-                  <textarea
-                    aria-label={`第${i + 1}对参考译文`}
-                    rows={2}
-                    value={pair.reference}
-                    onChange={(e) => updatePair(i, { reference: e.target.value })}
-                    placeholder={referenceLabel}
-                  />
-                  <div className="bar">
-                    <button onClick={() => movePair(i, -1)} disabled={i === 0}>
-                      上移
-                    </button>
-                    <button onClick={() => movePair(i, 1)} disabled={i === yogurtPairs.length - 1}>
-                      下移
-                    </button>
-                    <button onClick={() => mergeNextPair(i)} disabled={i === yogurtPairs.length - 1}>
-                      合并下一对
-                    </button>
-                    <button onClick={() => splitPair(i)}>拆成两句</button>
-                    <button onClick={() => deletePair(i)}>删除</button>
-                  </div>
-                </div>
-              ))}
-              <button
-                onClick={() =>
-                  setYogurtPairs((prev) => [...(prev ?? []), { source: '', reference: '' }])
-                }
-              >
-                ＋ 加一对
-              </button>
-            </div>
-          )}
+          <YogurtPairEditor yogurt={yogurt} sourceLabel={sourceLabel} referenceLabel={referenceLabel} />
         </div>
       ) : (
         <>
@@ -502,24 +412,30 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         <button
           className="primary"
           onClick={() => {
+            if (model.paused) {
+              model.resume()
+              return
+            }
             if (isYogurt) {
-              if (yogurtPairs) model.startYogurtPairs(yogurtPairs, pairWarning)
+              if (yogurtPairs) model.startYogurtPairs(yogurtPairs, yogurt.warning)
               else previewYogurt()
             } else {
               void model.start()
             }
           }}
-          disabled={model.generating || !canStart}
+          disabled={!model.paused && (model.generating || !canStart)}
         >
-          {model.generating
-            ? 'D老师出题中…'
-            : isYogurt
-              ? yogurtPairs
-                ? '开始逐句拷打'
-                : '拆句预览'
-              : settings.mode === 'full'
-                ? '全脂随机出题'
-                : '按主题出题'}
+          {model.paused
+            ? `继续这一组（第 ${model.index + 1} 题）`
+            : model.generating
+              ? 'D老师出题中…'
+              : isYogurt
+                ? yogurtPairs
+                  ? '开始逐句拷打'
+                  : '拆句预览'
+                : settings.mode === 'full'
+                  ? '全脂随机出题'
+                  : '按主题出题'}
         </button>
         {model.generating && (
           <button onClick={model.cancelRun} title="停止等待 AI 返回">

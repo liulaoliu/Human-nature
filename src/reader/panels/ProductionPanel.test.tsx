@@ -25,6 +25,29 @@ const feedback: WritingFeedback = {
   summary: '可以。',
 }
 
+/** 风味酸奶的断句编辑器：默认没拆过，用例要预览就塞 `pairs`。 */
+function yogurtStub(over: Record<string, unknown> = {}) {
+  const noop = vi.fn()
+  return {
+    pairs: null,
+    setPairs: noop,
+    warning: '',
+    error: '',
+    sessionPairs: [],
+    preview: vi.fn(() => true),
+    beginEdit: noop,
+    updatePair: noop,
+    movePair: noop,
+    deletePair: noop,
+    mergeNextPair: noop,
+    splitPair: noop,
+    addPair: noop,
+    apply: vi.fn(() => true),
+    reset: noop,
+    ...over,
+  }
+}
+
 function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
   const noop = vi.fn()
   const model = {
@@ -34,6 +57,10 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     sessionMode: 'skim',
     openProduction: noop,
     close: noop,
+    pause: noop,
+    resume: noop,
+    paused: false,
+    yogurt: yogurtStub(),
     stage: 'setup',
     settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
     updateSettings: noop,
@@ -142,17 +169,15 @@ describe('ProductionPanel：奶牛工棚', () => {
   it('三种模式可切；风味酸奶先拆句预览，再开始逐句', () => {
     const updateSettings = vi.fn()
     const startYogurtPairs = vi.fn()
-    const model = props({
-      startYogurtPairs,
-      updateSettings,
-      settings: {
-        ...DEFAULT_PRODUCTION_SETTINGS,
-        mode: 'yogurt',
-        sourceText: '你好。第二句。',
-        referenceText: 'Hello. Second sentence.',
-      },
-    })
-    renderPanel(<ProductionPanel model={model} />)
+    const yogurt = yogurtStub()
+    const settings = {
+      ...DEFAULT_PRODUCTION_SETTINGS,
+      mode: 'yogurt' as const,
+      sourceText: '你好。第二句。',
+      referenceText: 'Hello. Second sentence.',
+    }
+    const model = props({ startYogurtPairs, updateSettings, yogurt, settings })
+    const { rerender } = renderPanel(<ProductionPanel model={model} />)
     expect(screen.getByRole('button', { name: /全脂/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /脱脂奶/ })).toBeTruthy()
     expect(screen.getByRole('button', { name: /风味酸奶/ })).toBeTruthy()
@@ -160,6 +185,24 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect((screen.getByLabelText('风味酸奶参考译文') as HTMLTextAreaElement).value).toBe('Hello. Second sentence.')
     expect(screen.queryByLabelText('产出主题')).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: '拆句预览' }))
+    expect(yogurt.preview).toHaveBeenCalled()
+
+    rerenderPanel(
+      rerender,
+      <ProductionPanel
+        model={props({
+          startYogurtPairs,
+          updateSettings,
+          settings,
+          yogurt: yogurtStub({
+            pairs: [
+              { source: '你好。', reference: 'Hello.' },
+              { source: '第二句。', reference: 'Second sentence.' },
+            ],
+          }),
+        })}
+      />,
+    )
     expect(screen.getByLabelText('第1对原文')).toBeTruthy()
     expect(screen.getByLabelText('第2对参考译文')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '开始逐句拷打' }))
@@ -224,6 +267,71 @@ describe('ProductionPanel：奶牛工棚', () => {
       />,
     )
     expect(screen.getByText('把 AI 返回的批改 JSON 粘到这里')).toBeTruthy()
+    // 退化成「复制提示词」时，粘回框要自动展开，别让人再点一次
+    expect((screen.getByText('把 AI 返回的批改 JSON 粘到这里').closest('details') as HTMLDetailsElement).open).toBe(true)
+  })
+
+  it('暂停后回到工棚主界面，点继续接着原来那一题', () => {
+    const resume = vi.fn()
+    const first = { id: 'yogurt-1', zh: '你好。', goal: '', targets: [], reference: 'Hello.' }
+    const second = { id: 'yogurt-2', zh: '第二句。', goal: '', targets: [], reference: 'Second.' }
+    const model = props({
+      stage: 'playing',
+      sessionMode: 'yogurt',
+      paused: true,
+      index: 1,
+      resume,
+      current: second,
+      prompts: [first, second],
+      yogurt: yogurtStub({
+        sessionPairs: [
+          { source: '你好。', reference: 'Hello.' },
+          { source: '第二句。', reference: 'Second.' },
+        ],
+      }),
+    })
+    renderPanel(<ProductionPanel model={model} />)
+    expect(screen.getByText(/这一组已暂停：停在 2 \/ 2 题/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '继续这一组（第 2 题）' }))
+    expect(resume).toHaveBeenCalled()
+  })
+
+  it('风味酸奶拷打页左侧常驻断句列表，改完断句仍在同一题', () => {
+    const beginEdit = vi.fn()
+    const apply = vi.fn(() => true)
+    const current = { id: 'yogurt-3', zh: '第三句。', goal: '', targets: [], reference: 'Three.' }
+    const yogurt = yogurtStub({
+      beginEdit,
+      apply,
+      pairs: [
+        { source: '第一句。', reference: 'One.' },
+        { source: '第二句。', reference: 'Two.' },
+        { source: '第三句。', reference: 'Three.' },
+      ],
+      sessionPairs: [
+        { source: '第一句。', reference: 'One.' },
+        { source: '第二句。', reference: 'Two.' },
+        { source: '第三句。', reference: 'Three.' },
+      ],
+    })
+    renderPanel(
+      <ProductionPanel
+        model={props({
+          stage: 'playing',
+          sessionMode: 'yogurt',
+          index: 2,
+          current,
+          prompts: [current],
+          yogurt,
+        })}
+      />,
+    )
+    expect(screen.getAllByText('已交')).toHaveLength(2)
+    expect(screen.getByText('当前')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '改断句' }))
+    expect(beginEdit).toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: '应用断句，继续这一题' }))
+    expect(apply).toHaveBeenCalled()
   })
 
   it('挖空 / 词序题型是真交互：填格或点词都会改答案', () => {

@@ -15,9 +15,9 @@ export interface UseProductionSessionActionsParams {
   setSessionMode: Dispatch<SetStateAction<ProductionMode>>
   setSessionTopic: Dispatch<SetStateAction<string>>
   packPasteKind: string
-  applyPacketPaste: (raw: string) => void
+  applyPacketPaste: (raw: string) => boolean
   attemptPasteKind: string
-  applyAttemptFeedbackPaste: (raw: string) => void
+  applyAttemptFeedbackPaste: (raw: string) => boolean
   copyPackPromptAgain: () => Promise<void>
   copyAttemptPromptAgain: () => Promise<void>
 }
@@ -68,9 +68,10 @@ export function useProductionSessionActions({
   )
 
   const applyPaste = useCallback(
-    (raw: string) => {
-      if (packPasteKind) applyPacketPaste(raw)
-      else if (attemptPasteKind === 'feedback') applyAttemptFeedbackPaste(raw)
+    (raw: string): boolean => {
+      if (packPasteKind) return applyPacketPaste(raw)
+      if (attemptPasteKind === 'feedback') return applyAttemptFeedbackPaste(raw)
+      return false
     },
     [packPasteKind, applyPacketPaste, attemptPasteKind, applyAttemptFeedbackPaste],
   )

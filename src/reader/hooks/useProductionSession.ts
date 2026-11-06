@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
+import { useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ActivityCat } from '../../core/activity'
 import type {
   ProductionMode,
@@ -10,25 +10,20 @@ import type { WritingRecord } from '../../core/writing'
 import type { AnswerEvent } from '../../core/answerEvents'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import type { ProductionProgress } from '../../core/productionHistory'
-import {
-  deriveProductionProgress,
-  productionRecords,
-} from '../../core/productionHistory'
 import type { VocabLibrary } from '../../types/document'
 import type { ReaderDoc } from './useReaderDoc'
 import type { runAiBatch } from '../../adapters/aiRun'
 import { useProductionAi } from './useProductionAi'
 import { useProductionAttempt } from './useProductionAttempt'
-import { useProductionErrors } from './useProductionErrors'
 import { useProductionFollowUp } from './useProductionFollowUp'
 import { useProductionLegacyMigration } from './useProductionLegacyMigration'
 import { useProductionDraftLifecycle } from './useProductionDraftLifecycle'
 import { useProductionDueAutoStart } from './useProductionDueAutoStart'
 import { useProductionSessionControls } from './useProductionSessionControls'
 import { useProductionSessionActions } from './useProductionSessionActions'
-import { useProductionHistoryView } from './useProductionHistoryView'
-import { useProductionProgressSync } from './useProductionProgressSync'
+import { useProductionRollup } from './useProductionRollup'
 import { useProductionPacks } from './useProductionPacks'
+import { useProductionYogurtPairs } from './useProductionYogurtPairs'
 import type { ProductionStartPayload } from './productionPackRuns'
 import { useProductionSettings } from './useProductionSettings'
 
@@ -89,6 +84,8 @@ export function useProductionSession({
   const [open, setOpen] = useState(false)
   const [autoStart, setAutoStart] = useState(false)
   const [stage, setStage] = useState<ProductionStage>('setup')
+  /** 暂停：题目 / 作答原样留着，只是界面退回工棚主界面。 */
+  const [paused, setPaused] = useState(false)
   const [prompts, setPrompts] = useState<ProductionPrompt[]>([])
   const [index, setIndex] = useState(0)
   const [notice, setNotice] = useState('')
@@ -101,6 +98,8 @@ export function useProductionSession({
   const { ensureAi, callAi, copy, cancel } = ai
 
   const current = prompts[index] ?? null
+  /** 风味酸奶的逐句对子：选草料与挤奶两屏共用，断句可随时改（见 hook 注释）。 */
+  const yogurt = useProductionYogurtPairs({ settings, prompts, index, setPrompts, setIndex })
   const attempt = useProductionAttempt({
     current,
     sessionTopic,
@@ -132,14 +131,16 @@ export function useProductionSession({
     applyFeedbackPaste: applyAttemptFeedbackPaste,
     copyPromptAgain: copyAttemptPromptAgain,
   } = attempt
-  const allHistory = useMemo(() => productionRecords(writingHistory), [writingHistory])
-  useProductionErrors({ records: allHistory, writingErrorProgress, setWritingErrorProgress, answerEvents, now })
-  useProductionProgressSync({ records: allHistory, stored: productionProgress, setStored: setProductionProgress })
-  const derivedProgress = useMemo(() => deriveProductionProgress(allHistory), [allHistory])
-  const progress = useMemo(
-    () => (productionProgress && productionProgress.length ? productionProgress : derivedProgress),
-    [productionProgress, derivedProgress],
-  )
+  const { allHistory, progress, stats, history } = useProductionRollup({
+    writingHistory,
+    writingErrorProgress,
+    setWritingErrorProgress,
+    productionProgress,
+    setProductionProgress,
+    answerEvents,
+    articleIdentity,
+    now,
+  })
   const followUp = useProductionFollowUp({
     current,
     answer: attempt.answer,
@@ -148,7 +149,6 @@ export function useProductionSession({
     callAi,
     flash,
   })
-  const { stats, history } = useProductionHistoryView(allHistory, articleIdentity)
 
   const { saveNow, clearDraft, openProduction } = useProductionDraftLifecycle({
     open,
@@ -211,7 +211,11 @@ export function useProductionSession({
     copyPackPromptAgain: packs.copyPromptAgain,
     copyAttemptPromptAgain,
   })
-  applySessionRef.current = applySession
+  applySessionRef.current = (payload) => {
+    setPaused(false)
+    yogurt.reset()
+    applySession(payload)
+  }
 
   useProductionDueAutoStart({
     open,
@@ -226,11 +230,12 @@ export function useProductionSession({
     flash,
   })
 
-  const { openDueProduction, close, restart, cancelRun } = useProductionSessionControls({
+  const { openDueProduction, close, restart, cancelRun, pause, resume } = useProductionSessionControls({
     updateSettings,
     setAutoStart,
     setOpen,
     setStage,
+    setPaused,
     setPrompts,
     setIndex,
     setPoolInfo,
@@ -255,6 +260,10 @@ export function useProductionSession({
     openDueProduction,
     close,
     stage,
+    paused,
+    pause,
+    resume,
+    yogurt,
     settings,
     updateSettings,
     start: packs.start,
