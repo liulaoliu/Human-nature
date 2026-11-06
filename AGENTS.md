@@ -15,6 +15,11 @@
 
 - **工具优先于 shell**：读用 Read、改用 Edit/Write、找用 Glob/Grep；只有跑命令才动 Bash / PowerShell
   （Windows 上 Bash 是 Git Bash，路径用 `/`；PowerShell 是 5.1，别写 `&&`、`??`、三元）。
+- **跑命令用 Git Bash，不用 PowerShell**（2026-11-06 定）：`& "D:\Program Files\Git\bin\bash.exe" -lc "…"`
+  （`C:\Windows\System32\bash.exe` 是 WSL 的，别用）。PowerShell 5.1 的坑：中文输出经它打印会乱码、
+  没有 heredoc（写 commit message 只能落文件再 `git commit -F`）、`npm` 直接调会被执行策略拦（得 `cmd /c "npm …"`）。
+  PowerShell 只在要 Windows 原生能力时用（进程 / 服务 / 环境变量 / 符号链接）。
+  **文本编辑一律走 read/edit/write 工具**，不要用 shell 做文本往返（中文源码、含引号的 JSON 会被改坏）。
 - **命令有硬超时**：前台默认 2 分钟、上限 10 分钟，超时**自动转后台**（不杀进程）。
   构建 / 全量测试 / 批量 AI 一律用后台任务启动，收到完成通知再汇报；命令里不写 `sleep` 轮询。
 - **沙箱限制**（跟普通终端最大的差别）：
