@@ -106,6 +106,12 @@ export function useProductionAttempt({
     setLastRecordKey('')
   }, [])
 
+  /** 切题前留一份：点断句列表跳走、再跳回来时，写了一半的答案还在。 */
+  const snapshot = useCallback(
+    (): ProductionAttemptSnapshot => ({ answer, feedback, previousFeedback, hits, round }),
+    [answer, feedback, previousFeedback, hits, round],
+  )
+
   const applyFeedback = useCallback(
     (parsed: NonNullable<ReturnType<typeof parseProductionFeedback>>, pending: FeedbackPending) => {
       const rec: WritingRecord = {
@@ -287,6 +293,7 @@ export function useProductionAttempt({
     skip,
     reset,
     restore,
+    snapshot,
     cancelGrading: () => setGrading(false),
     clearError: () => setError(''),
   }

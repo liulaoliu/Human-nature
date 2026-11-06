@@ -24,6 +24,7 @@ import { useProductionSessionActions } from './useProductionSessionActions'
 import { useProductionRollup } from './useProductionRollup'
 import { useProductionPacks } from './useProductionPacks'
 import { useProductionYogurtPairs } from './useProductionYogurtPairs'
+import { useProductionJump } from './useProductionJump'
 import type { ProductionStartPayload } from './productionPackRuns'
 import { useProductionSettings } from './useProductionSettings'
 
@@ -100,6 +101,8 @@ export function useProductionSession({
   const current = prompts[index] ?? null
   /** 风味酸奶的逐句对子：选草料与挤奶两屏共用，断句可随时改（见 hook 注释）。 */
   const yogurt = useProductionYogurtPairs({ settings, prompts, index, setPrompts, setIndex })
+  /** 跳题要的「已交」标记：attempt 还是闭包，先放个 ref 再由下面接上。 */
+  const markDoneRef = useRef<(id: string) => void>(() => {})
   const attempt = useProductionAttempt({
     current,
     sessionTopic,
@@ -109,10 +112,12 @@ export function useProductionSession({
     articleTitle,
     hasNext: index + 1 < prompts.length,
     onNext: () => {
+      markDoneRef.current(current?.zh ?? '')
       setNotice('')
       setIndex((i) => i + 1)
     },
     onDone: () => {
+      markDoneRef.current(current?.zh ?? '')
       clearDraftRef.current()
       setStage('done')
     },
@@ -131,6 +136,16 @@ export function useProductionSession({
     applyFeedbackPaste: applyAttemptFeedbackPaste,
     copyPromptAgain: copyAttemptPromptAgain,
   } = attempt
+  const jump = useProductionJump({
+    prompts,
+    index,
+    setIndex,
+    snapshot: attempt.snapshot,
+    restore: attempt.restore,
+    resetAttempt,
+    grading: attempt.grading,
+  })
+  markDoneRef.current = jump.markDone
   const { allHistory, progress, stats, history } = useProductionRollup({
     writingHistory,
     writingErrorProgress,
@@ -214,6 +229,7 @@ export function useProductionSession({
   applySessionRef.current = (payload) => {
     setPaused(false)
     yogurt.reset()
+    jump.clear()
     applySession(payload)
   }
 
@@ -264,6 +280,8 @@ export function useProductionSession({
     pause,
     resume,
     yogurt,
+    doneIds: jump.doneIds,
+    jumpTo: jump.jumpTo,
     settings,
     updateSettings,
     start: packs.start,

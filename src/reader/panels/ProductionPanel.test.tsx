@@ -61,6 +61,8 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     resume: noop,
     paused: false,
     yogurt: yogurtStub(),
+    doneIds: new Set<string>(),
+    jumpTo: noop,
     stage: 'setup',
     settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
     updateSettings: noop,
@@ -296,42 +298,69 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(resume).toHaveBeenCalled()
   })
 
-  it('风味酸奶拷打页左侧常驻断句列表，改完断句仍在同一题', () => {
+  it('风味酸奶拷打页左侧常驻断句列表：点一句就做那一句，本句状态按已交集合算', () => {
     const beginEdit = vi.fn()
     const apply = vi.fn(() => true)
-    const current = { id: 'yogurt-3', zh: '第三句。', goal: '', targets: [], reference: 'Three.' }
-    const yogurt = yogurtStub({
-      beginEdit,
-      apply,
-      pairs: [
-        { source: '第一句。', reference: 'One.' },
-        { source: '第二句。', reference: 'Two.' },
-        { source: '第三句。', reference: 'Three.' },
-      ],
-      sessionPairs: [
-        { source: '第一句。', reference: 'One.' },
-        { source: '第二句。', reference: 'Two.' },
-        { source: '第三句。', reference: 'Three.' },
-      ],
-    })
+    const jumpTo = vi.fn()
+    const prompts = [
+      { id: 'yogurt-1', zh: '第一句。', goal: '', targets: [], reference: 'One.' },
+      { id: 'yogurt-2', zh: '第二句。', goal: '', targets: [], reference: 'Two.' },
+      { id: 'yogurt-3', zh: '第三句。', goal: '', targets: [], reference: 'Three.' },
+    ]
+    const pairs = [
+      { source: '第一句。', reference: 'One.' },
+      { source: '第二句。', reference: 'Two.' },
+      { source: '第三句。', reference: 'Three.' },
+    ]
     renderPanel(
       <ProductionPanel
         model={props({
           stage: 'playing',
           sessionMode: 'yogurt',
           index: 2,
-          current,
-          prompts: [current],
-          yogurt,
+          current: prompts[2],
+          prompts,
+          // 跳着做：只有第 1 句交过，第 2 句还是待做 —— 不能再用「在第几题之前」推断
+          doneIds: new Set(['第一句。']),
+          jumpTo,
+          yogurt: yogurtStub({ beginEdit, apply, pairs, sessionPairs: pairs }),
         })}
       />,
     )
-    expect(screen.getAllByText('已交')).toHaveLength(2)
+    expect(screen.getAllByText('已交')).toHaveLength(1)
+    expect(screen.getAllByText('待做')).toHaveLength(1)
     expect(screen.getByText('当前')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /第一句/ }))
+    expect(jumpTo).toHaveBeenCalledWith(0)
     fireEvent.click(screen.getByRole('button', { name: '改断句' }))
     expect(beginEdit).toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: '应用断句，继续这一题' }))
     expect(apply).toHaveBeenCalled()
+  })
+
+  it('风味酸奶开了整段连写时，列表末尾多一行「整段连写」也能点过去', () => {
+    const jumpTo = vi.fn()
+    const prompts = [
+      { id: 'yogurt-1', zh: '第一句。', goal: '', targets: [], reference: 'One.' },
+      { id: 'yogurt-paragraph', zh: '整段。', goal: '', targets: [], reference: 'Whole.' },
+    ]
+    const pairs = [{ source: '第一句。', reference: 'One.' }]
+    renderPanel(
+      <ProductionPanel
+        model={props({
+          stage: 'playing',
+          sessionMode: 'yogurt',
+          index: 0,
+          current: prompts[0],
+          prompts,
+          doneIds: new Set<string>(),
+          jumpTo,
+          yogurt: yogurtStub({ pairs, sessionPairs: pairs }),
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /整段连写/ }))
+    expect(jumpTo).toHaveBeenCalledWith(1)
   })
 
   it('挖空 / 词序题型是真交互：填格或点词都会改答案', () => {

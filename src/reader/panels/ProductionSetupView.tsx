@@ -408,47 +408,6 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         </div>
       )}
 
-      <div className="bar">
-        <button
-          className="primary"
-          onClick={() => {
-            if (model.paused) {
-              model.resume()
-              return
-            }
-            if (isYogurt) {
-              if (yogurtPairs) model.startYogurtPairs(yogurtPairs, yogurt.warning)
-              else previewYogurt()
-            } else {
-              void model.start()
-            }
-          }}
-          disabled={!model.paused && (model.generating || !canStart)}
-        >
-          {model.paused
-            ? `继续这一组（第 ${model.index + 1} 题）`
-            : model.generating
-              ? 'D老师出题中…'
-              : isYogurt
-                ? yogurtPairs
-                  ? '开始逐句拷打'
-                  : '拆句预览'
-                : settings.mode === 'full'
-                  ? '全脂随机出题'
-                  : '按主题出题'}
-        </button>
-        {model.generating && (
-          <button onClick={model.cancelRun} title="停止等待 AI 返回">
-            取消
-          </button>
-        )}
-        <span className="muted">
-          {isYogurt
-            ? '逐句拆分在本机完成；批改仍走 AI，没配 key 时复制批改提示词粘回。'
-            : '生成题目和批改会调用本机 AI；没配 key 时会复制提示词让你粘回。'}
-        </span>
-      </div>
-
       {showPaste && (
         <div className="production-paste">
           <div className="muted">
@@ -499,6 +458,48 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
           })}
         </div>
       )}
+
+      {/* 主按钮吸底：表单长的时候滚到哪都能直接开始，别让人翻回底部找按钮。 */}
+      <div className="production-setup-foot">
+        <button
+          className="primary"
+          onClick={() => {
+            if (model.paused) {
+              model.resume()
+              return
+            }
+            if (isYogurt) {
+              if (yogurtPairs) model.startYogurtPairs(yogurtPairs, yogurt.warning)
+              else previewYogurt()
+            } else {
+              void model.start()
+            }
+          }}
+          disabled={!model.paused && (model.generating || !canStart)}
+        >
+          {model.paused
+            ? `继续这一组（第 ${model.index + 1} 题）`
+            : model.generating
+              ? 'D老师出题中…'
+              : isYogurt
+                ? yogurtPairs
+                  ? '开始逐句拷打'
+                  : '拆句预览'
+                : settings.mode === 'full'
+                  ? '全脂随机出题'
+                  : '按主题出题'}
+        </button>
+        {model.generating && (
+          <button onClick={model.cancelRun} title="停止等待 AI 返回">
+            取消
+          </button>
+        )}
+        <span className="muted">
+          {isYogurt
+            ? '逐句拆分在本机完成；批改仍走 AI，没配 key 时复制批改提示词粘回。'
+            : '生成题目和批改会调用本机 AI；没配 key 时会复制提示词让你粘回。'}
+        </span>
+      </div>
     </div>
   )
 }

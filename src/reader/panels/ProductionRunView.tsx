@@ -209,38 +209,56 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
 
   if (!isYogurt) return <div className="production-body">{body}</div>
 
+  // 断句列表：每对一句；整段连写不是一对，单独补一行在最后，也能点过去。
+  const rows = yogurt.sessionPairs.map((pair, i) => ({
+    index: i,
+    no: String(i + 1),
+    label: pair.source || '（空）',
+  }))
+  const paragraphIndex = model.prompts.length - 1
+  if (model.prompts.length > yogurt.sessionPairs.length) {
+    rows.push({ index: paragraphIndex, no: '整', label: '整段连写（全文）' })
+  }
+
   return (
     <div className="production-body production-run">
       <aside className="production-side">
         <div className="bar">
           <b>断句</b>
           <span className="muted">
-            {model.index + 1} / {yogurt.sessionPairs.length}
+            {model.index + 1} / {model.prompts.length}
           </span>
           <button onClick={toggleEdit}>{editing ? '收起编辑器' : '改断句'}</button>
         </div>
         <ol className="production-sentences">
-          {yogurt.sessionPairs.map((pair, i) => {
-            const state = i < model.index ? '已交' : i === model.index ? '当前' : '待做'
+          {rows.map((row) => {
+            const on = row.index === model.index
+            const done = model.doneIds.has(model.prompts[row.index]?.zh ?? '')
             return (
-              <li
-                key={`${i}-${pair.source.slice(0, 8)}`}
-                ref={i === model.index ? activeRef : null}
-              >
-                <span className={'production-sentence' + (i === model.index ? ' on' : '')}>
-                  <span className="muted">{i + 1}</span>
-                  <span className="production-sentence-text">{pair.source || '（空）'}</span>
-                  <span className={'production-sentence-state' + (i < model.index ? ' done' : '')}>
-                    {state}
+              <li key={`${row.index}-${row.label.slice(0, 8)}`} ref={on ? activeRef : null}>
+                <button
+                  type="button"
+                  className={'production-sentence' + (on ? ' on' : '')}
+                  onClick={() => model.jumpTo(row.index)}
+                  aria-current={on ? 'step' : undefined}
+                  title={on ? '正在做这一句' : '跳到这一句（这一题的作答会留着）'}
+                >
+                  <span className="production-sentence-no">{row.no}</span>
+                  <span className="production-sentence-text">{row.label}</span>
+                  <span className={'production-sentence-state' + (done ? ' done' : '')}>
+                    {on ? '当前' : done ? '已交' : '待做'}
                   </span>
-                </span>
+                </button>
               </li>
             )
           })}
         </ol>
-        {yogurt.sessionPairs.length < model.prompts.length && (
-          <p className="muted">最后还有一道整段连写（第 {model.prompts.length} 题）。</p>
-        )}
+        <p className="muted production-side-hint">
+          点一句就做那一句；列表只滚动查看，不会换题。
+        </p>
+      </aside>
+      <div className="production-main">
+        {body}
         {editing && (
           <YogurtPairEditor
             yogurt={yogurt}
@@ -253,8 +271,7 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
             onCancel={() => setEditing(false)}
           />
         )}
-      </aside>
-      <div className="production-main">{body}</div>
+      </div>
     </div>
   )
 }
