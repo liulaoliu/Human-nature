@@ -74,6 +74,12 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
   服务端旧版把离线改动顶掉；正常镜像（只是成功保存后的副本）一律用服务端。下一次保存会带
   服务端版本号写回，成功后清脏。两边都改过的真冲突目前仍本机优先并提示用户，合并选择是后续债务。
 - 同一 id 的文章两边都有时，`updatedAt` 更新的那一版优先（离线改过的不会被旧库盖掉）。
+- 文章镜像另存同步状态（IndexedDB `shadowing-reader` v2 的 `article_sync`）：
+  `reconcile()` 只上传 `pendingUpload`（离线新建/修改）的条目；已同步镜像在服务端消失
+  视为别处删除，清本地、不再 PUT 复活。`remove()` 失败/离线时写 `pendingDelete` 墓碑，
+  `list()/get()` 先过滤墓碑，服务恢复后重试 DELETE，成功再清墓碑。
+- 删除失败仍保留墓碑、`get()` 比较本地与服务端 `updatedAt`（和 `list()`/`reconcile()` 同口径），
+  避免「删了又回来」和备份导入以旧版为底。
 - 词库里的句子原文按 `sentenceId` 共享：落盘前 `compactSentenceTexts` 收进
   `library.sentenceTexts`，读出来 `hydrateSentenceTexts` 补回 `source` / `contexts` /
   `articleEntries`。同一键文本不一致（改过正文）时不合并，避免张冠李戴。
