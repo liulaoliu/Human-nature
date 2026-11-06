@@ -1,4 +1,4 @@
-import { isPriority } from './vocab'
+import { hasReviewHistory, isPriority } from './vocab'
 import { isStable } from './mastery'
 import type { MistakeEntry } from './mistakes'
 import type { VocabItem } from '../types/document'
@@ -47,7 +47,7 @@ export function buildSiege(items: VocabItem[], mistakes: MistakeEntry[], opts: S
     const m = byItem.get(it.id)
     const prio = isPriority(it, now)
     const lapses = it.reviewState.lapses ?? 0
-    const studied = it.reviewState.repetitions > 0
+    const studied = hasReviewHistory(it)
     const reasons: string[] = []
     let score = 0
     if (m) {

@@ -125,4 +125,25 @@ describe('SideVocab：生词 / 语言点 分开显示', () => {
     fireEvent.click(screen.getByRole('button', { name: /语言点（0）/ }))
     expect(screen.getByText(/还没有语言点/)).toBeTruthy()
   })
+
+  it('今日目标行不混入选词会话的连续天数', () => {
+    setup({
+      statsOpen: true,
+      stats: {
+        totals: { picked: 0, seconds: 0 },
+        dayStats: { todayPicked: 0, streak: 9 },
+        studyTodaySeconds: 0,
+        studyTotalSeconds: 0,
+        studyTotalCards: 0,
+        studiedCount: 3,
+        dailyGoal: 20,
+        last7: [],
+        dueForecast: [],
+        byArticle: [],
+      },
+    })
+    const goal = document.querySelector('.goal')?.textContent ?? ''
+    expect(goal).toContain('今日目标：3 / 20')
+    expect(goal).not.toContain('🔥')
+  })
 })

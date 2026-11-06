@@ -463,7 +463,7 @@ export default function SideVocab({
           </div>
           <div className="goal">
             <div className="muted">
-              今日目标：{stats.studiedCount} / {stats.dailyGoal > 0 ? stats.dailyGoal : '不限'} · 🔥{dayStats.streak} 天
+              今日目标：{stats.studiedCount} / {stats.dailyGoal > 0 ? stats.dailyGoal : '不限'}
               <select
                 value={String(stats.dailyGoal)}
                 onChange={(e) => onDailyGoalChange(Number(e.target.value))}

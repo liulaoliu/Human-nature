@@ -189,6 +189,8 @@ describe('useSelection：回原文定位', () => {
     expect(params.persist).toHaveBeenCalledTimes(1)
     const next = vi.mocked(params.persist).mock.calls[0][0]
     expect(next.items[0].source?.sentenceId).toBe('s2')
+    // 已保存文章 articleKey 为空时，来源键也必须用 articleIdentity，不能写 null。
+    expect(next.items[0].source?.fileName).toBe('file:a.md')
   })
 
   it('正文里也没有 → 提示「找不到」', () => {

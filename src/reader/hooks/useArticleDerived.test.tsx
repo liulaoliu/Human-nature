@@ -55,6 +55,21 @@ describe('useArticleDerived：本篇归属', () => {
 })
 
 describe('useArticleDerived：掌握度 / 工作流 / 产出', () => {
+  it('未学只认 isFresh：reps 归零但仍有 interval/due 的词不算新词', () => {
+    const forgot = vocabItem({
+      id: 'forgot',
+      word: 'forgot',
+      lemma: 'forgot',
+      reviewState: { due: '2026-10-01T00:00:00.000Z', interval: 3, ease: 2.5, repetitions: 0, lapses: 1 },
+    })
+    const { result } = renderHook(() =>
+      useArticleDerived(params({ articleWordItems: [stableItem('run'), forgot] })),
+    )
+    const words = result.current.articleMastery.dimensions.find((d) => d.key === 'words')
+    expect(words?.detail).toContain('1/2 稳定')
+    expect(words?.detail).not.toContain('未学')
+  })
+
   it('掌握度按 stable / due / fresh 统计，并带精读维度', () => {
     const { result } = renderHook(() =>
       useArticleDerived(

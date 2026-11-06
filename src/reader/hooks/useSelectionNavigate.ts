@@ -94,7 +94,7 @@ export function useSelectionNavigate({
                   ...it,
                   source: {
                     articleId: articleTitle || articleKey || '手动粘贴',
-                    fileName: articleKey,
+                    fileName: articleIdentity,
                     sentenceId: sid,
                     sentenceText: hit!.text,
                   },

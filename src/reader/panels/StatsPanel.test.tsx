@@ -61,6 +61,10 @@ describe('StatsPanel', () => {
           {...empty}
         />,
       )
+      const monthLabel = [...container.querySelectorAll('.side-label')].find((el) =>
+        el.textContent?.includes('本月'),
+      )
+      expect(monthLabel?.textContent).toContain('本月（10 月）')
       const monthLine = [...container.querySelectorAll('.stat-line')].find((el) =>
         el.textContent?.includes('本月'),
       )

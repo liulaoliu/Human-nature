@@ -69,6 +69,17 @@ describe('autoFillLibrary（词库自动补全的唯一入口）', () => {
     expect(second.applied.langPoints).toBe(1) // 只动了 B 这篇
   })
 
+  it('单词被旧数据误标 phrase：不能因此认为「词库已有语言点」而跳过重收', () => {
+    const p = phrase('fall back on', '转而依靠')
+    const first = autoFillLibrary(createLibrary(), { langPoints: [p], collected: {} }, TEST_NOW)
+    const bad = {
+      ...createLibrary(),
+      items: [vocabItem({ id: 'run', word: 'run', lemma: 'run', kind: 'phrase' })],
+    }
+    const out = autoFillLibrary(bad, { langPoints: [p], collected: first.collected }, TEST_NOW)
+    expect(out.applied.langPoints).toBe(1)
+  })
+
   it('同一次调用里先做词形归并，再收语言点（P0 双写回归）', () => {
     const dict = {
       entries: new Map(),

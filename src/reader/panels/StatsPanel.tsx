@@ -189,7 +189,7 @@ export default function StatsPanel({
       {line('今日', todayCats)}
       <div className="side-label">近 7 天</div>
       {line('本周', weekCats)}
-      <div className="side-label">本月（{today.getMonth() + 1} 月）</div>
+      <div className="side-label">本月（{Number(tk.slice(5, 7))} 月）</div>
       {line('本月', monthCats)}
 
       <div className="side-label">汇总{onJump ? '（点整行跳到对应面板）' : ''}</div>

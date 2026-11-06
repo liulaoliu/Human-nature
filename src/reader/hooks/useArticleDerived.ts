@@ -3,7 +3,7 @@ import { activityStreak, type DayActivity } from '../../core/activity'
 import { buildArticleMastery, isStable } from '../../core/mastery'
 import { buildIntensivePlan } from '../../core/intensive'
 import { buildOutputBoard } from '../../core/output'
-import { hasReviewHistory, isDue, needsAiExamples } from '../../core/vocab'
+import { hasReviewHistory, isDue, isFresh, needsAiExamples } from '../../core/vocab'
 import { hasSentenceLanguage } from '../../core/language'
 import { practiceForArticle, type PracticeRecord } from '../../core/practice'
 import type { KindStats, RetellRecord } from '../../core/learning'
@@ -71,7 +71,7 @@ export function useArticleDerived({
       if (isStable(it)) stable += 1
       if (isDue(it)) due += 1
       if ((it.reviewState.lapses ?? 0) > 0) lapsed += 1
-      if (it.reviewState.repetitions === 0) fresh += 1
+      if (isFresh(it)) fresh += 1
     }
     const sents = doc?.sentences ?? []
     const reading = {

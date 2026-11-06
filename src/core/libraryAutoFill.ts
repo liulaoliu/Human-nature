@@ -15,6 +15,7 @@
 import type { VocabItem, VocabLibrary } from '../types/document'
 import { applyExamples, applyLemmaMap, dedupeLibrary, pickOfflineExamples } from './vocab'
 import { langPointSignature, upsertLanguagePoints, type LanguagePoint } from './langPoints'
+import { kindOf } from './entryKind'
 import { dictLemmaPairs, type Ecdict } from './ecdict'
 
 /** 离线例句查询（装了离线库才给；返回候选例句）。 */
@@ -108,7 +109,7 @@ export function autoFillLibrary(
      * 记账与实际不符时也重收：**词库里一条语言点都没有**，但文章里明明有
      * （换库、导库、早先版本丢过），说明那份「已收过」的记账是旧的 → 当成没收过。
      */
-    const hasLangItems = lib.items.some((it) => (it.kind ?? 'word') !== 'word')
+    const hasLangItems = lib.items.some((it) => kindOf(it) !== 'word')
     const todo = Object.entries(sig).filter(([id, s]) => !hasLangItems || collected[id] !== s)
     if (todo.length) {
       const ids = new Set(todo.map(([id]) => id))

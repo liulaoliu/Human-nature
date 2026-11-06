@@ -1,5 +1,6 @@
 import type { Sentence, VocabItem } from '../types/document'
 import { poolFor, studyableItems } from './quizPool'
+import { kindOf } from './entryKind'
 
 /**
  * 「D老师奶牛工棚」：用已经学过的词 / 词组 / 习语做**主动产出**。
@@ -305,7 +306,7 @@ function isWeakItem(item: VocabItem): boolean {
 
 function targetsOfItem(item: VocabItem, types: ReadonlySet<ProductionTargetKind>): ProductionTarget[] {
   const out: ProductionTarget[] = []
-  const kind = item.kind ?? 'word'
+  const kind = kindOf(item)
   if (kind === 'word' || kind === 'phrase' || kind === 'idiom') {
     if (types.has(kind)) {
       out.push({

@@ -63,6 +63,17 @@ describe('buildSiege', () => {
     expect(out[0].item.id).toBe('vocab:many')
   })
 
+  it('reps 归零但仍有 due/interval：仍算学过，给「还不稳」', () => {
+    const forgot = item({
+      id: 'vocab:z',
+      lemma: 'z',
+      reviewState: { ease: 2.5, due: '2026-10-20T00:00:00Z', interval: 1, repetitions: 0, lapses: 0 },
+    })
+    const out = buildSiege([forgot], [mistake('vocab:z')], { now: NOW })
+    expect(out.map((x) => x.item.id)).toEqual(['vocab:z'])
+    expect(out[0].reason).toContain('还不稳')
+  })
+
   it('scope=article 只看本篇', () => {
     const items = [
       item({ id: 'vocab:x', lemma: 'x', source: { articleId: 'art-A', fileName: 'art-A', sentenceId: 's1', sentenceText: 'X.' } }),

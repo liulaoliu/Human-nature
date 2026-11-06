@@ -76,6 +76,21 @@ describe('buildProductionTargets：选词块', () => {
     expect(pool.targets.find((t) => t.text === 'run out')?.meaning).toBe('用完')
   })
 
+  it('单词被旧数据误标 usage：仍按单词出目标', () => {
+    const stale = vocabItem({ id: 'v4', word: 'run', lemma: 'run', kind: 'usage', meaning: '跑' })
+    const pool = buildProductionTargets({
+      items: [stale],
+      scope: 'all',
+      articleIdentity: 'A',
+      docLemmas: new Set(),
+      types: ['word'],
+      limit: 10,
+      weakRatio: 0,
+      rng: () => 0,
+    })
+    expect(pool.targets.map((t) => t.text)).toEqual(['run'])
+  })
+
   it('本篇范围只取 source/正文 lemmas 命中的', () => {
     const pool = buildProductionTargets({
       items: [weak, strong, other],
