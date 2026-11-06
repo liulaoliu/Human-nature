@@ -31,7 +31,7 @@
     "check:dev": "node tool/check_dev_modules.mjs",
     "app": "npm run build && node server/appServer.ts",
     "typecheck:server": "tsc -p tsconfig.server.json",
-    "lint": "eslint src",
+    "lint": "eslint src server",
     "check:text": "node tool/check_text_files.mjs"
   },
   "dependencies": {

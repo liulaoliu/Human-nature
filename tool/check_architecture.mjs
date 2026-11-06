@@ -15,6 +15,7 @@
 //   R6 日期键只走 core/activity（不许自己拼 YYYY-MM-DD / 用 toISOString().slice(0,10)）
 //   R7 core 下每个模块要有同名测试（白名单 = 纯数据/纯类型/测试夹具）
 //   R8 <p> 里不许出现 <div>（非法 DOM 嵌套，React 会报 validateDOMNesting）
+//   R9 src/ 与 server/ 下不许出现 JS 源码（.js/.jsx/.cjs/.mjs）—— 一律 TypeScript
 //
 // EXCEPTIONS：存量违规登记（**必须写理由**，且会每次打印出来 —— 债务要看得见）。
 // 新增违规一律修代码，不许随手登记。
@@ -144,6 +145,29 @@ for (const r of allRel.filter((r) => r.startsWith('src/core/') && !isTest(r))) {
   if (!allRel.includes(test)) violations.push(`R7 ${r} 没有同名测试（${test}）`)
 }
 
+// R9：源码一律 TypeScript（src/ 与 server/ 下不许出现 JS 源码）
+//   tools/ 的 *.mjs 是命令行脚本，不在管辖范围；构建产物 / public 已由 SKIP_DIRS 跳过。
+//   服务端 .ts 由 `npm run typecheck:server` 单独把关，所以这里只管「有没有人又写回 .js」。
+function walkAll(dir, out = []) {
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) {
+      if (!SKIP_DIRS.has(e.name)) walkAll(p, out)
+    } else {
+      out.push(p)
+    }
+  }
+  return out
+}
+for (const dir of ['src', 'server']) {
+  for (const f of walkAll(dir)) {
+    const r = rel(f)
+    if (/\.(?:js|jsx|cjs|mjs)$/.test(r)) {
+      violations.push(`R9 ${r} 是 JS 源码 —— 一律写 .ts/.tsx（服务端也要是 .ts，由 typecheck:server 把关）`)
+    }
+  }
+}
+
 // R8 的规则说明放在下面实现处（要考虑跨组件，写长了）。
 /** 去掉注释与字符串，避免把「文档里写的 <p>」当成真标签。 */
 const stripJsxNoise = (src) =>
@@ -264,7 +288,7 @@ if (violations.length) {
 }
 
 const debt = Object.keys(EXCEPTIONS)
-console.log(`✅ 架构门禁通过（R1–R8）`)
+console.log(`✅ 架构门禁通过（R1–R9）`)
 if (debt.length) {
   console.log('存量豁免（看得见的债，建议尽快销账）：')
   for (const [f, why] of Object.entries(EXCEPTIONS)) console.log(`  - ${f}：${why}`)

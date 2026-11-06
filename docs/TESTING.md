@@ -85,7 +85,7 @@
 11. **IndexedDB 不能是唯一资产库**。它按来源隔离、会被浏览器回收、多标签没有统一事务；
     数据层已改为 **SQLite 主存（`data/xueba.db`）+ IndexedDB 兜底/镜像**。
     规矩：新增用户资产先走 `core/ports.ts` 端口 → `adapters` 的 HybridRepo；schema 变更走
-    `PRAGMA user_version` 迁移；服务端只加固定路由（`server/storeApi.js`），不加任意 SQL 接口。
+    `PRAGMA user_version` 迁移；服务端只加固定路由（`server/storeApi.ts`），不加任意 SQL 接口。
     详细取舍见 `docs/STORAGE.md`。
 12. **写库失败后只清 `pending` = 这一块永远不再重试**。
     现象：服务临时停掉时答的题，服务恢复后不刷新就一直没进 SQLite；只有下次改到同一 section 才碰巧补上。
@@ -625,12 +625,12 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
 36. **`server.fs.deny` 是“替换”不是“追加”**（2026-10-24）。手写 `['**/data/**']` 会把 Vite
     默认的 `.env` / `.env.*` / `*.{crt,pem}` 拒绝列表整体换掉，还会把根目录的
     `config.local.json`（`ai.apiKey` 就在里面）当静态文件吐给任意 localhost 页面。
-    策略现在集中在 `server/privatePaths.js` 的 `PRIVATE_FS_DENY`，由 `vite.config.ts` 引用；
+    策略现在集中在 `server/privatePaths.ts` 的 `PRIVATE_FS_DENY`，由 `vite.config.ts` 引用；
     改它时保留 `**/config.local.json`、`**/.env*`、`**/*.{crt,pem}`、`**/data/**`。
     验收：`curl -H "Origin: http://localhost:9999" http://localhost:5173/config.local.json` 必须 403/404。
 37. **只比 `Origin.host === Host` 防不住 DNS 重绑定**（2026-10-24）。把 `evil.com` 解析到
     127.0.0.1 后，浏览器发来的 Host 和 Origin 都是 `evil.com`，两者相等但页面不是本机。
-    `server/sameOrigin.js` 现在先要求 Host 的 hostname 属于 `localhost` / `127.0.0.1` / `[::1]`，
+    `server/sameOrigin.ts` 现在先要求 Host 的 hostname 属于 `localhost` / `127.0.0.1` / `[::1]`，
     再比较 Origin 与 Host；dev 插件和静态 `appServer` 共用这一层。补测试时同时断言
     “Host、Origin 都是 evil.test → 403”和“本机名 → 放行”，只测 Origin 不一致会漏掉重绑定。
 38. **路由同步 effect 别把“返回”当成“首屏恢复”**（2026-10-24）。`/reader/a/<slug>` 按返回后
@@ -786,7 +786,7 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `learning_snapshots` 时，老库里还躺着 v5 的同名表（`id` 主键 + `record_count` + 明文 payload）；
     `CREATE TABLE IF NOT EXISTS` 看到表名存在就直接跳过，第一次拍快照就 `no such column: bytes`。
     v12 迁移先按列判断，把老表改名成 `learning_snapshots_v5` 归档再建新表
-    （`sqliteStore.test.js` 已造 v11 老表钉住）。**任何“重新启用同名表”的迁移都要先 `PRAGMA table_info`。**
+    （`sqliteStore.test.ts` 已造 v11 老表钉住）。**任何“重新启用同名表”的迁移都要先 `PRAGMA table_info`。**
  65. **AI 结果只带篇内句号，切篇贴回会串写**（2026-11-01）。译文/语言点的结果形状是
     `[{id:"s001", ...}]`，旧逻辑只按 id 写回当前文章；在 A 篇复制提示词、切到 B 篇贴结果，
     就会把 A 的译文/语言点写进 B 的同号句子（Passé 的 s001/s002 被 Myanmar 篇覆盖，

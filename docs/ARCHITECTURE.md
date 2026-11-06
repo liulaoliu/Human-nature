@@ -343,7 +343,7 @@ types ← core ← adapters ← reader
 [`docs/STORAGE.md`](STORAGE.md)。改数据层时：
 
 - 先改 `src/core/ports.ts` 的端口，再改 `src/adapters/*` 的 HybridRepo，**不要**在视图里直接 `fetch('/api/store')`；
-- 服务端只暴露固定路由（`server/storeApi.js`），不加任意 SQL 接口；
+- 服务端只暴露固定路由（`server/storeApi.ts`），不加任意 SQL 接口；
 - SQLite 内部分两层：`vocab` / `articles` 的 `payload` JSON 是事实来源，
   `words` / `article_sentences` / `lang_points` 等是**同一事务里重建的派生表**；
   不要绕过 `saveVocab` / `saveArticle` 直接写派生表；
@@ -555,7 +555,7 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
    `src/reader/route.ts` 构造**带 `/reader` 前缀**的完整路径。
 2. **dev**：`vite.config.ts` 的 `spaRoutePlugin` 把 `/reader*` 与旧 `/reader.html`
    改写成 `/index.html`。
-3. **生产**：`server/httpApp.js` 的 `isSpaFallback()` 把前端路由统一回落 `index.html`；
+3. **生产**：`server/httpApp.ts` 的 `isSpaFallback()` 把前端路由统一回落 `index.html`；
    **带扩展名的缺失资源仍然 404**（旧 `/reader.html` 例外，它要打开阅读页），
    绝不能回落成 HTML —— 否则浏览器把一段 HTML 当 JS 解析，报一堆莫名其妙的语法错。
 4. **`base: '/'`（绝对路径）**。相对路径 `./assets/x.js` 在 `/reader/a/<slug>` 下会解析成
@@ -619,7 +619,7 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 所以「首屏还是慢」先确认跑的是哪个：日常开发用 `npm run dev`（有 HMR，慢是 vite 的固有代价），
 要看真实体感用 **`npm run app`**（build + 起生产服务，同一个 5173 端口）。
 
-⚠️ `server/httpApp.js` 的静态服务现在会 **gzip 文本资源**（js/css/html/json/tsv，>1KB，
+⚠️ `server/httpApp.ts` 的静态服务现在会 **gzip 文本资源**（js/css/html/json/tsv，>1KB，
 按 mtime+size 缓存结果）。这个以前是缺的 —— 586KB 的 bundle 一直明文发。
 
 ## 三·九、状态与边界：先问归属，再谈工具
@@ -702,6 +702,32 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 - 新组件是不是只拿自己那组 props？有没有把整包模型继续下传？
 - 这次拆分是拆了**行为边界**，还是只把 props 搬了个家？
 - 如果引入了 Context / store：reset 和测试隔离在哪？事实来源是谁？
+
+## 三·十、语言：一律 TypeScript（机器会拦）
+
+**结论：`src/` 和 `server/` 下只许 `.ts` / `.tsx`。没有例外，不许再写 `.js`。**
+
+- 前端：`src/` 已无 `.js`，新文件一律 `.ts`（纯逻辑）或 `.tsx`（有 JSX）。
+- 服务端：`server/` 也是全 `.ts`。Node ≥ 23.6 原生跑 `.ts`（本机 26.4 验过），
+  `node server/appServer.ts` 直接起，**没有** `dist-server` 构建步骤、没有 tsx/ts-node。
+  类型由 `npm run typecheck:server`（`tsconfig.server.json`：`strict` + `noUncheckedIndexedAccess`
+  + `verbatimModuleSyntax` + NodeNext）把关，**不是**由运行时。
+- 测试同理：`server/*.test.ts`、`src/**/*.test.ts`。测试不是法外之地，
+  服务端测试进 `typecheck:server` 的程序，写不类型化就过不了门禁。
+- `tools/*.mjs` 是命令行脚本（AI 跑批 / 构建 / 一次性迁移），允许 `.mjs`，不在门禁管辖内。
+- 门禁：`tool/check_architecture.mjs` 的 **R9**（`src/` `server/` 出现 `.js/.jsx/.cjs/.mjs` 直接失败）
+  + `npm run typecheck:server` + `npm run gates:server`。
+
+写类型的三条硬要求（都是踩过之后定的）：
+
+1. **不许 `@ts-nocheck` / `@ts-ignore` / 大面积 `any`** 换绿。类型要表达形状，不是把报错压掉。
+2. **在边界处断言一次**：HTTP 响应、SQLite 行、`JSON.parse` 的结果都是 `unknown`，
+   在文件顶部声明 `interface XxxResponse`，再用一个 `const json = async <T>(r: Response) => (await r.json()) as T`
+   收口；断言里用真实字段名，读代码的人能看出数据长什么样。
+3. **服务端程序不 import `src/`**（NodeNext 要求显式扩展名、lib 只有 ES2022，拉进来就编译不过）。
+   两边共用的清单/常量：要么在 `server/` 里各写一份并**注释声明必须同步**，
+   再用契约测试钉死（`server/learningContract.test.ts`、`src/core/learningSections.contract.test.ts`）；
+   需要同时 import 两侧的断言，放在 `src/` 那一侧（bundler 解析两边都能读）。
 
 ## 四、有意为之的例外（别当违规修）
 

@@ -79,7 +79,8 @@
     `tool/check_god_file.mjs` 的 `BASELINE`，**只准变小**（拆分后同步下调）。
   - hook 体量门禁：**新 hook 超 500 行直接失败，300 行起提醒（目标 200）**；
     存量基线在 `tool/check_hook_size.mjs`，拆回线下后必须删掉基线。
-  - 架构门禁：`tool/check_architecture.mjs` 的 R1–R8（依赖方向 / SSOT / 日期键 / 模块必须有测试 / `<p>` 里不许放块级标签）。
+  - 架构门禁：`tool/check_architecture.mjs` 的 R1–R9（依赖方向 / SSOT / 日期键 / 模块必须有测试 /
+    `<p>` 里不许放块级标签 / `src`、`server` 下不许有 JS 源码）。
     真留着的存量违规要在 `EXCEPTIONS` 里**写明理由**（每次运行都会打印出来当债务）。
 - **文档同步**（同一次提交里改）：结构/分层/新目录 → `docs/ARCHITECTURE.md`；
   新增踩坑 → `docs/TESTING.md` §3 补一条（编号 +1）；依赖原生/浏览器能力的用例 → §4 人工用例。
@@ -88,6 +89,20 @@
   先认滚动容器 → 负 margin 配等量 padding → 不透明底色 + z-index → 吸底抹掉 `.bar` 的
   `margin-bottom`；要一起吸的兄弟包一层，别各写一个 sticky；别用 `fixed` 假装吸底。
 - **不重复跑已验证的东西**：跑过的门禁没受影响就别重跑；长命令放后台跑完再汇报。
+
+## 语言：一律 TypeScript（硬规则，详见 `docs/ARCHITECTURE.md` §三·十）
+
+- **`src/` 与 `server/` 下只写 `.ts` / `.tsx`，不许新增 `.js` / `.jsx` / `.cjs`**。
+  门禁 `tool/check_architecture.mjs` 的 R9 会直接失败；测试也必须是 `.ts`，没有例外。
+  唯一的例外是 `tools/*.mjs`（命令行脚本：AI 跑批 / 构建 / 一次性迁移）。
+- 服务端不需要构建：Node ≥ 23.6 原生跑 `.ts`，`node server/appServer.ts` 直接起；
+  类型由 `npm run typecheck:server`（`tsconfig.server.json`，strict + noUncheckedIndexedAccess）把关，
+  写完服务端代码跑 `npm run gates:server`。
+- **不许用 `@ts-nocheck` / `@ts-ignore` / 大面积 `any` 换绿**。`Response.json()`、SQLite 行、`JSON.parse`
+  在无 DOM lib 时都是 `unknown`：在文件顶部声明 `interface XxxResponse`，用一个 `json<T>()` 边界断言收口。
+- **服务端不许 import `src/`**（NodeNext 要求显式扩展名、lib 只有 ES2022，编译不过）。
+  两边共用的清单/常量各写一份 + 注释声明必须同步，再用契约测试钉死
+  （`server/learningContract.test.ts`、`src/core/learningSections.contract.test.ts`）。
 
 ## 两条最容易踩的硬约定（详见 ARCHITECTURE §三）
 

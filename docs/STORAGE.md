@@ -132,7 +132,7 @@ articles(id, payload JSON, title, book, source_key,
 
 每次 `saveVocab` / `saveArticle` 在**同一个事务**里从 JSON 重建，不能单独写；
 所以不会出现「JSON 更新了、表还是旧的」。词库按 `id + 内容` 做**增量**（实现在
-`server/sqliteVocab.js`）：只重写新增 / 变化 / 删除的词条，未变化的保留原 rowid；文章仍按整篇重建。
+`server/sqliteVocab.ts`）：只重写新增 / 变化 / 删除的词条，未变化的保留原 rowid；文章仍按整篇重建。
 
 ```sql
 -- 词条：单词 / 词组 / 习语 / 用法笔记共用
@@ -335,7 +335,7 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
 
 ## 六、安全
 
-- `server/appServer.js` 只监听 `127.0.0.1`；SQLite 接口不对局域网开放。
+- `server/appServer.ts` 只监听 `127.0.0.1`；SQLite 接口不对局域网开放。
 - DB 文件 `0600`、目录 `0700`（Windows 忽略权限位）。
 - 写接口校验 `Origin`：浏览器跨站页面不能往 `127.0.0.1` 写数据（curl / 本机脚本不带 Origin 仍可用）。
 - 只暴露固定路由，不提供任意 SQL 执行；请求体上限 64MB。
@@ -350,18 +350,18 @@ React 视图 / hooks
       ↓ 只依赖 core/ports.ts（VocabRepoPort / ArticleRepoPort / LearningRepoPort / TakeRepoPort…）
 HybridRepo / LearningRepo（adapters：SQLite 优先，IndexedDB/localStorage 兜底）
       ↓ HTTP /api/store/*
-server/storeApi.js（路由，不认识具体 DB）
+server/storeApi.ts（路由，不认识具体 DB）
       ↓ 同一组方法：loadVocab / saveVocab / listArticles / saveArticle / loadLearning / saveLearning…
-server/sqliteStore.js（词库/文章/快照/导出）
-server/sqliteLearning.js（学习记录 section 读写）
-server/sqliteBackup.js（迁移前 / 每日整库备份）
-server/sqliteUtil.js（事务与字段转换）
+server/sqliteStore.ts（词库/文章/快照/导出）
+server/sqliteLearning.ts（学习记录 section 读写）
+server/sqliteBackup.ts（迁移前 / 每日整库备份）
+server/sqliteUtil.ts（事务与字段转换）
 ```
 
 所以：
 
 - **UI / hooks 不直接碰 SQL、不直接 fetch `/api/store`**；换 DB 不动视图。
-- 换到 Postgres / MySQL 时，主要写一个新的 `server/pgStore.js`，保持
+- 换到 Postgres / MySQL 时，主要写一个新的 `server/pgStore.ts`，保持
   `loadVocab / saveVocab / listSnapshots / listArticles / saveArticle / removeArticle /
   exportAll / checkpoint` 这组方法签名，然后让 `storeApi.js` 改用它。
 - 前端 `HybridRepo` 不需要改：它只认 HTTP 契约和 `/api/store/health`。
