@@ -1,0 +1,28 @@
+{
+  "runs": [
+    {
+      "at": "2026-11-06T20:52:00+08:00",
+      "mode": "health",
+      "scope": "I:\\Examples\\Stutterer",
+      "strictness": "balanced",
+      "composite": 86,
+      "dimensions": {
+        "prQuality": null,
+        "architecture": 89,
+        "techDebt": 89,
+        "testQuality": 79
+      },
+      "findings": { "red": 1, "yellow": 5, "green": 3 },
+      "gates": { "command": "npm run gates", "exit": 0, "testFiles": 369, "testsPassed": 3188, "skipped": 1, "seconds": 129 },
+      "corrections": [
+        "server/ 并非 0 测试：server/ 下有 5 个 .js 测试（1403 行 / 58 例），gates:server 会跑；真问题是它们无类型，2026-11-06 已补 :memory: 的 .ts 测试。",
+        "「测试非封闭」两条是刻意设计：core/articles.test.ts 用 describe.skipIf(!hasLibrary) 整组跳过；check_vocab_sense.mjs 无库时打印跳过并 exit 0。"
+      ],
+      "fixes": [
+        "dd2483a test: server 持久层补类型化的 :memory: 测试",
+        "0bd1ab6 fix: 写作来源白名单漏了 production",
+        "d308758 refactor: 词库落盘引擎拆成 vocabSaver（311→142 行）"
+      ]
+    }
+  ]
+}
