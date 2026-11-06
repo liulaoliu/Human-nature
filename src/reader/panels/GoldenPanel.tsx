@@ -1,4 +1,4 @@
-import { useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import GoldenBankView from './golden/GoldenBankView'
 import GoldenDrillView from './golden/GoldenDrillView'
 import GoldenExamView from './golden/GoldenExamView'
@@ -76,30 +76,60 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
   const { open, view, setView } = api
   const routeView = actions.goldenRoute?.view
   const canRoute = !!actions.onNavigateGolden
-  // URL 里的 gv=errors/history 是事实来源；没有 gv 时，errors/history 不能靠 localStorage 偷停。
+  const onNavigateGolden = actions.onNavigateGolden
+  const viewRef = useRef(view)
+  viewRef.current = view
+  const syncingRef = useRef(false)
+  const routeSeenRef = useRef(false)
+  const urlSyncedRef = useRef(false)
+
+  // URL → 视图：只在 route 变化时执行（深链接 / 浏览器返回），不跟本地点击抢写入。
   useEffect(() => {
-    if (!open || !canRoute) return
-    if (routeView) {
-      if (view !== routeView) setView(routeView)
+    if (!open || !canRoute) {
+      routeSeenRef.current = false
+      urlSyncedRef.current = false
+      syncingRef.current = false
       return
     }
-    if (view === 'errors' || view === 'history') setView('home')
-  }, [open, view, setView, canRoute, routeView])
+    const first = !routeSeenRef.current
+    routeSeenRef.current = true
+    const target = routeView ?? 'home'
+    if (first) {
+      if (routeView && viewRef.current !== target) {
+        syncingRef.current = true
+        setView(target)
+      }
+      return
+    }
+    if (viewRef.current !== target) {
+      syncingRef.current = true
+      setView(target)
+    }
+  }, [open, canRoute, routeView, setView])
+
+  // 视图 → URL：用户动作后写一次。打开子视图 push，页内回课程页 replace。
+  useEffect(() => {
+    if (!open || !canRoute || !onNavigateGolden) return
+    if (syncingRef.current) {
+      syncingRef.current = false
+      return
+    }
+    const current = routeView ?? undefined
+    const target = view === 'home' ? undefined : view
+    const first = !urlSyncedRef.current
+    urlSyncedRef.current = true
+    if (target === current) return
+    onNavigateGolden(
+      view === 'home' ? {} : { view },
+      { replace: view === 'home' || first },
+    )
+  }, [open, canRoute, view, routeView, onNavigateGolden])
 
   if (!open) return null
 
-  const openErrors = () => {
-    if (actions.onNavigateGolden) actions.onNavigateGolden({ view: 'errors' })
-    else api.setView('errors')
-  }
-  const openHistory = () => {
-    if (actions.onNavigateGolden) actions.onNavigateGolden({ view: 'history' })
-    else api.setView('history')
-  }
-  const backHome = () => {
-    api.setView('home')
-    actions.onNavigateGolden?.({}, { replace: true })
-  }
+  const openErrors = () => setView('errors')
+  const openHistory = () => setView('history')
+  const backHome = () => setView('home')
   const backFromHistory = () => {
     if (actions.goldenRoute?.from === 'errors') {
       if (actions.onNavigateGolden) {
@@ -171,10 +201,8 @@ export default function GoldenPanel({ api, articleTitle, onSpeak, actions }: Gol
           onOpenSentence={(sentenceId) => {
             if (!api.startSentenceDrill(sentenceId)) {
               actions.errors?.onMissingSentence?.()
-              return
             }
-            // 去练是 drill 子视图；先把 URL 里的 gv=errors 去掉，否则路由 effect 会把 drill 拉回错因页。
-            if (actions.onNavigateGolden) actions.onNavigateGolden({})
+            // 去练切到 drill；URL 由「视图 → URL」effect 统一写，别在这里再 CRUD query。
           }}
         />
       )}

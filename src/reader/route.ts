@@ -80,8 +80,34 @@ export interface ReaderRoute {
   production?: ProductionRouteState
 }
 
-/** D老师小课堂挂在 `/p/golden` 下的子视图；仍然由 `golden` 这一层整页会话承载。 */
-export type GoldenRouteView = 'errors' | 'history'
+/**
+ * D老师小课堂挂在 `/p/golden` 下的子视图；仍然由 `golden` 这一层整页会话承载。
+ * `home` 不写进 URL（没有 `gv` 就是课程页）。
+ */
+export type GoldenRouteView =
+  | 'plan'
+  | 'drill'
+  | 'recall'
+  | 'summary'
+  | 'bank'
+  | 'exam'
+  | 'history'
+  | 'errors'
+
+const GOLDEN_ROUTE_VIEWS: readonly GoldenRouteView[] = [
+  'plan',
+  'drill',
+  'recall',
+  'summary',
+  'bank',
+  'exam',
+  'history',
+  'errors',
+]
+
+function isGoldenRouteView(value: string | null): value is GoldenRouteView {
+  return !!value && (GOLDEN_ROUTE_VIEWS as readonly string[]).includes(value)
+}
 
 export interface GoldenRouteState {
   view?: GoldenRouteView
@@ -97,8 +123,7 @@ export interface GoldenRouteState {
 export function parseGoldenQuery(search: string): GoldenRouteState | undefined {
   const params = new URLSearchParams(search)
   const rawView = params.get('gv')
-  const view: GoldenRouteView | undefined =
-    rawView === 'errors' || rawView === 'history' ? rawView : undefined
+  const view = isGoldenRouteView(rawView) ? rawView : undefined
   const recordKey = params.get('gr')?.trim() || undefined
   const scopeRaw = params.get('gs')
   const scope = scopeRaw === 'all' || scopeRaw === 'article' ? scopeRaw : undefined

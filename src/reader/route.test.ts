@@ -163,6 +163,15 @@ describe('route：golden 子视图 / 历史详情', () => {
     })
   })
 
+  it('plan / drill / recall / summary / bank / exam 也能往返，home 不写进 URL', () => {
+    for (const view of ['plan', 'drill', 'recall', 'summary', 'bank', 'exam'] as const) {
+      const path = goldenPanelPath('my-article', { view })
+      expect(path).toContain(`gv=${view}`)
+      expect(parseGoldenQuery(path.split('?')[1])).toEqual({ view })
+    }
+    expect(parseGoldenQuery('?gv=home')).toBeUndefined()
+  })
+
   it('非 golden 面板不认 golden 子视图 query；坏 gv 当没有，gr 单独保留', () => {
     expect(parseReaderRoute('/reader/p/golden', '?gv=errors')).toMatchObject({
       panel: 'golden',

@@ -142,6 +142,113 @@ describe('GoldenPanel', () => {
     expect(setView).toHaveBeenCalledWith('errors')
   })
 
+  it('bank / plan / summary 都能由 URL 深链接', () => {
+    for (const view of ['bank', 'plan', 'summary'] as const) {
+      const setView = vi.fn()
+      const { unmount } = render(
+        <GoldenPanel
+          api={fakeApi({ view: 'home', setView })}
+          articleTitle="A"
+          onSpeak={vi.fn()}
+          actions={{
+            onExportMarkdown: vi.fn(),
+            goldenRoute: { view },
+            onNavigateGolden: vi.fn(),
+          }}
+        />,
+      )
+      expect(setView).toHaveBeenCalledWith(view)
+      unmount()
+    }
+  })
+
+  it('点开子视图 push 进 URL，回到课程页用 replace', async () => {
+    const onNavigateGolden = vi.fn()
+    const setView = vi.fn()
+    const { rerender } = render(
+      <GoldenPanel
+        api={fakeApi({ view: 'home', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), onNavigateGolden }}
+      />,
+    )
+    expect(onNavigateGolden).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByText('梳理思路'))
+    expect(setView).toHaveBeenCalledWith('plan')
+    rerender(
+      <GoldenPanel
+        api={fakeApi({ view: 'plan', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), onNavigateGolden }}
+      />,
+    )
+    await waitFor(() =>
+      expect(onNavigateGolden).toHaveBeenCalledWith({ view: 'plan' }, { replace: false }),
+    )
+
+    rerender(
+      <GoldenPanel
+        api={fakeApi({ view: 'plan', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), onNavigateGolden, goldenRoute: { view: 'plan' } }}
+      />,
+    )
+    rerender(
+      <GoldenPanel
+        api={fakeApi({ view: 'home', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), onNavigateGolden, goldenRoute: { view: 'plan' } }}
+      />,
+    )
+    await waitFor(() => expect(onNavigateGolden).toHaveBeenLastCalledWith({}, { replace: true }))
+  })
+
+  it('浏览器返回由 route 驱动视图，不反向写回历史', async () => {
+    const setView = vi.fn()
+    const onNavigateGolden = vi.fn()
+    const actions = { onExportMarkdown: vi.fn(), onNavigateGolden }
+    const { rerender } = render(
+      <GoldenPanel
+        api={fakeApi({ view: 'bank', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ ...actions, goldenRoute: { view: 'bank' } }}
+      />,
+    )
+    expect(onNavigateGolden).not.toHaveBeenCalled()
+
+    rerender(
+      <GoldenPanel
+        api={fakeApi({ view: 'bank', setView })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={actions}
+      />,
+    )
+    await waitFor(() => expect(setView).toHaveBeenCalledWith('home'))
+    expect(onNavigateGolden).not.toHaveBeenCalled()
+  })
+
+  it('没有 gv 时把本机恢复的子视图 replace 进 URL', async () => {
+    const onNavigateGolden = vi.fn()
+    render(
+      <GoldenPanel
+        api={fakeApi({ view: 'bank' })}
+        articleTitle="A"
+        onSpeak={vi.fn()}
+        actions={{ onExportMarkdown: vi.fn(), onNavigateGolden }}
+      />,
+    )
+    await waitFor(() =>
+      expect(onNavigateGolden).toHaveBeenCalledWith({ view: 'bank' }, { replace: true }),
+    )
+  })
+
   it('未选金句时，遣词造句 / 逆向回顾禁用', () => {
     const api = fakeApi()
     render(<GoldenPanel api={api} articleTitle="A" onSpeak={vi.fn()} actions={{ onExportMarkdown: vi.fn() }} />)

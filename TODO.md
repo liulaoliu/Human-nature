@@ -80,8 +80,9 @@
 > 7. 格式化：4 处「函数头与首行挤在一行」+ 1 处注释缩进改回正常。
 >
 > **留着没修（知道就够，别当已解决）**：
-> - 金句课子视图（`bank` / `plan` / `history` …）仍只在 `goldenSession` + localStorage，**不进 URL**；
->   它是侧栏面板不是整页会话，暂不受「整页界面必须有 URL」约束，但刷新回不到原视图。
+> - ~~金句课子视图（`bank` / `plan` / `history` …）仍只在 `goldenSession` + localStorage，**不进 URL**~~；
+>   **2026-11-06 已修**：`plan/drill/recall/summary/bank/exam/errors/history` 全部写 `?gv=…`，
+>   刷新 / 分享 / 浏览器返回都能回到原视图；打开 push、页内回课程页 replace。
 > - 三个导出器仍各写自己的布局 CSS（分栏/条目间距），公共外壳已收口，版面差异是刻意的。
 > - ~~`data/xueba.db` 2 条词卡自相矛盾~~ **2026-10-30 复测已清零**：`check_vocab_sense` ① 词性释义打架 **0**、
 >   ② 词被污染 **0**，只剩 13 条「词典里有多词性、占位可能选错义项」的提示（不拦 gates，卡里重查一次就消）。
