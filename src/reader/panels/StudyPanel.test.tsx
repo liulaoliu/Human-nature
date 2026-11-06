@@ -215,8 +215,11 @@ describe('StudyPanel：卡片与评分', () => {
     expect(onReveal).toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: /^认识/ })).toBeNull()
 
+    expect(screen.queryByText(/预计下次/)).toBeNull()
+
     rerender(<StudyPanel model={panelModel({ revealed: true })} />)
-    expect(screen.getByText(/复习 2 次/)).toBeTruthy()
+    expect(screen.getByText(/复习 2 次/).textContent).toContain('预计下次：认识')
+    expect(document.querySelector('.grade-preview')).toBeNull()
   })
 
   it('揭示后三个评分走 onGrade', () => {

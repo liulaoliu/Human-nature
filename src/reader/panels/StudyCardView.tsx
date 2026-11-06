@@ -4,11 +4,12 @@ import {
   displayMeaning,
   isPriority,
   normalizePos,
+  review,
   spellingMatches,
   vocabCardBlocks,
   type StudyMode,
 } from '../../core/vocab'
-import { fmtDue } from '../format'
+import { fmtDue, fmtInterval } from '../format'
 import VocabBlocks from './VocabBlocks'
 import { MeaningQuiz, type MeaningReveal } from './StudyDrill'
 
@@ -34,6 +35,8 @@ export interface StudyCardViewProps {
   meaningGate: boolean
   /** 卡片热度（0–4，越久越红）。 */
   heat: number
+  /** 当前卡可以评分：把「预计下次」并进卡片 SRS 行，省一条独立提示行。 */
+  gradeable: boolean
 
   onSpeak: (word: string) => void
   onReveal: () => void
@@ -66,6 +69,7 @@ export default function StudyCardView({
   reviewKeys,
   meaningGate,
   heat,
+  gradeable,
   onSpeak,
   onReveal,
   onInputChange,
@@ -202,6 +206,11 @@ export default function StudyCardView({
                 复习 {card.reviewState.repetitions} 次
                 {(card.reviewState.lapses ?? 0) > 0 ? ` · 忘记 ${card.reviewState.lapses} 次` : ''}
                 {card.reviewState.due ? ` · 下次 ${fmtDue(card.reviewState.due)}` : ' · 还没排期'}
+                {gradeable && !reviewMode
+                  ? ` · 预计下次：认识 ${fmtInterval(review(card.reviewState, 'good').interval)}` +
+                    ` · 模糊 ${fmtInterval(review(card.reviewState, 'hard').interval)}` +
+                    ` · 忘记了 ${fmtInterval(review(card.reviewState, 'again').interval)}`
+                  : ''}
                 {isPriority(card) ? ' · 🔥 优先重练' : ''}
                 {relearning ? ' · ♻️ 重学中' : ''}
                 {card.tags.includes('不认识') ? ' · 🆕 标为不认识' : ''}

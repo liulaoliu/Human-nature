@@ -1,6 +1,5 @@
 import type { VocabItem } from '../../types/document'
-import { fmtInterval } from '../format'
-import { review, type DrillReason, type ReviewGrade, type StudyMode } from '../../core/vocab'
+import type { DrillReason, ReviewGrade, StudyMode } from '../../core/vocab'
 import DrillBoard, { type MeaningReveal } from './StudyDrill'
 
 /**
@@ -140,26 +139,17 @@ export default function StudyActions(props: StudyActionsProps) {
 
   if (canGrade) {
     return (
-      <>
-        {!reviewMode && (
-          <div className="muted grade-preview">
-            预计下次：认识 {fmtInterval(review(card.reviewState, 'good').interval)} · 模糊{' '}
-            {fmtInterval(review(card.reviewState, 'hard').interval)} · 忘记了{' '}
-            {fmtInterval(review(card.reviewState, 'again').interval)}
-          </div>
-        )}
-        <div className="bar study-actions">
-          <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
-            认识 <kbd>1</kbd>
-          </button>
-          <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
-            模糊 <kbd>2</kbd>
-          </button>
-          <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
-            忘记了 <kbd>3</kbd>
-          </button>
-        </div>
-      </>
+      <div className="bar study-actions">
+        <button className="primary" onClick={() => (reviewMode ? onReviewAnswer('good') : onGrade('good'))}>
+          认识 <kbd>1</kbd>
+        </button>
+        <button onClick={() => (reviewMode ? onReviewAnswer('hard') : onGrade('hard'))}>
+          模糊 <kbd>2</kbd>
+        </button>
+        <button onClick={() => (reviewMode ? onReviewAnswer('again') : onGrade('again'))}>
+          忘记了 <kbd>3</kbd>
+        </button>
+      </div>
     )
   }
 

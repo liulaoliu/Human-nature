@@ -192,6 +192,7 @@ export default function StudyPanel({ model }: StudyPanelProps) {
                 reviewKeys={reviewKeys}
                 meaningGate={meaningGate}
                 heat={heat}
+                gradeable={canGrade}
                 onSpeak={onSpeak}
                 onReveal={onReveal}
                 onInputChange={onInputChange}
