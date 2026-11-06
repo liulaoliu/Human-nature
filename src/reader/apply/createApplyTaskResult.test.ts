@@ -53,6 +53,23 @@ describe('createApplyTaskResult：普通 factory', () => {
     expect(params.persist).toHaveBeenCalled()
   })
 
+  it('六个专用任务各走自己的 handler（表驱动，防止映射写错）', () => {
+    const cases: [string, string, string][] = [
+      ['auto_vocab', '!!!', '没解析出单词'],
+      ['golden', '{}', '先打开一篇文章'],
+      ['listening', '{}', '没解析出题目'],
+      ['language', '{}', '没解析出语言点'],
+      ['imitation', '{}', '没解析出仿写任务'],
+      ['feedback', '{}', '没解析出批改结果'],
+    ]
+    for (const [task, raw, expected] of cases) {
+      const params = makeParams()
+      const apply = createApplyTaskResult(params)
+      const out = apply(task as never, raw, [], [])
+      expect(out.report.join(' '), task).toContain(expected)
+    }
+  })
+
   it('切篇后拒绝应用：s001 只能写回复制提示词时的那篇', () => {
     const params = { ...makeParams(), articleKey: 'saved:B' }
     const apply = createApplyTaskResult(params)
