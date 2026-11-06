@@ -112,8 +112,24 @@ export default function StudyCardView({
     )
   }
 
+  const reveal = spellingFront || reviewKeys ? undefined : onReveal
   return (
-    <div className={'study-card heat-' + heat} onClick={spellingFront || reviewKeys ? undefined : onReveal}>
+    <div
+      className={'study-card heat-' + heat}
+      onClick={reveal}
+      role={reveal ? 'button' : undefined}
+      tabIndex={reveal ? 0 : undefined}
+      aria-label={reveal ? '单词卡片，回车或空格看释义' : undefined}
+      onKeyDown={
+        reveal
+          ? (e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return
+              e.preventDefault()
+              reveal()
+            }
+          : undefined
+      }
+    >
       {spellingFront ? (
         <div className="study-prompt">
           <div className="study-meaning">

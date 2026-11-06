@@ -1,6 +1,6 @@
-import { useEffect } from 'react'
 import GoldenFeedback from './GoldenFeedback'
 import { writingRecordLabel, type WritingRecord } from '../../../core/writing'
+import { useHotkeys } from '../../useHotkeys'
 
 /** 错因页的「看批改」抽屉；完整反馈复用历史详情的 GoldenFeedback。 */
 export default function GoldenRecordDrawer({
@@ -13,14 +13,17 @@ export default function GoldenRecordDrawer({
   /** 有路由时在历史页打开同一条；没有就隐藏 */
   onOpenHistory?: () => void
 }) {
-  useEffect(() => {
-    if (!record) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [record, onClose])
+  // 优先级高于金句课（45）：Esc 只关抽屉，不再顺手退出整课。
+  useHotkeys(
+    (e) => {
+      if (e.key !== 'Escape') return
+      e.preventDefault()
+      e.stopPropagation()
+      onClose()
+    },
+    !!record,
+    60,
+  )
 
   if (!record) return null
   return (

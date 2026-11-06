@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ModalShell from './ModalShell'
 import type { ArticleVocabEntry, VocabItem } from '../../types/document'
 import {
   PRINT_CONTENT_LABEL,
@@ -138,8 +139,7 @@ export default function ExportPanel({
   }
 
   return (
-    <div className="plan-overlay" onClick={onClose}>
-      <div className="plan-panel export-panel" onClick={(e) => e.stopPropagation()}>
+    <ModalShell title="打印 / 导出" onClose={onClose} panelClassName="export-panel">
         <div className="bar plan-head">
           <b>🖨 打印 / 导出</b>
           <span className="muted">
@@ -330,7 +330,6 @@ export default function ExportPanel({
             活动热力图、学习时长是全局统计，不随单篇走；整库搬家用侧栏「导出全部」。
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

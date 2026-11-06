@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react'
+import ModalShell from './ModalShell'
 import { AI_BATCH_NAME } from '../labels'
 import type { IntensivePlan, IntensiveStageKey } from '../../core/intensive'
 import type { DrillKind, DrillLimits, QuizDrillKind } from '../../core/intensiveDrill'
@@ -88,10 +89,9 @@ export default function IntensivePanel({
     ? `⏳ ${AI_BATCH_NAME} · 第 ${batchRound} 轮 · ${batchPhase || '处理中'} ${batchDone}/${batchTotal}`
     : `⚡ ${AI_BATCH_NAME}`
   return (
-    // 跑批中：点遮罩不关（一不留神就点没了，还以为是跑批失败）。真要收起来走「隐藏」按钮，
+    // 跑批中：点遮罩/Esc 都不关（一不留神就点没了，还以为是跑批失败）。真要收起来走「隐藏」按钮，
     // 跑批在后台继续，再打开面板能看到进度和「取消」。
-    <div className="plan-overlay" onClick={busy ? undefined : onClose}>
-      <div className="plan-panel intensive-panel" ref={panelRef} onClick={(e) => e.stopPropagation()}>
+    <ModalShell title="精读工作流" onClose={onClose} panelClassName="intensive-panel" busy={busy} panelRef={panelRef}>
         <div className="bar plan-head">
           <b>🎯 精读工作流</b>
           <span className={'ilevel ilevel-' + plan.level}>{plan.levelLabel}</span>
@@ -241,7 +241,6 @@ export default function IntensivePanel({
             </div>
           ))}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

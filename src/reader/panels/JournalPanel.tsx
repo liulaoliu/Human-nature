@@ -1,6 +1,7 @@
 import type { JournalDay, JournalSummaryRow } from '../../core/journal'
 import type { Heatmap } from '../../core/activity'
 import LanguageLines from './LanguageLines'
+import ModalShell from './ModalShell'
 
 export interface JournalPanelProps {
   onClose: () => void
@@ -41,8 +42,7 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, su
   )
 
   return (
-    <div className="plan-overlay" onClick={onClose}>
-      <div className="plan-panel journal-panel" onClick={(e) => e.stopPropagation()}>
+    <ModalShell title="学习日志" onClose={onClose} panelClassName="journal-panel">
         <div className="bar plan-head">
           <b>📅 学习日志</b>
           <button onClick={() => prev && onDayChange(prev)} disabled={!prev} title="前一天" aria-label="前一天">
@@ -176,7 +176,6 @@ export default function JournalPanel({ onClose, days, day, onDayChange, data, su
             <div className="muted">没有（语言点从生成/添加那天起才有记录）</div>
           )}
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

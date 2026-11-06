@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import ModalShell from './ModalShell'
 import { AI_BATCH_NAME } from '../labels'
 import { readJson, writeJson } from '../storage'
 
@@ -93,8 +94,7 @@ export default function PlanPanel({
   const doneCount = STEPS.filter((s) => checked.includes(s.id)).length
 
   return (
-    <div className="plan-overlay" onClick={onClose}>
-      <div className="plan-panel" onClick={(e) => e.stopPropagation()}>
+    <ModalShell title="今日计划" onClose={onClose}>
         <div className="bar plan-head">
           <b>📋 今日计划</b>
           <span className="muted">
@@ -137,7 +137,6 @@ export default function PlanPanel({
             </button>
           </div>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

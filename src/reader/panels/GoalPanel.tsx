@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import ModalShell from './ModalShell'
 import { buildHeatmap } from '../../core/activity'
 import { goalLevel, goalPct, goalReached, groupReadDone, readDoneTotals, type ReadDone } from '../../core/goals'
 
@@ -69,8 +70,7 @@ export default function GoalPanel({
   const maxDay = heat.max
 
   return (
-    <div className="plan-overlay" onClick={onClose}>
-      <div className="plan-panel goal-panel" onClick={(e) => e.stopPropagation()}>
+    <ModalShell title="目标备忘" onClose={onClose} panelClassName="goal-panel">
         <div className="bar plan-head">
           <b>📌 目标备忘</b>
           <span className={'ilevel ilevel-' + (reached ? 3 : pct >= 50 ? 1 : 0)}>
@@ -221,7 +221,6 @@ export default function GoalPanel({
             onChange={(e) => onMemoChange(e.target.value)}
           />
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }

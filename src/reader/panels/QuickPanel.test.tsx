@@ -41,6 +41,15 @@ describe('QuickPanel', () => {
     expect(onReveal).toHaveBeenCalled()
   })
 
+  it('卡片本身有键盘语义：Enter / 空格都能揭示', () => {
+    const onReveal = vi.fn()
+    render(<QuickPanel {...props({ onReveal })} />)
+    const card = screen.getByRole('button', { name: /单词卡片/ })
+    fireEvent.keyDown(card, { key: 'Enter' })
+    fireEvent.keyDown(card, { key: ' ' })
+    expect(onReveal).toHaveBeenCalledTimes(2)
+  })
+
   it('揭示后显示词性/释义/用法，评分按钮回调', () => {
     const onGrade = vi.fn()
     render(<QuickPanel {...props({ revealed: true, onGrade })} />)

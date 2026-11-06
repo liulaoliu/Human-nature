@@ -44,7 +44,7 @@ describe('GoalPanel：今日读文', () => {
     render(<GoalPanel {...props({ onGoalChange })} />)
     expect(screen.getByText('0 篇')).toBeTruthy()
     expect(screen.getByText('今天还没读完文章')).toBeTruthy()
-    fireEvent.change(screen.getByLabelText(/目标/), { target: { value: '2' } })
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '2' } })
     expect(onGoalChange).toHaveBeenCalledWith(2)
   })
 

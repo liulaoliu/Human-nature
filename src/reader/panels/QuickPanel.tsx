@@ -37,7 +37,18 @@ export default function QuickPanel({
 
       {current ? (
         <>
-          <div className="study-card quick-card" onClick={onReveal}>
+          <div
+            className="study-card quick-card"
+            onClick={onReveal}
+            role="button"
+            tabIndex={0}
+            aria-label="单词卡片，回车或空格看释义"
+            onKeyDown={(e) => {
+              if (e.key !== 'Enter' && e.key !== ' ') return
+              e.preventDefault()
+              onReveal()
+            }}
+          >
             <div className="study-word">
               {current.word}
               <button
