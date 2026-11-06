@@ -1,7 +1,7 @@
 import { useCallback, type Dispatch, type SetStateAction } from 'react'
 import type { ProductionMode, ProductionPrompt, ProductionTargetPool } from '../../core/production'
 import type { ProductionStage } from './useProductionSession'
-import type { ProductionStartPayload } from './useProductionPacks'
+import type { ProductionStartPayload } from './productionPackRuns'
 
 export interface UseProductionSessionActionsParams {
   setPrompts: Dispatch<SetStateAction<ProductionPrompt[]>>

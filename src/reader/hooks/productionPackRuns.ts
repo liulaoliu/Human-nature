@@ -5,6 +5,7 @@ import {
   validateProductionPack,
   validateTopicPack,
   buildTopicPackPrompt,
+  buildYogurtPrompts,
 } from '../../core/productionPrompts'
 import {
   buildProductionTargets,
@@ -50,6 +51,34 @@ export interface BuildTargetPackPlanInput {
   articleTitle: string
   progress: readonly ProductionProgressLike[]
   now: () => Date
+}
+
+/** 出题成功后交给会话层：题目、候选池、题组 id 与提示。 */
+export interface ProductionStartPayload {
+  prompts: ProductionPrompt[]
+  pool: ProductionTargetPool
+  sessionId: string
+  mode: ProductionMode
+  topic: string
+  notice: string
+}
+
+/** 三种起跑方式共用的依赖；全部从 hook 参数传入，不新开读写口子。 */
+export interface ProductionPackStartContext extends BuildTargetPackPlanInput {
+  sessionId: string
+  flash: (message: string) => void
+  ensureAi: () => Promise<boolean>
+  callAi: (task: string, prompt: string) => Promise<string>
+  copy: (prompt: string) => Promise<boolean>
+  onStart: (payload: ProductionStartPayload) => void
+}
+
+/** 起跑过程中要改的四个 React 状态，由 hook 提供 setter。 */
+export interface ProductionPackStartState {
+  setGenerating: (value: boolean) => void
+  setPackError: (value: string) => void
+  setPasteKind: (value: '' | 'pack') => void
+  setPendingPacket: (value: PendingPacket | null) => void
 }
 
 /** 选目标块、算每题数量、拼出题提示词；纯计算，不碰 React 状态。 */
@@ -243,4 +272,157 @@ export function parsePacketPaste(
       ? validateTopicPack(parsed, pending.maxPrompts)
       : validateProductionPack(parsed, pending.maxPrompts, pending.targetsPerPrompt, requireModel)
   return quality.ok ? { ok: true, prompts: parsed } : { ok: false, error: `题目不合格：${quality.reason}` }
+}
+
+/** 跑一次 AI 出题：自动重试提示、失败落回粘回框；成功才交给 onPrompts。 */
+async function runPack(
+  state: ProductionPackStartState,
+  flash: (message: string) => void,
+  run: () => Promise<PackRunResult>,
+  onPrompts: (prompts: ProductionPrompt[]) => void,
+): Promise<void> {
+  state.setGenerating(true)
+  try {
+    const result = await run()
+    if (result.retried) flash('AI 输出不合格，已自动重试一次')
+    if (!result.prompts) {
+      state.setPackError(result.error ?? 'AI 没有返回可用的题目')
+      state.setPasteKind('pack')
+      return
+    }
+    onPrompts(result.prompts)
+  } catch (e) {
+    state.setPackError(String((e as Error)?.message || e))
+    state.setPasteKind('pack')
+  } finally {
+    state.setGenerating(false)
+  }
+}
+
+/** 风味酸奶：本机拆句，不调 AI。 */
+export async function runYogurtStart(ctx: ProductionPackStartContext): Promise<void> {
+  const { settings, sessionId, flash, onStart } = ctx
+  const yogurt = buildYogurtPrompts(
+    settings.sourceText,
+    settings.referenceText,
+    settings.yogurtDirection,
+    settings.yogurtSplit,
+    settings.yogurtParagraph,
+  )
+  if (!yogurt) {
+    flash('风味酸奶需要原文和参考译文；两边都要有内容')
+    return
+  }
+  onStart({
+    prompts: yogurt.prompts,
+    pool: { targets: [], total: 0, weak: 0 },
+    sessionId,
+    mode: 'yogurt',
+    topic: PRODUCTION_MODE_LABEL.yogurt,
+    notice: yogurt.warning,
+  })
+}
+
+/** 纯主题包（全脂随机主题 / 脱脂奶无词块）：AI 出题或复制提示词粘回。 */
+export async function runTopicStart(
+  ctx: ProductionPackStartContext,
+  state: ProductionPackStartState,
+): Promise<void> {
+  const { settings, articleTitle, sessionId, flash, ensureAi, callAi, copy, onStart } = ctx
+  if (settings.mode === 'skim' && !settings.topic.trim()) {
+    flash('脱脂奶需要先写一个主题')
+    return
+  }
+  const plan = buildTopicPackPlan(settings, articleTitle)
+  state.setPendingPacket({
+    kind: 'topic',
+    prompt: plan.prompt,
+    mode: plan.mode,
+    topic: plan.topic,
+    allowed: [],
+    maxPrompts: plan.count,
+    targetsPerPrompt: 0,
+    pool: { targets: [], total: 0, weak: 0 },
+  })
+  if (!(await ensureAi())) {
+    state.setPasteKind('pack')
+    if (await copy(plan.prompt)) flash('已复制出题提示词；把 AI 返回的 JSON 粘到下面')
+    return
+  }
+  await runPack(state, flash, () => runTopicPack(plan.prompt, plan.count, callAi), (prompts) => {
+    state.setPendingPacket(null)
+    state.setPasteKind('')
+    onStart({
+      prompts,
+      pool: { targets: [], total: 0, weak: 0 },
+      sessionId,
+      mode: plan.mode,
+      topic: plan.topic,
+      notice: '',
+    })
+  })
+}
+
+/** 目标块包（全脂 / 脱脂奶带本机词块）：选池、硬校验、AI 出题或粘回。 */
+export async function runTargetStart(
+  ctx: ProductionPackStartContext,
+  state: ProductionPackStartState,
+): Promise<void> {
+  const { settings, doc, library, articleIdentity, articleTitle, progress, now, sessionId, flash, ensureAi, callAi, copy, onStart } = ctx
+  const planned = buildTargetPackPlan({
+    settings,
+    doc,
+    library,
+    articleIdentity,
+    articleTitle,
+    progress,
+    now,
+  })
+  if (!planned.ok) {
+    flash(planned.message)
+    return
+  }
+  const plan = planned.plan
+  for (const notice of plan.notices) flash(notice)
+  if (plan.shortNotice) flash(plan.shortNotice)
+  state.setPendingPacket({
+    kind: 'target',
+    prompt: plan.prompt,
+    mode: plan.mode,
+    topic: plan.topic,
+    allowed: plan.pool.targets,
+    maxPrompts: plan.count,
+    targetsPerPrompt: plan.per,
+    pool: plan.pool,
+  })
+  if (!(await ensureAi())) {
+    state.setPasteKind('pack')
+    if (await copy(plan.prompt)) flash('已复制出题提示词；把 AI 返回的 JSON 粘到下面')
+    return
+  }
+  await runPack(
+    state,
+    flash,
+    () =>
+      runTargetPack({
+        prompt: plan.prompt,
+        pool: plan.pool,
+        count: plan.count,
+        per: plan.per,
+        requireModel: settings.variant !== 'translate',
+        callAi,
+      }),
+    (prompts) => {
+      state.setPendingPacket(null)
+      state.setPasteKind('')
+      onStart({
+        prompts,
+        pool: plan.pool,
+        sessionId,
+        mode: plan.mode,
+        topic: plan.topic,
+        notice: plan.shortNotice,
+      })
+    },
+  )
 }
