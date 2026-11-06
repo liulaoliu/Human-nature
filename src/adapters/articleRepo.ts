@@ -11,10 +11,28 @@ export type { ArticleRepoPort, SavedArticle } from '../core/ports'
  * 仍用这个独立库 `shadowing-reader`，不和录音库、词库争版本号。
  */
 const DB_NAME = 'shadowing-reader'
-const DB_VERSION = 1
+const DB_VERSION = 2
 const STORE = 'articles'
+const SYNC_STORE = 'article_sync'
 
-export class IdbArticleRepo implements ArticleRepoPort {
+/**
+ * 本地镜像的同步状态。服务端是主存，但「服务端没有」有两种含义：
+ * 离线新建（要上传）和别处已删除（不能复活）。只靠 updatedAt 分不出来。
+ */
+export interface ArticleSyncMeta {
+  id: string
+  pendingUpload?: boolean
+  pendingDelete?: boolean
+}
+
+export interface LocalArticleRepo extends ArticleRepoPort {
+  getSync(id: string): Promise<ArticleSyncMeta | null>
+  listSync(): Promise<ArticleSyncMeta[]>
+  setSync(meta: ArticleSyncMeta): Promise<void>
+  removeSync(id: string): Promise<void>
+}
+
+export class IdbArticleRepo implements LocalArticleRepo {
   private db: Promise<IDBDatabase> | null = null
 
   private open(): Promise<IDBDatabase> {
@@ -25,6 +43,9 @@ export class IdbArticleRepo implements ArticleRepoPort {
           if (!req.result.objectStoreNames.contains(STORE)) {
             req.result.createObjectStore(STORE, { keyPath: 'id' })
           }
+          if (!req.result.objectStoreNames.contains(SYNC_STORE)) {
+            req.result.createObjectStore(SYNC_STORE, { keyPath: 'id' })
+          }
         }
         req.onsuccess = () => resolve(req.result)
         req.onerror = () => reject(req.error)
@@ -33,14 +54,22 @@ export class IdbArticleRepo implements ArticleRepoPort {
     return this.db
   }
 
-  private async run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  private async runStore<T>(
+    storeName: string,
+    mode: IDBTransactionMode,
+    fn: (store: IDBObjectStore) => IDBRequest<T>,
+  ): Promise<T> {
     const db = await this.open()
     return new Promise<T>((resolve, reject) => {
-      const t = db.transaction(STORE, mode)
-      const req = fn(t.objectStore(STORE))
+      const t = db.transaction(storeName, mode)
+      const req = fn(t.objectStore(storeName))
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
     })
+  }
+
+  private run<T>(mode: IDBTransactionMode, fn: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+    return this.runStore(STORE, mode, fn)
   }
 
   async list(): Promise<SavedArticle[]> {
@@ -66,10 +95,29 @@ export class IdbArticleRepo implements ArticleRepoPort {
   async remove(id: string): Promise<void> {
     await this.run('readwrite', (s) => s.delete(id))
   }
+
+  getSync(id: string): Promise<ArticleSyncMeta | null> {
+    return this.runStore<ArticleSyncMeta | undefined>(SYNC_STORE, 'readonly', (s) => s.get(id)).then(
+      (v) => v ?? null,
+    )
+  }
+
+  listSync(): Promise<ArticleSyncMeta[]> {
+    return this.runStore<ArticleSyncMeta[]>(SYNC_STORE, 'readonly', (s) => s.getAll() as IDBRequest<ArticleSyncMeta[]>)
+  }
+
+  setSync(meta: ArticleSyncMeta): Promise<void> {
+    return this.runStore(SYNC_STORE, 'readwrite', (s) => s.put(meta)).then(() => undefined)
+  }
+
+  removeSync(id: string): Promise<void> {
+    return this.runStore(SYNC_STORE, 'readwrite', (s) => s.delete(id)).then(() => undefined)
+  }
 }
 
-export class MemoryArticleRepo implements ArticleRepoPort {
+export class MemoryArticleRepo implements LocalArticleRepo {
   private map = new Map<string, SavedArticle>()
+  private sync = new Map<string, ArticleSyncMeta>()
   async list() {
     return [...this.map.values()].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
@@ -83,13 +131,25 @@ export class MemoryArticleRepo implements ArticleRepoPort {
   async remove(id: string) {
     this.map.delete(id)
   }
+  async getSync(id: string) {
+    return this.sync.get(id) ?? null
+  }
+  async listSync() {
+    return [...this.sync.values()]
+  }
+  async setSync(meta: ArticleSyncMeta) {
+    this.sync.set(meta.id, { ...meta })
+  }
+  async removeSync(id: string) {
+    this.sync.delete(id)
+  }
 }
 
 export function createArticleRepo(): ArticleRepoPort {
   return new HybridArticleRepo()
 }
 
-function createLocalArticleRepo(): ArticleRepoPort {
+function createLocalArticleRepo(): LocalArticleRepo {
   try {
     if (typeof indexedDB === 'undefined') return new MemoryArticleRepo()
     return new IdbArticleRepo()
@@ -113,30 +173,95 @@ function sortArticles(list: SavedArticle[]): SavedArticle[] {
 export class HybridArticleRepo implements ArticleRepoPort {
   private readonly hybrid = new HybridMode(() => storeHealth())
 
-  constructor(private readonly local: ArticleRepoPort = createLocalArticleRepo()) {}
+  constructor(private readonly local: LocalArticleRepo = createLocalArticleRepo()) {}
 
   private useSqlite(): Promise<boolean> {
     return this.hybrid.useSqlite()
   }
 
+  private markSynced(id: string): Promise<void> {
+    return this.local.setSync({ id })
+  }
+
+  private markPendingUpload(id: string): Promise<void> {
+    return this.local.setSync({ id, pendingUpload: true })
+  }
+
+  private markPendingDelete(id: string): Promise<void> {
+    return this.local.setSync({ id, pendingDelete: true })
+  }
+
   /**
-   * 把 IndexedDB 里「服务端没有 / 更新」的文章补上（只在启动时调用一次）。
+   * 同步本地镜像与服务端（只在启动时调用一次）。
    *
-   * 以前这个迁移藏在 `list()` 里：任何一次列表读取都顺手 PUT，读接口有副作用，
-   * 失败还会把模式踢回 local。现在读接口只读，迁移由宿主显式触发。
+   * 关键：本地镜像 ≠ 离线新建。只有 `pendingUpload`（或升级前没有同步记录的老镜像）
+   * 才允许上传；已同步镜像在服务端消失表示别处删除，必须清掉，不能重新 PUT 复活。
    */
   async reconcile(): Promise<void> {
     if (!(await this.useSqlite())) return
     try {
       const r = await storeRequest<{ articles: SavedArticle[] }>('/articles')
-      const byId = new Map(r.articles.map((a) => [a.id, a]))
-      for (const local of await this.local.list()) {
-        const server = byId.get(local.id)
-        if (!server || (local.updatedAt && local.updatedAt > server.updatedAt)) {
+      const serverById = new Map(r.articles.map((a) => [a.id, a]))
+      const localAll = await this.local.list()
+      const localById = new Map(localAll.map((a) => [a.id, a]))
+      const syncById = new Map((await this.local.listSync()).map((m) => [m.id, m]))
+      const removed = new Set<string>()
+
+      // 先重试别处/离线删除留下的墓碑；失败就留着，本次不复活文章。
+      for (const meta of [...syncById.values()]) {
+        if (!meta.pendingDelete) continue
+        try {
+          await storeRequest(`/articles/${encodeURIComponent(meta.id)}`, { method: 'DELETE' })
+          removed.add(meta.id)
+          serverById.delete(meta.id)
+          localById.delete(meta.id)
+          syncById.delete(meta.id)
+          await this.local.remove(meta.id)
+          await this.local.removeSync(meta.id)
+        } catch {
+          this.hybrid.fail()
+        }
+      }
+
+      // 服务端有、本地没有：补一份镜像，之后 get/list 可以离线兜底。
+      for (const [id, article] of serverById) {
+        if (localById.has(id)) continue
+        await this.local.save(article)
+        await this.markSynced(id)
+      }
+
+      for (const local of localAll) {
+        if (removed.has(local.id)) continue
+        const server = serverById.get(local.id)
+        const meta = syncById.get(local.id)
+        // 删除失败的墓碑不能因为服务端还在就当成已同步。
+        if (meta?.pendingDelete) continue
+        const pendingUpload = !meta || meta.pendingUpload === true
+
+        if (!server) {
+          if (pendingUpload) {
+            await storeRequest(`/articles/${encodeURIComponent(local.id)}`, {
+              method: 'PUT',
+              body: JSON.stringify(local),
+            })
+            await this.markSynced(local.id)
+          } else {
+            // 已同步镜像 + 服务端没有 = 别处删除；删本地，绝不 PUT。
+            await this.local.remove(local.id)
+            await this.local.removeSync(local.id)
+          }
+          continue
+        }
+
+        if (local.updatedAt > server.updatedAt) {
           await storeRequest(`/articles/${encodeURIComponent(local.id)}`, {
             method: 'PUT',
             body: JSON.stringify(local),
           })
+          await this.markSynced(local.id)
+        } else {
+          if (server.updatedAt > local.updatedAt) await this.local.save(server)
+          await this.markSynced(local.id)
         }
       }
     } catch {
@@ -150,10 +275,17 @@ export class HybridArticleRepo implements ArticleRepoPort {
       try {
         const r = await storeRequest<{ articles: SavedArticle[] }>('/articles')
         const byId = new Map(r.articles.map((a) => [a.id, a]))
-        // 只读合并：本地更新的一版直接显示（未迁移成功的文章也不会“消失”）。
+        const syncById = new Map((await this.local.listSync()).map((m) => [m.id, m]))
+        // 删除失败/离线留下的墓碑：服务端还没删掉，也不能先放回列表。
+        for (const [id, meta] of syncById) if (meta.pendingDelete) byId.delete(id)
+        // 只读合并：本地更新的一版直接显示；已同步但服务端没有的镜像不再复活。
         for (const local of await this.local.list()) {
+          const meta = syncById.get(local.id)
+          if (meta?.pendingDelete) continue
           const server = byId.get(local.id)
-          if (!server || (local.updatedAt && local.updatedAt > server.updatedAt)) {
+          if (server) {
+            if (local.updatedAt > server.updatedAt) byId.set(local.id, local)
+          } else if (!meta || meta.pendingUpload) {
             byId.set(local.id, local)
           }
         }
@@ -166,17 +298,28 @@ export class HybridArticleRepo implements ArticleRepoPort {
   }
 
   async get(id: string): Promise<SavedArticle | null> {
+    const local = await this.local.get(id)
+    const meta = await this.local.getSync(id)
+    if (meta?.pendingDelete) return null
     if (await this.useSqlite()) {
       try {
         const r = await storeRequest<{ value: SavedArticle | null }>(`/articles/${encodeURIComponent(id)}`)
-        if (r.value) return r.value
-        // 服务端没有：读本地兜底，迁移交给 reconcile()。
-        return this.local.get(id)
+        if (r.value) {
+          // 和 list()/reconcile() 同一口径：本地更新的一版优先。
+          return local && local.updatedAt > r.value.updatedAt ? local : r.value
+        }
+        if (local && (!meta || meta.pendingUpload)) return local
+        // 已同步镜像 + 服务端没有 = 别处删除；清掉，别让旧正文复活。
+        if (local) {
+          await this.local.remove(id)
+          await this.local.removeSync(id)
+        }
+        return null
       } catch {
         this.hybrid.fail()
       }
     }
-    return this.local.get(id)
+    return local
   }
 
   async save(article: SavedArticle): Promise<void> {
@@ -186,23 +329,34 @@ export class HybridArticleRepo implements ArticleRepoPort {
           method: 'PUT',
           body: JSON.stringify(article),
         })
-        void this.local.save(article).catch((e) => console.warn('[文章] 镜像到 IndexedDB 失败', e))
+        try {
+          await this.local.save(article)
+          await this.markSynced(article.id)
+        } catch (e) {
+          console.warn('[文章] 镜像到 IndexedDB 失败', e)
+        }
         return
       } catch {
         this.hybrid.fail()
       }
     }
     await this.local.save(article)
+    await this.markPendingUpload(article.id)
   }
 
   async remove(id: string): Promise<void> {
     if (await this.useSqlite()) {
       try {
         await storeRequest(`/articles/${encodeURIComponent(id)}`, { method: 'DELETE' })
+        await this.local.remove(id)
+        await this.local.removeSync(id)
+        return
       } catch {
         this.hybrid.fail()
       }
     }
+    // 删除失败/离线：本地先删，但留墓碑；reconcile 恢复后重试 DELETE，避免文章再冒出来。
     await this.local.remove(id)
+    await this.markPendingDelete(id)
   }
 }

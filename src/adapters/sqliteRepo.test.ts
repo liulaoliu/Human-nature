@@ -169,10 +169,14 @@ describe('HybridArticleRepo：SQLite 优先，IndexedDB 兜底', () => {
   it('服务端没有的文章从 IndexedDB 补上去', async () => {
     const local = new MemoryArticleRepo()
     await local.save(article('a1'))
+    let saved = false
     const calls = mockStore({
       '/api/store/health': () => jsonResponse({ ok: true }),
-      '/api/store/articles': () => jsonResponse({ ok: true, articles: [] }),
-      '/api/store/articles/a1': () => jsonResponse({ ok: true }),
+      '/api/store/articles': () => jsonResponse({ ok: true, articles: saved ? [article('a1')] : [] }),
+      '/api/store/articles/a1': (init) => {
+        if (init?.method === 'PUT') saved = true
+        return jsonResponse({ ok: true })
+      },
     })
 
     const repo = new HybridArticleRepo(local)
@@ -225,5 +229,101 @@ describe('HybridArticleRepo：SQLite 优先，IndexedDB 兜底', () => {
     expect((await repo.list()).map((a) => a.id)).toEqual(['a3'])
     await repo.save(article('a4'))
     expect((await local.get('a4'))?.id).toBe('a4')
+  })
+})
+
+describe('HybridArticleRepo：本地镜像与服务端删除/离线的状态机', () => {
+  const health = () => jsonResponse({ ok: true })
+
+  it('reconcile 不把已同步的本地镜像当新建：服务端已删就清镜像，不再 PUT', async () => {
+    const local = new MemoryArticleRepo()
+    await local.save(article('a1'))
+    await local.setSync({ id: 'a1' })
+    const calls = mockStore({
+      '/api/store/health': health,
+      '/api/store/articles': () => jsonResponse({ ok: true, articles: [] }),
+    })
+
+    const repo = new HybridArticleRepo(local)
+    await repo.reconcile()
+
+    expect(calls.some((c) => c.path === '/api/store/articles/a1' && c.init?.method === 'PUT')).toBe(false)
+    expect(await local.get('a1')).toBeNull()
+    expect(await repo.list()).toEqual([])
+  })
+
+  it('离线保存标 pendingUpload，恢复后 reconcile 才上传', async () => {
+    const local = new MemoryArticleRepo()
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse({ ok: false }, 503)))
+    const repo = new HybridArticleRepo(local)
+    await repo.save(article('a2'))
+    expect((await local.getSync('a2'))?.pendingUpload).toBe(true)
+
+    const calls = mockStore({
+      '/api/store/health': health,
+      '/api/store/articles': () => jsonResponse({ ok: true, articles: [] }),
+      '/api/store/articles/a2': () => jsonResponse({ ok: true }),
+    })
+    vi.advanceTimersByTime(31_000)
+    await repo.reconcile()
+
+    expect(calls.some((c) => c.path === '/api/store/articles/a2' && c.init?.method === 'PUT')).toBe(true)
+    expect((await local.getSync('a2'))?.pendingUpload).toBeUndefined()
+  })
+
+  it('DELETE 失败留墓碑：list 不把服务端旧文章放回来，恢复后重试删除', async () => {
+    const local = new MemoryArticleRepo()
+    await local.save(article('a1'))
+    await local.setSync({ id: 'a1' })
+    let deleted = false
+    let failDelete = true
+    const calls = mockStore({
+      '/api/store/health': health,
+      '/api/store/articles': () => jsonResponse({ ok: true, articles: deleted ? [] : [article('a1')] }),
+      '/api/store/articles/a1': (init) => {
+        if (init?.method === 'DELETE') {
+          if (failDelete) return jsonResponse({ ok: false }, 500)
+          deleted = true
+          return jsonResponse({ ok: true })
+        }
+        return jsonResponse({ ok: true, value: article('a1') })
+      },
+    })
+
+    const repo = new HybridArticleRepo(local)
+    await repo.remove('a1')
+    expect(await local.get('a1')).toBeNull()
+    expect((await local.getSync('a1'))?.pendingDelete).toBe(true)
+
+    const fresh = new HybridArticleRepo(local)
+    expect(await fresh.list()).toEqual([])
+
+    failDelete = false
+    await fresh.reconcile()
+    expect(calls.some((c) => c.path === '/api/store/articles/a1' && c.init?.method === 'DELETE')).toBe(true)
+    expect(await local.getSync('a1')).toBeNull()
+    expect(await fresh.list()).toEqual([])
+  })
+
+  it('get 本地更新优先；服务端删掉的已同步镜像不能从本地复活', async () => {
+    const local = new MemoryArticleRepo()
+    await local.save(article('a1', '2026-01-02T00:00:00.000Z'))
+    await local.setSync({ id: 'a1' })
+    mockStore({
+      '/api/store/health': health,
+      '/api/store/articles/a1': () =>
+        jsonResponse({ ok: true, value: article('a1', '2026-01-01T00:00:00.000Z') }),
+    })
+    const repo = new HybridArticleRepo(local)
+    expect((await repo.get('a1'))?.updatedAt).toBe('2026-01-02T00:00:00.000Z')
+
+    mockStore({
+      '/api/store/health': health,
+      '/api/store/articles/a1': () => jsonResponse({ ok: true, value: null }),
+    })
+    const afterDelete = new HybridArticleRepo(local)
+    expect(await afterDelete.get('a1')).toBeNull()
+    expect(await local.get('a1')).toBeNull()
   })
 })
