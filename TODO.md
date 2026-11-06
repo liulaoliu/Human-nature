@@ -1,5 +1,50 @@
 # TODO
 
+> **2026-11-06 奶牛工棚复审：已修 3 个 commit，剩下留给下一棒**
+>
+> 复审对象：2026-11-06 拉下来的 157 文件 / +11133 行（奶牛工棚产出训练整套）。
+> 门禁实跑：**360 测试文件 / 3123 passed / 5 skipped**，`npm run gates` exit 0。
+>
+> **已修（别重复做）**
+> 1. `139e16b` **子视图 query 收进 `route.ts`**：新增 `parseProductionQuery` /
+>    `productionPanelPath` / `ProductionRouteState`，`?ph/pm/pa/pt/ptk` 的解析和构造只有一份；
+>    主面板与历史子视图不再各自 `useSearchParams`（原来各拿各的快照整份重建，会互相抹掉）。
+>    接线在 `ReaderApp` 的 `productionActions`（和 `goldenActions` 同一套），
+>    语义：开子视图 push、页面内返回 / 改筛选 replace。
+> 2. `4c6e6ef` **面板拆分**：`ProductionPanel` 776 → **75 行**（壳：标题栏 + 子视图路由 + 阶段切换），
+>    新增 `ProductionSetupView`（588，选草料）/ `ProductionRunView`（180，挤奶）/
+>    `ProductionDoneView`（23，收工）。界面对外不变，10 条面板测试原样通过。
+> 3. `a244a6e` 文档：ARCHITECTURE 补三屏与三个 hook 的体量理由；TESTING §3-67 记「同一 panel
+>    两个视图各拼 query 会互相覆盖」。
+>
+> **还没做（按价值排，逐条单独 commit）**
+> - [ ] **P1 `useProductionPacks.start` 三段分支外移**（296 行 → 目标 ≤200）。现在 `start` 里
+>       酸奶 / 脱脂奶 / 全脂各一段，各自 `await` + 校验 + `onStart`；建议在
+>       `productionPackRuns.ts` 里落成三个编排函数（`runYogurtStart` / `runTopicStart` /
+>       `runTargetStart`），hook 只留 `generating / packError / pasteKind / pendingPacket` 四个状态和
+>       分支选择。注意 `callAi` / `flash` / `onStart` 从参数传入，不要复制新口子。
+> - [ ] **P2 补 `useProductionAttempt` 的直接测试**（292 行，现在只有经 `useProductionSession` 的间接覆盖）。
+>       至少要钉：`grade` 失败不清答案、`applyFeedbackPaste` 坏 JSON 不落库、`rewrite → round 2`、
+>       `skip` 写一条 `source='production'` 但不动目标块进度。
+> - [ ] **P2 `productionPackRuns.ts` 的直接测试**（246 行）：三类包的 count 上限、
+>       目标块不足时的 `shortNotice`、AI 返回不合 schema 时的重试与放弃。
+> - [ ] **P3 其余新增叶子模块无同名测试**（`useDrillWarmup` / `useProductionSettings` /
+>       `useQuizRoundHistory` / `ProductionHint` / `RoundStartPrompt` / `VoiceInputButton` …）。
+>       门禁 R7 只管 `core/`，这不是违规，是覆盖缺口；按「哪天改到它就先补」处理，别为凑数写空测试。
+> - [ ] **P3 README 大改需确认没丢运维信息**（704 → 370 行，-517/+187）：
+>       跟读链路 / Economist PDF 版式档案那几段被压缩，`docs/PIPELINE-PDF.md` 里仍有全文，
+>       但要确认「换一期先核字体」「原文库不进仓库」这两个提醒在新 README 里还能看到。
+> - [ ] **P3 三个 200–300 行 hook 的余地**：`useProductionPacks` 296 / `useProductionSession` 295 /
+>       `useProductionAttempt` 292。理由已写进 ARCHITECTURE；只有 P1 那条值得现在动。
+>
+> **给下一棒的三句话**
+> 1. 工棚的 **URL 只有 `route.ts` 一个写入方**，加子视图 / 筛选项先改 `parseProductionQuery` +
+>    `productionPanelPath` + 往返测试，别在面板里 `useSearchParams`。
+> 2. 工棚的**事实源**不变：作答/批改写 `writing_records(source='production')`，
+>    目标块进度是**派生表**（attempts 归并 → `production_progress`），别把进度当事实源反写历史。
+> 3. 每改一屏先看它归哪个 View：`Setup`（表单）/ `Run`（作答批改）/ `Done`（结算）；
+>    新状态放对应那一屏，别回灌到 `ProductionPanel` 壳里。
+
 > **2026-10-30 统计面板升级（方案 B，已过门禁）**
 >
 > 1. **汇总表**：本周 / 本月 / 累计 × 背词 / 写作 / 复述 / 读完 / 金句 / 练习六类；**整行可点**（标签带 `›`，
