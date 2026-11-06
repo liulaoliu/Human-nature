@@ -222,7 +222,7 @@
 .vtable.has-source th:nth-child(4), .vtable.has-source td:nth-child(4) { width: 33%; }
 .vtable.has-source th:nth-child(5), .vtable.has-source td:nth-child(5) { width: 34px; }
 .vtable .cell-source { color: var(--dim); font-size: 12.5px; }
-.vtable .src-article { color: #cfd5df; }
+.vtable .src-article { color: var(--dim); }
 .vtable .src-sentence { color: var(--dim); margin-top: 2px; line-height: 1.5; }
 .entry .ex.src { color: var(--dim); font-size: 12px; }
 

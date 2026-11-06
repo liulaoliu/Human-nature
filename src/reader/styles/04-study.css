@@ -295,7 +295,7 @@
 .s-pair { display: contents; }
 .tr-block {
   display: block;
-  color: #b7bfcc;
+  color: var(--dim);
   font-size: 0.86em;
   line-height: 1.7;
   margin: 1px 0 8px 2px;
@@ -308,5 +308,5 @@
 }
 /* 只看译文：隐藏英文，段落流不变 */
 .article.tr-only .sent { display: none; }
-.article.tr-only .tr-block { font-size: var(--read); color: #d3d8e2; margin: 0 0 12px; }
+.article.tr-only .tr-block { font-size: var(--read); color: var(--fg); margin: 0 0 12px; }
 
