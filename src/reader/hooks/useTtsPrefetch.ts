@@ -30,6 +30,11 @@ export function useTtsPrefetch({ doc, selectedId, voice, canUseServer, timingsCa
   /** 当前音色（预热回调身份稳定，读 ref 取最新）。 */
   const voiceRef = useRef(voice)
   voiceRef.current = voice
+  const canUseServerRef = useRef(canUseServer)
+  canUseServerRef.current = canUseServer
+  /** 服务端降级期：队列不丢，隔几秒自动再试一次（不要等用户再点新句子）。 */
+  const retryTimerRef = useRef<number | null>(null)
+  const pumpRef = useRef<() => void>(() => {})
   /** 后台预热的队列与去重集，串行执行（不抢用户点击的合成并发）。 */
   const prefetchQueueRef = useRef<string[]>([])
   const prefetchQueuedRef = useRef<Set<string>>(new Set())
@@ -44,7 +49,15 @@ export function useTtsPrefetch({ doc, selectedId, voice, canUseServer, timingsCa
     try {
       while (prefetchQueueRef.current.length) {
         // 服务端在 Edge 降级期：先不预热，队列留着，恢复后自动继续；离线引擎不受影响
-        if (!isOfflineTtsVoice(voiceRef.current) && !canUseServer()) break
+        if (!isOfflineTtsVoice(voiceRef.current) && !canUseServerRef.current()) {
+          if (retryTimerRef.current === null) {
+            retryTimerRef.current = window.setTimeout(() => {
+              retryTimerRef.current = null
+              void pumpRef.current()
+            }, 5000)
+          }
+          break
+        }
         const t = prefetchQueueRef.current.shift()!
         const k = timingKey(voiceRef.current, t)
         if (prefetchDoneRef.current.has(k)) {
@@ -61,7 +74,8 @@ export function useTtsPrefetch({ doc, selectedId, voice, canUseServer, timingsCa
     } finally {
       prefetchingRef.current = false
     }
-  }, [canUseServer])
+  }, [])
+  pumpRef.current = pumpPrefetch
 
   const enqueuePrefetch = useCallback(
     (texts: string[]) => {
@@ -114,7 +128,18 @@ export function useTtsPrefetch({ doc, selectedId, voice, canUseServer, timingsCa
     prefetchQueuedRef.current.clear()
     prefetchDoneRef.current.clear()
     warmTimingsQueuedRef.current.clear()
+    if (retryTimerRef.current !== null) {
+      window.clearTimeout(retryTimerRef.current)
+      retryTimerRef.current = null
+    }
   }, [voice, timingsCache])
+
+  useEffect(
+    () => () => {
+      if (retryTimerRef.current !== null) window.clearTimeout(retryTimerRef.current)
+    },
+    [],
+  )
 
   // 选中某句 → 预热它和其后几句，顺读时下一次点击基本秒播
   useEffect(() => {

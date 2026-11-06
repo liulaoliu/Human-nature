@@ -44,6 +44,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
 })
 
@@ -88,6 +89,21 @@ describe('useTtsPrefetch：降级与音色', () => {
     const head = urls().filter((u) => u.startsWith('/api/tts?'))
     expect(head.some((u) => u.includes('Held.'))).toBe(true)
     expect(head.some((u) => u.includes('After.'))).toBe(true)
+  })
+
+  it('服务恢复后不点新句子也会自动续跑队列', async () => {
+    vi.useFakeTimers()
+    const { rerender } = render(<Harness serverUp={false} />)
+    act(() => api!.warmTexts(['Held.']))
+    await flush()
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    rerender(<Harness serverUp />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5000)
+      for (let i = 0; i < 5; i++) await Promise.resolve()
+    })
+    expect(urls().some((u) => u.includes('Held.'))).toBe(true)
   })
 
   it('warmTimings 取回后进共享缓存；换音色清空', async () => {
