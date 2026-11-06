@@ -169,6 +169,11 @@ export async function runAiBatch(
 
     const startedAt = Date.now()
     let misses = 0
+    // 服务端按游标只回新增结果；客户端累加，避免每 1.5 秒重传整份结果（O(N²)）。
+    let results: unknown[] = []
+    let failed: unknown[] = []
+    let resultCursor = 0
+    let failedCursor = 0
     for (;;) {
       await sleep(POLL_INTERVAL_MS, signal)
       if (Date.now() - startedAt > MAX_POLL_MS) {
@@ -179,10 +184,17 @@ export async function runAiBatch(
         done?: number
         results?: unknown
         failed?: unknown
+        resultCount?: number
+        failedCount?: number
         error?: string
       } | null = null
       try {
-        p = await (await f('/api/ai/run?id=' + encodeURIComponent(actualRunId), { signal })).json()
+        const qs = new URLSearchParams({
+          id: actualRunId,
+          since: String(resultCursor),
+          failedSince: String(failedCursor),
+        })
+        p = await (await f('/api/ai/run?' + qs.toString(), { signal })).json()
       } catch {
         if (signal.aborted) throw new Error(CANCEL_MESSAGE)
         misses += 1
@@ -193,12 +205,24 @@ export async function runAiBatch(
       }
       misses = 0
       if (!p) continue
+      const chunkResults = Array.isArray(p.results) ? p.results : []
+      const chunkFailed = Array.isArray(p.failed) ? p.failed : []
+      if (typeof p.resultCount === 'number') {
+        results = results.concat(chunkResults)
+        resultCursor = p.resultCount
+        failed = failed.concat(chunkFailed)
+        failedCursor = typeof p.failedCount === 'number' ? p.failedCount : failed.length
+      } else {
+        // 兼容旧服务端：没有游标就按整份结果替换。
+        results = chunkResults
+        failed = chunkFailed
+      }
       onProgress?.(p.done ?? 0)
       if (p.state === 'done') {
-        const normalized = normalizeAiResults(p.results)
+        const normalized = normalizeAiResults(results)
         return {
           results: normalized.results,
-          failed: normalizeAiFailed(p.failed),
+          failed: normalizeAiFailed(failed),
           dropped: normalized.dropped,
         }
       }

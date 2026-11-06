@@ -60,6 +60,34 @@ describe('runAiBatch：轮询到结束', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 
+  it('轮询按 since/failedSince 游标追加，不重复拿全量结果', async () => {
+    vi.useFakeTimers()
+    const a = { id: 'a', task: 'lookup', raw: 'x' }
+    const b = { id: 'b', task: 'lookup', raw: 'y' }
+    const polls = [
+      { state: 'running', done: 1, results: [a], resultCount: 1, failed: [], failedCount: 0 },
+      { state: 'done', done: 2, results: [b], resultCount: 2, failed: [{ id: 'f', error: 'x' }], failedCount: 1 },
+    ]
+    const calls: string[] = []
+    const fetchImpl = vi.fn(async (url: string) => {
+      calls.push(url)
+      if (url.startsWith('/api/ai/run?id=')) return json(polls.shift())
+      if (url.startsWith('/api/ai/run?')) return json({ runId: 'r1' })
+      return json({})
+    }) as unknown as typeof fetch
+
+    const p = runAiBatch(jobs, { signal: new AbortController().signal, fetchImpl })
+    await vi.advanceTimersByTimeAsync(1500)
+    await vi.advanceTimersByTimeAsync(1500)
+    const out = await p
+
+    expect(out.results).toEqual([a, b])
+    expect(out.failed).toEqual([{ id: 'f', error: 'x' }])
+    const pollUrls = calls.filter((u) => u.startsWith('/api/ai/run?id='))
+    expect(pollUrls[0]).toContain('since=0')
+    expect(pollUrls[1]).toContain('since=1')
+  })
+
   it('服务端 results 混入坏条目：过滤并报告丢弃数，不把 raw.trim 留到应用层才炸', async () => {
     vi.useFakeTimers()
     const fetchImpl = stubFetch(async () =>

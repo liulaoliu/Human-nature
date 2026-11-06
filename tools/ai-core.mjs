@@ -148,6 +148,8 @@ const runs = new Map()
 const cancelledRuns = new Map()
 const RUN_TTL = 30 * 60 * 1000
 const MAX_CANCELLED_IDS = 500
+const MAX_JOBS = 500
+const MAX_ACTIVE_RUNS = 2
 
 /** 客户端生成的 runId 只允许安全字符，避免被拿来拼 key / 注入。 */
 function isRunId(value) {
@@ -174,6 +176,12 @@ function readBody(req, limit = 8 * 1024 * 1024) {
     req.on('end', () => resolve(body))
     req.on('error', () => resolve(''))
   })
+}
+
+/** 完成/取消后安排回收；不 unref 会拖住 Node 进程退出。 */
+function scheduleRunGc(runId) {
+  const timer = setTimeout(() => runs.delete(runId), RUN_TTL)
+  timer.unref?.()
 }
 
 function gcRuns() {
@@ -220,6 +228,14 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
       return
     }
     gcRuns()
+    const active = [...runs.values()].filter((r) => r.state === 'running').length
+    if (active >= MAX_ACTIVE_RUNS) {
+      sendJson(res, 429, {
+        error: 'too-many-runs',
+        message: `同时最多 ${MAX_ACTIVE_RUNS} 个跑批，请等当前跑完再试`,
+      })
+      return
+    }
     // 先占位再读 body：客户端在启动请求还没回来时点取消，也能按 runId 找到它。
     // runId 由客户端生成（query 传），服务端只在缺失/非法时补一个。
     const requested = new URLSearchParams(query || '').get('runId') || ''
@@ -254,6 +270,15 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
         run.state = 'error'
         run.error = 'bad-jobs'
         sendJson(res, 400, { error: 'bad-jobs', message: '缺少 jobs 数组' })
+        return
+      }
+      if (jobs.length > MAX_JOBS) {
+        run.state = 'error'
+        run.error = 'too-many-jobs'
+        sendJson(res, 400, {
+          error: 'too-many-jobs',
+          message: `一次最多 ${MAX_JOBS} 条 job（收到 ${jobs.length} 条）`,
+        })
         return
       }
       run.total = jobs.length
@@ -291,6 +316,7 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
           run.state = 'error'
           run.error = String((e && e.message) || e)
         })
+        .finally(() => scheduleRunGc(runId))
       sendJson(res, 200, { runId, total: jobs.length })
     })
     return
@@ -325,18 +351,25 @@ export function handleAiApi(req, res, { root = process.cwd() } = {}) {
   }
 
   if (path === '/api/ai/run' && req.method === 'GET') {
-    const id = new URLSearchParams(query || '').get('id') || ''
+    const q = new URLSearchParams(query || '')
+    const id = q.get('id') || ''
     const run = runs.get(id)
     if (!run) {
       sendJson(res, 404, { error: 'no-run' })
       return
     }
+    const since = Math.max(0, Math.floor(Number(q.get('since')) || 0))
+    const failedSince = Math.max(0, Math.floor(Number(q.get('failedSince')) || 0))
+    const results = run.results.slice(since)
+    const failed = run.failed.slice(failedSince)
     sendJson(res, 200, {
       state: run.state,
       done: run.done,
       total: run.total,
-      results: run.results,
-      failed: run.failed,
+      results,
+      failed,
+      resultCount: run.results.length,
+      failedCount: run.failed.length,
       error: run.error,
     })
     return

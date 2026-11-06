@@ -159,6 +159,56 @@ describe('handleAiApi：启动/取消的 HTTP 语义', () => {
     expect(modelCalls).toBe(1)
   })
 
+  it('单次 job 超过上限：400，且一个模型请求都不发', async () => {
+    const model = vi.fn()
+    vi.stubGlobal('fetch', model)
+    const jobs = Array.from({ length: 501 }, (_, i) => ({ id: `j${i}`, task: 't', prompt: 'p' }))
+    const start = await callApi(
+      fakeReq({
+        url: '/api/ai/run?runId=run-test-limit-1',
+        body: JSON.stringify({ jobs }),
+      }),
+    )
+    expect(start.status).toBe(400)
+    expect(start.body.error).toBe('too-many-jobs')
+    expect(model).not.toHaveBeenCalled()
+  })
+
+  it('轮询游标只返回新增结果', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url, init) => {
+        const body = JSON.parse(init.body)
+        return reply(body.messages[1].content)
+      }),
+    )
+    const runId = 'run-test-cursor-1'
+    const start = await callApi(
+      fakeReq({
+        url: `/api/ai/run?runId=${runId}`,
+        body: JSON.stringify({
+          jobs: [
+            { id: 'a', task: 't', prompt: 'p1' },
+            { id: 'b', task: 't', prompt: 'p2' },
+          ],
+        }),
+      }),
+    )
+    expect(start.status).toBe(200)
+
+    let full
+    for (let i = 0; i < 50; i++) {
+      full = await callApi(fakeReq({ url: `/api/ai/run?id=${runId}`, method: 'GET' }))
+      if (full.body.state === 'done') break
+      await new Promise((r) => setTimeout(r, 5))
+    }
+    expect(full.body.state).toBe('done')
+    expect(full.body.results).toHaveLength(2)
+    const tail = await callApi(fakeReq({ url: `/api/ai/run?id=${runId}&since=1`, method: 'GET' }))
+    expect(tail.body.results).toHaveLength(1)
+    expect(tail.body.resultCount).toBe(2)
+  })
+
   it('取消比启动先到：墓碑让后续启动直接取消，一个模型请求都不发', async () => {
     let modelCalls = 0
     vi.stubGlobal(
