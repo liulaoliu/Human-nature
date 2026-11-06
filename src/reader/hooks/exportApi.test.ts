@@ -5,7 +5,7 @@ import { createExport, type ExportParams } from './exportApi'
 import { ARTICLE_PACKAGE_FORMAT } from '../../core/articlePackage'
 import { createLibrary, markWord } from '../../core/vocab'
 import { TEST_NOW, vocabItem } from '../../core/testFixtures'
-import { installFakeStorage } from '../testStorage'
+import { installFakeStorage, makeFakeStorage } from '../testStorage'
 import type { LearningCollections, LearningSetters } from './useLearningData'
 import type { ArticleRepoPort, SavedArticle } from '../../core/ports'
 
@@ -137,6 +137,20 @@ describe('exportApi：导入', () => {
     expect(persistNow).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('导入失败：不是有效的 JSON 备份')
   })
+
+  it('词库落盘失败：先不写文章，提示「词库未写入」而不是笼统的「数据未改动」', async () => {
+    const persistNow = vi.fn(async () => {
+      throw new Error('quota')
+    })
+    const { api, save, flash } = setup({ persistNow })
+    await act(async () => {
+      await api.onImportBackup(
+        fileOf(JSON.stringify({ articles: [article], library: backupLibrary() })),
+      )
+    })
+    expect(save).not.toHaveBeenCalled()
+    expect(flash).toHaveBeenLastCalledWith(expect.stringContaining('词库未写入'))
+  })
 })
 
 describe('exportApi：合并导入', () => {
@@ -210,6 +224,24 @@ describe('exportApi：合并导入', () => {
     })
     expect(persistNow).not.toHaveBeenCalled()
     expect(flash).toHaveBeenCalledWith('合并失败：不是有效的 JSON 备份')
+  })
+
+  it('指纹写入失败：数据已合并，但明确提示不要重复导入', async () => {
+    const storage = makeFakeStorage()
+    const setItem = storage.setItem.bind(storage)
+    storage.setItem = (k: string, v: string) => {
+      if (k === 'reader:importedBackups') throw new Error('quota')
+      setItem(k, v)
+    }
+    restoreStorage()
+    restoreStorage = installFakeStorage(storage)
+
+    const { api, persistNow, flash } = setup()
+    await act(async () => {
+      await api.onMergeBackup(fileOf(JSON.stringify({ articles: [article], library: backupLibrary() })))
+    })
+    expect(persistNow).toHaveBeenCalledTimes(1)
+    expect(flash.mock.calls.at(-1)?.[0]).toContain('去重指纹未保存')
   })
 })
 

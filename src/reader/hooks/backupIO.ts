@@ -71,7 +71,8 @@ export function createBackupIO({
   /** 导入备份（覆盖）：词库整库替换、统计整段替换，文章按 id 写入。 */
   const onImportBackup = async (file: File | null | undefined) => {
     if (!file) return
-    let phase: 'parse' | 'write' = 'parse'
+    let phase: 'parse' | 'library' | 'articles' | 'stats' = 'parse'
+    let libraryWritten = false
     try {
       const raw = JSON.parse(await file.text())
       if (isArticlePackage(raw)) {
@@ -79,19 +80,22 @@ export function createBackupIO({
         return
       }
       const parsed = parseBackupPayload(raw)
-      phase = 'write'
+      if (parsed.library) {
+        // 词库是整库替换里最关键的一份：先确认它落盘，失败时文章还没动。
+        phase = 'library'
+        await persistNow(parsed.library)
+        libraryWritten = true
+        // 整库被替换了：清掉「语言点已收」记账，让文章里的语言点重新收一遍（不然会以为收过而不再补）
+        writeJson('reader:langCollected', {})
+      }
+      phase = 'articles'
       for (const a of parsed.articles) {
         if (a && a.id && Array.isArray(a.sentences) && Array.isArray(a.paragraphs)) {
           const existing = (await articles.current?.get(a.id)) ?? null
           await articles.current?.save(mergeGoldenIntoArticle(existing, a))
         }
       }
-      if (parsed.library) {
-        // 先等词库真正落盘，再改统计：写失败时数据保持原样，用户可以重试同一份文件。
-        await persistNow(parsed.library)
-        // 整库被替换了：清掉「语言点已收」记账，让文章里的语言点重新收一遍（不然会以为收过而不再补）
-        writeJson('reader:langCollected', {})
-      }
+      phase = 'stats'
       if (parsed.sessions) setSessions(parsed.sessions)
       if (parsed.studyDays) setStudyDays(parsed.studyDays)
       if (parsed.activity) setActivity(parsed.activity)
@@ -123,7 +127,13 @@ export function createBackupIO({
       flash(
         phase === 'parse'
           ? '导入失败：不是有效的 JSON 备份'
-          : '导入失败：写入本机/服务端出错，数据未改动，可稍后重试',
+          : phase === 'library'
+            ? '导入失败：词库未写入，数据未改动，可稍后重试'
+            : phase === 'articles'
+              ? libraryWritten
+                ? '导入失败：词库已替换，但文章写入失败（可能部分已写入），可重试同一份文件'
+                : '导入失败：文章写入失败（可能部分已写入），词库未改动，可重试同一份文件'
+              : '导入失败：词库/文章已写入，但统计写入失败，可重试同一份文件',
       )
     }
   }
@@ -180,10 +190,14 @@ export function createBackupIO({
         writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(mergeProductionDraftMaps(current, incoming)))
       }
       setSaved((await articles.current?.list()) ?? [])
-      writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))
-      flash(
+      const ledgerSaved = writeRaw('reader:importedBackups', JSON.stringify(rememberImport(ledger, fingerprint)))
+      const done =
         `合并完成：文章 ${added} 篇${mergedLib ? `，生词共 ${mergedLib.items.length} 个` : ''}` +
-          (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : ''),
+        (parsed.dropped ? `（跳过 ${parsed.dropped} 条无效数据）` : '')
+      flash(
+        ledgerSaved
+          ? done
+          : `${done}；数据已合并，但去重指纹未保存，请勿重复导入同一份文件`,
       )
     } catch (e) {
       console.warn('[备份] 合并导入失败', e)
