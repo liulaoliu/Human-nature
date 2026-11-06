@@ -803,14 +803,14 @@ Hook 不是什么特殊物种，它就是一个函数：接收参数，返回状
 复习三键 / 锤炼门禁进 `useStudyAnswering`；主 hook 只剩设置池、装载、快捷键和返回映射。拼写 / 答题都收
 `ui` 卡面对象，不再逐个透传 `checked / pendingScore / setRevealed`。
 
-**奶牛工棚三个 200–300 行 hook 为什么保留**（2026-11-06 复审时逐个看过）：
-`useProductionPacks` 296 行——出题包的 `generating / packError / pasteKind / pendingPacket` 与三路
-AI 调用（全脂 / 脱脂奶 / 酸奶）必须共用一个闭包，拆开就要把这四个 setter 和 `callAi` 往返透传；
-`useProductionSession` 295 行——只做会话编排（选池、开题、进度、草稿、追问、旧记录迁移的接线），
-规则早已下沉 `core/production*`；`useProductionAttempt` 292 行——「当前这一稿」是一个整体状态
-（答案 / 批改 / 命中 / 稿次），`grade` 的写回必须原子。三者都**在 300 行提醒线以下**，
-真要再切，优先动 `useProductionPacks.start`（三段分支各成 `productionPackRuns` 里的编排函数），
-别为了行数把 return 拍平。
+**奶牛工棚的 hook 体量与起跑编排**（2026-11-06 复审；第二棒已拆 `start`）：
+`useProductionPacks` **162 行**——只留 `generating / packError / pasteKind / pendingPacket` 四个状态、
+三路分支选择和粘回入口；三段起跑编排（`runYogurtStart` / `runTopicStart` / `runTargetStart`）
+落到 `hooks/productionPackRuns.ts`（428 行，普通函数不是 hook；`callAi` / `flash` / `onStart`
+从参数传入，不另开读写口子）。`useProductionSession` 295 行——只做会话编排（选池、开题、进度、
+草稿、追问、旧记录迁移的接线），规则早已下沉 `core/production*`；`useProductionAttempt` 292 行——
+「当前这一稿」是一个整体状态（答案 / 批改 / 命中 / 稿次），`grade` 的写回必须原子。
+两者都在 300 行提醒线以下；真要再切，按域拆，别为了行数把 return 拍平。
 
 ### 背单词会话为什么不上全局状态管理器（2026-10-28）
 

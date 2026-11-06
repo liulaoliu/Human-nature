@@ -1,9 +1,11 @@
 # TODO
 
-> **2026-11-06 奶牛工棚复审：已修 3 个 commit，剩下留给下一棒**
+> **2026-11-06 奶牛工棚复审：已修 6 个 commit，剩下留给下一棒**
 >
 > 复审对象：2026-11-06 拉下来的 157 文件 / +11133 行（奶牛工棚产出训练整套）。
-> 门禁实跑：**360 测试文件 / 3123 passed / 5 skipped**，`npm run gates` exit 0。
+> 门禁实跑（复审时）：**360 测试文件 / 3123 passed / 5 skipped**（无 `public/articles.json` 的机器；
+> 有原文库时是 3127 passed / 1 skipped）。第二棒补 13 条测试后：**362 文件 / 3140 passed / 1 skipped**，
+> `npm run gates` exit 0。
 >
 > **已修（别重复做）**
 > 1. `139e16b` **子视图 query 收进 `route.ts`**：新增 `parseProductionQuery` /
@@ -13,29 +15,34 @@
 >    语义：开子视图 push、页面内返回 / 改筛选 replace。
 > 2. `4c6e6ef` **面板拆分**：`ProductionPanel` 776 → **75 行**（壳：标题栏 + 子视图路由 + 阶段切换），
 >    新增 `ProductionSetupView`（588，选草料）/ `ProductionRunView`（180，挤奶）/
->    `ProductionDoneView`（23，收工）。界面对外不变，10 条面板测试原样通过。
+>    `ProductionDoneView`（23，收工）。界面对外不变；面板测试由 9 条调到 10 条
+>    （改写历史深链 1 条、新增「点历史按钮 push」1 条）。
 > 3. `a244a6e` 文档：ARCHITECTURE 补三屏与三个 hook 的体量理由；TESTING §3-67 记「同一 panel
 >    两个视图各拼 query 会互相覆盖」。
 >
-> **还没做（按价值排，逐条单独 commit）**
-> - [ ] **P1 `useProductionPacks.start` 三段分支外移**（296 行 → 目标 ≤200）。现在 `start` 里
->       酸奶 / 脱脂奶 / 全脂各一段，各自 `await` + 校验 + `onStart`；建议在
->       `productionPackRuns.ts` 里落成三个编排函数（`runYogurtStart` / `runTopicStart` /
->       `runTargetStart`），hook 只留 `generating / packError / pasteKind / pendingPacket` 四个状态和
->       分支选择。注意 `callAi` / `flash` / `onStart` 从参数传入，不要复制新口子。
-> - [ ] **P2 补 `useProductionAttempt` 的直接测试**（292 行，现在只有经 `useProductionSession` 的间接覆盖）。
->       至少要钉：`grade` 失败不清答案、`applyFeedbackPaste` 坏 JSON 不落库、`rewrite → round 2`、
->       `skip` 写一条 `source='production'` 但不动目标块进度。
-> - [ ] **P2 `productionPackRuns.ts` 的直接测试**（246 行）：三类包的 count 上限、
->       目标块不足时的 `shortNotice`、AI 返回不合 schema 时的重试与放弃。
+> **本轮已完成（2026-11-06 第二棒，逐条单独 commit）**
+> - [x] **P1 `useProductionPacks.start` 三段分支外移**：`useProductionPacks` 296 → **162 行**；
+>       酸奶 / 脱脂奶 / 全脂三段落成 `hooks/productionPackRuns.ts` 的 `runYogurtStart` /
+>       `runTopicStart` / `runTargetStart`（246 → 428 行），hook 只留
+>       `generating / packError / pasteKind / pendingPacket` 四个状态和分支选择；
+>       `callAi` / `flash` / `onStart` 仍从参数传入。
+> - [x] **P2 `useProductionAttempt` 直接测试**：新增 `useProductionAttempt.test.tsx` 4 条，
+>       钉住 `grade` 失败不清答案、`applyFeedbackPaste` 坏 JSON 不落库、`rewrite → round 2`、
+>       `skip` 只留档不记学习活动。
+> - [x] **P2 `productionPackRuns` 直接测试**：新增 `productionPackRuns.test.ts` 9 条，
+>       覆盖到期每日上限、候选不足的 `shortNotice`、主题包截断 / 重试、目标包数量与 schema
+>       重试 / 放弃、`requireModel`。
+>
+> **还没做（按价值排）**
 > - [ ] **P3 其余新增叶子模块无同名测试**（`useDrillWarmup` / `useProductionSettings` /
 >       `useQuizRoundHistory` / `ProductionHint` / `RoundStartPrompt` / `VoiceInputButton` …）。
 >       门禁 R7 只管 `core/`，这不是违规，是覆盖缺口；按「哪天改到它就先补」处理，别为凑数写空测试。
-> - [ ] **P3 README 大改需确认没丢运维信息**（704 → 370 行，-517/+187）：
->       跟读链路 / Economist PDF 版式档案那几段被压缩，`docs/PIPELINE-PDF.md` 里仍有全文，
->       但要确认「换一期先核字体」「原文库不进仓库」这两个提醒在新 README 里还能看到。
-> - [ ] **P3 三个 200–300 行 hook 的余地**：`useProductionPacks` 296 / `useProductionSession` 295 /
->       `useProductionAttempt` 292。理由已写进 ARCHITECTURE；只有 P1 那条值得现在动。
+> - [x] **P3 README 大改需确认没丢运维信息**：原「704 → 370 行，-517/+187」与仓库历史不符
+>       （当前 269 行，历史最高 599），本条作废；两个提醒已确认还在：`README.md:252`
+>       （仓库不含杂志正文 / 音频 / 词典原始数据）、`docs/PIPELINE-PDF.md`「换一期：先核对字体」
+>       （README 第 266 行有链接）。
+> - [ ] **P3 两个 200–300 行 hook 的余地**：`useProductionSession` 295 /
+>       `useProductionAttempt` 292。理由已写进 ARCHITECTURE。
 >
 > **给下一棒的三句话**
 > 1. 工棚的 **URL 只有 `route.ts` 一个写入方**，加子视图 / 筛选项先改 `parseProductionQuery` +
