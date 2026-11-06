@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { createServer, request } from 'node:http'
+import type { IncomingHttpHeaders, IncomingMessage, Server } from 'node:http'
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { gunzipSync } from 'node:zlib'
@@ -18,6 +19,166 @@ import { localDayKey } from './localDate.ts'
 
 const require = createRequire(import.meta.url)
 const { DatabaseSync } = require('node:sqlite')
+
+/* ------------------------------------------------------------------ *
+ * 请求 / 响应边界的形状声明
+ *
+ * 服务端 store 层刻意把持久化数据当 `unknown`（见 sqliteLearning.ts 顶部
+ * 的职责说明），而 `Response.json()` 在 @types/node 里也返回 `unknown`。
+ * 所以在这里用 interface 描述「用例真正读到的字段」，解析处只做一次断言
+ * —— 断言里的字段名都照 server/storeApi.ts 实际发出的 JSON 写。
+ * ------------------------------------------------------------------ */
+
+/** GET /api/status */
+interface StatusResponse {
+  ok: boolean
+  pid: number
+  uptime: number
+  time: string
+}
+
+/** GET /api/store/health（故意不声明库文件绝对路径：用例要断言它不存在） */
+interface StoreHealthResponse {
+  ok: boolean
+  engine: string
+  version: number
+  path?: string
+}
+
+/** 词库数据：PUT 的请求体，也是 /vocab 响应里的 value */
+interface VocabLibrary {
+  items: { id: string; word: string }[]
+  stats: Record<string, unknown>
+}
+
+/** GET /api/store/vocab */
+interface VocabResponse {
+  ok: boolean
+  value: VocabLibrary
+  updatedAt: string
+  count: number
+}
+
+/** PUT /api/store/vocab 的 200 / 409 响应（409 额外带库里的最新版本与条数） */
+interface VocabWriteResponse {
+  ok: boolean
+  updatedAt: string
+  count: number
+}
+
+/** GET /api/store/vocab/snapshots */
+interface VocabSnapshotsResponse {
+  ok: boolean
+  snapshots: { at: string; count: number }[]
+}
+
+/** 文章：用例构造的请求体，以及 GET /api/store/articles 的列表项 */
+interface ArticleFixture {
+  id: string
+  title: string
+  text: string
+  paragraphs: unknown[]
+  sentences: unknown[]
+  sourceKey: string | null
+  updatedAt: string
+}
+
+interface ArticlesResponse {
+  ok: boolean
+  articles: ArticleFixture[]
+}
+
+/** 学习数据：用例构造的请求体 */
+interface LearningFixture {
+  practice: { at: string; kind: string; total: number; correct: number }[]
+  mistakes: { id: string; kind: string; at: string; count: number; label: string }[]
+  readDone: unknown[]
+  writingHistory: unknown[]
+  retells: unknown[]
+  activity: { day: string; counts: Record<string, number> }[]
+  studyDays: unknown[]
+  sessions: unknown[]
+  studiedDays: { day: string; ids: string[] }[]
+  skimmed: unknown[]
+  kindStats: Record<string, unknown>
+  answerEvents: {
+    at: string
+    day: string
+    articleId: string
+    source: string
+    kind: string
+    cat: string
+    correct: boolean
+  }[]
+}
+
+/** 读回来的学习数据：只声明用例断言到的部分（其余字段由前端守卫收窄） */
+interface LearningPayload {
+  practice: unknown[]
+  mistakes: unknown[]
+  studiedDays: { day: string; ids: string[] }[]
+  activity: { day: string; counts: Record<string, number> }[]
+  answerEvents: unknown[]
+}
+
+/** GET /learning、POST /learning/rebuild-derived */
+interface LearningResponse {
+  ok: boolean
+  value: LearningPayload
+}
+
+/** PUT /learning/if-empty（migrated=false 表示库里已有数据，没覆盖） */
+interface LearningMigrateResponse {
+  ok: boolean
+  migrated: boolean
+  value: LearningPayload
+}
+
+/** GET /api/store/export */
+interface StoreExportResponse {
+  format: string
+  version: number
+  exportedAt: string
+  vocab: VocabLibrary
+  articles: ArticleFixture[]
+  learning: LearningPayload
+}
+
+/** node:http 直连拿到的原始响应（fetch 会自动解压，断言不到 Content-Encoding） */
+interface RawResponse {
+  status: number | undefined
+  headers: IncomingHttpHeaders
+  body: Buffer
+}
+
+/** 只带请求头的「最小请求」：allowLocalRequest 只读 req.headers。 */
+const withHeaders = (headers: Record<string, string>): IncomingMessage =>
+  ({ headers } as unknown as IncomingMessage)
+
+/** 起服务并等 listening。 */
+const listen = (server: Server, port = 0, host?: string): Promise<void> =>
+  new Promise<void>((resolve) => {
+    server.listen(port, host, () => resolve())
+  })
+
+/** listen 之后 address() 一定不是 null / 字符串；用运行期检查代替断言。 */
+const portOf = (server: Server): number => {
+  const addr = server.address()
+  if (addr === null || typeof addr === 'string') throw new Error('server 没有监听 TCP 端口')
+  return addr.port
+}
+
+/** HTTP 响应解析的唯一断言点：json() 是 unknown，形状由上面的 interface 给出。 */
+const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
+  const res = await fetch(url, init)
+  return (await res.json()) as T
+}
+
+/** 写接口的 JSON 头；可再叠 Origin / X-Vocab-Base 等。 */
+const jsonHeaders = (init: Record<string, string> = {}): Record<string, string> => ({
+  'Content-Type': 'application/json',
+  ...init,
+})
 
 describe('util', () => {
   it('contentType 按扩展名', () => {
@@ -49,18 +210,18 @@ describe('localDayKey', () => {
 
 describe('sameOrigin', () => {
   it('同源放行；跨站 Origin / Sec-Fetch-Site 拒绝；无 Origin 的本机脚本放行', () => {
-    expect(allowLocalRequest({ headers: { host: 'localhost:5173', origin: 'http://localhost:5173' } })).toBe(true)
-    expect(allowLocalRequest({ headers: { host: 'localhost:5173', origin: 'http://evil.test' } })).toBe(false)
-    expect(allowLocalRequest({ headers: { host: 'localhost:5173', 'sec-fetch-site': 'cross-site' } })).toBe(false)
-    expect(allowLocalRequest({ headers: { host: 'localhost:5173' } })).toBe(true)
+    expect(allowLocalRequest(withHeaders({ host: 'localhost:5173', origin: 'http://localhost:5173' }))).toBe(true)
+    expect(allowLocalRequest(withHeaders({ host: 'localhost:5173', origin: 'http://evil.test' }))).toBe(false)
+    expect(allowLocalRequest(withHeaders({ host: 'localhost:5173', 'sec-fetch-site': 'cross-site' }))).toBe(false)
+    expect(allowLocalRequest(withHeaders({ host: 'localhost:5173' }))).toBe(true)
   })
 
   it('DNS 重绑定：Host 和 Origin 都是 evil.test 也拒绝；无 Origin 的 evil Host 同样拒绝', () => {
-    expect(allowLocalRequest({ headers: { host: 'evil.test:5173', origin: 'http://evil.test:5173' } })).toBe(false)
+    expect(allowLocalRequest(withHeaders({ host: 'evil.test:5173', origin: 'http://evil.test:5173' }))).toBe(false)
     // 浏览器同源 GET 通常不带 Origin，只有 Host —— 这正是重绑定页读库的路径。
-    expect(allowLocalRequest({ headers: { host: 'evil.test:5173' } })).toBe(false)
-    expect(allowLocalRequest({ headers: { host: '127.0.0.1:5173', origin: 'http://127.0.0.1:5173' } })).toBe(true)
-    expect(allowLocalRequest({ headers: { host: '[::1]:5173', origin: 'http://[::1]:5173' } })).toBe(true)
+    expect(allowLocalRequest(withHeaders({ host: 'evil.test:5173' }))).toBe(false)
+    expect(allowLocalRequest(withHeaders({ host: '127.0.0.1:5173', origin: 'http://127.0.0.1:5173' }))).toBe(true)
+    expect(allowLocalRequest(withHeaders({ host: '[::1]:5173', origin: 'http://[::1]:5173' }))).toBe(true)
   })
 })
 
@@ -97,10 +258,10 @@ describe('httpApp 请求处理', () => {
     mkdirSync(join(dist, 'assets'), { recursive: true })
     writeFileSync(join(dist, 'index.html'), '<!doctype html><title>t</title>')
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
-    await new Promise((r) => server.listen(0, r))
-    const port = server.address().port
+    await listen(server)
+    const port = portOf(server)
     try {
-      const st = await fetch(`http://127.0.0.1:${port}/api/status`).then((r) => r.json())
+      const st = await fetchJson<StatusResponse>(`http://127.0.0.1:${port}/api/status`)
       expect(st.ok).toBe(true)
       expect(st.pid).toBe(process.pid)
 
@@ -148,59 +309,58 @@ describe('httpApp 请求处理', () => {
     mkdirSync(join(dist, 'assets'), { recursive: true })
     writeFileSync(join(dist, 'index.html'), 'x')
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub, dbPath }))
-    await new Promise((r) => server.listen(0, '127.0.0.1', r))
-    const base = `http://127.0.0.1:${server.address().port}`
-    const json = (init) => ({ 'Content-Type': 'application/json', ...init })
+    await listen(server, 0, '127.0.0.1')
+    const base = `http://127.0.0.1:${portOf(server)}`
     try {
-      const health = await fetch(`${base}/api/store/health`).then((r) => r.json())
+      const health = await fetchJson<StoreHealthResponse>(`${base}/api/store/health`)
       expect(health).toMatchObject({ ok: true, engine: 'sqlite' })
       // 不向页面泄露数据库绝对路径（截图/日志分享时）
       expect(health.path).toBeUndefined()
 
-      const library = { items: [{ id: 'w1', word: 'test' }], stats: {} }
+      const library: VocabLibrary = { items: [{ id: 'w1', word: 'test' }], stats: {} }
       const putVocab = await fetch(`${base}/api/store/vocab`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify(library),
       })
       expect(putVocab.status).toBe(200)
-      const got = await fetch(`${base}/api/store/vocab`).then((r) => r.json())
+      const got = await fetchJson<VocabResponse>(`${base}/api/store/vocab`)
       expect(got.value.items).toHaveLength(1)
       expect(got.updatedAt).toBeTruthy()
 
       // 乐观锁：带着过期版本号写 → 409，库不动
       const stale = await fetch(`${base}/api/store/vocab`, {
         method: 'PUT',
-        headers: { ...json(), 'X-Vocab-Base': '2000-01-01T00:00:00.000Z' },
+        headers: jsonHeaders({ 'X-Vocab-Base': '2000-01-01T00:00:00.000Z' }),
         body: JSON.stringify({ items: [], stats: {} }),
       })
       expect(stale.status).toBe(409)
-      expect((await stale.json()).count).toBe(1)
-      expect((await fetch(`${base}/api/store/vocab`).then((r) => r.json())).value.items).toHaveLength(1)
+      expect(((await stale.json()) as VocabWriteResponse).count).toBe(1)
+      expect((await fetchJson<VocabResponse>(`${base}/api/store/vocab`)).value.items).toHaveLength(1)
 
       // 带着最新版本号写 → 放行
       const fresh = await fetch(`${base}/api/store/vocab`, {
         method: 'PUT',
-        headers: { ...json(), 'X-Vocab-Base': got.updatedAt },
+        headers: jsonHeaders({ 'X-Vocab-Base': got.updatedAt }),
         body: JSON.stringify({ items: [...library.items, { id: 'w2', word: 'more' }], stats: {} }),
       })
       expect(fresh.status).toBe(200)
-      expect((await fresh.json()).updatedAt).not.toBe(got.updatedAt)
+      expect(((await fresh.json()) as VocabWriteResponse).updatedAt).not.toBe(got.updatedAt)
 
       // 还原成原来的内容，后面的「相同内容不重复写」才测得准（不带 base = 强制写）
-      await fetch(`${base}/api/store/vocab`, { method: 'PUT', headers: json(), body: JSON.stringify(library) })
+      await fetch(`${base}/api/store/vocab`, { method: 'PUT', headers: jsonHeaders(), body: JSON.stringify(library) })
 
       // 相同内容重复 PUT：不再写快照 / 重建派生表
-      const snapsBefore = (await fetch(`${base}/api/store/vocab/snapshots`).then((r) => r.json())).snapshots.length
+      const snapsBefore = (await fetchJson<VocabSnapshotsResponse>(`${base}/api/store/vocab/snapshots`)).snapshots.length
       await fetch(`${base}/api/store/vocab`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify(library),
       })
-      const snapsAfter = (await fetch(`${base}/api/store/vocab/snapshots`).then((r) => r.json())).snapshots.length
+      const snapsAfter = (await fetchJson<VocabSnapshotsResponse>(`${base}/api/store/vocab/snapshots`)).snapshots.length
       expect(snapsAfter).toBe(snapsBefore)
 
-      const article = {
+      const article: ArticleFixture = {
         id: 'a1',
         title: 'A',
         text: 'x',
@@ -211,20 +371,20 @@ describe('httpApp 请求处理', () => {
       }
       const putArticle = await fetch(`${base}/api/store/articles/a1`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify(article),
       })
       expect(putArticle.status).toBe(200)
-      expect((await fetch(`${base}/api/store/articles`).then((r) => r.json())).articles[0].id).toBe('a1')
+      expect((await fetchJson<ArticlesResponse>(`${base}/api/store/articles`)).articles[0]?.id).toBe('a1')
 
       const putArticle2 = await fetch(`${base}/api/store/articles/a1`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify({ ...article, title: 'A2', updatedAt: '2026-01-02T00:00:00.000Z' }),
       })
       expect(putArticle2.status).toBe(200)
 
-      const learning = {
+      const learning: LearningFixture = {
         practice: [{ at: '2026-01-01T00:00:00.000Z', kind: 'quiz', total: 10, correct: 8 }],
         mistakes: [{ id: 'vocab:w1', kind: 'vocab', at: '2026-01-01T00:00:00.000Z', count: 1, label: 'w1' }],
         readDone: [],
@@ -250,44 +410,44 @@ describe('httpApp 请求处理', () => {
       }
       const putLearning = await fetch(`${base}/api/store/learning`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify(learning),
       })
       expect(putLearning.status).toBe(200)
-      const learningGet = await fetch(`${base}/api/store/learning`).then((r) => r.json())
+      const learningGet = await fetchJson<LearningResponse>(`${base}/api/store/learning`)
       expect(learningGet.value.practice).toHaveLength(1)
-      expect(learningGet.value.activity[0].counts.vocab).toBe(3)
+      expect(learningGet.value.activity[0]?.counts.vocab).toBe(3)
       expect(learningGet.value.answerEvents).toHaveLength(1)
 
-      const rebuilt = await fetch(`${base}/api/store/learning/rebuild-derived`, {
+      const rebuilt = await fetchJson<LearningResponse>(`${base}/api/store/learning/rebuild-derived`, {
         method: 'POST',
-        headers: json(),
-      }).then((r) => r.json())
+        headers: jsonHeaders(),
+      })
       expect(rebuilt.ok).toBe(true)
       expect(rebuilt.value.answerEvents).toHaveLength(1)
 
       const partial = await fetch(`${base}/api/store/learning/partial`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify({ practice: [] }),
       })
       expect(partial.status).toBe(200)
-      const afterPartial = await fetch(`${base}/api/store/learning`).then((r) => r.json())
+      const afterPartial = await fetchJson<LearningResponse>(`${base}/api/store/learning`)
       expect(afterPartial.value.practice).toEqual([])
       expect(afterPartial.value.mistakes).toHaveLength(1)
-      expect(afterPartial.value.studiedDays[0].ids).toEqual(['w1'])
+      expect(afterPartial.value.studiedDays[0]?.ids).toEqual(['w1'])
 
-      const migrateEmpty = await fetch(`${base}/api/store/learning/if-empty`, {
+      const migrateEmpty = await fetchJson<LearningMigrateResponse>(`${base}/api/store/learning/if-empty`, {
         method: 'PUT',
-        headers: json(),
+        headers: jsonHeaders(),
         body: JSON.stringify({ ...learning, practice: [] }),
-      }).then((r) => r.json())
+      })
       expect(migrateEmpty.migrated).toBe(false)
       expect(migrateEmpty.value.practice).toEqual([])
 
-      const dump = await fetch(`${base}/api/store/export`).then((r) => r.json())
+      const dump = await fetchJson<StoreExportResponse>(`${base}/api/store/export`)
       expect(dump.vocab.items).toHaveLength(1)
-      expect(dump.articles[0].id).toBe('a1')
+      expect(dump.articles[0]?.id).toBe('a1')
       expect(dump.learning.practice).toEqual([])
 
       const dbFile = await fetch(`${base}/api/store/db`)
@@ -305,20 +465,20 @@ describe('httpApp 请求处理', () => {
 
       const evil = await fetch(`${base}/api/store/vocab`, {
         method: 'PUT',
-        headers: { ...json(), Origin: 'http://evil.test' },
+        headers: jsonHeaders({ Origin: 'http://evil.test' }),
         body: JSON.stringify(library),
       })
       expect(evil.status).toBe(403)
 
       // DNS 重绑定：Host 与 Origin 都是 evil.test（两者相等），仍必须 403。
-      const rebound = await new Promise((resolve, reject) => {
+      const rebound = await new Promise<number | undefined>((resolve, reject) => {
         const req = request(
           {
             host: '127.0.0.1',
-            port: server.address().port,
+            port: portOf(server),
             path: '/api/store/vocab',
             method: 'GET',
-            headers: { Host: `evil.test:${server.address().port}`, Origin: `http://evil.test:${server.address().port}` },
+            headers: { Host: `evil.test:${portOf(server)}`, Origin: `http://evil.test:${portOf(server)}` },
           },
           (res) => {
             res.resume()
@@ -344,10 +504,10 @@ describe('httpApp 请求处理', () => {
     writeFileSync(join(fish, 'a.png'), 'PNGDATA')
     writeFileSync(join(fish, 'note.txt'), 'nope')
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub, fishDir: fish }))
-    await new Promise((r) => server.listen(0, r))
-    const port = server.address().port
+    await listen(server)
+    const port = portOf(server)
     try {
-      const list = await fetch(`http://127.0.0.1:${port}/fish/manifest.json`).then((r) => r.json())
+      const list = await fetchJson<string[]>(`http://127.0.0.1:${port}/fish/manifest.json`)
       expect(list).toEqual(['a.png'])
       const img = await fetch(`http://127.0.0.1:${port}/fish/a.png`)
       expect(img.status).toBe(200)
@@ -366,11 +526,12 @@ describe('httpApp 请求处理', () => {
 describe('mode.resolveChild / loadMode', () => {
   it('static 模式跑 appServer', () => {
     const c = resolveChild(resolve('.'), 'static')
-    expect(c.args[0].endsWith('appServer.ts')).toBe(true)
+    expect(c.args[0]?.endsWith('appServer.ts')).toBe(true)
   })
   it('dev 模式优先 vite（装了依赖时）', () => {
     const c = resolveChild(resolve('.'), 'dev')
-    expect(c.args[0].includes('vite') || c.args[0].endsWith('appServer.ts')).toBe(true)
+    const entry = c.args[0] ?? ''
+    expect(entry.includes('vite') || entry.endsWith('appServer.ts')).toBe(true)
   })
   it('默认模式是 dev', () => {
     expect(loadMode(resolve('.'))).toBe('dev')
@@ -379,10 +540,10 @@ describe('mode.resolveChild / loadMode', () => {
 
 describe('httpApp：路由回落 + 静态 gzip', () => {
   /** 用 node:http 直连（fetch 会自动解压，断言不到 Content-Encoding）。 */
-  const rawGet = (port, path, headers = {}) =>
-    new Promise((resolve, reject) => {
+  const rawGet = (port: number, path: string, headers: Record<string, string> = {}): Promise<RawResponse> =>
+    new Promise<RawResponse>((resolve, reject) => {
       const req = request({ host: '127.0.0.1', port, path, headers }, (res) => {
-        const chunks = []
+        const chunks: Buffer[] = []
         res.on('data', (c) => chunks.push(c))
         res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: Buffer.concat(chunks) }))
       })
@@ -404,8 +565,8 @@ describe('httpApp：路由回落 + 静态 gzip', () => {
   it('/reader、/reader/** 与旧 /reader.html 都回落到单入口 index.html', async () => {
     const { dist, pub } = setup()
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
-    await new Promise((r) => server.listen(0, r))
-    const port = server.address().port
+    await listen(server)
+    const port = portOf(server)
     try {
       for (const p of ['/reader', '/reader/a/b%3A005', '/reader/a/b%3A005/p/intensive', '/reader/p/plan', '/reader.html']) {
         const r = await rawGet(port, p)
@@ -424,8 +585,8 @@ describe('httpApp：路由回落 + 静态 gzip', () => {
   it('文本资源按 Accept-Encoding 决定是否 gzip，体积真的变小且内容一致', async () => {
     const { dist, pub } = setup()
     const server = createServer(createRequestHandler({ distDir: dist, publicDir: pub }))
-    await new Promise((r) => server.listen(0, r))
-    const port = server.address().port
+    await listen(server)
+    const port = portOf(server)
     try {
       const plain = await rawGet(port, '/assets/app.js')
       const gz = await rawGet(port, '/assets/app.js', { 'accept-encoding': 'gzip' })

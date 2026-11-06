@@ -15,7 +15,7 @@ describe('guards（JSON 边界守卫）', () => {
   it('asRecord：放行的原样返回（同一引用，不拷贝），拒绝的返回 null', () => {
     const o = { a: 1 }
     expect(asRecord(o)).toBe(o)
-    expect(asRecord([1, 2]).length).toBe(2)
+    expect(asRecord([1, 2])?.length).toBe(2)
     expect(asRecord(null)).toBeNull()
     expect(asRecord(undefined)).toBeNull()
     expect(asRecord('x')).toBeNull()

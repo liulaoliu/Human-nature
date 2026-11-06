@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { mkdtempSync, readFileSync, readdirSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
@@ -11,18 +11,16 @@ import { compressOldBackups, pruneBackups } from './sqliteBackup.ts'
  *   - `compressOldBackups`：只压**旧的**，当天那份保持 `.db` 以便 `PRAGMA quick_check`。
  */
 
-const dir = () => mkdtempSync(join(tmpdir(), 'xueba-backup-'))
-const touch = (d, name, content = 'x') => writeFileSync(join(d, name), content)
+const dir = (): string => mkdtempSync(join(tmpdir(), 'xueba-backup-'))
+const touch = (d: string, name: string, content = 'x'): void => {
+  writeFileSync(join(d, name), content)
+}
 
 /** 把 mtime 往前调，模拟「昨天/上个月做的备份」。 */
-const age = (file, ms) => {
+const age = (file: string, ms: number): void => {
   const t = new Date(Date.now() - ms)
   utimesSync(file, t, t)
 }
-
-afterEach(() => {
-  // 临时目录留在系统 temp 里，由系统清理
-})
 
 describe('pruneBackups：保留最近 N 份', () => {
   it('.db 与 .db.gz 一起计入保留数（压缩不能变成「多留一份」）', () => {
