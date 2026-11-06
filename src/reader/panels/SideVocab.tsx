@@ -2,7 +2,7 @@
 import { useMemo, useState } from 'react'
 import VocabList, { type VocabEditPatch } from '../VocabList'
 import type { VocabItem, VocabMeaningSource, VocabVia } from '../../types/document'
-import type { PrintRow } from '../../core/printPlan'
+import { printRowsForItems, type PrintRow } from '../../core/printPlan'
 import { sortItems, type ReviewGrade, type VocabSortBy } from '../../core/vocab'
 import { langEntries, wordEntries } from '../../core/entryKind'
 import LangPointList from './LangPointList'
@@ -353,13 +353,12 @@ export default function SideVocab({
         </button>
         <button
           onClick={() => {
-            const rows: PrintRow[] = shown.map((item) => ({
-              item,
+            const rows: PrintRow[] = printRowsForItems(shown, {
               articleId: articleIdentity ?? '',
               articleTitle: printTitle,
-              number: articleNums.get(item.lemma) ?? null,
-              meaning: meaningOf?.(item.word) ?? null,
-            }))
+              numberOf: (item) => articleNums.get(item.lemma) ?? null,
+              meaningOf: (item) => meaningOf?.(item.word) ?? null,
+            })
             if (onPrintRows && articleIdentity) onPrintRows(rows, shownPrintTitle)
             else onPrint(shown, shownPrintTitle, (it) => articleNums.get(it.lemma) ?? null)
           }}

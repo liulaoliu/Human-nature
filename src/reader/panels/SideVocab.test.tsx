@@ -126,6 +126,20 @@ describe('SideVocab：生词 / 语言点 分开显示', () => {
     expect(screen.getByText(/还没有语言点/)).toBeTruthy()
   })
 
+  it('本篇 A4 走 onPrintRows：行里带篇 id、编号和语境释义', () => {
+    const onPrintRows = vi.fn()
+    setup({
+      onPrintRows,
+      articleIdentity: 'a1',
+      articleNums: new Map([['run', 2]]),
+      meaningOf: () => '跑步',
+    })
+    fireEvent.click(screen.getByRole('button', { name: /A4（本篇）/ }))
+    const [rows, title] = onPrintRows.mock.calls[0]
+    expect(title).toBe('A 篇')
+    expect(rows[0]).toMatchObject({ articleId: 'a1', articleTitle: 'A 篇', number: 2, meaning: '跑步' })
+  })
+
   it('今日目标行不混入选词会话的连续天数', () => {
     setup({
       statsOpen: true,

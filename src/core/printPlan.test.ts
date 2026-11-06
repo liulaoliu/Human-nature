@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { contentKinds, planPrint, type PrintArticleRef } from './printPlan'
+import { contentKinds, planPrint, printRowsForItems, type PrintArticleRef } from './printPlan'
 import { vocabItem } from './testFixtures'
 
 /**
@@ -28,6 +28,20 @@ const base = {
   content: 'all' as const,
   scope: 'all' as const,
 }
+
+describe('printRowsForItems', () => {
+  it('只在一处拼行结构：篇 id / 标题 / 编号 / 语境释义', () => {
+    const one = item({ id: 'w1', word: 'run', lemma: 'run', meaning: '跑' })
+    expect(
+      printRowsForItems([one], {
+        articleId: 'a1',
+        articleTitle: 'A 篇',
+        numberOf: () => 2,
+        meaningOf: () => '跑步',
+      }),
+    ).toEqual([{ item: one, articleId: 'a1', articleTitle: 'A 篇', number: 2, meaning: '跑步' }])
+  })
+})
 
 describe('planPrint：内容口径', () => {
   it('单词 / 词组习语 / 用法 三类各自过滤，all 不过滤', () => {

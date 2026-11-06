@@ -66,6 +66,28 @@ export interface PrintRow {
   meaning?: string | null
 }
 
+/**
+ * 把「当前这一篇的条目」转成打印行。视图只传编号/语境释义取值器，
+ * 行结构（articleId / articleTitle / number / meaning）只在 core 里定义一次。
+ */
+export function printRowsForItems(
+  items: VocabItem[],
+  opts: {
+    articleId: string
+    articleTitle: string
+    numberOf?: (item: VocabItem) => number | null
+    meaningOf?: (item: VocabItem) => string | null
+  },
+): PrintRow[] {
+  return items.map((item) => ({
+    item,
+    articleId: opts.articleId,
+    articleTitle: opts.articleTitle,
+    number: opts.numberOf?.(item) ?? null,
+    meaning: opts.meaningOf?.(item) ?? null,
+  }))
+}
+
 export interface PrintPlanInput {
   /** 整个词库 */
   libraryItems: VocabItem[]
