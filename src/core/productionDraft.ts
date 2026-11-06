@@ -17,7 +17,18 @@ import type { WritingFeedback } from './writing'
 export const PRODUCTION_DRAFT_KEY = 'reader:productionDraft'
 const VERSION = 1
 const MAX_PROMPTS = 60
-const DRAFT_CAP = 5
+/** 3 篇文章 × 3 种模式：三种吃法各留一组，暂停着酸奶也能开全脂。 */
+const DRAFT_CAP = 9
+
+/**
+ * 草稿按「文章 + 模式」各存一份。
+ *
+ * 以前只按文章存，风味酸奶暂停着去开全脂，新的一组会把暂停的那组顶掉；
+ * 现在两边的题号 / 作答 / 批改互不覆盖。
+ */
+export function productionDraftKey(articleId: string, mode: ProductionMode): string {
+  return `${articleId || 'manual'}::${mode}`
+}
 
 export interface ProductionDraft {
   version: 1
@@ -102,18 +113,20 @@ function normalizeFeedback(v: unknown): WritingFeedback | null {
   return v as unknown as WritingFeedback
 }
 
-/** 草稿集合：按文章保留最近 5 组；兼容旧版单草稿对象。 */
+/** 草稿集合：按「文章 + 模式」各留一组，最多 9 组；兼容旧版按文章存的对象。 */
 export function normalizeProductionDraftMap(raw: unknown): Record<string, ProductionDraft> {
   if (!isObject(raw)) return {}
   const out: Record<string, ProductionDraft> = {}
+  const add = (draft: ProductionDraft | null) => {
+    if (!draft) return
+    const key = productionDraftKey(draft.articleId, draft.mode)
+    const old = out[key]
+    if (!old || draft.at >= old.at) out[key] = draft
+  }
   if (raw.version === VERSION && typeof raw.articleId === 'string') {
-    const draft = normalizeProductionDraft(raw)
-    if (draft) out[draft.articleId] = draft
+    add(normalizeProductionDraft(raw))
   } else {
-    for (const value of Object.values(raw)) {
-      const draft = normalizeProductionDraft(value)
-      if (draft) out[draft.articleId] = draft
-    }
+    for (const value of Object.values(raw)) add(normalizeProductionDraft(value))
   }
   return Object.fromEntries(
     Object.entries(out)
@@ -122,7 +135,7 @@ export function normalizeProductionDraftMap(raw: unknown): Record<string, Produc
   )
 }
 
-/** 合并导入：同一篇文章取较新的草稿，保留最多 5 篇。 */
+/** 合并导入：同一篇文章同一模式取较新的草稿，最多留 9 组。 */
 export function mergeProductionDraftMaps(
   current: Record<string, ProductionDraft>,
   incoming: Record<string, ProductionDraft>,

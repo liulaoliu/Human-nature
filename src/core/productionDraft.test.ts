@@ -52,14 +52,29 @@ describe('productionDraft：会话草稿守卫', () => {
     expect(normalizeProductionDraft({ ...draft, prompts: [] }, 'A')).toBeNull()
   })
 
-  it('多草稿按文章保留；合并导入取较新的一版', () => {
+  it('多草稿按「文章 + 模式」各存一组；合并导入取较新的一版', () => {
     const other = { ...draft, articleId: 'B', at: '2026-11-02T00:00:00.000Z', answer: 'B draft' }
     const map = normalizeProductionDraftMap({ A: draft, B: other })
-    expect(Object.keys(map).sort()).toEqual(['A', 'B'])
+    expect(Object.keys(map).sort()).toEqual(['A::full', 'B::full'])
     const merged = mergeProductionDraftMaps(
-      { A: { ...draft, answer: 'old' } },
-      { A: { ...draft, at: '2026-11-03T00:00:00.000Z', answer: 'new' } },
+      { 'A::full': { ...draft, answer: 'old' } },
+      { 'A::full': { ...draft, at: '2026-11-03T00:00:00.000Z', answer: 'new' } },
     )
-    expect(merged.A.answer).toBe('new')
+    expect(merged['A::full'].answer).toBe('new')
+  })
+
+  it('同一篇文章的不同吃法各留一组，互不覆盖', () => {
+    const yogurt = {
+      ...draft,
+      mode: 'yogurt' as const,
+      at: '2026-11-04T00:00:00.000Z',
+      answer: 'yogurt draft',
+    }
+    const map = normalizeProductionDraftMap({ 'A::full': draft, 'A::yogurt': yogurt })
+    expect(Object.keys(map).sort()).toEqual(['A::full', 'A::yogurt'])
+    expect(map['A::yogurt'].answer).toBe('yogurt draft')
+    // 旧版按文章存的 map 也能读进来（键从草稿字段重新推）
+    const legacy = normalizeProductionDraftMap({ A: yogurt })
+    expect(Object.keys(legacy)).toEqual(['A::yogurt'])
   })
 })

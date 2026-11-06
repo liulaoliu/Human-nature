@@ -60,6 +60,9 @@ function props(over: Partial<ReturnType<typeof useProductionSession>> = {}) {
     pause: noop,
     resume: noop,
     paused: false,
+    savedDrafts: [],
+    resumeSaved: noop,
+    manualGrade: noop,
     yogurt: yogurtStub(),
     doneIds: new Set<string>(),
     jumpTo: noop,
@@ -273,7 +276,7 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect((screen.getByText('把 AI 返回的批改 JSON 粘到这里').closest('details') as HTMLDetailsElement).open).toBe(true)
   })
 
-  it('暂停后回到工棚主界面，点继续接着原来那一题', () => {
+  it('暂停后回到工棚主界面：同一吃法才显示「继续」，点它接着原来那一题', () => {
     const resume = vi.fn()
     const first = { id: 'yogurt-1', zh: '你好。', goal: '', targets: [], reference: 'Hello.' }
     const second = { id: 'yogurt-2', zh: '第二句。', goal: '', targets: [], reference: 'Second.' }
@@ -285,6 +288,8 @@ describe('ProductionPanel：奶牛工棚', () => {
       resume,
       current: second,
       prompts: [first, second],
+      // 停在选草料屏时选中的就是风味酸奶
+      settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'yogurt' },
       yogurt: yogurtStub({
         sessionPairs: [
           { source: '你好。', reference: 'Hello.' },
@@ -296,6 +301,60 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(screen.getByText(/这一组已暂停：停在 2 \/ 2 题/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '继续这一组（第 2 题）' }))
     expect(resume).toHaveBeenCalled()
+  })
+
+  it('酸奶暂停着去切到脱脂奶：不许拿暂停那组冒充开始按钮，只给「切过去继续」', () => {
+    const updateSettings = vi.fn()
+    const first = { id: 'yogurt-1', zh: '你好。', goal: '', targets: [], reference: 'Hello.' }
+    const model = props({
+      stage: 'playing',
+      sessionMode: 'yogurt',
+      paused: true,
+      index: 0,
+      updateSettings,
+      current: first,
+      prompts: [first],
+      settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'skim', topic: '工作沟通' },
+    })
+    renderPanel(<ProductionPanel model={model} />)
+    // 主按钮是脱脂奶自己的开始，不是「继续这一组」
+    expect(screen.getByRole('button', { name: '按主题出题' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /继续这一组/ })).toBeNull()
+    expect(screen.getByText(/「风味酸奶」那一组还暂停着/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '切过去继续' }))
+    expect(updateSettings).toHaveBeenCalledWith({ mode: 'yogurt' })
+  })
+
+  it('别的吃法有草稿停着时，选草料屏给「继续这一组」把草稿接回来', () => {
+    const resumeSaved = vi.fn()
+    const draft = {
+      version: 1 as const,
+      sessionId: 's1',
+      articleId: 'A',
+      at: '2026-11-06T12:00:00.000Z',
+      mode: 'yogurt' as const,
+      sessionTopic: '风味酸奶',
+      prompts: [{ id: 'yogurt-1', zh: '你好。', goal: '', targets: [] }],
+      index: 0,
+      answer: '',
+      feedback: null,
+      previousFeedback: null,
+      hits: [],
+      round: 1,
+      notice: '',
+    }
+    renderPanel(
+      <ProductionPanel
+        model={props({
+          settings: { ...DEFAULT_PRODUCTION_SETTINGS, mode: 'yogurt' },
+          savedDrafts: [draft],
+          resumeSaved,
+        })}
+      />,
+    )
+    expect(screen.getByText(/这里还停着一组：风味酸奶 · 第 1 \/ 1 题/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: '继续这一组' }))
+    expect(resumeSaved).toHaveBeenCalledWith(draft)
   })
 
   it('风味酸奶拷打页左侧常驻断句列表：点一句就做那一句，本句状态按已交集合算', () => {

@@ -125,6 +125,35 @@ describe('useProductionAttempt：一题作答状态机', () => {
     expect(h.getRecords()).toHaveLength(2)
   })
 
+  it('没配 key 也能手动批改：复制提示词、等粘回，答案不清', async () => {
+    const h = setup({ ensureAi: vi.fn(async () => false) })
+    act(() => h.result.current.setAnswer('I run daily.'))
+    await act(async () => {
+      await h.result.current.manualGrade()
+    })
+    // 与「按下批改但没 key」走同一条路：复制提示词 + 打开粘回框
+    expect(h.copy).toHaveBeenCalledWith(expect.stringContaining('I run daily.'))
+    expect(h.result.current.pasteKind).toBe('feedback')
+    expect(h.result.current.pendingPrompt).not.toBe('')
+    expect(h.result.current.answer).toBe('I run daily.')
+    expect(h.flash).toHaveBeenCalledWith(expect.stringContaining('已复制批改提示词'))
+    expect(h.getRecords()).toHaveLength(0)
+
+    // 粘回的结果照常落库
+    act(() => h.result.current.applyFeedbackPaste(feedbackRaw))
+    expect(h.result.current.feedback?.total).toBe(40)
+    expect(h.getRecords()).toHaveLength(1)
+  })
+
+  it('空答案不许手动批改，也不复制提示词', async () => {
+    const h = setup()
+    await act(async () => {
+      await h.result.current.manualGrade()
+    })
+    expect(h.copy).not.toHaveBeenCalled()
+    expect(h.flash).toHaveBeenCalledWith(expect.stringContaining('先写一句英文'))
+  })
+
   it('跳过着保留一条 source=production 的记录，但不记学习活动', () => {
     const h = setup()
     act(() => h.result.current.setAnswer('draft answer'))

@@ -2,9 +2,11 @@ import { useCallback, useEffect, useRef } from 'react'
 import {
   normalizeProductionDraft,
   normalizeProductionDraftMap,
+  productionDraftKey,
   PRODUCTION_DRAFT_KEY,
   type ProductionDraft,
 } from '../../core/productionDraft'
+import type { ProductionMode } from '../../core/production'
 import { readJson, removeRaw, reportStorageFailure, writeRaw } from '../storage'
 
 type DraftMap = Record<string, ProductionDraft>
@@ -16,14 +18,18 @@ function readMap(): DraftMap {
 
 /**
  * 会话草稿的 localStorage 读写。
+ *
+ * 键是「文章 + 模式」：风味酸奶暂停着也能开全脂，两组草稿互不覆盖。
  * 同一浏览器的其它标签页通过 BroadcastChannel / storage 事件收到更新；
  * 冲突由调用方按草稿 `at` 决定是否采用。
  */
 export function useProductionDraft(
   articleId: string,
+  mode: ProductionMode,
   onRemote?: (draft: ProductionDraft) => void,
 ) {
-  const key = articleId || 'manual'
+  const base = articleId || 'manual'
+  const key = productionDraftKey(base, mode)
   const remoteRef = useRef(onRemote)
   remoteRef.current = onRemote
   const channelRef = useRef<BroadcastChannel | null>(null)
@@ -37,7 +43,9 @@ export function useProductionDraft(
         const data = event.data as { type?: unknown; draft?: unknown } | null
         if (!data || data.type !== 'save') return
         const draft = normalizeProductionDraft(data.draft)
-        if (draft?.articleId === key) remoteRef.current?.(draft)
+        if (draft && productionDraftKey(draft.articleId, draft.mode) === key) {
+          remoteRef.current?.(draft)
+        }
       }
     }
     const onStorage = (event: StorageEvent) => {
@@ -59,16 +67,29 @@ export function useProductionDraft(
   }, [key])
 
   const load = useCallback(() => readMap()[key] ?? null, [key])
+  /** 打开工棚时用：这篇文章里最新的一组（不管哪种吃法）。 */
+  const loadNewest = useCallback((): ProductionDraft | null => {
+    const mine = Object.values(readMap()).filter((d) => d.articleId === base)
+    mine.sort((a, b) => b.at.localeCompare(a.at))
+    return mine[0] ?? null
+  }, [base])
+  /** 选草料屏用：这篇文章各吃法各停在哪一题。 */
+  const listMine = useCallback((): ProductionDraft[] => {
+    return Object.values(readMap())
+      .filter((d) => d.articleId === base)
+      .sort((a, b) => b.at.localeCompare(a.at))
+  }, [base])
   const save = useCallback((draft: ProductionDraft) => {
     try {
       const map = readMap()
-      const old = map[draft.articleId]
+      const mapKey = productionDraftKey(draft.articleId, draft.mode)
+      const old = map[mapKey]
       const winner = old && old.at > draft.at ? old : draft
-      map[draft.articleId] = winner
+      map[mapKey] = winner
       const trimmed = Object.fromEntries(
         Object.entries(map)
           .sort(([, a], [, b]) => b.at.localeCompare(a.at))
-          .slice(0, 5),
+          .slice(0, 9),
       )
       if (!writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(trimmed))) {
         reportStorageFailure(PRODUCTION_DRAFT_KEY, new Error('write failed'))
@@ -79,11 +100,15 @@ export function useProductionDraft(
       reportStorageFailure(PRODUCTION_DRAFT_KEY, error)
     }
   }, [])
-  const clear = useCallback(() => {
-    const map = readMap()
-    delete map[key]
-    if (!Object.keys(map).length) removeRaw(PRODUCTION_DRAFT_KEY)
-    else writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(map))
-  }, [key])
-  return { load, save, clear }
+  /** 清掉某种吃法的草稿（默认清当前挂着的这种）。 */
+  const clearFor = useCallback(
+    (clearMode: ProductionMode = mode) => {
+      const map = readMap()
+      delete map[productionDraftKey(base, clearMode)]
+      if (!Object.keys(map).length) removeRaw(PRODUCTION_DRAFT_KEY)
+      else writeRaw(PRODUCTION_DRAFT_KEY, JSON.stringify(map))
+    },
+    [base, mode],
+  )
+  return { load, loadNewest, listMine, save, clear: clearFor, clearFor }
 }

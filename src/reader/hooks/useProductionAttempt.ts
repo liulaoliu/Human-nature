@@ -157,15 +157,16 @@ export function useProductionAttempt({
     [hits, lastRecordKey, setWritingHistory],
   )
 
-  const grade = useCallback(async () => {
+  /** 批改前先把题面 / 目标块 / 提示词备好：AI 直连与手动粘回共用这一份。 */
+  const prepare = useCallback((): FeedbackPending | null => {
     if (!current) {
       flash('这一题还没有题面')
-      return
+      return null
     }
     const text = answer.trim()
     if (!text) {
       flash('先写一句英文再批改')
-      return
+      return null
     }
     const task = makeProductionTask(current, sessionTopic, sessionMode, sessionId)
     const nextHits = checkProductionTargets(text, current.targets)
@@ -177,17 +178,23 @@ export function useProductionAttempt({
     const pending: FeedbackPending = { prompt, answer: text, task, hits: nextHits, round }
     setPendingFeedback(pending)
     setError('')
+    return pending
+  }, [current, answer, sessionTopic, round, previousFeedback, sessionMode, sessionId, flash])
+
+  const grade = useCallback(async () => {
+    const pending = prepare()
+    if (!pending) return
 
     if (!(await ensureAi())) {
       setPasteKind('feedback')
-      if (await copy(prompt)) flash('已复制批改提示词；把 AI 返回的 JSON 粘到下面')
+      if (await copy(pending.prompt)) flash('已复制批改提示词；把 AI 返回的 JSON 粘到下面')
       return
     }
 
     setGrading(true)
     try {
-      const raw = await callAi('feedback', prompt)
-      const parsed = parseProductionFeedback(raw, text)
+      const raw = await callAi('feedback', pending.prompt)
+      const parsed = parseProductionFeedback(raw, pending.answer)
       if (!parsed) {
         setError('没解析出批改结果：需要 v2 JSON（version / scores / issues / polished / summary）')
         return
@@ -199,20 +206,18 @@ export function useProductionAttempt({
     } finally {
       setGrading(false)
     }
-  }, [
-    current,
-    answer,
-    sessionTopic,
-    round,
-    previousFeedback,
-    sessionMode,
-    sessionId,
-    ensureAi,
-    copy,
-    callAi,
-    flash,
-    applyFeedback,
-  ])
+  }, [prepare, ensureAi, copy, callAi, flash, applyFeedback])
+
+  /**
+   * 手动批改：不叫 AI，直接把提示词复制走（和「本句仿写」的「复制批改提示词」同一套流程）。
+   * 用户拿去任何 AI 里跑完，粘回 JSON 就行。
+   */
+  const manualGrade = useCallback(async () => {
+    const pending = prepare()
+    if (!pending) return
+    setPasteKind('feedback')
+    if (await copy(pending.prompt)) flash('已复制批改提示词；把 AI 返回的 JSON 粘到下面')
+  }, [prepare, copy, flash])
 
   const applyFeedbackPaste = useCallback(
     (raw: string): boolean => {
@@ -286,6 +291,7 @@ export function useProductionAttempt({
     pasteKind,
     pendingPrompt: pendingFeedback?.prompt ?? '',
     grade,
+    manualGrade,
     applyFeedbackPaste,
     copyPromptAgain,
     rewrite,
