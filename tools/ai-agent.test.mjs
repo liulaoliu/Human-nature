@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { agentModel, extractResultJson, isJson, resultsPathFor, winQuote } from './ai-agent.mjs'
+import { agentModel, extractResultJson, isJson, isSafePackPath, resultsPathFor, winQuote } from './ai-agent.mjs'
 
 const saved = process.env.AI_AGENT_MODEL
 
@@ -25,6 +25,12 @@ describe('ai-agent：结果路径 / 输出抠 JSON / Windows 引号', () => {
     expect(isJson('{"a":1}')).toBe(true)
     expect(isJson('[1,2]')).toBe(true)
     expect(isJson('{a:1}')).toBe(false)
+  })
+
+  it('工作包路径拒绝会改变 cmd 语义的特殊字符', () => {
+    expect(isSafePackPath('new/ai-jobs-2026-10-24.json')).toBe(true)
+    expect(isSafePackPath('new/ai-jobs-&calc&.json')).toBe(false)
+    expect(isSafePackPath('new/ai-jobs-%PATH%.json')).toBe(false)
   })
 
   it('Windows shell 参数只在含空格/引号时加引号', () => {

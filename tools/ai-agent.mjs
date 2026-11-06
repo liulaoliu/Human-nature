@@ -76,6 +76,11 @@ export function agentModel() {
   }
 }
 
+/** 拼进 cmd 命令行前拒绝会改变语义的字符（文件名里不应出现）。 */
+export function isSafePackPath(p) {
+  return !/[%&|<>^"\r\n]/.test(String(p))
+}
+
 /** Windows 上拼 shell 命令行时给含空格/引号的参数加引号。 */
 export function winQuote(s) {
   return /[\s"]/.test(s) ? `"${String(s).replace(/"/g, '\\"')}"` : String(s)
@@ -90,6 +95,10 @@ function main() {
   const outPath = process.argv[3] ? resolve(ROOT, process.argv[3]) : resultsPathFor(jobsPath)
   const relIn = relative(ROOT, jobsPath).replace(/\\/g, '/')
   const relOut = relative(ROOT, outPath).replace(/\\/g, '/')
+  if (!isSafePackPath(relIn) || !isSafePackPath(relOut)) {
+    console.error('工作包/输出路径含 shell 特殊字符（% & | < > ^ "），请改名后再试。')
+    process.exit(1)
+  }
 
   console.log(`工作包  : ${relIn}`)
   console.log(`结果写到: ${relOut}`)
