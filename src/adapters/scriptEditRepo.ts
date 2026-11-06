@@ -1,4 +1,5 @@
 import type { ScriptEditRepoPort } from '../core/ports'
+import { parseScriptEditMap } from '../core/shadowingState'
 
 const KEY = 'shadowing.scripts.v1'
 
@@ -13,7 +14,7 @@ export class LocalScriptEditRepo implements ScriptEditRepoPort {
   private read(): Record<string, string> {
     try {
       const raw = localStorage.getItem(KEY)
-      return raw ? (JSON.parse(raw) as Record<string, string>) : {}
+      return raw ? parseScriptEditMap(JSON.parse(raw)) : {}
     } catch {
       return {}
     }

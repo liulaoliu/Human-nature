@@ -214,6 +214,19 @@ export function normalizeLearning(raw: unknown): LearningData {
   return out
 }
 
+/**
+ * 单段解析：localStorage 每个 section 一个 key，读的时候不能直接 `JSON.parse as T`。
+ * 复用整份 normalizeLearning 的守卫，但只返回这一段，保证和 SQLite 水合同口径。
+ */
+export function normalizeLearningSection<K extends LearningSection>(
+  key: K,
+  raw: unknown,
+): LearningData[K] {
+  const record: Record<string, unknown> = {}
+  record[key] = raw
+  return normalizeLearning(record)[key]
+}
+
 /** 是否至少有一条学习记录（偏好不算）。 */
 export function hasLearningData(data: LearningData): boolean {
   return (

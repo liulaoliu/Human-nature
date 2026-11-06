@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
-import { emptyLearning, hasLearningData, LEARNING_KEYS, LEARNING_SECTIONS, normalizeLearning } from './learning'
+import {
+  emptyLearning,
+  hasLearningData,
+  LEARNING_KEYS,
+  LEARNING_SECTIONS,
+  normalizeLearning,
+  normalizeLearningSection,
+} from './learning'
 
 describe('learning 记录', () => {
   it('LEARNING_KEYS 与 LEARNING_SECTIONS 一一对应，键名不重复', () => {
@@ -126,5 +133,21 @@ describe('learning 记录', () => {
 
   it('只有偏好/空记录时 hasLearningData=false', () => {
     expect(hasLearningData(emptyLearning())).toBe(false)
+  })
+})
+
+describe('normalizeLearningSection：单段外部输入也走同一守卫', () => {
+  it('每段坏值都回到空值，好值保留', () => {
+    expect(normalizeLearningSection('activity', null)).toEqual([])
+    expect(normalizeLearningSection('practice', 'nope')).toEqual([])
+    expect(normalizeLearningSection('mistakes', {})).toEqual([])
+    expect(normalizeLearningSection('kindStats', [])).toEqual({})
+    expect(normalizeLearningSection('retells', null)).toEqual([])
+    expect(normalizeLearningSection('studyDays', null)).toEqual([])
+    expect(normalizeLearningSection('sessions', {})).toEqual([])
+    expect(normalizeLearningSection('skimmed', 'x')).toEqual([])
+    expect(
+      normalizeLearningSection('activity', [{ day: '2026-10-01', counts: { read: 2 } }, { day: 1 }]),
+    ).toEqual([{ day: '2026-10-01', counts: { read: 2 } }])
   })
 })

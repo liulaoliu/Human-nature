@@ -1,4 +1,5 @@
 import type { Calibration, CalibrationRepoPort } from '../core/ports'
+import { parseCalibrationMap } from '../core/shadowingState'
 
 const KEY = 'shadowing.calibration.v1'
 
@@ -19,7 +20,7 @@ export class LocalCalibrationRepo implements CalibrationRepoPort {
   private read(): Record<string, Calibration> {
     try {
       const raw = localStorage.getItem(KEY)
-      return raw ? (JSON.parse(raw) as Record<string, Calibration>) : {}
+      return raw ? parseCalibrationMap(JSON.parse(raw)) : {}
     } catch {
       return {}
     }

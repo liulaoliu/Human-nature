@@ -6,8 +6,8 @@ import type { BackTranslationRecord } from '../../core/backTranslate'
 import { normalizeBackTranslationRecords } from '../../core/backTranslate'
 import type { GoldenDrillRecord } from '../../core/goldenProgress'
 import { normalizeGoldenDrills } from '../../core/goldenProgress'
-import { LEARNING_KEYS } from '../../core/learning'
-import type { KindStats, RetellRecord, StudiedDay } from '../../core/learning'
+import { LEARNING_KEYS, normalizeLearningSection } from '../../core/learning'
+import type { KindStats, LearningData, LearningSection, RetellRecord, StudiedDay } from '../../core/learning'
 import type { WritingErrorProgress } from '../../core/writingErrorProgress'
 import { normalizeWritingErrorProgress } from '../../core/writingErrorProgress'
 import { normalizeProductionProgress } from '../../core/productionHistory'
@@ -17,12 +17,25 @@ import type { PickSession, StudyDay } from '../../core/vocabStats'
 import type { LearningCollectionSetters, LearningCollectionsSnapshot } from './learningDataTypes'
 import { useLocalStorageState } from './useLocalStorageState'
 
+/** 每个 section 一个 key：坏 JSON / 坏形状都在这里回到空值，业务只收好数据。 */
+function parseSection<K extends LearningSection>(key: K) {
+  return (raw: string): LearningData[K] => {
+    try {
+      return normalizeLearningSection(key, JSON.parse(raw))
+    } catch {
+      return normalizeLearningSection(key, null)
+    }
+  }
+}
+
 /**
  * 学习记录的落盘层：每个集合一个 localStorage 键，解析守卫也在这里。
  * 只提供状态和 setter；写业务动作在 useLearningActions。
  */
 export function useLearningCollections() {
-  const [studyDays, setStudyDays] = useLocalStorageState<StudyDay[]>(LEARNING_KEYS.studyDays, [])
+  const [studyDays, setStudyDays] = useLocalStorageState<StudyDay[]>(LEARNING_KEYS.studyDays, [], {
+    parse: parseSection('studyDays'),
+  })
   const [studiedDays, setStudiedDays] = useLocalStorageState<StudiedDay[]>(LEARNING_KEYS.studiedDays, [], {
     parse: (raw) => {
       try {
@@ -46,10 +59,18 @@ export function useLearningCollections() {
       return []
     },
   })
-  const [activity, setActivity] = useLocalStorageState<DayActivity[]>(LEARNING_KEYS.activity, [])
-  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>(LEARNING_KEYS.practice, [])
-  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>(LEARNING_KEYS.mistakes, [])
-  const [kindStats, setKindStats] = useLocalStorageState<KindStats>(LEARNING_KEYS.kindStats, {})
+  const [activity, setActivity] = useLocalStorageState<DayActivity[]>(LEARNING_KEYS.activity, [], {
+    parse: parseSection('activity'),
+  })
+  const [practice, setPractice] = useLocalStorageState<PracticeRecord[]>(LEARNING_KEYS.practice, [], {
+    parse: parseSection('practice'),
+  })
+  const [mistakes, setMistakes] = useLocalStorageState<MistakeEntry[]>(LEARNING_KEYS.mistakes, [], {
+    parse: parseSection('mistakes'),
+  })
+  const [kindStats, setKindStats] = useLocalStorageState<KindStats>(LEARNING_KEYS.kindStats, {}, {
+    parse: parseSection('kindStats'),
+  })
   const [answerEvents, setAnswerEvents] = useLocalStorageState<AnswerEvent[]>(LEARNING_KEYS.answerEvents, [], {
     parse: (raw) => {
       try {
@@ -94,7 +115,9 @@ export function useLearningCollections() {
       },
     },
   )
-  const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [])
+  const [retells, setRetells] = useLocalStorageState<RetellRecord[]>(LEARNING_KEYS.retells, [], {
+    parse: parseSection('retells'),
+  })
   const [backTranslations, setBackTranslations] = useLocalStorageState<BackTranslationRecord[]>(
     LEARNING_KEYS.backTranslations,
     [],
@@ -108,8 +131,12 @@ export function useLearningCollections() {
       },
     },
   )
-  const [sessions, setSessions] = useLocalStorageState<PickSession[]>(LEARNING_KEYS.sessions, [])
-  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>(LEARNING_KEYS.skimmed, [])
+  const [sessions, setSessions] = useLocalStorageState<PickSession[]>(LEARNING_KEYS.sessions, [], {
+    parse: parseSection('sessions'),
+  })
+  const [skimmedArticles, setSkimmedArticles] = useLocalStorageState<string[]>(LEARNING_KEYS.skimmed, [], {
+    parse: parseSection('skimmed'),
+  })
   const [readGoal, setReadGoal] = useLocalStorageState('reader:readGoal', 2, {
     parse: (raw) => {
       const n = Number(raw)
