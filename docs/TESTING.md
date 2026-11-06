@@ -783,3 +783,10 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `createApplyTaskResult.test` 钉住「切篇拒绝 / 同篇写回 / 无 meta 兼容」。
 
 66. **一次性迁移 effect 不能只靠 `changed` 防重**（2026-11-05）。父组件每次渲染都可能传新数组但内容相同；如果迁移里又 `setReport` 触发渲染、而测试/调用方的 `setRecords` 是 no-op，effect 会反复迁移，最后 OOM。现在用「待迁移记录指纹」ref 跳过重复内容，只有指纹变化才备份 + 归组 + 出报告。
+
+67. **同一个地址的两个视图别各自 `useSearchParams`**（2026-11-06）。工棚主面板写 `?ph=1`、
+   历史子视图写 `?pm/pa/pt/ptk`，两边都从自己的 `params` 快照整份重建 URL：
+   主面板开历史时会把筛选抹掉，历史改筛选时又会把 `ph` 抹掉（`setParams(next)` 是整份替换，
+   不是打补丁）。现在 query 的**解析和构造都只在 `route.ts`**（`parseProductionQuery` /
+   `productionPanelPath`），面板只调 `onNavigate(state)`，写入方只有一个。
+   判断标准：同一个 `<panel>` 下有两个以上组件要改 query，就必须先有 parse / build 纯函数 + 往返测试。
