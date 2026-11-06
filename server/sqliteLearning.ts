@@ -217,6 +217,15 @@ export function emptyLearning(): LearningOut {
 // 注：原 JS 里有个从未被调用的私有 `jsonText`（写侧 sqliteLearningWrite 有同名函数
 // 才是真正在用的那个）。迁移时按 noUnusedLocals 移除死代码，行为不变。
 
+/**
+ * 写作记录的来源白名单。
+ *
+ * **必须与 `src/core/writing.ts` 的 `WRITING_SOURCES` 保持一致**：前端认哪几种，
+ * 这里就得认哪几种。两边漂过（2026-10-30：前端加了 `production`，服务端没跟，
+ * 产出训练的历史存进去、读回来就丢了来源），`server/learningContract.test.ts` 盯着这条。
+ */
+const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production'] as const
+
 function parseJson(v: unknown): unknown {
   if (v === undefined || v === null || v === '') return undefined
   try {
@@ -566,13 +575,8 @@ export function loadLearning(db: DatabaseSync): LearningOut {
       const task = parseJson(r.task_json)
       if (task !== undefined) rec.task = task
       // 来源只认白名单：坏值当普通仿写，别让金句课历史被一条脏数据带歪
-      if (
-        r.source === 'writing' ||
-        r.source === 'goldenSentence' ||
-        r.source === 'goldenExam' ||
-        r.source === 'goldenError'
-      ) {
-        rec.source = r.source
+      if ((WRITING_SOURCES as readonly unknown[]).includes(r.source)) {
+        rec.source = String(r.source)
       }
       if (r.sentence_id !== null && r.sentence_id !== undefined) rec.sentenceId = String(r.sentence_id)
       if (r.exam_id !== null && r.exam_id !== undefined) rec.examId = String(r.exam_id)
