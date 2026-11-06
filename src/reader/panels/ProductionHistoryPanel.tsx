@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import type { ProductionMode } from '../../core/production'
 import {
   filterProductionHistory,
@@ -16,6 +15,7 @@ import {
 } from '../../core/productionHistory'
 import type { WritingRecord } from '../../core/writing'
 import { PRODUCTION_MODE_LABEL } from '../../core/production'
+import type { ProductionRouteState } from '../route'
 
 export interface ProductionHistoryPanelProps {
   records: WritingRecord[]
@@ -23,6 +23,9 @@ export interface ProductionHistoryPanelProps {
   articleIdentity: string
   articleTitle: string
   onBack: () => void
+  /** 筛选状态来自 URL（`/p/production?pm=...&pa=all&pt=...&ptk=...`） */
+  route?: ProductionRouteState
+  onNavigate?: (state: ProductionRouteState, opts?: { replace?: boolean }) => void
 }
 
 function downloadText(name: string, text: string) {
@@ -42,26 +45,23 @@ export default function ProductionHistoryPanel({
   articleIdentity,
   articleTitle,
   onBack,
+  route,
+  onNavigate,
 }: ProductionHistoryPanelProps) {
-  const [params, setParams] = useSearchParams()
   const [selected, setSelected] = useState<string | null>(null)
   const [limit, setLimit] = useState(40)
-  const rawMode = params.get('pm')
-  const mode: ProductionMode | 'all' =
-    rawMode === 'full' || rawMode === 'skim' || rawMode === 'yogurt' ? rawMode : 'all'
-  const scope: 'all' | 'article' = params.get('pa') === 'all' ? 'all' : 'article'
-  const topic = params.get('pt') ?? ''
-  const targetKey = params.get('ptk')
-  const setParam = (key: string, value: string) => {
-    const next = new URLSearchParams(params)
-    if (value) next.set(key, value)
-    else next.delete(key)
-    setParams(next, { replace: true })
-  }
-  const setScope = (value: 'all' | 'article') => setParam('pa', value === 'all' ? 'all' : '')
-  const setMode = (value: ProductionMode | 'all') => setParam('pm', value === 'all' ? '' : value)
-  const setTopic = (value: string) => setParam('pt', value)
-  const setTargetKey = (value: string | null) => setParam('ptk', value ?? '')
+  const mode: ProductionMode | 'all' = route?.mode ?? 'all'
+  const scope: 'all' | 'article' = route?.scope === 'all' ? 'all' : 'article'
+  const topic = route?.topic ?? ''
+  const targetKey = route?.targetKey
+  // 筛选是「页面内动作」：一律 replace，不往历史里堆；`view` 保持不变（关闭由主面板负责）。
+  // 默认值不写进 URL（mode=all / scope=article），地址短一点。
+  const navigate = (patch: Partial<ProductionRouteState>) =>
+    onNavigate?.({ ...route, ...patch }, { replace: true })
+  const setScope = (value: 'all' | 'article') => navigate({ scope: value === 'all' ? 'all' : undefined })
+  const setMode = (value: ProductionMode | 'all') => navigate({ mode: value === 'all' ? undefined : value })
+  const setTopic = (value: string) => navigate({ topic: value.trim() ? value : undefined })
+  const setTargetKey = (value: string | null) => navigate({ targetKey: value ?? undefined })
 
   useEffect(() => {
     setLimit(40)

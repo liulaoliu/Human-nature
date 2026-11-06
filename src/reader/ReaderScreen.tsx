@@ -31,6 +31,7 @@ import type { useSpeaking } from './hooks/useSpeaking'
 import type { usePregenerate } from './hooks/usePregenerate'
 import type { useGoldenDrill } from './hooks/useGoldenDrill'
 import type { GoldenPanelActions } from './panels/GoldenPanel'
+import type { ProductionPanelActions } from './panels/ProductionPanel'
 
 
 type ShellP = ComponentProps<typeof ReaderShell>
@@ -148,6 +149,8 @@ export interface ReaderScreenProps {
   exporter: SidebarP['exporter']
   /** 金句课的导出 / 生成 / 仿写 / 金句本动作，打包交给面板。 */
   goldenActions: GoldenPanelActions
+  /** 奶牛工棚的子视图 / 历史筛选接线（URL 是事实来源，见 `route.ts`）。 */
+  productionActions: ProductionPanelActions
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>

@@ -268,15 +268,27 @@ describe('ProductionPanel：奶牛工棚', () => {
     expect(setAnswer).toHaveBeenCalled()
   })
 
-  it('历史视图可用 ?ph=1 深链接；返回回到选草料', () => {
+  it('route.view=history 时进历史；返回回到工棚并 replace 掉 ph', () => {
+    const onNavigate = vi.fn()
     render(
-      <MemoryRouter initialEntries={['/reader/p/production?ph=1']}>
-        <ProductionPanel model={props()} />
+      <MemoryRouter>
+        <ProductionPanel model={props()} route={{ view: 'history' }} onNavigate={onNavigate} />
       </MemoryRouter>,
     )
     expect(screen.getByText('产出历史')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '← 返回工棚' }))
-    expect(screen.getByText('🐄 D老师奶牛工棚')).toBeTruthy()
+    expect(onNavigate).toHaveBeenCalledWith({ view: undefined }, { replace: true })
+  })
+
+  it('点历史按钮 push 到 ?ph=1', () => {
+    const onNavigate = vi.fn()
+    render(
+      <MemoryRouter>
+        <ProductionPanel model={props()} route={{ mode: 'skim' }} onNavigate={onNavigate} />
+      </MemoryRouter>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '历史' }))
+    expect(onNavigate).toHaveBeenCalledWith({ mode: 'skim', view: 'history' })
   })
 
   it('第二稿后可以进下一题；完成页能再来一组', () => {

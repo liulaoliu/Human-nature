@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigationType } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import type { ReactNode } from 'react'
-import { parseReaderRoute, useRoutedPanels } from './route'
+import { parseReaderRoute, productionPanelPath, useRoutedPanels } from './route'
 import { useReaderPanels } from './hooks/useReaderPanels'
 
 /**
@@ -102,5 +102,56 @@ describe('useRoutedPanels：真实导航语义', () => {
     const before = result.current.setStatsOpen
     rerender({ extra: 1 })
     expect(result.current.setStatsOpen).toBe(before)
+  })
+})
+
+/**
+ * 奶牛工棚的子视图 / 历史筛选：主面板和历史子视图是同一个地址的两半，
+ * 写入方只有 `route.ts` 一份（2026-11-06 复审：两个面板各自 `useSearchParams` 会互相覆盖）。
+ */
+function useProductionHarness() {
+  const location = useLocation()
+  const navigate = useNavigate()
+  const navigationType = useNavigationType()
+  const route = parseReaderRoute(location.pathname, location.search)
+  const onNavigate = (
+    state: Parameters<typeof productionPanelPath>[1],
+    opts?: { replace?: boolean },
+  ) => navigate(productionPanelPath(route.slug, state), { replace: opts?.replace })
+  return { route, onNavigate, search: location.search, navigationType }
+}
+
+function setupProduction(initialPath: string) {
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <MemoryRouter initialEntries={[initialPath]}>{children}</MemoryRouter>
+  )
+  return renderHook(() => useProductionHarness(), { wrapper })
+}
+
+describe('production 子视图：真实导航语义', () => {
+  it('开历史 push 一层且保留已选筛选；关闭 replace 回工棚、筛选不丢', async () => {
+    const { result } = setupProduction('/reader/a/my-article/p/production?pm=skim')
+    await waitFor(() => expect(result.current.route.panel).toBe('production'))
+    expect(result.current.route.production).toEqual({ mode: 'skim' })
+
+    act(() => result.current.onNavigate({ ...result.current.route.production, view: 'history' }))
+    await waitFor(() => expect(result.current.search).toBe('?ph=1&pm=skim'))
+    expect(result.current.navigationType).toBe('PUSH')
+    expect(result.current.route.production).toEqual({ view: 'history', mode: 'skim' })
+
+    act(() => result.current.onNavigate({ ...result.current.route.production, view: undefined }, { replace: true }))
+    await waitFor(() => expect(result.current.search).toBe('?pm=skim'))
+    expect(result.current.navigationType).toBe('REPLACE')
+    expect(result.current.route.production).toEqual({ mode: 'skim' })
+  })
+
+  it('历史里改筛选（replace）不会把 ph 挤掉', async () => {
+    const { result } = setupProduction('/reader/a/my-article/p/production?ph=1&pa=all')
+    await waitFor(() => expect(result.current.route.production).toEqual({ view: 'history', scope: 'all' }))
+
+    act(() => result.current.onNavigate({ ...result.current.route.production, mode: 'yogurt' }, { replace: true }))
+    await waitFor(() => expect(result.current.search).toBe('?ph=1&pm=yogurt&pa=all'))
+    expect(result.current.navigationType).toBe('REPLACE')
+    expect(result.current.route.production).toEqual({ view: 'history', mode: 'yogurt', scope: 'all' })
   })
 })

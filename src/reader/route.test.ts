@@ -8,6 +8,8 @@ import {
   panelFlags,
   panelPath,
   parseGoldenQuery,
+  parseProductionQuery,
+  productionPanelPath,
   parseReaderRoute,
 } from './route'
 
@@ -173,6 +175,49 @@ describe('route：golden 子视图 / 历史详情', () => {
     })
     expect(parseGoldenQuery('?gv=nope&gr=x')).toEqual({ recordKey: 'x' })
     expect(parseGoldenQuery('?gv=nope')).toBeUndefined()
+  })
+})
+
+describe('route：production 子视图 / 历史筛选', () => {
+  it('view / mode / scope / topic / targetKey 往返，主题和目标块键会编码', () => {
+    const state = {
+      view: 'history' as const,
+      mode: 'skim' as const,
+      scope: 'all' as const,
+      topic: '工作 & 旅行',
+      targetKey: 'word:follow up',
+    }
+    const path = productionPanelPath('my-article', state)
+    expect(path.startsWith('/reader/a/my-article/p/production?')).toBe(true)
+    expect(path).toContain('ph=1')
+    expect(path).toContain('ptk=word%3Afollow+up')
+    expect(parseProductionQuery(path.split('?')[1])).toEqual(state)
+    expect(parseReaderRoute('/reader/a/my-article/p/production', path.split('?')[1])).toMatchObject({
+      panel: 'production',
+      production: state,
+    })
+  })
+
+  it('没有 query 时不写 production；别的面板不认这组 query', () => {
+    expect(productionPanelPath('x')).toBe('/reader/a/x/p/production')
+    expect(parseProductionQuery('')).toBeUndefined()
+    expect(parseReaderRoute('/reader/p/production')).toEqual({
+      slug: '',
+      panel: 'production',
+      overlay: '',
+    })
+    expect(parseReaderRoute('/reader/p/speed', '?ph=1')).toEqual({
+      slug: '',
+      panel: 'speed',
+      overlay: '',
+    })
+  })
+
+  it('坏值忽略：pm 只认三种模式 / all，pa 只认 article / all，空白主题当没写', () => {
+    expect(parseProductionQuery('?pm=nope&pa=lol&pt=%20%20')).toBeUndefined()
+    expect(parseProductionQuery('?pm=all')).toEqual({ mode: 'all' })
+    expect(parseProductionQuery('?pa=article')).toEqual({ scope: 'article' })
+    expect(parseProductionQuery('?ph=0&pm=yogurt')).toEqual({ mode: 'yogurt' })
   })
 })
 

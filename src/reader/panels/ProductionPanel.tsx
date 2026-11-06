@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
   PRODUCTION_ANGLE_LABEL,
@@ -28,6 +27,7 @@ import {
   type YogurtPair,
 } from '../../core/productionPrompts'
 import { writingRecordLabel } from '../../core/writing'
+import type { ProductionRouteState } from '../route'
 import type { useProductionSession } from '../hooks/useProductionSession'
 import GoldenFeedback from './golden/GoldenFeedback'
 import RoundSizeSelect from './RoundSizeSelect'
@@ -36,7 +36,16 @@ import ProductionReview from './ProductionReview'
 import VoiceInputButton from './VoiceInputButton'
 import ProductionHint from './ProductionHint'
 
-export interface ProductionPanelProps {
+export interface ProductionPanelActions {
+  /**
+   * `/p/production` 的子视图 / 历史筛选。URL 是事实来源，解析与拼接都在 `route.ts`；
+   * 面板只决定「点这个按钮要变成哪个状态」。
+   */
+  route?: ProductionRouteState
+  onNavigate?: (state: ProductionRouteState, opts?: { replace?: boolean }) => void
+}
+
+export interface ProductionPanelProps extends ProductionPanelActions {
   model: ReturnType<typeof useProductionSession>
 }
 
@@ -54,23 +63,15 @@ const TARGET_TYPE_LABEL: Record<ProductionTargetKind, string> = {
  * 页面只负责把 hook 的状态画出来；出题、批改、目标块硬校验、落盘都在
  * `useProductionSession` / `core/production`。
  */
-export default function ProductionPanel({ model }: ProductionPanelProps) {
+export default function ProductionPanel({ model, route, onNavigate }: ProductionPanelProps) {
   const [pasteText, setPasteText] = useState('')
   const [yogurtPairs, setYogurtPairs] = useState<YogurtPair[] | null>(null)
   const [pairWarning, setPairWarning] = useState('')
   const [pairError, setPairError] = useState('')
-  const [searchParams, setSearchParams] = useSearchParams()
-  const historyOpen = searchParams.get('ph') === '1'
-  const openHistory = () => {
-    const next = new URLSearchParams(searchParams)
-    next.set('ph', '1')
-    setSearchParams(next)
-  }
-  const closeHistory = () => {
-    const next = new URLSearchParams(searchParams)
-    next.delete('ph')
-    setSearchParams(next, { replace: true })
-  }
+  const historyOpen = route?.view === 'history'
+  // 打开 = push（返回键能退回工棚）；页面内关闭 = replace（返回键不经过已关掉的界面）。
+  const openHistory = () => onNavigate?.({ ...route, view: 'history' })
+  const closeHistory = () => onNavigate?.({ ...route, view: undefined }, { replace: true })
   const articleTitle = model.articleTitle
   const { settings, updateSettings } = model
   const pastePrompt = model.pendingPrompt
@@ -159,7 +160,18 @@ export default function ProductionPanel({ model }: ProductionPanelProps) {
   }
 
   if (historyOpen)
-    return <ProductionHistoryView open records={model.allHistory} progress={model.progress} articleIdentity={model.articleIdentity} articleTitle={articleTitle} onBack={closeHistory} />
+    return (
+      <ProductionHistoryView
+        open
+        route={route}
+        onNavigate={onNavigate}
+        records={model.allHistory}
+        progress={model.progress}
+        articleIdentity={model.articleIdentity}
+        articleTitle={articleTitle}
+        onBack={closeHistory}
+      />
+    )
 
   return (
     <div className="study production">

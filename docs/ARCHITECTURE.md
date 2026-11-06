@@ -122,7 +122,7 @@ types ← core ← adapters ← reader
 | 各模块的本轮数量选择器 | `src/reader/panels/RoundSizeSelect.tsx` + `RoundStartPrompt.tsx` | 统一档位文案 / `0 = 全部` / 自定义单位；精读七种拷打（记忆 / 词块在预习页）、考试设置、结算「再来一轮」、听写、听力、背单词的新词配额 / 每组词数共用；各模块只负责状态和「开始」动作 |
 | 精读七种拷打各自的每次题数 | `src/core/intensiveDrill.ts` | 七种入口（记忆 / 词块 / 英英释义 / 语法标记 / 语法·结构 / 听力 / 错题包围战）、档位 5/10/15/20/30、默认 10；坏数据逐项回默认。七种各存各的，统一在 `reader:drillLimits`，设置存取在 `hooks/useQuizSettings` |
 | 精读面板的阶段 / 拷打入口 | `src/reader/hooks/useIntensiveActions.ts` + `panels/DrillLauncher.tsx` | 阶段→工具、拷打→题型两张表；记忆 / 词块直接进预习页（数量也在预习页选），其它入口由 `DrillLauncher` 先弹数量，确认后传给 `startDrill` / `startArticleDrill` / `startSiege` |
-| D老师奶牛工棚（产出训练） | `src/core/production.ts` + `productionPrompts.ts` + `productionHistory.ts` + `hooks/useProductionSession.ts` + `hooks/useProductionPacks.ts` + `panels/ProductionPanel.tsx` | 三种模式：全脂（AI 随机定主题）/ 脱脂奶（用户定主题）/ 风味酸奶（粘贴中英对照，本机逐句拆、可手动对齐、支持英译中/整段连写）。全脂 / 脱脂奶都有「带本机词块」开关；带词块时从 `library.items` 抽目标块并做硬校验，支持翻译 / 挖空 / 词序三种题型、难度和 due/weak/recent/mistakes/theme 范围。作答/批改/重写仍写 `writingRecords`（`source='production'`）；目标块进度由 attempts 归并后落 `reader:productionProgress` / `production_progress`（v13，跨设备恢复；attempts 仍是事实源）。会话草稿在 `reader:productionDraft`（最多 5 篇，随整库备份导出/导入），刷新可恢复，多标签页通过 BroadcastChannel / storage 同步（取较新）；历史/统计/导出在 `ProductionHistoryPanel`，用 `?ph=1` 做可刷新/可分享子视图，筛选和目标块详情写 `pm/pa/pt/ptk`；顶栏和今日计划区分到期/新目标/薄弱，`due` 单组最多 6 个并自动开始；产出 must-fix 错因经 `useProductionErrors` 进 `writing_error_progress`（新增或内容变化都更新）；批改后可「追问 D老师」；趋势/高频错因只看最近 1000 条；旧记录用 `useProductionLegacyMigration` 一次性补 `sessionId`，同时写 `reader:productionLegacyBackup` 和 `reader:productionLegacyReport`（选草料页显示归组明细）；目标块进度首次/结构变化全量回算、新增 attempts 只增量叠加，落表会清掉不在 payload 里的孤儿行；草稿保存只用较新 `at` 覆盖，旧标签页晚到的保存不会盖掉新草稿；答案和追问支持 Web Speech API 语音输入（不支持则隐藏按钮，只收最终识别结果） |
+| D老师奶牛工棚（产出训练） | `src/core/production.ts` + `productionPrompts.ts` + `productionHistory.ts` + `hooks/useProductionSession.ts` + `hooks/useProductionPacks.ts` + `panels/ProductionPanel.tsx` | 三种模式：全脂（AI 随机定主题）/ 脱脂奶（用户定主题）/ 风味酸奶（粘贴中英对照，本机逐句拆、可手动对齐、支持英译中/整段连写）。全脂 / 脱脂奶都有「带本机词块」开关；带词块时从 `library.items` 抽目标块并做硬校验，支持翻译 / 挖空 / 词序三种题型、难度和 due/weak/recent/mistakes/theme 范围。作答/批改/重写仍写 `writingRecords`（`source='production'`）；目标块进度由 attempts 归并后落 `reader:productionProgress` / `production_progress`（v13，跨设备恢复；attempts 仍是事实源）。会话草稿在 `reader:productionDraft`（最多 5 篇，随整库备份导出/导入），刷新可恢复，多标签页通过 BroadcastChannel / storage 同步（取较新）；历史/统计/导出在 `ProductionHistoryPanel`，用 `?ph=1` 做可刷新/可分享子视图，筛选和目标块详情写 `pm/pa/pt/ptk`（解析 / 构造只在 `route.ts` 的 `parseProductionQuery` / `productionPanelPath`，面板不直接碰 `useSearchParams`）；顶栏和今日计划区分到期/新目标/薄弱，`due` 单组最多 6 个并自动开始；产出 must-fix 错因经 `useProductionErrors` 进 `writing_error_progress`（新增或内容变化都更新）；批改后可「追问 D老师」；趋势/高频错因只看最近 1000 条；旧记录用 `useProductionLegacyMigration` 一次性补 `sessionId`，同时写 `reader:productionLegacyBackup` 和 `reader:productionLegacyReport`（选草料页显示归组明细）；目标块进度首次/结构变化全量回算、新增 attempts 只增量叠加，落表会清掉不在 payload 里的孤儿行；草稿保存只用较新 `at` 覆盖，旧标签页晚到的保存不会盖掉新草稿；答案和追问支持 Web Speech API 语音输入（不支持则隐藏按钮，只收最终识别结果） |
 | 考试判分落库 | `src/reader/quiz/createQuizCheck.ts` | 对/错 → SRS、错题本、活动、答题事件、朗读、自动切题；无 React 状态，主 hook 传当前快照 |
 | 出题素材（答案归一化 / 挖空 / 干扰项 / 语法标记 / 洗牌） | `src/core/quizParts.ts` | 从 `quiz.ts` 抽出；题型枚举、`makeQuestion`、判分仍在 `quiz.ts`，公开 import 不变 |
 | 服务端跑批（起跑 + 轮询 + 取消） | `src/adapters/aiRun.ts` | 有界（40 分钟超时 / 连续 20 次失联）+ 可取消；runId 由客户端生成并随启动请求发过去，服务端**先占位再读 body**，所以启动响应还没回来时点取消也能停；取消先 `POST /api/ai/cancel` 停服务端，再打断本地轮询；hooks 里别自己 `fetch('/api/ai/run')` |
@@ -466,6 +466,13 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 `/reader/a/<slug>/p/browse?kind=word&q=run&days=2026-10-01,2026-10-02&status=due&mastered=0&picked=saved:A`。
 默认值不写；`scope` 只在和入口（`browse` / `browse-article`）不同时写；筛选改动只 **replace**、不 push
 （返回键不会一步步经过每次输入）。解析 / 构造在 `reader/browseQuery.ts`，接线在 `hooks/useBrowseFilters.ts`。
+
+**整页会话里的子视图 / 筛选**同理写在 query 上，但解析和构造必须收在 `reader/route.ts` 一处：
+金句课历史用 `parseGoldenQuery` / `goldenPanelPath`（`?gv/gr/gs/from`），
+奶牛工棚历史用 `parseProductionQuery` / `productionPanelPath`（`?ph/pm/pa/pt/ptk`）；
+打开子视图 push、页面内改筛选 / 返回 replace。**面板里不许各自 `useSearchParams` 拼 query**——
+同一个地址的两半各拿各的快照再整份重建，会互相覆盖（2026-11-06 复审：工棚主面板写 `ph` 时
+把历史筛选抹掉，反之亦然）。坏值一律忽略，不把页面搞崩。
 
 `<panel>` 有两类，都在同一张 `PanelName` 表里：
 

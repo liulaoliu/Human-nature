@@ -8,7 +8,8 @@ import { useArticleIdentity } from './hooks/useArticleIdentity'
 import { useReaderArticleNavigation } from './hooks/useReaderArticleNavigation'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useBrowseFilters } from './hooks/useBrowseFilters'
-import { goldenPanelPath } from './route'
+import { goldenPanelPath, productionPanelPath } from './route'
+import type { ProductionPanelActions } from './panels/ProductionPanel'
 
 import { useToast } from './hooks/useToast'
 
@@ -623,6 +624,16 @@ export default function ReaderApp() {
     ) => navigate(goldenPanelPath(currentSlug, state), { replace: opts?.replace }),
   }
 
+  /**
+   * 奶牛工棚的 URL 接线：子视图 / 历史筛选也走 `route.ts`，
+   * 两个面板不再各自 `useSearchParams` 拼 query（会互相覆盖）。
+   */
+  const productionActions: ProductionPanelActions = {
+    route: route.production,
+    onNavigate: (state, opts) =>
+      navigate(productionPanelPath(currentSlug, state), { replace: opts?.replace }),
+  }
+
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
     library,
@@ -688,6 +699,7 @@ export default function ReaderApp() {
     production,
     golden,
     goldenActions,
+    productionActions,
     panels,
     browseFilters,
     articleRouting,

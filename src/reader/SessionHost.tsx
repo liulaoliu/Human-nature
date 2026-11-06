@@ -8,6 +8,7 @@ import type { useListening } from './hooks/useListening'
 import type { useWriting } from './hooks/useWriting'
 import type { useBackTranslate } from './hooks/useBackTranslate'
 import type { useProductionSession } from './hooks/useProductionSession'
+import type { ProductionPanelActions } from './panels/ProductionPanel'
 import StudyPanelFromModel from './panels/StudyPanelFromModel'
 import ProductionPanel from './panels/ProductionPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
@@ -52,6 +53,8 @@ export interface SessionHostProps {
   writing: ReturnType<typeof useWriting>
   back: ReturnType<typeof useBackTranslate>
   production: ReturnType<typeof useProductionSession>
+  /** 奶牛工棚的子视图 / 历史筛选接线（`route.ts` 解析出来的 URL 状态）。 */
+  productionActions: ProductionPanelActions
 }
 
 /**
@@ -75,6 +78,7 @@ export default function SessionHost({
   writing,
   back,
   production,
+  productionActions,
 }: SessionHostProps) {
   const quickCurrent =
     quick.queue && quick.index < quick.queue.length
@@ -82,7 +86,7 @@ export default function SessionHost({
       : null
 
   // 产出训练是整页会话：打开时只画它，避免和背词 / 考试 / 金句课叠在一起。
-  if (production.open) return <ProductionPanel model={production} />
+  if (production.open) return <ProductionPanel model={production} {...productionActions} />
 
   return (
     <>

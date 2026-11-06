@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
+import type { ProductionMode } from '../core/production'
 
 /**
  * 阅读页的路由模型（**全站单入口**：BrowserRouter 在 `src/main.tsx`，这里只管 `/reader` 这一段）。
@@ -75,6 +76,8 @@ export interface ReaderRoute {
   back?: BooleanPanelName
   /** `/p/golden` 的子视图 / 记录定位；没有 query 时不写这个字段 */
   golden?: GoldenRouteState
+  /** `/p/production` 的子视图 / 历史筛选；没有 query 时不写这个字段 */
+  production?: ProductionRouteState
 }
 
 /** D老师小课堂挂在 `/p/golden` 下的子视图；仍然由 `golden` 这一层整页会话承载。 */
@@ -117,6 +120,65 @@ export function goldenPanelPath(slug: string, state: GoldenRouteState = {}): str
   if (state.recordKey) params.set('gr', state.recordKey)
   if (state.scope) params.set('gs', state.scope)
   if (state.from) params.set('from', state.from)
+  const query = params.toString()
+  return query ? `${base}?${query}` : base
+}
+
+/**
+ * 奶牛工棚挂在 `/p/production` 下的子视图 / 历史筛选；仍然由 `production` 这一层整页会话承载。
+ *
+ * 为什么必须收在这里、而不是两个面板各自 `useSearchParams`：主面板和历史子视图是**同一个地址**
+ * 的两半，各拿各的快照再整份重建 query 会互相覆盖（主面板写 `ph` 时会把历史筛选抹掉，
+ * 反之亦然）。这里做一份 parse / build，写入方只有一个，坏值也不会把页面搞崩。
+ * query 键沿用上线时的 `ph / pm / pa / pt / ptk`，不改名，免得已存下的地址失效。
+ */
+export type ProductionRouteView = 'history'
+
+export interface ProductionRouteState {
+  view?: ProductionRouteView
+  /** 历史列表的模式筛选（`all` = 三种模式混看） */
+  mode?: ProductionMode | 'all'
+  /** `article` = 只看本篇，`all` = 全库 */
+  scope?: 'article' | 'all'
+  topic?: string
+  /** 目标块稳定键（`kind|text`），点趋势条进来时定位 */
+  targetKey?: string
+}
+
+const PRODUCTION_MODES: readonly string[] = ['full', 'skim', 'yogurt']
+
+/** 解析 `/p/production?ph=1&pm=skim&pa=all&pt=...&ptk=...`。坏值忽略。 */
+export function parseProductionQuery(search: string): ProductionRouteState | undefined {
+  const params = new URLSearchParams(search)
+  const view: ProductionRouteView | undefined = params.get('ph') === '1' ? 'history' : undefined
+  const modeRaw = params.get('pm')
+  const mode: ProductionMode | 'all' | undefined =
+    modeRaw === 'all' ? 'all' : modeRaw && PRODUCTION_MODES.includes(modeRaw) ? (modeRaw as ProductionMode) : undefined
+  const scopeRaw = params.get('pa')
+  const scope = scopeRaw === 'all' || scopeRaw === 'article' ? scopeRaw : undefined
+  const topic = params.get('pt')?.trim() || undefined
+  const targetKey = params.get('ptk')?.trim() || undefined
+  if (!view && !mode && !scope && !topic && !targetKey) return undefined
+  return {
+    ...(view ? { view } : {}),
+    ...(mode ? { mode } : {}),
+    ...(scope ? { scope } : {}),
+    ...(topic ? { topic } : {}),
+    ...(targetKey ? { targetKey } : {}),
+  }
+}
+
+/** 生成 `/p/production?...`；主题 / 目标块键做 URL 编码。 */
+export function productionPanelPath(slug: string, state: ProductionRouteState = {}): string {
+  const base = panelPath(slug, 'production')
+  const params = new URLSearchParams()
+  if (state.view === 'history') params.set('ph', '1')
+  if (state.mode) params.set('pm', state.mode)
+  if (state.scope) params.set('pa', state.scope)
+  const topic = state.topic?.trim()
+  if (topic) params.set('pt', topic)
+  const targetKey = state.targetKey?.trim()
+  if (targetKey) params.set('ptk', targetKey)
   const query = params.toString()
   return query ? `${base}?${query}` : base
 }
@@ -211,7 +273,11 @@ function withQuery(route: ReaderRoute, search: string): ReaderRoute {
     const back = parseBackPanel(search)
     if (back) next = { ...next, back }
   }
-  if (next.panel !== 'golden') return next
+  if (next.panel !== 'golden' && next.panel !== 'production') return next
+  if (next.panel === 'production') {
+    const production = parseProductionQuery(search)
+    return production ? { ...next, production } : next
+  }
   const golden = parseGoldenQuery(search)
   return golden ? { ...next, golden } : next
 }
