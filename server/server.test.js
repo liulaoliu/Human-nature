@@ -55,8 +55,10 @@ describe('sameOrigin', () => {
     expect(allowLocalRequest({ headers: { host: 'localhost:5173' } })).toBe(true)
   })
 
-  it('DNS 重绑定：Host 和 Origin 都是 evil.test 也拒绝；本机名放行', () => {
+  it('DNS 重绑定：Host 和 Origin 都是 evil.test 也拒绝；无 Origin 的 evil Host 同样拒绝', () => {
     expect(allowLocalRequest({ headers: { host: 'evil.test:5173', origin: 'http://evil.test:5173' } })).toBe(false)
+    // 浏览器同源 GET 通常不带 Origin，只有 Host —— 这正是重绑定页读库的路径。
+    expect(allowLocalRequest({ headers: { host: 'evil.test:5173' } })).toBe(false)
     expect(allowLocalRequest({ headers: { host: '127.0.0.1:5173', origin: 'http://127.0.0.1:5173' } })).toBe(true)
     expect(allowLocalRequest({ headers: { host: '[::1]:5173', origin: 'http://[::1]:5173' } })).toBe(true)
   })

@@ -36,8 +36,10 @@ export function isLocalHost(host: string | undefined): boolean {
 
 export function isSameOrigin(req: IncomingMessage): boolean {
   const origin = req.headers.origin
-  if (!origin) return true
   const host = req.headers.host || ''
+  // 没有 Origin 不等于可信：浏览器同源 GET 通常不带 Origin，DNS 重绑定页
+  // 发来的 Host 仍是 evil.com。必须先确认 Host 是本机名，再决定是否比 Origin。
+  if (!origin) return isLocalHost(host)
   if (!isLocalHost(host)) return false
   try {
     // headers.origin 的静态类型是 string | string[]（重复 Origin 头理论上会出现，
@@ -56,7 +58,8 @@ export function isCrossSiteRequest(req: IncomingMessage): boolean {
   return req.headers['sec-fetch-site'] === 'cross-site'
 }
 
-/** 有副作用 / 会花钱 / 会写盘的请求是否允许。 */
+/** 本地 API 请求是否允许。所有 `/api/store/*`（含 GET）都要过这一层。 */
 export function allowLocalRequest(req: IncomingMessage): boolean {
+  if (!isLocalHost(req.headers.host)) return false
   return isSameOrigin(req) && !isCrossSiteRequest(req)
 }

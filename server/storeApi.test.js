@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
-import { createServer } from 'node:http'
+import { createServer, request } from 'node:http'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -79,6 +79,28 @@ describe('GET /vocab：响应形状与压缩', () => {
     expect(j).toEqual({ ok: true, value: null, updatedAt: null, count: 0 })
     await new Promise((r) => empty.close(r))
     closeAllStores()
+  })
+
+  it('无 Origin 的 evil Host 读 GET 也拒绝（dev 插件直连路径）', async () => {
+    const status = await new Promise((resolve, reject) => {
+      const req = request(
+        {
+          host: '127.0.0.1',
+          port: server.address().port,
+          path: '/api/store/vocab',
+          method: 'GET',
+          // 浏览器 DNS 重绑定后的同源 GET：没有 Origin，只有 evil Host。
+          headers: { Host: `evil.test:${server.address().port}` },
+        },
+        (res) => {
+          res.resume()
+          res.on('end', () => resolve(res.statusCode))
+        },
+      )
+      req.on('error', reject)
+      req.end()
+    })
+    expect(status).toBe(403)
   })
 })
 

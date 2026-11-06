@@ -4,7 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION, VocabConflictError } from './sqliteStore.ts'
-import { allowLocalRequest, isCrossSiteRequest } from './sameOrigin.ts'
+import { allowLocalRequest } from './sameOrigin.ts'
 import { localDayKey } from './localDate.ts'
 import { gzip } from 'node:zlib'
 import { promisify } from 'node:util'
@@ -123,8 +123,8 @@ export async function handleStoreApi(
   const path = url.pathname.replace(/^\/api\/store/, '') || '/'
   const method = req.method || 'GET'
 
-  const needsGuard = (method !== 'GET' && method !== 'HEAD') || isCrossSiteRequest(req)
-  if (needsGuard && !sameOrigin(req)) {
+  // GET 也暴露整库（/vocab、/learning、/export、/db），不能因为“只读”跳过 Host 校验。
+  if (!sameOrigin(req)) {
     fail(res, 403, '跨站请求被拒绝')
     return
   }
