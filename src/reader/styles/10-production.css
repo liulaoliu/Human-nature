@@ -3,11 +3,17 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  /* 工棚是长滚动页：整块最多一屏高，顶栏留在上面、按钮区贴底，
+     中间那份草料自己滚（滚动容器必须是 .production-body，否则 sticky 不生效）。
+     用 max-height 而不是 height，短屏时候不会凭空多出一截。 */
+  max-height: 100%;
 }
 .production-body {
   display: flex;
+  flex: 1 1 auto;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
   width: min(960px, 100%);
   margin: 0 auto;
   padding: 16px 18px 28px;
@@ -133,6 +139,32 @@
   color: var(--dim);
   white-space: pre-wrap;
 }
+/* 选草料屏顶上的「这组停着 / 某某吃法还暂停着」提示：文字 + 一个按钮 */
+.production-draft {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  border-left: 3px solid var(--accent);
+  background: var(--panel-2);
+}
+.production-draft .muted {
+  color: var(--dim);
+}
+.production-draft button {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.production-draft button:hover {
+  border-color: var(--accent);
+}
+
 .production-reference {
   padding: 8px 10px;
   border-left: 3px solid var(--green);

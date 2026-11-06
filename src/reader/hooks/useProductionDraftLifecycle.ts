@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ProductionDraft } from '../../core/productionDraft'
 import type { ProductionMode, ProductionPrompt } from '../../core/production'
 import type { ProductionAttemptSnapshot } from './useProductionAttempt'
@@ -62,10 +62,16 @@ export function useProductionDraftLifecycle({
 }: UseProductionDraftLifecycleParams) {
   const remoteDraftRef = useRef<(draft: ProductionDraft) => void>(() => {})
   const lastDraftAtRef = useRef('')
-  const { load: loadDraft, save: saveDraft, clear: clearDraft } = useProductionDraft(
-    articleIdentity,
-    (draft) => remoteDraftRef.current(draft),
-  )
+  const [savedDrafts, setSavedDrafts] = useState<ProductionDraft[]>([])
+  const {
+    loadNewest,
+    listMine,
+    save: saveDraft,
+    clearFor: clearDraft,
+  } = useProductionDraft(articleIdentity, sessionMode, (draft) => remoteDraftRef.current(draft))
+
+  /** 选草料屏要显示「各吃法各停在第几题」，所以草稿列表也得是状态。 */
+  const refreshDrafts = useCallback(() => setSavedDrafts(listMine()), [listMine])
 
   const applyDraft = useCallback(
     (draft: ProductionDraft) => {
@@ -145,25 +151,62 @@ export function useProductionDraftLifecycle({
     if (!draft) return null
     lastDraftAtRef.current = draft.at
     saveDraft(draft)
+    refreshDrafts()
     return draft
-  }, [snapshotDraft, saveDraft])
+  }, [snapshotDraft, saveDraft, refreshDrafts])
 
   useEffect(() => {
     if (!open) return
     const draft = snapshotDraft()
     if (!draft) return
     lastDraftAtRef.current = draft.at
-    const timer = setTimeout(() => saveDraft(draft), 250)
+    const timer = setTimeout(() => {
+      saveDraft(draft)
+      refreshDrafts()
+    }, 250)
     return () => clearTimeout(timer)
-  }, [open, snapshotDraft, saveDraft])
+  }, [open, snapshotDraft, saveDraft, refreshDrafts])
+
+  useEffect(() => {
+    if (open) refreshDrafts()
+  }, [open, refreshDrafts])
+
+  /** 换到别的吃法再开一组：只清那一组的草稿，暂停着的那组留着。 */
+  const clearForMode = useCallback(
+    (mode: ProductionMode = sessionMode) => {
+      clearDraft(mode)
+      refreshDrafts()
+    },
+    [clearDraft, refreshDrafts, sessionMode],
+  )
+
+  /** 选草料屏点「继续这一组」：把那组草稿原样接回去。 */
+  const resumeSaved = useCallback(
+    (draft: ProductionDraft) => {
+      applyDraft(draft)
+      refreshDrafts()
+    },
+    [applyDraft, refreshDrafts],
+  )
 
   const openProduction = useCallback(() => {
     if (!open && !prompts.length && stage === 'setup') {
-      const draft = loadDraft()
+      // 三种吃法各存一组；打开时回到这篇文章里最新的那一组
+      const draft = loadNewest()
       if (draft) applyDraft(draft)
     }
     setOpen(true)
-  }, [open, prompts.length, stage, loadDraft, applyDraft, setOpen])
+  }, [open, prompts.length, stage, loadNewest, applyDraft, setOpen])
 
-  return { loadDraft, saveDraft, saveNow, clearDraft, snapshotDraft, openProduction }
+  return {
+    loadNewest,
+    savedDrafts,
+    refreshDrafts,
+    resumeSaved,
+    saveDraft,
+    saveNow,
+    clearDraft: clearForMode,
+    snapshotDraft,
+    openProduction,
+  }
 }

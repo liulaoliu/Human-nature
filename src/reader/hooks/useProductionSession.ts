@@ -165,29 +165,30 @@ export function useProductionSession({
     flash,
   })
 
-  const { saveNow, clearDraft, openProduction } = useProductionDraftLifecycle({
-    open,
-    setOpen,
-    stage,
-    setStage,
-    prompts,
-    setPrompts,
-    index,
-    setIndex,
-    sessionId,
-    setSessionId,
-    sessionMode,
-    setSessionMode,
-    sessionTopic,
-    setSessionTopic,
-    notice,
-    setNotice,
-    setAiError,
-    attempt,
-    articleIdentity,
-    now,
-    flash,
-  })
+  const { saveNow, clearDraft, openProduction, savedDrafts, resumeSaved } =
+    useProductionDraftLifecycle({
+      open,
+      setOpen,
+      stage,
+      setStage,
+      prompts,
+      setPrompts,
+      index,
+      setIndex,
+      sessionId,
+      setSessionId,
+      sessionMode,
+      setSessionMode,
+      sessionTopic,
+      setSessionTopic,
+      notice,
+      setNotice,
+      setAiError,
+      attempt,
+      articleIdentity,
+      now,
+      flash,
+    })
   clearDraftRef.current = clearDraft
 
   const packs = useProductionPacks({
@@ -299,6 +300,9 @@ export function useProductionSession({
     round: attempt.round,
     rewrite: attempt.rewrite,
     grade: attempt.grade,
+    manualGrade: attempt.manualGrade,
+    savedDrafts,
+    resumeSaved,
     next: attempt.next,
     skip: attempt.skip,
     generating: packs.generating,

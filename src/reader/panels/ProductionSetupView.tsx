@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect } from 'react'
 import { KIND_LABEL } from '../../core/entryKind'
 import {
   PRODUCTION_ANGLE_LABEL,
@@ -23,6 +23,8 @@ import {
 import { isProductionTask, productionHits } from '../../core/productionPrompts'
 import { writingRecordLabel } from '../../core/writing'
 import type { useProductionSession } from '../hooks/useProductionSession'
+import { useGoldenPasteBox } from '../hooks/useGoldenPasteBox'
+import GoldenPasteBox from './golden/GoldenPasteBox'
 import YogurtPairEditor from './production/YogurtPairEditor'
 import RoundSizeSelect from './RoundSizeSelect'
 
@@ -47,12 +49,24 @@ export type ProductionSetupModel = Pick<
   | 'yogurt'
   | 'paused'
   | 'resume'
+  | 'savedDrafts'
+  | 'resumeSaved'
+  | 'sessionMode'
   | 'index'
   | 'prompts'
   | 'round'
 >
 
 const TOPIC_PRESETS = ['工作沟通', '旅行见闻', '表达观点', '生活小事']
+
+/** 草稿存的时间戳 → 「11 月 6 日 22:10」，只用来看这组是什么时候停的。 */
+function formatDraftAt(at: string): string {
+  const d = new Date(at)
+  if (Number.isNaN(d.getTime())) return '刚刚'
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `${d.getMonth() + 1} 月 ${d.getDate()} 日 ${hh}:${mm}`
+}
 
 const TARGET_TYPE_LABEL: Record<ProductionTargetKind, string> = {
   word: KIND_LABEL.word,
@@ -70,13 +84,19 @@ export interface ProductionSetupViewProps {
  * 只做这一屏的表单状态（粘回框内容、逐句配对），出题与校验都在 `useProductionSession`。
  */
 export default function ProductionSetupView({ model }: ProductionSetupViewProps) {
-  const [pasteText, setPasteText] = useState('')
+  const paste = useGoldenPasteBox()
+  const pasteOpen = paste.setOpen
   /** 逐句对子放在会话里：挤奶屏左侧的断句列表和这里用的是同一份。 */
   const yogurt = model.yogurt
   const yogurtPairs = yogurt.pairs
   const { settings, updateSettings } = model
   const pastePrompt = model.pendingPrompt
   const activeMode = settings.mode
+
+  // 出题失败 / 没配 key 时批改退化成复制提示词：和本句仿写一样自动展开粘回框
+  useEffect(() => {
+    if (model.pasteKind) pasteOpen(true)
+  }, [model.pasteKind, pasteOpen])
   const isYogurt = activeMode === 'yogurt'
   const isSkim = activeMode === 'skim'
   const isFull = activeMode === 'full'
@@ -101,6 +121,13 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
 
   const invalidatePairs = yogurt.reset
 
+  /** 当前这类吃法有没有草稿停着（暂停的、刷新过的都算）。 */
+  const saved = model.savedDrafts.find((d) => d.mode === activeMode) ?? null
+  /** 暂停中的那一组正好是当前这类吃法：主按钮才是「继续」。 */
+  const resumable = model.paused && model.sessionMode === activeMode
+  /** 暂停的是别的吃法：不许拿它冒充当前吃法的开始按钮。 */
+  const elsewhere = model.paused && model.sessionMode !== activeMode ? model.sessionMode : null
+
   const previewYogurt = () => {
     yogurt.preview()
   }
@@ -112,10 +139,27 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         <span className="muted">三种吃法：全脂随机、脱脂奶按主题、风味酸奶逐句翻译；批改后再重写一版。</span>
       </div>
 
-      {model.paused && (
+      {resumable && (
         <div className="production-notice">
           这一组已暂停：停在 {model.index + 1} / {model.prompts.length} 题（第 {model.round} 稿）。
           作答、批改、断句都还在；点「继续这一组」原样回去，也可以在这里改断句再继续。
+        </div>
+      )}
+
+      {saved && !resumable && (
+        <div className="production-notice production-draft">
+          这里还停着一组：{PRODUCTION_MODE_LABEL[saved.mode]} · 第 {saved.index + 1} /{' '}
+          {saved.prompts.length} 题（{formatDraftAt(saved.at)}）。
+          <button onClick={() => model.resumeSaved(saved)}>继续这一组</button>
+          也可以直接开始新的一组，那组会留着。
+        </div>
+      )}
+
+      {elsewhere && (
+        <div className="production-notice">
+          「{PRODUCTION_MODE_LABEL[elsewhere]}」那一组还暂停着（第 {model.index + 1} /{' '}
+          {model.prompts.length} 题）。
+          <button onClick={() => updateSettings({ mode: elsewhere })}>切过去继续</button>
         </div>
       )}
 
@@ -408,32 +452,26 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         </div>
       )}
 
-      {showPaste && (
-        <div className="production-paste">
-          <div className="muted">
-            {model.pasteKind === 'pack' ? '把 AI 返回的题目 JSON 粘到这里' : '把 AI 返回的批改 JSON 粘到这里'}
-          </div>
-          <textarea
-            rows={6}
-            value={pasteText}
-            onChange={(e) => setPasteText(e.target.value)}
-            placeholder={
-              model.pasteKind === 'pack'
-                ? !useChunks
-                  ? '{"prompts":[{"zh":"...","goal":"..."}]}'
-                  : '{"prompts":[{"zh":"...","goal":"...","targetIds":["..."]}]}'
-                : '{"version":2,...}'
-            }
-          />
-          <div className="bar">
-            <button className="primary" onClick={() => model.applyPaste(pasteText)} disabled={!pasteText.trim()}>
-              应用 AI 返回
-            </button>
-            <button onClick={() => void model.copyPromptAgain()} disabled={!pastePrompt}>
-              复制提示词
-            </button>
-          </div>
-        </div>
+      {(showPaste || !!pastePrompt) && (
+        <GoldenPasteBox
+          label={
+            model.pasteKind === 'pack'
+              ? '把 AI 返回的题目 JSON 粘到这里'
+              : '把 AI 返回的批改 JSON 粘到这里'
+          }
+          value={paste.text}
+          onChange={paste.setText}
+          onApply={() => paste.apply((text) => model.applyPaste(text))}
+          placeholder={
+            model.pasteKind === 'pack'
+              ? !useChunks
+                ? '{"prompts":[{"zh":"...","goal":"..."}]}'
+                : '{"prompts":[{"zh":"...","goal":"...","targetIds":["..."]}]}'
+              : '{"version":2,"scores":[…],"issues":[…],"polished":"…","summary":"…"}'
+          }
+          open={paste.open}
+          onOpenChange={paste.setOpen}
+        />
       )}
 
       {model.history.length > 0 && (
@@ -464,7 +502,7 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         <button
           className="primary"
           onClick={() => {
-            if (model.paused) {
+            if (resumable) {
               model.resume()
               return
             }
@@ -475,9 +513,9 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
               void model.start()
             }
           }}
-          disabled={!model.paused && (model.generating || !canStart)}
+          disabled={!resumable && (model.generating || !canStart)}
         >
-          {model.paused
+          {resumable
             ? `继续这一组（第 ${model.index + 1} 题）`
             : model.generating
               ? 'D老师出题中…'

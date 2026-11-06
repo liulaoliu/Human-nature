@@ -2,6 +2,7 @@ import { useCallback, useState } from 'react'
 import { buildYogurtPromptsFromPairs, type YogurtPair } from '../../core/productionPrompts'
 import {
   PRODUCTION_MODE_LABEL,
+  type ProductionMode,
   type ProductionProgressLike,
   type ProductionSettings,
 } from '../../core/production'
@@ -29,7 +30,8 @@ export interface UseProductionPacksParams {
   ensureAi: () => Promise<boolean>
   callAi: (task: string, prompt: string) => Promise<string>
   copy: (prompt: string) => Promise<boolean>
-  clearDraft: () => void
+  /** 清草稿：只清指定吃法那一组，别的吃法暂停着的那组不动。 */
+  clearDraft: (mode: ProductionMode) => void
   onStart: (payload: ProductionStartPayload) => void
 }
 
@@ -70,7 +72,8 @@ export function useProductionPacks({
     setPendingPacket(null)
     const mode = settings.mode
     const sessionId = newProductionSessionId()
-    clearDraft()
+    // 只清这一种吃法自己的草稿：风味酸奶暂停着去开全脂，那边那组要留着
+    clearDraft(mode)
     const ctx = {
       settings,
       doc,
@@ -107,7 +110,7 @@ export function useProductionPacks({
         flash('至少保留一对有内容的原文 / 参考译文')
         return
       }
-      clearDraft()
+      clearDraft('yogurt')
       onStart({
         prompts: yogurt.prompts,
         pool: { targets: [], total: 0, weak: 0 },

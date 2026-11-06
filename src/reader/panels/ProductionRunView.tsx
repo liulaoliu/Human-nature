@@ -162,6 +162,13 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
               {model.grading ? '批改中…' : model.round === 1 ? '批改这一稿' : '提交重写并批改'}
             </button>
             {model.grading && <button onClick={model.cancelRun}>取消</button>}
+            <button
+              onClick={() => void model.manualGrade()}
+              disabled={!model.answer.trim() || model.answer.includes('_____') || model.grading || model.generating}
+              title="不叫 AI：直接复制批改提示词，拿去任何 AI 里跑完，把 JSON 粘回下面"
+            >
+              复制批改提示词
+            </button>
             <button onClick={model.skip} title="不保存这一题的批改，直接进入下一题">
               跳过这题
             </button>
