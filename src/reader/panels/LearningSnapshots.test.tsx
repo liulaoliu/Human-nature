@@ -31,8 +31,8 @@ describe('LearningSnapshots', () => {
   it('展开才拉列表，按时间列出并标出来源', async () => {
     mocks.list.mockResolvedValue({
       snapshots: [
-        { at: '2026-01-02T03:04:00.000Z', reason: 'auto', bytes: 2048 },
-        { at: '2026-01-01T00:00:00.000Z', reason: 'manual', bytes: 1024 },
+        { at: new Date(2026, 0, 2, 3, 4).toISOString(), reason: 'auto', bytes: 2048 },
+        { at: new Date(2026, 0, 1, 0, 0).toISOString(), reason: 'manual', bytes: 1024 },
       ],
       dropped: 0,
     })
@@ -46,7 +46,7 @@ describe('LearningSnapshots', () => {
 
   it('拍一张：创建后刷新列表并提示', async () => {
     mocks.list.mockResolvedValue({ snapshots: [], dropped: 0 })
-    mocks.create.mockResolvedValue('2026-01-03T00:00:00.000Z')
+    mocks.create.mockResolvedValue(new Date(2026, 0, 3, 0, 0).toISOString())
     const { container } = render(<LearningSnapshots />)
     openDetails(container)
     await screen.findByRole('option', { name: '还没有快照' })
@@ -57,8 +57,9 @@ describe('LearningSnapshots', () => {
   })
 
   it('恢复：确认后调用 restore，并通知外层重新加载', async () => {
+    const at = new Date(2026, 0, 2, 3, 4).toISOString()
     mocks.list.mockResolvedValue({
-      snapshots: [{ at: '2026-01-02T03:04:00.000Z', reason: 'auto', bytes: 10 }],
+      snapshots: [{ at, reason: 'auto', bytes: 10 }],
       dropped: 0,
     })
     mocks.restore.mockResolvedValue(undefined)
@@ -71,14 +72,14 @@ describe('LearningSnapshots', () => {
     fireEvent.change(screen.getByLabelText('选择要恢复的学习快照'), { target: { value: option.getAttribute('value') } })
     fireEvent.click(screen.getByRole('button', { name: '恢复' }))
 
-    await waitFor(() => expect(mocks.restore).toHaveBeenCalledWith('2026-01-02T03:04:00.000Z'))
+    await waitFor(() => expect(mocks.restore).toHaveBeenCalledWith(at))
     expect(confirm).toHaveBeenCalledWith(expect.stringContaining('2026-01-02 03:04'))
     expect(onRestored).toHaveBeenCalledTimes(1)
   })
 
   it('确认框点取消就不恢复', async () => {
     mocks.list.mockResolvedValue({
-      snapshots: [{ at: '2026-01-02T03:04:00.000Z', reason: 'auto', bytes: 10 }],
+      snapshots: [{ at: new Date(2026, 0, 2, 3, 4).toISOString(), reason: 'auto', bytes: 10 }],
       dropped: 0,
     })
     const { container } = render(<LearningSnapshots confirm={() => false} />)

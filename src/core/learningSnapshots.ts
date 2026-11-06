@@ -5,6 +5,7 @@
  * `as LearningSnapshotMeta[]` 直接进界面：坏条目丢掉并计数，界面能如实提示。
  * 服务端写入侧见 `server/sqliteLearning.ts`。
  */
+import { calendarDayKey } from './activity'
 
 export interface LearningSnapshotMeta {
   at: string
@@ -67,11 +68,13 @@ export function snapshotReasonLabel(reason: string): string {
   }
 }
 
-/** 固定按 UTC 显示到分钟，避免测试/跨时区机器上结果飘。 */
+/** 按用户本地时区显示到分钟（快照文件名仍由服务端按 UTC 生成）。 */
 export function formatSnapshotAt(at: string): string {
   const ms = Date.parse(at)
   if (!Number.isFinite(ms)) return at
-  return new Date(ms).toISOString().slice(0, 16).replace('T', ' ')
+  const d = new Date(ms)
+  const pad = (n: number) => String(n).padStart(2, '0')
+  return `${calendarDayKey(d)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
 export function formatSnapshotBytes(bytes: number): string {

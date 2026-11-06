@@ -46,9 +46,15 @@ export function parsePack(text) {
   }
 }
 
+/** 本地日历日（和应用导出/备份同一口径，别用 UTC 把凌晨算成前一天）。 */
+export function localDayKey(now = new Date()) {
+  const pad = (n) => String(n).padStart(2, '0')
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
+}
+
 /** 没指定输出文件时，默认写 `ai-results-YYYY-MM-DD.json`。 */
 export function defaultOutFile(root, now = new Date()) {
-  return join(root, `ai-results-${now.toISOString().slice(0, 10)}.json`)
+  return join(root, `ai-results-${localDayKey(now)}.json`)
 }
 
 async function main() {

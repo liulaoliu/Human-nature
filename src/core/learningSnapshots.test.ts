@@ -42,8 +42,11 @@ describe('快照展示', () => {
     expect(snapshotReasonLabel('')).toBe('未知')
   })
 
-  it('时间按 UTC 到分钟', () => {
-    expect(formatSnapshotAt('2026-01-03T04:05:06.000Z')).toBe('2026-01-03 04:05')
+  it('时间按本地时区到分钟', () => {
+    const d = new Date('2026-01-03T04:05:06.000Z')
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const local = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+    expect(formatSnapshotAt('2026-01-03T04:05:06.000Z')).toBe(local)
     expect(formatSnapshotAt('bad')).toBe('bad')
   })
 

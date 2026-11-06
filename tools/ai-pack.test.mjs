@@ -15,9 +15,12 @@ describe('ai-pack：工作包解析 / 默认输出名', () => {
     expect(parsePack('')).toEqual([])
   })
 
-  it('默认输出按 UTC 日期命名，和结果文件口径一致', () => {
+  it('默认输出按本地日历日命名（凌晨不落到前一天）', () => {
     const root = join('C:', 'xueba')
-    expect(defaultOutFile(root, new Date('2026-10-24T23:59:00.000Z'))).toBe(
+    expect(defaultOutFile(root, new Date(2026, 9, 24, 0, 30))).toBe(
+      join(root, 'ai-results-2026-10-24.json'),
+    )
+    expect(defaultOutFile(root, new Date(2026, 9, 24, 23, 59))).toBe(
       join(root, 'ai-results-2026-10-24.json'),
     )
   })
