@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import { buildGoldenExamFeedbackPrompt, examToImitation } from '../../core/goldenExam'
 import {
   addWritingRecord,
@@ -69,6 +69,9 @@ export function useGoldenImitation({
    * 只在同一题（同篇同句/同题同 focus）里翻，不串到别的题。
    */
   const [viewIndex, setViewIndex] = useState<number | null>(null)
+  /** 卸载/重开时 abort 掉在途 AI 请求。 */
+  const aiAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => aiAbortRef.current?.abort(), [])
 
   const examId = source === 'goldenExam' ? (current?.id ?? null) : null
   const attempts = useMemo(
@@ -212,10 +215,13 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
     }
     setGrading(true)
     setError('')
+    aiAbortRef.current?.abort()
+    const aiAbort = new AbortController()
+    aiAbortRef.current = aiAbort
     try {
       const out = await runAi(
         [{ id: `golden-grade-${Date.now().toString(36)}`, task: 'feedback', prompt }],
-        { signal: new AbortController().signal },
+        { signal: aiAbort.signal },
       )
       const raw = out.results[0]?.raw
       if (!raw) {
@@ -227,6 +233,7 @@ function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
       setError(String((e as Error)?.message || e))
       return 'failed'
     } finally {
+      if (aiAbortRef.current === aiAbort) aiAbortRef.current = null
       setGrading(false)
     }
   }, [current, answer, availablePoints, feedback, round, ensureAi, copyGradePrompt, runAi, applyGrade, flash])

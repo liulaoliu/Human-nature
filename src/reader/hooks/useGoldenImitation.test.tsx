@@ -73,6 +73,22 @@ describe('useGoldenImitation', () => {
     expect(h.recordActivity).toHaveBeenCalledWith('write', 1)
   })
 
+  it('卸载时 abort 在途批改请求', async () => {
+    let signal: AbortSignal | undefined
+    const runAi = vi.fn((_jobs: unknown, opts: { signal: AbortSignal }) => {
+      signal = opts.signal
+      return new Promise(() => {})
+    })
+    const h = setup(runAi)
+    act(() => h.result.current.imitation.setAnswer('In response to the flood, remote work has become the new norm.'))
+    await act(async () => {
+      void h.result.current.imitation.grade()
+      await Promise.resolve()
+    })
+    h.unmount()
+    expect(signal?.aborted).toBe(true)
+  })
+
   it('按批改意见再写一稿：第二次批改记成第 2 稿，且只能改一次', async () => {
     const raw = JSON.stringify(feedback)
     const runAi = vi.fn().mockResolvedValue({ results: [{ id: 'x', task: 'feedback', raw }], failed: [], dropped: 0 })

@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from 'react'
 import {
   buildGoldenExamPrompt,
   buildLocalGoldenExam,
@@ -64,6 +64,9 @@ export function useGoldenExam({
   const [index, setIndex] = useState(0)
   const [generating, setGenerating] = useState(false)
   const [taskError, setTaskError] = useState('')
+  /** 卸载/重开时 abort 掉在途 AI 请求，别让它继续跑完还回写状态。 */
+  const aiAbortRef = useRef<AbortController | null>(null)
+  useEffect(() => () => aiAbortRef.current?.abort(), [])
 
   const metas = useMemo(
     () =>
@@ -183,10 +186,13 @@ export function useGoldenExam({
     }
     setGenerating(true)
     setTaskError('')
+    aiAbortRef.current?.abort()
+    const aiAbort = new AbortController()
+    aiAbortRef.current = aiAbort
     try {
       const out = await runAi(
         [{ id: `golden-exam-${Date.now().toString(36)}`, task: 'golden_exam', prompt }],
-        { signal: new AbortController().signal },
+        { signal: aiAbort.signal },
       )
       const raw = out.results[0]?.raw
       if (!raw) {
@@ -198,6 +204,7 @@ export function useGoldenExam({
       setTaskError(String((e as Error)?.message || e))
       return 'failed'
     } finally {
+      if (aiAbortRef.current === aiAbort) aiAbortRef.current = null
       setGenerating(false)
     }
   }, [lesson, unlocked, after, metas, records, articleId, articleTitle, ensureAi, runAi, applyTasks, flash])

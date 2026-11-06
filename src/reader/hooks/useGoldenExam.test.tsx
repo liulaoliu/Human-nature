@@ -172,6 +172,21 @@ describe('useGoldenExam', () => {
     expect(h.recordActivity).toHaveBeenCalledWith('write', 1)
   })
 
+  it('卸载时 abort 在途 AI 请求，不让它继续跑完', async () => {
+    let signal: AbortSignal | undefined
+    const runAi = vi.fn((_jobs: unknown, opts: { signal: AbortSignal }) => {
+      signal = opts.signal
+      return new Promise(() => {})
+    })
+    const h = setup(runAi)
+    await act(async () => {
+      void h.result.current.exam.generateTasks()
+      await Promise.resolve()
+    })
+    h.unmount()
+    expect(signal?.aborted).toBe(true)
+  })
+
   it('没配 AI 时出题改成复制提示词并返回 copied；AI 直连返回 generated', async () => {
     const h = setup(vi.fn(), vi.fn().mockResolvedValue(false))
     act(() => h.result.current.exam.start())
