@@ -100,6 +100,7 @@ export default function SessionHost({
         kind={quiz.drill}
         items={items}
         results={quiz.results}
+        questions={quiz.queue ?? []}
         articleId={drillWriting.articleId}
         articleTitle={drillWriting.articleTitle}
         writingHistory={drillWriting.writingHistory}

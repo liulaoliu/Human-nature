@@ -228,6 +228,21 @@
   text-align: left;
 }
 .drill-sentence-head { justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.drill-sentence-switch { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 10px; }
+.drill-sentence-switch button {
+  max-width: 220px;
+  padding: 3px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--bg-elev);
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.drill-sentence-switch button.on { border-color: var(--accent); color: var(--accent); }
+.drill-sentence-task[hidden] { display: none; }
 .drill-sentence .golden-exam-input { text-align: left; }
 
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */

@@ -82,7 +82,7 @@ beforeEach(() => {
 })
 
 describe('DrillSentenceStage：拷打结算页的造句', () => {
-  it('记忆拷打：用本轮词 + 词义拼题，批改走 drillSentence 来源', () => {
+  it('记忆拷打：每个词独立一题，不再把所有词塞进一句', () => {
     renderStage({
       items: [item(), item({ id: 'v2', word: 'make', lemma: 'make', meaning: '制造' })],
       results: [
@@ -91,41 +91,57 @@ describe('DrillSentenceStage：拷打结算页的造句', () => {
       ],
     })
 
-    const params = useGoldenImitationMock.mock.calls[0][0] as UseGoldenImitationParams
-    expect(params.source).toBe('drillSentence')
-    expect(params.articleId).toBe('A')
-    expect(params.current?.task).toContain('本轮记忆拷打')
-    expect(params.current?.task).toContain('run（跑）')
-    expect(params.current?.task).toContain('make（制造）')
-    expect(params.current?.mustUse).toEqual(['run', 'make'])
-    expect(params.current?.id).toMatch(/^drill:memory:/)
+    const calls = useGoldenImitationMock.mock.calls.map(
+      ([params]) => params as UseGoldenImitationParams,
+    )
+    expect(calls).toHaveLength(2)
+    expect(calls[0].source).toBe('drillSentence')
+    expect(calls[0].articleId).toBe('A')
+    expect(calls[0].current?.task).toContain('run（跑）')
+    expect(calls[0].current?.task).not.toContain('make')
+    expect(calls[0].current?.mustUse).toEqual(['run'])
+    expect(calls[0].current?.id).toMatch(/^drill:memory:/)
+
+    expect(calls[1].current?.task).toContain('make（制造）')
+    expect(calls[1].current?.task).not.toContain('run')
+    expect(calls[1].current?.mustUse).toEqual(['make'])
+    expect(calls[1].current?.id).not.toBe(calls[0].current?.id)
 
     expect(screen.getByText('✍️ 用学过的内容造句')).toBeTruthy()
-    expect(screen.getByText(/本轮记忆拷打已考完/)).toBeTruthy()
+    expect(screen.getByText(/共 2 题 · 每个词独立一题/)).toBeTruthy()
+    const first = screen.getByRole('button', { name: '1. run' })
+    const second = screen.getByRole('button', { name: '2. make' })
+    expect(first.getAttribute('aria-pressed')).toBe('true')
+    expect(second.getAttribute('aria-pressed')).toBe('false')
+    fireEvent.click(second)
+    expect(second.getAttribute('aria-pressed')).toBe('true')
+
+    expect(screen.getAllByText(/本轮记忆拷打已考完/)).toHaveLength(2)
     expect(screen.getByRole('button', { name: '提交 AI 批改' })).toBeTruthy()
     expect(screen.getByRole('button', { name: '复制批改提示词' })).toBeTruthy()
     // 嵌在结算页里：没有自己的「下一步」按钮
     expect(screen.queryByRole('button', { name: '下一步' })).toBeNull()
   })
 
-  it('词块拷打：题面取词块和中文释义', () => {
+  it('词块拷打：每个词条只取一个词块，题面不混别的词块', () => {
     renderStage({
       kind: 'chunk',
-      items: [item({ phrases: ['run out of — 用完'] })],
+      items: [item({ phrases: ['run out of — 用完', 'run into'] })],
     })
 
     const params = useGoldenImitationMock.mock.calls[0][0] as UseGoldenImitationParams
     expect(params.current?.task).toContain('本轮词块拷打')
     expect(params.current?.task).toContain('run out of（用完）')
+    expect(params.current?.task).not.toContain('run into')
     expect(params.current?.mustUse).toEqual(['run out of'])
+    expect(screen.getByText(/共 1 题 · 每个词块独立一题/)).toBeTruthy()
     expect(screen.getByText(/本轮词块拷打已考完/)).toBeTruthy()
   })
 
-  it('没有可造句的素材：整块不渲染', () => {
+  it('没有可造句的素材：整块不渲染，也不创建批改 hook', () => {
     const { container } = renderStage({ items: [], results: [] })
     expect(container.innerHTML).toBe('')
-    const params = useGoldenImitationMock.mock.calls[0][0] as UseGoldenImitationParams
-    expect(params.current).toBeNull()
+    expect(useGoldenImitationMock).not.toHaveBeenCalled()
   })
 
   it('结算区能直接展开造句历史，默认只列本篇拷打造句', () => {
