@@ -224,9 +224,11 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
 - `writing_records.feedback_json` 自 **契约 v2** 起带 `version: 2`、`issues[]`（含闭集 `rule`、稳定 `key`、
   `severity`）和 `recommendations[]`。旧记录由 `tools/backfill-writing-v2.mjs` 一次性回填（先 `VACUUM INTO`
   备份，再事务更新）；运行时只分析 v2，不再保留旧格式双读。
-- `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError / production`；
+- `writing_records.source` 白名单是 `writing / goldenSentence / goldenExam / goldenError / production / drillSentence`；
   `goldenError` 是错因复习里的 AI 订正记录，照常进历史/备份/导出，但 `filterWritingErrorRecords`
-  会跳过它，避免「改错产生新错因、再改」自己长卡。
+  会跳过它，避免「改错产生新错因、再改」自己长卡。`drillSentence` 是记忆 / 词块拷打结算页的造句，
+  复用同一份 `feedback_json` / `task_json`；`task_json.mustUse` 是本轮前 5 个词 / 词块，`model` 为空
+  （没有范句，批改提示词只写「要求用上」）。
 - **奶牛工棚复用 `writing_records`**：每稿一条 `source='production'`，`task_json` 保存模式 / 主题 /
   中文情境 / 参考译文 / 目标块 / 命中 / sessionId，`feedback_json` 仍是 v2 批改；不新开 attempts 表。
   目标块 due/weak/recent/mistakes 进度由这些 attempts **归并**后写 `production_progress`（v13，key/kind/text/attempts/hits/misses/streak/last_at/due_at/updated_at）：

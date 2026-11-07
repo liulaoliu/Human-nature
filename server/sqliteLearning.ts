@@ -224,7 +224,7 @@ export function emptyLearning(): LearningOut {
  * 这里就得认哪几种。两边漂过（2026-10-30：前端加了 `production`，服务端没跟，
  * 产出训练的历史存进去、读回来就丢了来源），`server/learningContract.test.ts` 盯着这条。
  */
-const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production'] as const
+const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production', 'drillSentence'] as const
 
 function parseJson(v: unknown): unknown {
   if (v === undefined || v === null || v === '') return undefined
