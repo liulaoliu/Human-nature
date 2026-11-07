@@ -270,7 +270,7 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     )
   })
 
-  it('刷新后恢复当前会话草稿；跳过会保留草稿并进入下一题', async () => {
+  it('刷新后先回选草料页；点「继续这一组」才恢复当前会话草稿', async () => {
     const h = setup()
     act(() =>
       h.result.current.updateSettings({
@@ -291,6 +291,10 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
 
     const restored = setup()
     act(() => restored.result.current.openProduction())
+    expect(restored.result.current.stage).toBe('setup')
+    const draft = restored.result.current.savedDrafts.find((d) => d.answer === 'draft answer')
+    expect(draft).toBeTruthy()
+    act(() => restored.result.current.resumeSaved(draft!))
     expect(restored.result.current.stage).toBe('playing')
     expect(restored.result.current.answer).toBe('draft answer')
     expect(restored.result.current.current?.zh).toContain('跟进')
@@ -300,6 +304,30 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     expect(restored.getRecords()).toHaveLength(1)
     expect((restored.getRecords()[0].task as { skipped?: boolean }).skipped).toBe(true)
     expect(restored.getRecords()[0].text).toBe('draft answer')
+  })
+
+  it('关闭后再次进工棚：即使有未完成任务，也先回选草料页', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        scope: 'all',
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    await act(async () => {
+      await h.result.current.start()
+    })
+    act(() => h.result.current.setAnswer('still here'))
+    act(() => h.result.current.close())
+    expect(h.result.current.open).toBe(false)
+
+    act(() => h.result.current.openProduction())
+    expect(h.result.current.stage).toBe('setup')
+    expect(h.result.current.savedDrafts.some((d) => d.answer === 'still here')).toBe(true)
   })
 
   it('手工纠正目标块命中会写回已保存的一稿', async () => {
