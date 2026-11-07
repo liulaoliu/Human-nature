@@ -32,12 +32,24 @@ export function useQuizSessionSnapshot() {
   const [results, setResults] = useState<QuizResultRow[]>(restored?.results ?? [])
   /** 本轮是否自动切题（开始一轮时按设置快照）。 */
   const [autoRun, setAutoRun] = useState(restored?.autoRun ?? false)
+  /** 记忆 / 词块拷打：结算页要接着出造句题，刷新也不能丢。 */
+  const [drill, setDrill] = useState<'memory' | 'chunk' | null>(restored?.drill ?? null)
 
   // 刷新页面后能接着考
   useEffect(() => {
     try {
       if (queue && queue.length) {
-        const snap: QuizSessionSnapshot = { v: 1, queue, index, input, checked, result, results, autoRun }
+        const snap: QuizSessionSnapshot = {
+          v: 1,
+          queue,
+          index,
+          input,
+          checked,
+          result,
+          results,
+          autoRun,
+          ...(drill ? { drill } : {}),
+        }
         localStorage.setItem(QUIZ_SESSION_KEY, JSON.stringify(snap))
       } else {
         localStorage.removeItem(QUIZ_SESSION_KEY)
@@ -45,7 +57,7 @@ export function useQuizSessionSnapshot() {
     } catch {
       // 隐私模式 / 配额满：忽略
     }
-  }, [queue, index, input, checked, result, results, autoRun])
+  }, [queue, index, input, checked, result, results, autoRun, drill])
 
   return {
     restored,
@@ -63,5 +75,7 @@ export function useQuizSessionSnapshot() {
     setResults,
     autoRun,
     setAutoRun,
+    drill,
+    setDrill,
   }
 }

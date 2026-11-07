@@ -218,6 +218,18 @@
 .drill .study-result.bad { margin-top: 4px; }
 .study-done { text-align: center; padding: 40px 0; }
 
+/* 记忆 / 词块拷打结算页的造句：嵌在居中结算里，但输入和批改要左对齐 */
+.drill-sentence {
+  margin: 18px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  text-align: left;
+}
+.drill-sentence-head { justify-content: space-between; margin-bottom: 10px; }
+.drill-sentence .golden-exam-input { text-align: left; }
+
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */
 .study-tools { justify-content: center; gap: 10px; }
 .grade-info { color: var(--accent); font-size: 13px; font-weight: 600; }

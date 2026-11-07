@@ -176,6 +176,17 @@ describe('QuizPanel：结算', () => {
     expect(screen.getByRole('button', { name: '🔁 继续鞭打错题 2' })).toBeTruthy()
   })
 
+  it('记忆 / 词块结算页挂造句区；答题中不挂', () => {
+    const drill = <div>用学过的内容造句</div>
+    const { rerender } = render(
+      <QuizPanel {...props({ question: null, results: [{ id: 'a', itemId: 'v1', correct: true }], sentenceDrill: drill })} />,
+    )
+    expect(screen.getByText('用学过的内容造句')).toBeTruthy()
+
+    rerender(<QuizPanel {...props({ sentenceDrill: drill })} />)
+    expect(screen.queryByText('用学过的内容造句')).toBeNull()
+  })
+
   it('没有错题时不显示继续鞭打，再来一轮先选数量再开始', () => {
     const onRestart = vi.fn()
     const onClose = vi.fn()

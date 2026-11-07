@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { formatAnswerInput, maskAnswer, QUIZ_KIND_LABEL, type QuizQuestion } from '../../core/quiz'
 import type { VocabItem } from '../../types/document'
 import { fmtDur } from '../format'
@@ -60,6 +60,8 @@ export interface QuizPanelProps {
   restartLimit?: number
   /** 记忆 / 词块：再来一轮先进「先看一遍」预习页，不在结算页选题数。 */
   restartWithPreview?: boolean
+  /** 记忆 / 词块拷打结束后的造句区（只在结算页挂载；由 SessionHost 接线）。 */
+  sentenceDrill?: ReactNode
   onSelectOption: (option: string) => void
   onInputChange: (value: string) => void
   /** 确认拼错判定，继续下一题（该词已进重学队列）。 */
@@ -93,6 +95,7 @@ export default function QuizPanel({
   onRestart,
   restartLimit,
   restartWithPreview,
+  sentenceDrill,
   onSelectOption,
   onInputChange,
   onAckSpellMiss,
@@ -298,6 +301,7 @@ export default function QuizPanel({
                   })}
                 </div>
               )}
+              {sentenceDrill}
               <div className="bar">
                 {wrongIds.length > 0 && (
                   <button className="primary" onClick={onRetryWrong} title="只重练这一轮的错题（开了「反复鞭打」会自动接着练）">

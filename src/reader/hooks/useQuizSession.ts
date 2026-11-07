@@ -101,6 +101,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setResults,
     autoRun,
     setAutoRun,
+    /** 记忆 / 词块拷打：结算页据此决定要不要出「用学过的内容造句」。 */
+    drill,
+    setDrill,
     clearAdvance,
     advance,
     next,
@@ -134,7 +137,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
 
   /** 用一批题开一轮考试（内部复用）。 */
   const begin = useCallback(
-    (qs: QuizQuestion[], opts?: { article?: boolean }) => {
+    (qs: QuizQuestion[], opts?: { article?: boolean; drill?: 'memory' | 'chunk' }) => {
       if (!qs.length) {
         flash('这个范围/题型下没题可出（词条可能缺释义或例句）')
         return
@@ -144,13 +147,27 @@ export function useQuizSession(params: UseQuizSessionParams) {
       allRef.current = qs
       resetDrill()
       setArticleRun(!!opts?.article)
+      setDrill(opts?.drill ?? null)
       setQueue(shuffleQuiz(qs))
       resetProgress()
       setAutoRun(auto)
       setSetupOpen(false)
     },
-    // 四个 setter 都是 useState 的，引用恒定；列全依赖后不再需要豁免。
-    [clearAdvance, closeOthers, auto, flash, resetProgress, resetDrill, setArticleRun, setQueue, setAutoRun, setSetupOpen, allRef],
+    // 各 setter 都是 useState 的，引用恒定；列全依赖后不再需要豁免。
+    [
+      clearAdvance,
+      closeOthers,
+      auto,
+      flash,
+      resetProgress,
+      resetDrill,
+      setArticleRun,
+      setDrill,
+      setQueue,
+      setAutoRun,
+      setSetupOpen,
+      allRef,
+    ],
   )
 
   const {
@@ -191,10 +208,22 @@ export function useQuizSession(params: UseQuizSessionParams) {
     allRef.current = []
     setQueue(null)
     setArticleRun(false)
+    // 旧一轮已经作废；真正开考时 beginWarmup 会把 kind 再写回来。
+    setDrill(null)
     setSpellMiss(null)
     resetProgress()
     resetDrill()
-  }, [warmup, clearAdvance, allRef, setQueue, setArticleRun, setSpellMiss, resetProgress, resetDrill])
+  }, [
+    warmup,
+    clearAdvance,
+    allRef,
+    setQueue,
+    setArticleRun,
+    setDrill,
+    setSpellMiss,
+    resetProgress,
+    resetDrill,
+  ])
 
   /** 判分：对 → SRS good，错 → SRS again（记 lapse）。 */
   const check = createQuizCheck({
@@ -228,9 +257,10 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setQueue(null)
     setSetupOpen(false)
     setArticleRun(false)
+    setDrill(null)
     setSpellMiss(null)
-    // 四个都是 useState 的 setter，引用恒定。
-  }, [clearAdvance, clearDrill, setQueue, setSetupOpen, setArticleRun, setSpellMiss])
+    // 各 setter 都是 useState 的，引用恒定。
+  }, [clearAdvance, clearDrill, setQueue, setSetupOpen, setArticleRun, setDrill, setSpellMiss])
 
   /** 拼写判错未确认时，不允许直接结束把这次判罚吞掉。 */
   const close = useCallback(() => {
@@ -277,6 +307,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     ...settings,
     articleRun,
     drillRound,
+    /** memory / chunk = 本轮是记忆 / 词块拷打；结算页据此出造句题。 */
+    drill,
     // 会话
     setupOpen,
     setSetupOpen,

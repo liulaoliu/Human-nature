@@ -23,6 +23,8 @@ export interface QuizSessionSnapshot {
   result: boolean | null
   results: QuizResultRow[]
   autoRun: boolean
+  /** 本轮是记忆 / 词块拷打时记下来：刷新到结算页还能接着做「用学过的内容造句」。 */
+  drill?: 'memory' | 'chunk'
 }
 
 export interface DictItemData {
@@ -125,6 +127,7 @@ export function parseQuizSessionSnapshot(raw: string | null): QuizSessionSnapsho
     result: typeof data.result === 'boolean' ? data.result : null,
     results,
     autoRun: bool(data.autoRun, false),
+    ...(data.drill === 'memory' || data.drill === 'chunk' ? { drill: data.drill } : {}),
   }
 }
 

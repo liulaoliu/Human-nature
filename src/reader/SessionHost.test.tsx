@@ -42,6 +42,14 @@ function props(over: Partial<SessionHostProps> = {}): SessionHostProps {
     back: { open: false } as never,
     production: { open: false } as never,
     productionActions: {},
+    drillWriting: {
+      writingHistory: [],
+      setWritingHistory: vi.fn(),
+      flash: vi.fn(),
+      recordActivity: vi.fn(),
+      articleId: 'a1',
+      articleTitle: '文章',
+    },
     ...over,
   }
 }

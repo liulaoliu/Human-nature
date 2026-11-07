@@ -7,15 +7,20 @@ import GoldenPasteBox from './GoldenPasteBox'
 /**
  * 每句遣词造句走完后的单句仿写：用当前句的句型/中文提示写一句新的，
  * 批改口径与整课考试完全一致；不写就过不去，但 AI 不可用时可粘贴结果。
+ *
+ * `onNext` 省略时只画作答 + 批改（拷打造句嵌在结算页里，下一步由结算页按钮负责）。
  */
 export default function GoldenSentenceImitation({
   imitation,
-  nextLabel,
+  nextLabel = '下一步',
   onNext,
+  hint,
 }: {
   imitation: GoldenImitationApi
-  nextLabel: string
-  onNext: () => void
+  nextLabel?: string
+  onNext?: () => void
+  /** 换掉默认的“本句流程已走完…”提示；拷打造句用本轮学过的词，不是仿写句型。 */
+  hint?: string
 }) {
   const paste = useGoldenPasteBox()
   const current = imitation.current
@@ -25,9 +30,11 @@ export default function GoldenSentenceImitation({
     return (
       <div className="golden-preview">
         <div className="muted">本句没有可迁移的句型，直接进入下一步。</div>
-        <div className="bar">
-          <button className="primary" onClick={onNext}>{nextLabel}</button>
-        </div>
+        {onNext && (
+          <div className="bar">
+            <button className="primary" onClick={onNext}>{nextLabel}</button>
+          </div>
+        )}
       </div>
     )
   }
@@ -36,7 +43,7 @@ export default function GoldenSentenceImitation({
     <div className="golden-imitation">
       <div className="golden-preview">
         <div className="muted">
-          本句流程已走完。现在换一个主语或场景，用同一句型仿写一句英文；不要照抄范句。
+          {hint ?? '本句流程已走完。现在换一个主语或场景，用同一句型仿写一句英文；不要照抄范句。'}
         </div>
         <div className="golden-en golden-exam-task">{current.task}</div>
         {current.structure && <div className="golden-note">目标结构：{current.structure}</div>}
@@ -72,9 +79,11 @@ export default function GoldenSentenceImitation({
           复制批改提示词
         </button>
         {imitation.canRewrite && <button onClick={imitation.rewrite}>按批改意见再写一稿</button>}
-        <button className="primary" onClick={onNext} disabled={!hasAnswer}>
-          {nextLabel}
-        </button>
+        {onNext && (
+          <button className="primary" onClick={onNext} disabled={!hasAnswer}>
+            {nextLabel}
+          </button>
+        )}
       </div>
 
       {imitation.error && <div className="golden-bad">{imitation.error}</div>}

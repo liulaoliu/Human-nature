@@ -96,6 +96,15 @@ describe('本句仿写：手动复制提示词 → 展开粘贴框 → 应用成
     await waitFor(() => expect(box().open).toBe(false))
   })
 
+  it('不给下一步时不画「下一步」按钮；提示语可替换（拷打造句复用）', () => {
+    const imitation = fakeImitation()
+    render(<GoldenSentenceImitation imitation={imitation} hint="用本轮学过的词造句。" />)
+    expect(screen.getByText('用本轮学过的词造句。')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '下一步' })).toBeNull()
+    expect(screen.getByRole('button', { name: '提交 AI 批改' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: '复制批改提示词' })).toBeTruthy()
+  })
+
   it('AI 直连批改不展开；没配 AI 改成复制提示词时才展开', async () => {
     const graded = fakeImitation({ grade: vi.fn().mockResolvedValue('graded') })
     const { unmount } = render(
