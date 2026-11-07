@@ -14,6 +14,7 @@ export interface UseProductionDraftLifecycleParams {
   setOpen: Dispatch<SetStateAction<boolean>>
   stage: ProductionStage
   setStage: Dispatch<SetStateAction<ProductionStage>>
+  setPaused: Dispatch<SetStateAction<boolean>>
   prompts: ProductionPrompt[]
   setPrompts: Dispatch<SetStateAction<ProductionPrompt[]>>
   index: number
@@ -42,6 +43,7 @@ export function useProductionDraftLifecycle({
   setOpen,
   stage,
   setStage,
+  setPaused,
   prompts,
   setPrompts,
   index,
@@ -190,13 +192,15 @@ export function useProductionDraftLifecycle({
   )
 
   const openProduction = useCallback(() => {
-    if (!open && !prompts.length && stage === 'setup') {
-      // 三种吃法各存一组；打开时回到这篇文章里最新的那一组
-      const draft = loadNewest()
-      if (draft) applyDraft(draft)
+    if (!open) {
+      // 进工棚先停在「全脂 / 脱脂 / 风味」选择页：未完成的草稿只出现在
+      // savedDrafts 里，由用户点「继续这一组」再进挤奶屏，不自动跳进去。
+      if (stage === 'playing') saveNow()
+      if (stage !== 'setup') setStage('setup')
+      setPaused(false)
     }
     setOpen(true)
-  }, [open, prompts.length, stage, loadNewest, applyDraft, setOpen])
+  }, [open, stage, saveNow, setStage, setPaused, setOpen])
 
   return {
     loadNewest,

@@ -171,6 +171,7 @@ export function useProductionSession({
       setOpen,
       stage,
       setStage,
+      setPaused,
       prompts,
       setPrompts,
       index,
