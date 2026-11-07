@@ -123,6 +123,25 @@ describe('WritingPanel：历史', () => {
     expect(onClearHistory).toHaveBeenCalled()
   })
 
+  it('拷打造句记录在仿写历史里也有来源标签，能点开回看', () => {
+    const drill: WritingRecord = {
+      at: '2026-11-08T00:00:00.000Z',
+      articleId: 'doc:1',
+      model: '',
+      text: 'I run every day.',
+      feedback,
+      task: { task: '用 run 造句', model: '', mustUse: ['run'], rubric: [] },
+      source: 'drillSentence',
+      sentenceId: 'drill:memory:test',
+    }
+    const onLoadRecord = vi.fn()
+    render(<WritingPanel {...props({ history: [...history, drill], onLoadRecord })} />)
+    fireEvent.click(screen.getByRole('button', { name: '历史（2）' }))
+    expect(screen.getByText('拷打造句')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /拷打造句/ }))
+    expect(onLoadRecord).toHaveBeenCalledWith(drill)
+  })
+
   it('结束按钮回调', () => {
     const onClose = vi.fn()
     render(<WritingPanel {...props({ onClose })} />)

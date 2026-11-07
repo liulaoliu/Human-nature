@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { isGoldenWritingRecord, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import {
+  isGoldenWritingRecord,
+  writingRecordLabel,
+  type ImitationTask,
+  type WritingFeedback,
+  type WritingRecord,
+} from '../../core/writing'
 
 export interface WritingPanelProps {
   model: string
@@ -130,7 +136,11 @@ export default function WritingPanel({
                 }}
               >
                 <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-                <span className="ellipsis"> {rec.model}</span>
+                <span className="ellipsis">
+                  {' '}
+                  {writingRecordLabel(rec)}
+                  {rec.model ? ` · ${rec.model}` : ''}
+                </span>
                 <b>
                   {rec.feedback.total}/{rec.feedback.max}
                 </b>
