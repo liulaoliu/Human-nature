@@ -1,4 +1,6 @@
-import { isGoldenWritingRecord } from '../core/writing'
+import type { Dispatch, SetStateAction } from 'react'
+import type { ActivityCat } from '../core/activity'
+import { isGoldenWritingRecord, type WritingRecord } from '../core/writing'
 import type { VocabItem } from '../types/document'
 import type { useStudySession } from './hooks/useStudySession'
 import type { useQuizSession } from './hooks/useQuizSession'
@@ -19,6 +21,7 @@ import DictPanel from './panels/DictPanel'
 import ListeningPanel from './panels/ListeningPanel'
 import WritingPanel from './panels/WritingPanel'
 import BackTranslatePanel from './panels/BackTranslatePanel'
+import DrillSentenceStage from './panels/DrillSentenceStage'
 
 type TtsState = 'idle' | 'loading' | 'playing'
 
@@ -55,6 +58,15 @@ export interface SessionHostProps {
   production: ReturnType<typeof useProductionSession>
   /** 奶牛工棚的子视图 / 历史筛选接线（`route.ts` 解析出来的 URL 状态）。 */
   productionActions: ProductionPanelActions
+  /** 记忆 / 词块拷打结算页造句：写作历史 + 活动记录由 ReaderApp 的学习域统一提供。 */
+  drillWriting: {
+    writingHistory: WritingRecord[]
+    setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
+    flash: (message: string) => void
+    recordActivity: (cat: ActivityCat, n?: number) => void
+    articleId: string
+    articleTitle: string
+  }
 }
 
 /**
@@ -79,7 +91,24 @@ export default function SessionHost({
   back,
   production,
   productionActions,
+  drillWriting,
 }: SessionHostProps) {
+  // 记忆 / 词块拷打结算页：用本轮考到的词 / 词块出一道造句，批改复用金句课本句仿写。
+  const sentenceDrill =
+    quiz.drill && quiz.queue && quiz.index >= quiz.queue.length ? (
+      <DrillSentenceStage
+        kind={quiz.drill}
+        items={items}
+        results={quiz.results}
+        articleId={drillWriting.articleId}
+        articleTitle={drillWriting.articleTitle}
+        writingHistory={drillWriting.writingHistory}
+        setWritingHistory={drillWriting.setWritingHistory}
+        flash={drillWriting.flash}
+        recordActivity={drillWriting.recordActivity}
+      />
+    ) : null
+
   const quickCurrent =
     quick.queue && quick.index < quick.queue.length
       ? (items.find((it) => it.id === quick.queue![quick.index].id) ?? quick.queue[quick.index])
@@ -181,6 +210,7 @@ export default function SessionHost({
           }}
           restartLimit={quiz.lastRound?.limit ?? quiz.queue?.length ?? quiz.limit}
           restartWithPreview={!!quiz.lastRound?.warmup}
+          sentenceDrill={sentenceDrill}
           onAckSpellMiss={quiz.ackSpellMiss}
           onRelearn={quiz.relearnSpellMiss}
           onSelectOption={(opt) => {

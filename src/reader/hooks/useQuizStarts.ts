@@ -30,7 +30,7 @@ export interface UseQuizStartsParams {
   unique: boolean
   articleKinds: QuizKind[]
   setArticleKinds: Dispatch<SetStateAction<QuizKind[]>>
-  begin: (qs: QuizQuestion[], opts?: { article?: boolean }) => void
+  begin: (qs: QuizQuestion[], opts?: { article?: boolean; drill?: 'memory' | 'chunk' }) => void
   flash: (message: string) => void
 }
 

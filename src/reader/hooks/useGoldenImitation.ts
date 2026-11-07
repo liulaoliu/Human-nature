@@ -12,7 +12,7 @@ import type { GoldenExamItem } from '../../types/document'
 import type { ActivityCat } from '../../core/activity'
 import { fetchAiStatus, runAiBatch } from '../../adapters/aiRun'
 
-export type GoldenImitationSource = 'goldenExam' | 'goldenSentence' | 'goldenError'
+export type GoldenImitationSource = 'goldenExam' | 'goldenSentence' | 'goldenError' | 'drillSentence'
 
 /** 批改动作的结果：AI 直连成功 / 没配 AI 改成复制提示词 / 失败。 */
 export type GoldenGradeOutcome = 'graded' | 'copied' | 'failed'
@@ -22,7 +22,7 @@ export interface UseGoldenImitationParams {
   current: GoldenExamItem | null
   articleId: string
   articleTitle: string
-  /** goldenExam = 整课考试；goldenSentence = 单句仿写；goldenError = 错因订正 */
+  /** goldenExam = 整课考试；goldenSentence = 单句仿写；goldenError = 错因订正；drillSentence = 拷打造句 */
   source: GoldenImitationSource
   setWritingHistory: Dispatch<SetStateAction<WritingRecord[]>>
   flash: (message: string) => void
@@ -40,8 +40,9 @@ export interface UseGoldenImitationParams {
 /**
  * 一次仿写作答（写 → AI 批改 → 存历史）。
  *
- * 整课仿写考试、每句末尾的单句仿写和错因订正共用这一条，避免两套批改/解析/存记录。
- * 题面由调用方准备：单句仿写用当前句，考试用 `GoldenLesson.exam`，错因订正用 `errorFixExamItem`。
+ * 整课仿写考试、每句末尾的单句仿写、错因订正和拷打造句共用这一条，避免两套批改/解析/存记录。
+ * 题面由调用方准备：单句仿写用当前句，考试用 `GoldenLesson.exam`，错因订正用 `errorFixExamItem`，
+ * 拷打造句用 `core/drillSentence` 从本轮考到的词 / 词块拼题。
  */
 export function useGoldenImitation({
   current,

@@ -28,7 +28,7 @@ interface WarmupSpec {
 
 export interface UseDrillWarmupParams {
   libraryItems: VocabItem[]
-  begin: (qs: QuizQuestion[], opts?: { article?: boolean }) => void
+  begin: (qs: QuizQuestion[], opts?: { article?: boolean; drill?: 'memory' | 'chunk' }) => void
   prepare: (key: string, qs: QuizQuestion[], take: number) => QuizQuestion[]
   remember: (spec: QuizRoundSpec, picked: QuizQuestion[], take: number) => void
 }
@@ -71,7 +71,7 @@ export function useDrillWarmup({
     if (!w) return
     specRef.current = null
     setWarmup(null)
-    begin(w.questions, { article: w.article })
+    begin(w.questions, { article: w.article, drill: w.kind })
   }, [warmup, begin])
 
   const cancelWarmup = useCallback(() => {

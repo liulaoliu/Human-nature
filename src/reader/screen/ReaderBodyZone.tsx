@@ -212,6 +212,14 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
         back={props.services.backApi}
         production={props.production}
         productionActions={props.productionActions}
+        drillWriting={{
+          writingHistory: props.services.writingHistory,
+          setWritingHistory: props.services.setWritingHistory,
+          flash,
+          recordActivity: props.learning.recordActivity,
+          articleId: articleIdentity,
+          articleTitle,
+        }}
       />
 
       {golden.open && (

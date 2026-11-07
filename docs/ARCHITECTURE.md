@@ -119,6 +119,7 @@ types ← core ← adapters ← reader
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` + `src/core/quizHistory.ts` | 范围 × 题型 → 候选词与题量；下一轮只从「没答过」里抽：词级按 `itemId`、文章级按题目 id，新题不够只考剩下的，不拿旧题凑数；全考完后自动清空本轮记录、重新开一轮（不会卡死）。错题重练 / 包围战不过滤 |
 | 考试再来一轮 / 本轮数量 | `src/reader/hooks/useQuizStarts.ts` | 每轮记 `lastRound`（来源 / 范围 / 题型 / 实际题数）；`restart(limit)` 完整复现上一轮、只换数量，文章测验不会掉成词级；结算页先选数量再开 |
 | 记忆 / 词块「先看一遍」 | `src/reader/hooks/useDrillWarmup.ts` | 预习状态、候选池、本轮题数都在这里；改数量按同一 track 重抽卡，看完才 `begin()`；结算「再来一轮」重新出预习卡，不直接开考 |
+| 记忆 / 词块拷打结算造句 | `src/core/drillSentence.ts` + `panels/DrillSentenceStage.tsx` | 结算页用本轮考到的词 / 词块出一道造句题（最多前 5 个，全部用上）；素材由 `drillSentencePoints` 从判分结果反推，中文用法笔记不当 `mustUse`；批改 / 解析 / 粘贴 / 历史复用 `useGoldenImitation` + `GoldenSentenceImitation`，成绩存 `WritingRecord.source='drillSentence'`；`drill` 随考试快照落盘，刷新结算页还能接着写 |
 | 各模块的本轮数量选择器 | `src/reader/panels/RoundSizeSelect.tsx` + `RoundStartPrompt.tsx` | 统一档位文案 / `0 = 全部` / 自定义单位；精读七种拷打（记忆 / 词块在预习页）、考试设置、结算「再来一轮」、听写、听力、背单词的新词配额 / 每组词数共用；各模块只负责状态和「开始」动作 |
 | 精读七种拷打各自的每次题数 | `src/core/intensiveDrill.ts` | 七种入口（记忆 / 词块 / 英英释义 / 语法标记 / 语法·结构 / 听力 / 错题包围战）、档位 5/10/15/20/30、默认 10；坏数据逐项回默认。七种各存各的，统一在 `reader:drillLimits`，设置存取在 `hooks/useQuizSettings` |
 | 精读面板的阶段 / 拷打入口 | `src/reader/hooks/useIntensiveActions.ts` + `panels/DrillLauncher.tsx` | 阶段→工具、拷打→题型两张表；记忆 / 词块直接进预习页（数量也在预习页选），其它入口由 `DrillLauncher` 先弹数量，确认后传给 `startDrill` / `startArticleDrill` / `startSiege` |

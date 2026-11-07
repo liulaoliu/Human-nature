@@ -382,6 +382,21 @@ describe('useQuizSession：拷打前先学一遍（预习卡）', () => {
     act(() => api!.beginWarmup())
     expect(api!.warmup).toBeNull()
     expect(api!.queue).toHaveLength(1)
+    // 结算页据此出「用学过的内容造句」
+    expect(api!.drill).toBe('memory')
+  })
+
+  it('词块拷打开始后记下 drill=chunk；普通考试 / 关卷清空', () => {
+    render(<Harness library={lib([word({ phrases: ['run out of'] })])} />)
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'chunk' }))
+    act(() => api!.beginWarmup())
+    expect(api!.drill).toBe('chunk')
+
+    act(() => api!.close())
+    expect(api!.drill).toBeNull()
+
+    act(() => api!.startItems(['w1'], ['spell']))
+    expect(api!.drill).toBeNull()
   })
 
   it('取消预习：不开考、不留队列', () => {

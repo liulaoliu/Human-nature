@@ -18,7 +18,7 @@ const q = {
 describe('parseQuizSessionSnapshot', () => {
   it('合法快照原样恢复；index 越界收敛到队列末尾', () => {
     const s = parseQuizSessionSnapshot(
-      JSON.stringify({ v: 1, queue: [q], index: 99, input: 'ru', checked: true, result: false, results: [{ id: q.id, itemId: q.itemId, correct: false }], autoRun: true }),
+      JSON.stringify({ v: 1, queue: [q], index: 99, input: 'ru', checked: true, result: false, results: [{ id: q.id, itemId: q.itemId, correct: false }], autoRun: true, drill: 'memory' }),
     )
     expect(s?.queue).toHaveLength(1)
     expect(s?.index).toBe(1)
@@ -27,6 +27,13 @@ describe('parseQuizSessionSnapshot', () => {
     expect(s?.result).toBe(false)
     expect(s?.results).toEqual([{ id: q.id, itemId: q.itemId, correct: false }])
     expect(s?.autoRun).toBe(true)
+    expect(s?.drill).toBe('memory')
+  })
+
+  it('未知的 drill 值丢掉（旧快照仍可用）', () => {
+    const s = parseQuizSessionSnapshot(JSON.stringify({ v: 1, queue: [q], drill: 'nope' }))
+    expect(s).not.toBeNull()
+    expect(s?.drill).toBeUndefined()
   })
 
   it('坏题 / 未知题型被丢弃，好题保留；accept 空时补标准答案', () => {
@@ -58,6 +65,7 @@ describe('parseQuizSessionSnapshot', () => {
     expect(s?.result).toBeNull()
     expect(s?.results).toEqual([])
     expect(s?.autoRun).toBe(false)
+    expect(s?.drill).toBeUndefined()
   })
 })
 
