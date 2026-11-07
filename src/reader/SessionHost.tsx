@@ -1,6 +1,6 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { ActivityCat } from '../core/activity'
-import { isGoldenWritingRecord, type WritingRecord } from '../core/writing'
+import type { WritingRecord } from '../core/writing'
 import type { VocabItem } from '../types/document'
 import type { useStudySession } from './hooks/useStudySession'
 import type { useQuizSession } from './hooks/useQuizSession'
@@ -297,12 +297,14 @@ export default function SessionHost({
           task={writing.task}
           feedback={writing.feedback}
           history={writing.history}
+          articleId={writing.articleId}
+          articleTitle={writing.articleTitle}
           onClose={() => writing.setOpen(false)}
           onGenerateTask={() => void writing.copyImitationTask()}
           onFeedback={() => void writing.copyFeedback()}
           onModelChange={writing.setModel}
           onTextChange={writing.setText}
-          onClearHistory={() => writing.setHistory((h) => h.filter(isGoldenWritingRecord))}
+          onClearHistory={writing.clearHistory}
           onLoadRecord={writing.loadRecord}
         />
       )}

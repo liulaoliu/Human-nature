@@ -50,6 +50,8 @@ function props(over: Partial<WritingPanelProps> = {}): WritingPanelProps {
     task: null,
     feedback: null,
     history: [],
+    articleId: 'doc:1',
+    articleTitle: '文章一',
     onClose: noop,
     onGenerateTask: noop,
     onFeedback: noop,
@@ -105,7 +107,7 @@ describe('WritingPanel：历史', () => {
   it('没历史时打开显示占位；不能清空', () => {
     render(<WritingPanel {...props()} />)
     fireEvent.click(screen.getByRole('button', { name: '历史（0）' }))
-    expect(screen.getByText(/还没有记录/)).toBeTruthy()
+    expect(screen.getByText(/还没有.*记录/)).toBeTruthy()
     expect(screen.queryByRole('button', { name: '清空' })).toBeNull()
   })
 
@@ -120,7 +122,11 @@ describe('WritingPanel：历史', () => {
 
     fireEvent.click(screen.getByRole('button', { name: '历史（1）' }))
     fireEvent.click(screen.getByRole('button', { name: '清空' }))
-    expect(onClearHistory).toHaveBeenCalled()
+    expect(onClearHistory).toHaveBeenCalledWith({
+      source: 'all',
+      scope: 'article',
+      articleId: 'doc:1',
+    })
   })
 
   it('拷打造句记录在仿写历史里也有来源标签，能点开回看', () => {

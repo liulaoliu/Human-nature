@@ -69,6 +69,8 @@ export function useQuickWritingBack({
   const writingApi = useWriting({
     doc,
     selectedId,
+    articleIdentity,
+    articleTitle,
     flash,
     setLastTask,
     askedWordsRef,

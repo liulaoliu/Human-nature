@@ -217,6 +217,11 @@
 .write-issues .ok { color: var(--green); }
 .write-polished { margin-top: 8px; }
 .write-history { margin-top: 12px; border-top: 1px dashed var(--line); padding-top: 10px; }
+.write-history-bar { justify-content: flex-start; flex-wrap: wrap; gap: 6px; margin-bottom: 4px; }
+.write-history-bar select { max-width: 180px; }
+.write-history-scope { margin: 4px 0 8px; font-size: 12px; }
+.write-history-empty { line-height: 1.8; }
+.write-hist-more { justify-content: center; }
 .write-hist-row {
   display: flex;
   align-items: center;

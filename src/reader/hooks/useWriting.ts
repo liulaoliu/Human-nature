@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { buildImitationTaskPrompt, buildWritingFeedbackPrompt, parseImitationTask, type ImitationTask, type WritingFeedback, type WritingRecord } from '../../core/writing'
+import { removeWritingHistory, type WritingHistoryFilter } from '../../core/writingHistory'
 import { getSentenceLanguages } from '../../core/language'
 import { LEARNING_KEYS } from '../../core/learning'
 import { useLocalStorageState } from './useLocalStorageState'
@@ -29,6 +30,9 @@ function loadWritingDraft(): { model: string; text: string; task: ImitationTask 
 export interface UseWritingParams {
   doc: { sentences: { id: string; text: string; language?: { structure?: string; phrases?: string[] } }[] } | null
   selectedId: string | null
+  /** 当前文章身份 / 标题：历史筛选的「本篇」和列表里的篇名都按它。 */
+  articleIdentity: string
+  articleTitle: string
   flash: (message: string) => void
   setLastTask: (task: 'imitation' | 'feedback') => void
   askedWordsRef: { current: string[] }
@@ -43,6 +47,8 @@ export interface UseWritingParams {
 export function useWriting({
   doc,
   selectedId,
+  articleIdentity,
+  articleTitle,
   flash,
   setLastTask,
   askedWordsRef,
@@ -134,6 +140,14 @@ export function useWriting({
     setTask(rec.task ?? null)
   }, [])
 
+  /** 清空当前筛选范围（来源 + 本篇/全库）；金句课记录不在仿写面板里清。 */
+  const clearHistory = useCallback(
+    (filter: WritingHistoryFilter) => {
+      setHistory((h) => removeWritingHistory(h, filter))
+    },
+    [setHistory],
+  )
+
   // 仿写草稿（范句 / 作答 / 任务）持久化
   useEffect(() => {
     try {
@@ -146,6 +160,8 @@ export function useWriting({
   return {
     open,
     setOpen,
+    articleId: articleIdentity,
+    articleTitle,
     model,
     setModel,
     task,
@@ -162,5 +178,6 @@ export function useWriting({
     copyImitationTask,
     copyFeedback,
     loadRecord,
+    clearHistory,
   }
 }

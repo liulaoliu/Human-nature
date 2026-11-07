@@ -17,6 +17,8 @@ function params(over: Partial<UseWritingParams> = {}): UseWritingParams {
   return {
     doc,
     selectedId: 's2',
+    articleIdentity: 'doc:1',
+    articleTitle: '文章一',
     flash: vi.fn(),
     setLastTask: vi.fn(),
     askedWordsRef: { current: ['old'] },
@@ -146,5 +148,37 @@ describe('useWriting：开始与复制提示词', () => {
     expect(result.current.model).toBe('M')
     expect(result.current.text).toBe('T')
     expect(result.current.task?.task).toBe('T')
+  })
+
+  it('暴露当前文章；clearHistory 只清当前筛选，金句课保留', () => {
+    localStorage.setItem(
+      'reader:writingHistory',
+      JSON.stringify([
+        {
+          at: '2026-11-01T00:00:00.000Z',
+          articleId: 'doc:1',
+          model: '',
+          text: 'drill',
+          feedback: { version: 2, scores: [], total: 8, max: 10, issues: [] },
+          source: 'drillSentence',
+        },
+        {
+          at: '2026-11-02T00:00:00.000Z',
+          articleId: 'doc:1',
+          model: '',
+          text: 'golden',
+          feedback: { version: 2, scores: [], total: 8, max: 10, issues: [] },
+          source: 'goldenSentence',
+        },
+      ]),
+    )
+    const { result } = renderHook(() => useWriting(params()))
+    expect(result.current.articleId).toBe('doc:1')
+    expect(result.current.articleTitle).toBe('文章一')
+
+    act(() =>
+      result.current.clearHistory({ source: 'drillSentence', scope: 'article', articleId: 'doc:1' }),
+    )
+    expect(result.current.history.map((r) => r.text)).toEqual(['golden'])
   })
 })

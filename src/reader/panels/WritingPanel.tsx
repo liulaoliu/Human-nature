@@ -1,11 +1,10 @@
 import { useState } from 'react'
+import type { ImitationTask, WritingFeedback, WritingRecord } from '../../core/writing'
 import {
-  isGoldenWritingRecord,
-  writingRecordLabel,
-  type ImitationTask,
-  type WritingFeedback,
-  type WritingRecord,
-} from '../../core/writing'
+  writingHistoryCounts,
+  type WritingHistoryFilter,
+} from '../../core/writingHistory'
+import WritingHistoryList from './WritingHistoryList'
 
 export interface WritingPanelProps {
   model: string
@@ -13,12 +12,16 @@ export interface WritingPanelProps {
   task: ImitationTask | null
   feedback: WritingFeedback | null
   history: WritingRecord[]
+  /** 当前文章；历史筛选的「本篇」按它归属。 */
+  articleId: string
+  articleTitle?: string
   onClose: () => void
   onGenerateTask: () => void
   onFeedback: () => void
   onModelChange: (value: string) => void
   onTextChange: (value: string) => void
-  onClearHistory: () => void
+  /** 只清当前筛选范围（来源 + 篇/全库），金句课记录不在这里清。 */
+  onClearHistory: (filter: WritingHistoryFilter) => void
   onLoadRecord: (rec: WritingRecord) => void
 }
 
@@ -29,6 +32,8 @@ export default function WritingPanel({
   task,
   feedback,
   history,
+  articleId,
+  articleTitle,
   onClose,
   onGenerateTask,
   onFeedback,
@@ -38,8 +43,8 @@ export default function WritingPanel({
   onLoadRecord,
 }: WritingPanelProps) {
   const [historyOpen, setHistoryOpen] = useState(false)
-  // 仿写考试的记录由金句课自己回看；这里只列普通仿写，避免两套题目混在一起。
-  const rows = history.filter((rec) => !isGoldenWritingRecord(rec))
+  // 金句课的记录由小课堂自己回看；这里默认只看本篇的普通仿写 / 工棚 / 拷打造句。
+  const historyCount = writingHistoryCounts(history, 'article', articleId).all
 
   return (
     <div className="study writing">
@@ -50,7 +55,7 @@ export default function WritingPanel({
         <button className="primary" onClick={onFeedback} disabled={!task || !text.trim()}>
           ② 批改
         </button>
-        <button onClick={() => setHistoryOpen((v) => !v)}>历史（{rows.length}）</button>
+        <button onClick={() => setHistoryOpen((v) => !v)}>历史（{historyCount}）</button>
       </div>
 
       <div className="write-block">
@@ -116,40 +121,16 @@ export default function WritingPanel({
       )}
 
       {historyOpen && (
-        <div className="write-history">
-          <div className="bar">
-            <span className="muted">练习历史（{rows.length}）</span>
-            {rows.length > 0 && (
-              <button className="danger" onClick={onClearHistory}>
-                清空
-              </button>
-            )}
-          </div>
-          {rows.length ? (
-            rows.map((rec, i) => (
-              <button
-                key={i}
-                className="write-hist-row"
-                onClick={() => {
-                  onLoadRecord(rec)
-                  setHistoryOpen(false)
-                }}
-              >
-                <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-                <span className="ellipsis">
-                  {' '}
-                  {writingRecordLabel(rec)}
-                  {rec.model ? ` · ${rec.model}` : ''}
-                </span>
-                <b>
-                  {rec.feedback.total}/{rec.feedback.max}
-                </b>
-              </button>
-            ))
-          ) : (
-            <div className="muted">还没有记录；批改一次就会存下来。</div>
-          )}
-        </div>
+        <WritingHistoryList
+          history={history}
+          articleId={articleId}
+          {...(articleTitle ? { articleTitle } : {})}
+          onLoadRecord={(rec) => {
+            onLoadRecord(rec)
+            setHistoryOpen(false)
+          }}
+          onClear={onClearHistory}
+        />
       )}
     </div>
   )
