@@ -220,6 +220,14 @@ export function buildWritingFeedbackPrompt(
   const pointLines = points.length
     ? points.map((p) => `- ${p.id} | ${p.en}${p.zh ? ` | ${p.zh}` : ''}${p.kind ? ` | ${p.kind}` : ''}`).join('\n')
     : '（本题没有可选语言点；recommendations 里不要写 pointId / from=article）'
+  const model = task.model.trim()
+  const mustUse = task.mustUse.map((s) => s.trim()).filter(Boolean)
+  const taskRef = [
+    model ? `范句：${model}` : '',
+    mustUse.length ? `要求用上：${mustUse.join('、')}` : '',
+  ]
+    .filter(Boolean)
+    .join('；')
   const previous = options.previousIssues?.filter((i) => i.suggestion.trim()) ?? []
   const previousBlock = previous.length
     ? [
@@ -256,7 +264,8 @@ export function buildWritingFeedbackPrompt(
     '',
     '任务：',
     task.task,
-    `（范句：${task.model}${task.mustUse.length ? `；要求用上：${task.mustUse.join('、')}` : ''}）`,
+    // 拷打造句没有范句，只写「要求用上」；旧题面输出保持原样。
+    taskRef ? `（${taskRef}）` : '',
     '',
     '可选语言点（id | 英文 | 中文 | 类型）：',
     pointLines,
@@ -510,8 +519,8 @@ export interface WritingRecord {
   feedback: WritingFeedback
   /** 当时的仿写任务（题目 + rubric），可能没有 */
   task?: ImitationTask
-  /** 普通仿写缺省；金句课记录（单句仿写 / 整课考试 / 错因订正）分开标记，历史可分流 */
-  source?: 'writing' | 'goldenExam' | 'goldenSentence' | 'goldenError' | 'production'
+  /** 普通仿写缺省；金句课 / 奶牛工棚 / 拷打造句分开标记，历史可分流 */
+  source?: 'writing' | 'goldenExam' | 'goldenSentence' | 'goldenError' | 'production' | 'drillSentence'
   /** 金句课考试题 id（source = goldenExam 时） */
   examId?: string
   /** 金句课单句 id（source = goldenSentence 时） */
@@ -546,7 +555,7 @@ export function isGoldenWritingRecord(rec: WritingRecord): boolean {
   return rec.source === 'goldenExam' || rec.source === 'goldenSentence' || rec.source === 'goldenError'
 }
 
-const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production'] as const
+const WRITING_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production', 'drillSentence'] as const
 
 /**
  * 一条批改记录的**外部数据守卫**（localStorage / 服务端 / 备份都可能带脏值）。
@@ -577,6 +586,7 @@ const WRITING_SOURCE_LABEL: Record<NonNullable<WritingRecord['source']>, string>
   goldenExam: '整课考试',
   goldenError: '错因订正',
   production: '奶牛工棚',
+  drillSentence: '拷打造句',
 }
 
 /**
@@ -602,6 +612,7 @@ function baseLabel(rec: Pick<WritingRecord, 'source' | 'task'>): string {
     const focus = rec.task?.focus?.trim()
     return focus ? `奶牛工棚 · ${focus}` : WRITING_SOURCE_LABEL.production
   }
+  if (rec.source === 'drillSentence') return WRITING_SOURCE_LABEL.drillSentence
   return WRITING_SOURCE_LABEL.writing
 }
 

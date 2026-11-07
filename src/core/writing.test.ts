@@ -63,6 +63,11 @@ describe('buildWritingFeedbackPrompt', () => {
     expect(p).toContain('chunk-sense')
     expect(p).toContain('"recommendations"')
   })
+  it('没有范句时只写「要求用上」，不留空的「范句：」', () => {
+    const p = buildWritingFeedbackPrompt({ ...task, model: '' }, 'I run every day.')
+    expect(p).toContain('（要求用上：a）')
+    expect(p).not.toContain('范句：')
+  })
   it('给可选语言点时，把 id 和 from=article 的约束写进提示词', () => {
     const p = buildWritingFeedbackPrompt(task, 'I go to school.', {
       availablePoints: [{ id: 'lp:s1:come-to-an-end', en: 'come to an end', zh: '结束', kind: 'chunk' }],
@@ -259,6 +264,7 @@ describe('writingRecordLabel：一条记录叫什么', () => {
         task: { task: 'x', model: 'm', mustUse: ['come with'], rubric: [], focus: 'come with' },
       }),
     ).toBe('语言点造句 · come with')
+    expect(writingRecordLabel({ source: 'drillSentence', task: undefined })).toBe('拷打造句')
     expect(writingRecordLabel({ source: 'production', task: undefined })).toBe('奶牛工棚')
     expect(
       writingRecordLabel({
@@ -295,6 +301,7 @@ describe('normalizeWritingRecord：外部数据里的来源只认白名单', () 
     expect(normalizeWritingRecord({ ...base, source: 'goldenError', sentenceId: 's1' }).source).toBe('goldenError')
     expect(normalizeWritingRecord({ ...base, source: 'writing' }).source).toBe('writing')
     expect(normalizeWritingRecord({ ...base, source: 'production' }).source).toBe('production')
+    expect(normalizeWritingRecord({ ...base, source: 'drillSentence' }).source).toBe('drillSentence')
   })
 
   it('坏来源当普通仿写；id 不是字符串就丢掉（和服务端 sqliteLearning 同一口径）', () => {

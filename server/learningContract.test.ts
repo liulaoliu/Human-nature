@@ -15,7 +15,7 @@ import { ensureSchema } from './sqliteStore.ts'
  * 这里故意把前端那五个值写死（服务端程序不该 import src，两层各跑各的 tsc）：
  * 前端再加来源时，把新值补进这个数组，测试就会立刻告诉你服务端还没认。
  */
-const FRONTEND_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production'] as const
+const FRONTEND_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production', 'drillSentence'] as const
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
   DatabaseSync: new (path: string) => SqliteDatabase

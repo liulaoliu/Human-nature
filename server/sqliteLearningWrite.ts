@@ -81,7 +81,14 @@ function writeWriting(db: DatabaseSync, data: LearningData): void {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `)
   const source = (v: unknown): string | null =>
-    v === 'writing' || v === 'goldenSentence' || v === 'goldenExam' || v === 'goldenError' || v === 'production' ? v : null
+    v === 'writing' ||
+    v === 'goldenSentence' ||
+    v === 'goldenExam' ||
+    v === 'goldenError' ||
+    v === 'production' ||
+    v === 'drillSentence'
+      ? v
+      : null
   for (const r of list<unknown>(data.writingHistory)) {
     if (!isRecord(r)) continue
     insert.run(
