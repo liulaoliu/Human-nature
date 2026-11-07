@@ -227,7 +227,7 @@
   background: var(--panel);
   text-align: left;
 }
-.drill-sentence-head { justify-content: space-between; margin-bottom: 10px; }
+.drill-sentence-head { justify-content: space-between; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
 .drill-sentence .golden-exam-input { text-align: left; }
 
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */

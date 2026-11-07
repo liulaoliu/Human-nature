@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultReviewState, type GoldenExamItem, type VocabItem } from '../../types/document'
 import type { GoldenImitationApi, UseGoldenImitationParams } from '../hooks/useGoldenImitation'
@@ -126,5 +126,45 @@ describe('DrillSentenceStage：拷打结算页的造句', () => {
     expect(container.innerHTML).toBe('')
     const params = useGoldenImitationMock.mock.calls[0][0] as UseGoldenImitationParams
     expect(params.current).toBeNull()
+  })
+
+  it('结算区能直接展开造句历史，默认只列本篇拷打造句', () => {
+    const feedback = {
+      version: 2 as const,
+      scores: [],
+      total: 8,
+      max: 10,
+      issues: [],
+    }
+    renderStage({
+      writingHistory: [
+        {
+          at: '2026-11-07T00:00:00.000Z',
+          articleId: 'A',
+          articleTitle: '文章',
+          model: '',
+          text: 'A drill',
+          feedback,
+          source: 'drillSentence',
+          sentenceId: 'drill:A',
+        },
+        {
+          at: '2026-11-08T00:00:00.000Z',
+          articleId: 'B',
+          articleTitle: '别的文章',
+          model: '',
+          text: 'B drill',
+          feedback,
+          source: 'drillSentence',
+          sentenceId: 'drill:B',
+        },
+      ],
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: '查看造句历史' }))
+    expect(screen.getByText('造句历史（1）')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /拷打造句/ }))
+    expect(screen.getByText('A drill')).toBeTruthy()
+    expect(screen.queryByText('B drill')).toBeNull()
   })
 })

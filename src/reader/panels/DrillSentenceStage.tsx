@@ -1,4 +1,4 @@
-import { useMemo, type Dispatch, type SetStateAction } from 'react'
+import { useMemo, useState, type Dispatch, type SetStateAction } from 'react'
 import type { ActivityCat } from '../../core/activity'
 import {
   buildDrillSentenceItem,
@@ -7,10 +7,12 @@ import {
   type DrillSentenceKind,
 } from '../../core/drillSentence'
 import type { QuizResultRow } from '../../core/sessionSnapshots'
+import { removeWritingHistory } from '../../core/writingHistory'
 import type { WritingRecord } from '../../core/writing'
 import type { VocabItem } from '../../types/document'
 import { useGoldenImitation } from '../hooks/useGoldenImitation'
 import GoldenSentenceImitation from './golden/GoldenSentenceImitation'
+import WritingHistoryList from './WritingHistoryList'
 
 export interface DrillSentenceStageProps {
   kind: DrillSentenceKind
@@ -56,6 +58,7 @@ export default function DrillSentenceStage({
     flash,
     recordActivity,
   })
+  const [historyOpen, setHistoryOpen] = useState(false)
 
   if (!current) return null
 
@@ -67,11 +70,25 @@ export default function DrillSentenceStage({
       <div className="bar drill-sentence-head">
         <b>✍️ 用学过的内容造句</b>
         <span className="muted">选做 · AI 批改 / 复制提示词手工批改</span>
+        <button onClick={() => setHistoryOpen((v) => !v)} aria-expanded={historyOpen}>
+          {historyOpen ? '收起造句历史' : '查看造句历史'}
+        </button>
       </div>
       <GoldenSentenceImitation
         imitation={imitation}
         hint={`本轮${label}已考完。现在把学到的${unit}用出来：写 1–3 句英文，全部用上下面这些${unit}；AI 会按${focus}批改。`}
       />
+      {historyOpen && (
+        <WritingHistoryList
+          history={writingHistory}
+          articleId={articleId}
+          articleTitle={articleTitle}
+          title="造句历史"
+          initialSource="drillSentence"
+          initialScope="article"
+          onClear={(filter) => setWritingHistory((h) => removeWritingHistory(h, filter))}
+        />
+      )}
     </section>
   )
 }
