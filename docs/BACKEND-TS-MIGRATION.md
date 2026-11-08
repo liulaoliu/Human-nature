@@ -378,6 +378,6 @@ Linux 只做 `server/shadowing-reader.service.template` 的静态检查，不在
   能命中），但改 `server/` 里的共享模块（如 `sqliteLearningWrite.ts`、`sqliteSchema.ts`）时没有同名测试，
   `gates:fast` 会打印「没有改动的测试文件，跳过测试」并 exit 0 —— 一个测试都没跑就报绿。
 - 现在：只要有 `server/**` 的**非测试**代码改动，就当作 `server/` 整个目录参与筛选
-  （venom 会跑 server 下全部 14 个测试文件、几秒），与 `gates:server` 的集合一致；
+  （会跑 server 下全部 14 个测试文件、几秒），与 `gates:server` 的集合一致；
   纯前端改动不受影响。验证方式：往 `server/sqliteSchema.ts` 追加一行注释跑
   `node tool/test_changed.mjs` → 输出「相关测试 1 个：server/」；撤掉改动后再跑 → 回到「跳过」。
