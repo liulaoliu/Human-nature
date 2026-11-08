@@ -367,3 +367,16 @@ Linux 只做 `server/shadowing-reader.service.template` 的静态检查，不在
 启动脚本、.cmd/.vbs、systemd 模板、README 与入口文件同一个 commit 改。
 先给我一份迁移清单和第一文件的计划，再开始改代码。
 ```
+
+---
+
+## 12. 现在还剩什么（2026-11-08 复审）
+
+迁移本身已经结束；剩下的是一条**覆盖缺口**，不是类型缺口：
+
+- `tool/test_changed.mjs` 只按「同名测试」推导（`server/sqliteStore.ts` → `server/sqliteStore.test.ts`
+  会自动命中），但**改 `server/` 里的共享模块**（如 `sqliteLearningWrite.ts`、`sqliteSchema.ts`）时
+  没有同名测试，`gates:fast` 会「跳过测试仍报绿」——它只提示「没有改动的测试文件，跳过测试」，
+  退出码 0。全量 `npm run gates` 不受影响（无条件跑全部测试）。
+- 要补的方向：`tool/test_changed.mjs` 只要命中 `server/**` 就并上 `server tools`（与
+  `gates:server` 同集合），够小、可测、不会拖慢纯前端改动。
