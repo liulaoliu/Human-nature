@@ -44,6 +44,15 @@ export interface UseGoldenImitationParams {
  * 题面由调用方准备：单句仿写用当前句，考试用 `GoldenLesson.exam`，错因订正用 `errorFixExamItem`，
  * 拷打造句用 `core/drillSentence` 从本轮考到的词 / 词块拼题。
  */
+
+/** 同题、同稿、同文字算一次；重复点批改不往历史里堆第二条。 */
+function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
+  const key = (r: WritingRecord) =>
+    [r.articleId, r.sentenceId ?? r.examId ?? '', r.task?.focus ?? '', r.task?.round ?? 1, r.text.trim()].join('\u0000')
+  const k = key(rec)
+  return list.some((r) => key(r) === k)
+}
+
 export function useGoldenImitation({
   current,
   articleId,
@@ -87,14 +96,6 @@ export function useGoldenImitation({
         : [],
     [writingHistory, articleId, current, examId],
   )
-
-/** 同题、同稿、同文字算一次；重复点批改不往历史里堆第二条。 */
-function hasSameAttempt(list: WritingRecord[], rec: WritingRecord): boolean {
-  const key = (r: WritingRecord) =>
-    [r.articleId, r.sentenceId ?? r.examId ?? '', r.task?.focus ?? '', r.task?.round ?? 1, r.text.trim()].join('\u0000')
-  const k = key(rec)
-  return list.some((r) => key(r) === k)
-}
 
   const reset = useCallback(() => {
     setAnswer('')
