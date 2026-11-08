@@ -35,6 +35,11 @@ for (const f of files) {
   }
 }
 
+// server/ 下大量模块没有同名测试（sqliteSchema / sqliteLearningWrite 这类共享代码），
+// 只按同名推导会「一个测试都不跑就退出」。改了服务端就整组跑 server（14 个文件、几秒）。
+const touchedServer = files.some((f) => isCode(f) && f.startsWith('server/') && !isTest(f))
+if (touchedServer) tests.add('server/')
+
 if (!tests.size) {
   console.log('[gates:fast] 没有改动的测试文件，跳过测试（tsc / 静态门禁仍会跑）')
   process.exit(0)

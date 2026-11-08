@@ -372,11 +372,12 @@ Linux 只做 `server/shadowing-reader.service.template` 的静态检查，不在
 
 ## 12. 现在还剩什么（2026-11-08 复审）
 
-迁移本身已经结束；剩下的是一条**覆盖缺口**，不是类型缺口：
+迁移本身已经结束。复审时发现并已修掉一条**覆盖缺口**（不是类型缺口）：
 
-- `tool/test_changed.mjs` 只按「同名测试」推导（`server/sqliteStore.ts` → `server/sqliteStore.test.ts`
-  会自动命中），但**改 `server/` 里的共享模块**（如 `sqliteLearningWrite.ts`、`sqliteSchema.ts`）时
-  没有同名测试，`gates:fast` 会「跳过测试仍报绿」——它只提示「没有改动的测试文件，跳过测试」，
-  退出码 0。全量 `npm run gates` 不受影响（无条件跑全部测试）。
-- 要补的方向：`tool/test_changed.mjs` 只要命中 `server/**` 就并上 `server tools`（与
-  `gates:server` 同集合），够小、可测、不会拖慢纯前端改动。
+- 旧行为：`tool/test_changed.mjs` 只按「同名测试」推导（`server/sqliteStore.ts` → `server/sqliteStore.test.ts`
+  能命中），但改 `server/` 里的共享模块（如 `sqliteLearningWrite.ts`、`sqliteSchema.ts`）时没有同名测试，
+  `gates:fast` 会打印「没有改动的测试文件，跳过测试」并 exit 0 —— 一个测试都没跑就报绿。
+- 现在：只要有 `server/**` 的**非测试**代码改动，就当作 `server/` 整个目录参与筛选
+  （venom 会跑 server 下全部 14 个测试文件、几秒），与 `gates:server` 的集合一致；
+  纯前端改动不受影响。验证方式：往 `server/sqliteSchema.ts` 追加一行注释跑
+  `node tool/test_changed.mjs` → 输出「相关测试 1 个：server/」；撤掉改动后再跑 → 回到「跳过」。
