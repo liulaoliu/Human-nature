@@ -241,8 +241,21 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.drill-sentence-switch button { position: relative; }
 .drill-sentence-switch button.on { border-color: var(--accent); color: var(--accent); }
+/* 这题写了一半：按钮右上角一个小圆点，切走也知道哪题有草稿 */
+.drill-sentence-dot {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+}
 .drill-sentence-task[hidden] { display: none; }
+.drill-sentence-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.drill-sentence-actions button { font-size: 12px; padding: 3px 10px; }
 .drill-sentence .golden-exam-input { text-align: left; }
 
 /* 背单词：卡内维护（编辑 / 删除）与反馈 */

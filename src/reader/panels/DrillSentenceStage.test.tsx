@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultReviewState, type GoldenExamItem, type VocabItem } from '../../types/document'
+import { readDrillSentenceDrafts } from '../../core/drillSentenceDraft'
+import { installFakeStorage } from '../testStorage'
 import type { GoldenImitationApi, UseGoldenImitationParams } from '../hooks/useGoldenImitation'
 
 const useGoldenImitationMock = vi.fn()
@@ -57,9 +59,6 @@ function fakeApi(current: GoldenExamItem | null): GoldenImitationApi {
 }
 
 function renderStage(over: Partial<Parameters<typeof DrillSentenceStage>[0]> = {}) {
-  const setWritingHistory = vi.fn()
-  const flash = vi.fn()
-  const recordActivity = vi.fn()
   return render(
     <DrillSentenceStage
       kind="memory"
@@ -68,28 +67,45 @@ function renderStage(over: Partial<Parameters<typeof DrillSentenceStage>[0]> = {
       articleId="A"
       articleTitle="文章"
       writingHistory={[]}
-      setWritingHistory={setWritingHistory}
-      flash={flash}
-      recordActivity={recordActivity}
+      setWritingHistory={vi.fn()}
+      flash={vi.fn()}
+      recordActivity={vi.fn()}
       {...over}
     />,
   )
 }
 
+/** 两个词 → 两道造句题，用来测「切题 / 刷新 / 清空」。 */
+function twoItems() {
+  return {
+    items: [item(), item({ id: 'v2', word: 'make', lemma: 'make', meaning: '制造' })],
+    results: [
+      { id: 'q1', itemId: 'v1', correct: true },
+      { id: 'q2', itemId: 'v2', correct: false },
+    ],
+  }
+}
+
+function pressed(name: string): string | null {
+  return screen.getByRole('button', { name }).getAttribute('aria-pressed')
+}
+
+let restoreStorage: () => void = () => {}
+
 beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  localStorage.clear()
   useGoldenImitationMock.mockReset()
   useGoldenImitationMock.mockImplementation((params: UseGoldenImitationParams) => fakeApi(params.current))
 })
 
+afterEach(() => {
+  restoreStorage()
+})
+
 describe('DrillSentenceStage：拷打结算页的造句', () => {
   it('记忆拷打：每个词独立一题，不再把所有词塞进一句', () => {
-    renderStage({
-      items: [item(), item({ id: 'v2', word: 'make', lemma: 'make', meaning: '制造' })],
-      results: [
-        { id: 'q1', itemId: 'v1', correct: true },
-        { id: 'q2', itemId: 'v2', correct: false },
-      ],
-    })
+    renderStage(twoItems())
 
     const calls = useGoldenImitationMock.mock.calls.map(
       ([params]) => params as UseGoldenImitationParams,
@@ -109,12 +125,10 @@ describe('DrillSentenceStage：拷打结算页的造句', () => {
 
     expect(screen.getByText('✍️ 用学过的内容造句')).toBeTruthy()
     expect(screen.getByText(/共 2 题 · 每个词独立一题/)).toBeTruthy()
-    const first = screen.getByRole('button', { name: '1. run' })
-    const second = screen.getByRole('button', { name: '2. make' })
-    expect(first.getAttribute('aria-pressed')).toBe('true')
-    expect(second.getAttribute('aria-pressed')).toBe('false')
-    fireEvent.click(second)
-    expect(second.getAttribute('aria-pressed')).toBe('true')
+    expect(pressed('1. run')).toBe('true')
+    expect(pressed('2. make')).toBe('false')
+    fireEvent.click(screen.getByRole('button', { name: '2. make' }))
+    expect(pressed('2. make')).toBe('true')
 
     expect(screen.getAllByText(/本轮记忆拷打已考完/)).toHaveLength(2)
     expect(screen.getByRole('button', { name: '提交 AI 批改' })).toBeTruthy()
@@ -182,5 +196,30 @@ describe('DrillSentenceStage：拷打结算页的造句', () => {
     fireEvent.click(screen.getByRole('button', { name: /拷打造句/ }))
     expect(screen.getByText('A drill')).toBeTruthy()
     expect(screen.queryByText('B drill')).toBeNull()
+  })
+
+  it('换到第 2 题并留下草稿后刷新：重新打开还停在第 2 题', () => {
+    const first = renderStage(twoItems())
+    fireEvent.click(screen.getByRole('button', { name: '2. make' }))
+    fireEvent.click(screen.getByRole('button', { name: '先存这一句' }))
+    const stored = Object.values(readDrillSentenceDrafts())
+    expect(stored).toHaveLength(1)
+    expect(stored[0]?.activeIndex).toBe(1)
+
+    first.unmount()
+    renderStage(twoItems())
+    expect(pressed('2. make')).toBe('true')
+    expect(pressed('1. run')).toBe('false')
+  })
+
+  it('清空这一轮造句草稿：题号回到第 1 题，草稿条目被删掉', () => {
+    renderStage(twoItems())
+    fireEvent.click(screen.getByRole('button', { name: '2. make' }))
+    expect(Object.keys(readDrillSentenceDrafts())).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole('button', { name: '查看造句历史' }))
+    fireEvent.click(screen.getByRole('button', { name: '清空这一轮造句草稿' }))
+    expect(readDrillSentenceDrafts()).toEqual({})
+    expect(pressed('1. run')).toBe('true')
   })
 })
