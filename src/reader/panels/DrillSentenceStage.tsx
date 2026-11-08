@@ -21,7 +21,7 @@ import {
   removeDrillSentenceDraft,
   saveDrillSentenceDraft,
   type DrillSentenceAnswerDraft,
-} from '../../core/drillSentenceDraft'
+} from '../drillSentenceDraft'
 import type { QuizResultRow } from '../../core/sessionSnapshots'
 import type { QuizQuestion } from '../../core/quiz'
 import { removeWritingHistory } from '../../core/writingHistory'

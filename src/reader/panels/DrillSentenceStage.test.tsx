@@ -2,7 +2,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { defaultReviewState, type GoldenExamItem, type VocabItem } from '../../types/document'
-import { readDrillSentenceDrafts } from '../../core/drillSentenceDraft'
+import { readDrillSentenceDrafts } from '../drillSentenceDraft'
 import { installFakeStorage } from '../testStorage'
 import type { GoldenImitationApi, UseGoldenImitationParams } from '../hooks/useGoldenImitation'
 
