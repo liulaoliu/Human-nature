@@ -121,13 +121,14 @@ export function useQuizSession(params: UseQuizSessionParams) {
   const poolSizesNow = useMemo(() => poolSizes(studyable, kinds), [studyable, kinds])
   const availableCount = useMemo(() => countQuestions(pool, kinds), [pool, kinds])
 
-  const { drillRound, retryWrong, resetDrill, clearDrill } = useQuizCompletion({
+  const { drillRound, sentenceResults, sentenceQuestions, retryWrong, resetDrill, clearDrill } = useQuizCompletion({
     queue,
     index,
     results,
     allRef,
     recordedRef,
     suspended,
+    drill,
     loopWrong,
     recordPractice,
     onKinds,
@@ -341,6 +342,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     result,
     results,
     setResults,
+    /** 拷打最初的整轮结果 / 题目：重练错题后，结算页仍按整轮出造句。 */
+    sentenceResults,
+    sentenceQuestions,
     /** 拼写错判定提示；非空时禁止直接切题 / 结束。 */
     spellMiss,
     /** 拷打被「从头重学」挂起：队列还在，背单词结束后调 `resumeFromRelearn` 回来。 */

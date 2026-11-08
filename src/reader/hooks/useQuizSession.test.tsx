@@ -189,6 +189,80 @@ describe('useQuizSession：出题与判分', () => {
     expect(api!.results).toEqual([])
   })
 
+  it('记忆 / 词块拷打不自动鞭打：结算页留着，别把整轮造句闪掉', () => {
+    vi.useFakeTimers()
+    localStorage.setItem('reader:quizLoopWrong', '1')
+    render(
+      <Harness
+        library={lib([
+          word({ id: 'w1' }),
+          word({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+        ])}
+      />,
+    )
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory', limit: 2 }))
+    act(() => api!.beginWarmup())
+
+    // 第 1 题拼错 → 确认「继续考试（已排队重学）」
+    act(() => api!.setInput('zzz'))
+    act(() => api!.check())
+    act(() => api!.ackSpellMiss())
+
+    // 第 2 题答对 → 进入结算页
+    act(() => api!.setInput(api!.queue![1].answer))
+    act(() => api!.check())
+    act(() => api!.next())
+
+    expect(api!.results).toHaveLength(2)
+    expect(api!.drillRound).toBe(0)
+    expect(api!.sentenceResults).toHaveLength(2)
+
+    // 就算开了「反复鞭打」，拷打也不能自动跳去重练；造句页要停在这里
+    act(() => vi.advanceTimersByTime(1500))
+    expect(api!.queue).toHaveLength(2)
+    expect(api!.results).toHaveLength(2)
+    expect(api!.drillRound).toBe(0)
+    expect(api!.sentenceResults).toHaveLength(2)
+  })
+
+  it('重练错题后，造句仍按整轮的题目与结果', () => {
+    render(
+      <Harness
+        library={lib([
+          word({ id: 'w1' }),
+          word({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+        ])}
+      />,
+    )
+    act(() => api!.startDrill(['spell'], 'all', { warmup: 'memory', limit: 2 }))
+    act(() => api!.beginWarmup())
+
+    act(() => api!.setInput('zzz'))
+    act(() => api!.check())
+    act(() => api!.ackSpellMiss())
+    act(() => api!.setInput(api!.queue![1].answer))
+    act(() => api!.check())
+    act(() => api!.next())
+
+    const original = api!.sentenceResults
+    expect(original).toHaveLength(2)
+    expect(api!.sentenceQuestions).toHaveLength(2)
+
+    // 手动重练错题：当前轮只剩 1 题，但造句素材不能跟着缩
+    act(() => api!.retryWrong())
+    expect(api!.queue).toHaveLength(1)
+    expect(api!.results).toEqual([])
+    expect(api!.sentenceResults).toHaveLength(2)
+    expect(api!.sentenceQuestions).toHaveLength(2)
+
+    act(() => api!.setInput(api!.queue![0].answer))
+    act(() => api!.check())
+    act(() => api!.next())
+    expect(api!.results).toHaveLength(1)
+    expect(api!.sentenceResults).toBe(original)
+    expect(api!.sentenceQuestions).toHaveLength(2)
+  })
+
   it('快捷键：回车判分 / 确认拼错，Esc 退出', () => {
     render(<Harness library={lib([word()])} />)
     act(() => api!.startItems(['w1'], ['spell']))

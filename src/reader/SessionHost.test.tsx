@@ -1,11 +1,23 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { render } from '@testing-library/react'
+import type { ReactNode } from 'react'
 import SessionHost, { type SessionHostProps } from './SessionHost'
 
 vi.mock('./panels/StudyPanel', () => ({ default: () => <div>study-panel</div> }))
 vi.mock('./panels/QuizSetupPanel', () => ({ default: () => <div>quiz-setup</div> }))
-vi.mock('./panels/QuizPanel', () => ({ default: () => <div>quiz-panel</div> }))
+vi.mock('./panels/QuizPanel', () => ({
+  default: ({ sentenceDrill }: { sentenceDrill?: ReactNode }) => (
+    <div>quiz-panel{sentenceDrill}</div>
+  ),
+}))
+vi.mock('./panels/DrillSentenceStage', () => ({
+  default: ({ results, questions }: { results: unknown[]; questions: unknown[] }) => (
+    <div>
+      sentence-stage-{results.length}-{questions.length}
+    </div>
+  ),
+}))
 vi.mock('./panels/QuickPanel', () => ({ default: () => <div>quick-panel</div> }))
 vi.mock('./panels/DictPanel', () => ({ default: () => <div>dict-panel</div> }))
 vi.mock('./panels/ListeningPanel', () => ({ default: () => <div>listening-panel</div> }))
@@ -104,5 +116,31 @@ describe('SessionHost', () => {
     const text = container.textContent ?? ''
     expect(text).toContain('study-panel')
     expect(text).not.toContain('quiz-panel')
+  })
+
+  it('拷打结算页的造句用整轮结果，不跟着重练小轮缩水', () => {
+    const fiveResults = Array.from({ length: 5 }, (_, i) => ({
+      id: `q${i}`,
+      itemId: `w${i}`,
+      correct: i !== 0,
+    }))
+    const fiveQuestions = Array.from({ length: 5 }, (_, i) => ({ id: `q${i}`, itemId: `w${i}` }))
+    const { container } = render(
+      <SessionHost
+        {...props({
+          quiz: {
+            setupOpen: false,
+            queue: [fiveQuestions[0]],
+            index: 1,
+            drill: 'memory',
+            results: [fiveResults[0]],
+            sentenceResults: fiveResults,
+            sentenceQuestions: fiveQuestions,
+            poolSizes: { unmastered: 0 },
+          } as never,
+        })}
+      />,
+    )
+    expect(container.textContent).toContain('sentence-stage-5-5')
   })
 })

@@ -16,6 +16,8 @@ export interface UseQuizCompletionParams {
   recordedRef: MutableRefObject<boolean>
   /** 拷打被「从头重学」挂起：先不结算、不自动鞭打，等回来再算。 */
   suspended: boolean
+  /** 记忆 / 词块拷打：结算页要留给造句，别自动跳去重练错题。 */
+  drill: 'memory' | 'chunk' | null
   loopWrong: boolean
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
   onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
@@ -28,6 +30,12 @@ export interface UseQuizCompletionParams {
 
 export interface QuizCompletion {
   drillRound: number
+  /**
+   * 本轮拷打最初的判分结果 / 题目（重练错题后仍保留）。
+   * 结算页的造句按「整轮考过的内容」出题，不能因为重练只剩一道就缩成一题。
+   */
+  sentenceResults: QuizResultRow[]
+  sentenceQuestions: QuizQuestion[]
   retryWrong: () => void
   resetDrill: () => void
   clearDrill: () => void
@@ -47,6 +55,7 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
     allRef,
     recordedRef,
     suspended,
+    drill,
     loopWrong,
     recordPractice,
     onKinds,
@@ -61,11 +70,21 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
   const drillRoundRef = useRef(0)
   /** 鞭打轮的定时器（换轮/关闭时清掉）。 */
   const drillTimerRef = useRef<number | null>(null)
+  /**
+   * 拷打这一轮**最初**的题目与判分结果。
+   * 「继续鞭打错题」会把 queue / results 换成只剩错题的小轮；造句页仍要按原来的整轮出题，
+   * 否则用户重练完就只剩一道造句，之前没造过的内容全丢。
+   */
+  const [sentenceRound, setSentenceRound] = useState<{
+    results: QuizResultRow[]
+    questions: QuizQuestion[]
+  } | null>(null)
 
   /** 新一轮开始：鞭打轮数归零。 */
   const resetDrill = useCallback(() => {
     drillRoundRef.current = 0
     setDrillRound(0)
+    setSentenceRound(null)
   }, [])
 
   /** 关卷 / 卸载：清掉待触发的鞭打定时器。 */
@@ -88,6 +107,13 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
     setQueue(shuffleQuiz(qs))
     resetProgress()
   }, [results, allRef, clearAdvance, flash, setQueue, resetProgress])
+
+  // 拷打第一次答完：把整轮题目 / 结果留一份给结算页造句。
+  // 之后「继续鞭打错题」只换当前 queue / results，不会把这条快照冲掉。
+  useEffect(() => {
+    if (!drill || !queue || index < queue.length || results.length === 0) return
+    setSentenceRound((prev) => prev ?? { results, questions: queue })
+  }, [drill, queue, index, results])
 
   // 考试完成 → 记一次成绩
   useEffect(() => {
@@ -114,9 +140,11 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
         }
         if (tally.size) onKinds([...tally].map(([kind, s]) => ({ kind, ...s })))
       }
-      // 反复鞭打：还有错题就自动重练（上限 MAX_DRILL_ROUNDS 轮，避免死循环）
+      // 反复鞭打：还有错题就自动重练（上限 MAX_DRILL_ROUNDS 轮，避免死循环）。
+      // 记忆 / 词块拷打不自动跳：结算页的造句才是这一轮的落点，自动重练会把 5 造句闪掉。
+      // 想重练的用户可以点结算页的「继续鞭打错题」。
       const wrong = results.filter((r) => !r.correct).length
-      if (loopWrong && wrong > 0 && drillRoundRef.current < MAX_DRILL_ROUNDS) {
+      if (!drill && loopWrong && wrong > 0 && drillRoundRef.current < MAX_DRILL_ROUNDS) {
         drillRoundRef.current += 1
         setDrillRound(drillRoundRef.current)
         setAutoRun(true) // 鞭打轮自动切题，别停下来
@@ -126,10 +154,17 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
         }, 1500)
       }
     }
-  }, [queue, index, results, suspended, recordPractice, onKinds, loopWrong, retryWrong, recordedRef, setAutoRun])
+  }, [queue, index, results, suspended, drill, recordPractice, onKinds, loopWrong, retryWrong, recordedRef, setAutoRun])
 
   // 卸载时清掉待触发的鞭打定时器（自动切题由 useQuizAdvance 自己清理）
   useEffect(() => () => clearDrill(), [clearDrill])
 
-  return { drillRound, retryWrong, resetDrill, clearDrill }
+  return {
+    drillRound,
+    sentenceResults: sentenceRound?.results ?? results,
+    sentenceQuestions: sentenceRound?.questions ?? queue ?? [],
+    retryWrong,
+    resetDrill,
+    clearDrill,
+  }
 }

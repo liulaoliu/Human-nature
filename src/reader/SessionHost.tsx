@@ -99,8 +99,8 @@ export default function SessionHost({
       <DrillSentenceStage
         kind={quiz.drill}
         items={items}
-        results={quiz.results}
-        questions={quiz.queue ?? []}
+        results={quiz.sentenceResults}
+        questions={quiz.sentenceQuestions}
         articleId={drillWriting.articleId}
         articleTitle={drillWriting.articleTitle}
         writingHistory={drillWriting.writingHistory}
