@@ -17,6 +17,7 @@ import {
   type DrillSentenceKind,
 } from '../../core/drillSentence'
 import {
+  hasDrillSentenceDraft,
   loadDrillSentenceDraft,
   removeDrillSentenceDraft,
   saveDrillSentenceDraft,
@@ -30,6 +31,16 @@ import type { GoldenExamItem, VocabItem } from '../../types/document'
 import { useGoldenImitation } from '../hooks/useGoldenImitation'
 import GoldenSentenceImitation from './golden/GoldenSentenceImitation'
 import WritingHistoryList from './WritingHistoryList'
+
+/** 草稿内容签名：只用来判断「这次要不要重写」，不参与存储。 */
+function draftSignature(
+  batchId: string,
+  activeIndex: number,
+  answers: Record<string, DrillSentenceAnswerDraft>,
+): string {
+  return [batchId, activeIndex, JSON.stringify(answers)].join('\u0000')
+}
+
 
 export interface DrillSentenceStageProps {
   kind: DrillSentenceKind
@@ -166,17 +177,45 @@ export default function DrillSentenceStage({
     () => restored?.answers ?? {},
   )
   const [historyOpen, setHistoryOpen] = useState(false)
-  const taskKey = tasks.map((task) => task.id).join('|')
   /** 清空后别马上被自动保存写回去（等用户真动一下再存）。 */
   const skipSaveRef = useRef(false)
+  /** 上一次真正落盘的内容：没变就不重写（不然每渲染一次都把 at 顶新，挤掉别的草稿）。 */
+  const savedRef = useRef(
+    restored
+      ? draftSignature(
+          batchId,
+          Math.max(0, Math.min(restored.activeIndex, Math.max(tasks.length - 1, 0))),
+          restored.answers,
+        )
+      : '',
+  )
 
-  // 换一批题才回到第一题；同一批（刷新 / 重渲染）由上面 restored 决定停在第几题。
-  const firstTaskKeyRef = useRef(taskKey)
-  useEffect(() => {
-    if (firstTaskKeyRef.current === taskKey) return
-    firstTaskKeyRef.current = taskKey
-    setActiveIndex(0)
-  }, [taskKey])
+  /**
+   * 换一批题（换了一轮拷打结果）就整批换掉作答：先看这一批自己有没有草稿，
+   * 有就接着上次停的那题，没有就清空。
+   *
+   * 在 render 阶段改 state（React 官方的「props 变了就调整 state」写法），
+   * 不放在 effect 里 —— 放 effect 会先让「保存草稿」那个 effect 用**旧作答 + 新批次**
+   * 跑一遍，等于把上一批的答案写进这一批（题 id 撞上时还会回填到新题输入框）。
+   */
+  const [seenBatch, setSeenBatch] = useState(batchId)
+  if (seenBatch !== batchId) {
+    const draft = loadDrillSentenceDraft(batchId)
+    const nextIndex = Math.max(0, Math.min(draft?.activeIndex ?? 0, Math.max(tasks.length - 1, 0)))
+    // 这一批自己存的优先；另外把「两批里都有的同一道题」的作答带过来
+    // （题 id 由词/词块本身算出来，同一个词就是同一道题，不该丢），别的旧题一律丢掉。
+    const keep: Record<string, DrillSentenceAnswerDraft> = {}
+    for (const task of tasks) {
+      const old = answers[task.id]
+      if (old) keep[task.id] = old
+    }
+    const nextAnswers = { ...keep, ...draft?.answers }
+    setSeenBatch(batchId)
+    setAnswers(nextAnswers)
+    setActiveIndex(nextIndex)
+    // 只把「盘上已有的」记成已保存：带上来的重叠题若不在盘上，交给下面那个 effect 补写。
+    savedRef.current = draft ? draftSignature(batchId, nextIndex, draft.answers) : ''
+  }
 
   // 停在哪一题、每题写到哪，都随写随存（不必用户手动点）。
   useEffect(() => {
@@ -185,9 +224,18 @@ export default function DrillSentenceStage({
       skipSaveRef.current = false
       return
     }
+    const nextIndex = Math.min(activeIndex, tasks.length - 1)
+    const signature = draftSignature(batchId, nextIndex, answers)
+    if (savedRef.current === signature) return
+    savedRef.current = signature
+    // 一个字都没写、也没换过题：不落空草稿（空条目会占满 8 个名额，把真草稿挤掉）。
+    if (nextIndex === 0 && !Object.keys(answers).length) {
+      if (hasDrillSentenceDraft(batchId)) removeDrillSentenceDraft(batchId)
+      return
+    }
     saveDrillSentenceDraft({
       batchId,
-      activeIndex: Math.min(activeIndex, tasks.length - 1),
+      activeIndex: nextIndex,
       answers,
       at: new Date().toISOString(),
     })

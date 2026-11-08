@@ -56,7 +56,9 @@ describe('拷打造句草稿', () => {
 
   it(`只留最近 ${DRILL_DRAFT_CAP} 轮，更早的按时间倒序裁掉`, () => {
     for (let i = 0; i < DRILL_DRAFT_CAP + 2; i++) {
-      saveDrillSentenceDraft(draft({ batchId: `b${i}`, at: `2026-11-08T0${i}:00:00.000Z` }))
+      // 两位数补零：i ≥ 10 时 `0${i}` 会拼出非法时间，排序断言会假失败
+      const hh = String(i).padStart(2, '0')
+      saveDrillSentenceDraft(draft({ batchId: `b${i}`, at: `2026-11-08T${hh}:00:00.000Z` }))
     }
     const map = readDrillSentenceDrafts()
     expect(Object.keys(map)).toHaveLength(DRILL_DRAFT_CAP)
@@ -89,5 +91,24 @@ describe('拷打造句草稿', () => {
     saveDrillSentenceDraft(draft())
     removeDrillSentenceDraft('batch-1')
     expect(localStorage.getItem(DRILL_SENTENCE_DRAFT_KEY)).toBeNull()
+  })
+
+  it('别人改了盘上的数据（另一个标签页 / 备份导入 / 被清空），读的时候要看见新值', () => {
+    saveDrillSentenceDraft(draft())
+    expect(loadDrillSentenceDraft('batch-1')?.activeIndex).toBe(2)
+
+    // 外部整份改写：缓存不能一直喂旧值
+    localStorage.setItem(
+      DRILL_SENTENCE_DRAFT_KEY,
+      JSON.stringify({
+        'batch-1': { batchId: 'batch-1', activeIndex: 0, at: '2026-11-08T05:00:00.000Z', answers: {} },
+      }),
+    )
+    expect(loadDrillSentenceDraft('batch-1')?.activeIndex).toBe(0)
+
+    // 外部直接清空：读回来当没有
+    localStorage.removeItem(DRILL_SENTENCE_DRAFT_KEY)
+    expect(readDrillSentenceDrafts()).toEqual({})
+    expect(loadDrillSentenceDraft('batch-1')).toBeNull()
   })
 })

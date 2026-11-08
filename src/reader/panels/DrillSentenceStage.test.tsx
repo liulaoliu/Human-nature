@@ -35,10 +35,10 @@ function item(over: Partial<VocabItem> = {}): VocabItem {
   }
 }
 
-function fakeApi(current: GoldenExamItem | null): GoldenImitationApi {
+function fakeApi(current: GoldenExamItem | null, answer = ''): GoldenImitationApi {
   return {
     current,
-    answer: '',
+    answer,
     setAnswer: vi.fn(),
     grade: vi.fn().mockResolvedValue('graded'),
     grading: false,
@@ -87,7 +87,8 @@ function twoItems() {
 }
 
 function pressed(name: string): string | null {
-  return screen.getByRole('button', { name }).getAttribute('aria-pressed')
+  // 题号按钮在有草稿时会多一个「有草稿」标记（读屏可闻），按前缀找。
+  return screen.getByRole('button', { name: new RegExp(`^${name.replace('.', '\\.')}`) }).getAttribute('aria-pressed')
 }
 
 let restoreStorage: () => void = () => {}
@@ -198,18 +199,66 @@ describe('DrillSentenceStage：拷打结算页的造句', () => {
     expect(screen.queryByText('B drill')).toBeNull()
   })
 
-  it('换到第 2 题并留下草稿后刷新：重新打开还停在第 2 题', () => {
+  it('换到第 2 题并留下草稿后刷新：重新打开还停在第 2 题，写好的句子也回来', () => {
+    useGoldenImitationMock.mockImplementation((params: UseGoldenImitationParams) =>
+      fakeApi(params.current, 'I made a sentence.'),
+    )
     const first = renderStage(twoItems())
     fireEvent.click(screen.getByRole('button', { name: '2. make' }))
     fireEvent.click(screen.getByRole('button', { name: '先存这一句' }))
     const stored = Object.values(readDrillSentenceDrafts())
     expect(stored).toHaveLength(1)
     expect(stored[0]?.activeIndex).toBe(1)
+    expect(Object.values(stored[0]?.answers ?? {}).map((d) => d.answer)).toEqual([
+      'I made a sentence.',
+    ])
 
     first.unmount()
     renderStage(twoItems())
     expect(pressed('2. make')).toBe('true')
     expect(pressed('1. run')).toBe('false')
+    // 回填靠的是存下来的草稿：重新挂载时把这句递回给那一题
+    const last = useGoldenImitationMock.mock.calls.at(-1)?.[0] as UseGoldenImitationParams
+    expect(last.current?.mustUse).toEqual(['make'])
+    expect(Object.values(readDrillSentenceDrafts())[0]?.answers).toBeTruthy()
+  })
+
+  it('只打开结算页、一个字没写：不落空草稿', () => {
+    renderStage(twoItems())
+    expect(readDrillSentenceDrafts()).toEqual({})
+  })
+
+  it('换一批题：上一批的作答不会写进这一批的草稿', () => {
+    useGoldenImitationMock.mockImplementation((params: UseGoldenImitationParams) =>
+      fakeApi(params.current, 'round one answer'),
+    )
+    const { rerender } = renderStage({ items: [item()], results: [{ id: 'q1', itemId: 'v1', correct: false }] })
+    fireEvent.click(screen.getByRole('button', { name: '先存这一句' }))
+    const before = readDrillSentenceDrafts()
+    expect(Object.keys(before)).toHaveLength(1)
+
+    // 换一轮（只考 make）：上一轮 run 的作答不许跟着搬过来
+    rerender(
+      <DrillSentenceStage
+        kind="memory"
+        items={[item(), item({ id: 'v2', word: 'make', lemma: 'make', meaning: '制造' })]}
+        results={[{ id: 'q2', itemId: 'v2', correct: false }]}
+        articleId="A"
+        articleTitle="文章"
+        writingHistory={[]}
+        setWritingHistory={vi.fn()}
+        flash={vi.fn()}
+        recordActivity={vi.fn()}
+      />,
+    )
+    const after = readDrillSentenceDrafts()
+    // 新一批一个字没写：不落空草稿，旧的那一批原样留着
+    expect(Object.keys(after)).toHaveLength(1)
+    expect(Object.values(after)[0]?.answers).toEqual(Object.values(before)[0]?.answers)
+    // 新一批只有一道题：没有切换条，直接看题面用的是 make
+    const last = useGoldenImitationMock.mock.calls.at(-1)?.[0] as UseGoldenImitationParams
+    expect(last.current?.mustUse).toEqual(['make'])
+    expect(screen.getByText(/共 1 题/)).toBeTruthy()
   })
 
   it('清空这一轮造句草稿：题号回到第 1 题，草稿条目被删掉', () => {

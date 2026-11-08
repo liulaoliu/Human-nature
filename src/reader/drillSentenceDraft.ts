@@ -16,7 +16,7 @@ import {
   type DrillSentenceDraft,
   type DrillSentenceDraftMap,
 } from '../core/drillSentenceDraft'
-import { readJson, removeRaw, writeRaw } from './storage'
+import { readJson, readRaw, removeRaw, writeRaw } from './storage'
 
 export {
   DRILL_DRAFT_CAP,
@@ -29,45 +29,54 @@ export {
 } from '../core/drillSentenceDraft'
 
 /**
- * 同一份会话里重复读很频繁（每写一个字都要知道自己是不是有草稿），
- * 用这个缓存省掉反复 JSON.parse；写入 / 删除时同步刷新。
+ * 缓存**整份 map**，并且用「原始字符串」当指纹：
+ * 同一份数据反复读时不重复 JSON.parse（结算页每打一个字都要问一次有没有草稿），
+ * 而只要 localStorage 里的字符串变了（别的标签页写了、备份导入了、被清掉了），
+ * 指纹对不上就重新解析 —— 缓存不会把过期内容一直喂给调用方。
  */
-const readDrillSentenceDraftCache = new Map<string, DrillSentenceDraft | null>()
+let cachedRaw: string | null = null
+let cachedMap: DrillSentenceDraftMap = {}
+let cacheValid = false
+
+function draftsNow(): DrillSentenceDraftMap {
+  const raw = readRaw(DRILL_SENTENCE_DRAFT_KEY)
+  if (cacheValid && raw === cachedRaw) return cachedMap
+  cachedRaw = raw
+  cachedMap = normalizeDrillSentenceDraftMap(readJson<unknown>(DRILL_SENTENCE_DRAFT_KEY, null))
+  cacheValid = true
+  return cachedMap
+}
+
+/** 写入 / 删除后调用：下次读一定重新读盘。 */
+function invalidate(): void {
+  cacheValid = false
+}
 
 export function readDrillSentenceDrafts(): DrillSentenceDraftMap {
-  // 每次都真读盘：外部（测试、另一个标签页、备份导入）可能直接改 localStorage，
-  // 缓存只服务「同一批题在同一轮里读很多次」，读写都发生在本模块内。
-  readDrillSentenceDraftCache.clear()
-  return normalizeDrillSentenceDraftMap(readJson<unknown>(DRILL_SENTENCE_DRAFT_KEY, null))
+  return draftsNow()
 }
 
 /** 读某一批题的作答；没有或坏掉都返回 null（调用方当作全新一轮）。 */
 export function loadDrillSentenceDraft(batchId: string): DrillSentenceDraft | null {
   if (!batchId) return null
-  const cached = readDrillSentenceDraftCache.get(batchId)
-  if (cached !== undefined) return cached
-  const draft = readDrillSentenceDrafts()[batchId] ?? null
-  readDrillSentenceDraftCache.set(batchId, draft)
-  return draft
+  return draftsNow()[batchId] ?? null
 }
 
 /** 存某一批题：整份 map 里只留最近 `DRILL_DRAFT_CAP` 轮，旧的按时间倒序裁掉。 */
 export function saveDrillSentenceDraft(draft: DrillSentenceDraft): void {
-  const map = readDrillSentenceDrafts()
-  map[draft.batchId] = draft
+  const map = { ...draftsNow(), [draft.batchId]: draft }
   writeRaw(DRILL_SENTENCE_DRAFT_KEY, JSON.stringify(trimDrillSentenceDrafts(map)))
-  readDrillSentenceDraftCache.clear()
-  readDrillSentenceDraftCache.set(draft.batchId, draft)
+  invalidate()
 }
 
 /** 用户主动清空 / 换进度时删掉这一轮。 */
 export function removeDrillSentenceDraft(batchId: string): void {
-  const map = readDrillSentenceDrafts()
+  const map = { ...draftsNow() }
   if (!(batchId in map)) return
   delete map[batchId]
   if (!Object.keys(map).length) removeRaw(DRILL_SENTENCE_DRAFT_KEY)
   else writeRaw(DRILL_SENTENCE_DRAFT_KEY, JSON.stringify(map))
-  readDrillSentenceDraftCache.clear()
+  invalidate()
 }
 
 /** 有没有存过这一轮的草稿（界面用来提示「这里接着上次」）。 */
