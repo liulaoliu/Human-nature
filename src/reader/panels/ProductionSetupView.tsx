@@ -155,6 +155,12 @@ export default function ProductionSetupView({ model }: ProductionSetupViewProps)
         </div>
       )}
 
+      {settings.scope === 'due' && model.savedDrafts.length > 0 && (
+        <div className="production-notice muted">
+          到期队列不会自动开新组：上面还有没做完的，先接着做，或者直接开始新的一组。
+        </div>
+      )}
+
       {elsewhere && (
         <div className="production-notice">
           「{PRODUCTION_MODE_LABEL[elsewhere]}」那一组还暂停着（第 {model.index + 1} /{' '}

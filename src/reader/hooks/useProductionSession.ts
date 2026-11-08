@@ -244,6 +244,7 @@ export function useProductionSession({
     mode: settings.mode,
     fullUseChunks: settings.fullUseChunks,
     skimUseChunks: settings.skimUseChunks,
+    hasSavedDraft: savedDrafts.length > 0,
     start: startPacks,
     flash,
   })

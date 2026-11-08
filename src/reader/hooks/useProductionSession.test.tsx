@@ -111,6 +111,45 @@ describe('useProductionSession：出题 → 作答 → 批改 → 重写', () =>
     expect(h.result.current.settings.scope).toBe('due')
   })
 
+  it('到期入口遇到没做完的草稿不自动开新组，只提示，草稿还在', async () => {
+    const h = setup()
+    act(() =>
+      h.result.current.updateSettings({
+        mode: 'full',
+        scope: 'due',
+        types: ['word'],
+        promptCount: 3,
+        targetsPerPrompt: 1,
+        weakRatio: 0,
+      }),
+    )
+    act(() => h.result.current.openProduction())
+    await act(async () => {
+      await h.result.current.start()
+    })
+    act(() => h.result.current.setAnswer('half done'))
+    act(() => h.result.current.close())
+    h.unmount()
+
+    // 刷新后回来：stage 是 setup，草稿躺在 map 里
+    const again = setup()
+    act(() => again.result.current.openProduction())
+    expect(again.result.current.savedDrafts.some((d) => d.answer === 'half done')).toBe(true)
+    act(() => again.result.current.openDueProduction())
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+    expect(again.result.current.stage).toBe('setup')
+    expect(again.result.current.settings.scope).toBe('due')
+    expect(again.flash).toHaveBeenCalledWith(expect.stringContaining('还停着一组'))
+    expect(again.result.current.savedDrafts.some((d) => d.answer === 'half done')).toBe(true)
+    // 草稿没被换掉：点「继续这一组」还能原样接回去
+    const draft = again.result.current.savedDrafts.find((d) => d.answer === 'half done')
+    act(() => again.result.current.resumeSaved(draft!))
+    expect(again.result.current.stage).toBe('playing')
+    expect(again.result.current.answer).toBe('half done')
+  })
+
   it('AI 出中文题；作答后批改落 writingHistory，重写后才进下一题', async () => {
     const h = setup()
     act(() => h.result.current.openProduction())
