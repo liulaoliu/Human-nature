@@ -8,8 +8,9 @@ import { useArticleIdentity } from './hooks/useArticleIdentity'
 import { useReaderArticleNavigation } from './hooks/useReaderArticleNavigation'
 import { useReaderFlowRouting } from './hooks/useReaderFlowRouting'
 import { useBrowseFilters } from './hooks/useBrowseFilters'
-import { goldenPanelPath, productionPanelPath } from './route'
+import { goldenPanelPath, productionPanelPath, writePanelPath } from './route'
 import type { ProductionPanelActions } from './panels/ProductionPanel'
+import type { WritingPanelActions } from './panels/WritingPanel'
 
 import { useToast } from './hooks/useToast'
 
@@ -634,6 +635,21 @@ export default function ReaderApp() {
       navigate(productionPanelPath(currentSlug, state), { replace: opts?.replace }),
   }
 
+  /**
+   * 仿写面板的 URL 接线：历史列表 / 详情都写进 `/p/write?wv=…&wr=…&ws=…`，
+   * 刷新 / 分享 / 返回键都能落回同一条记录。`back` 沿用进来时那个面板
+   * （从精读工作流点「历史」进来就是 `intensive`），关掉仿写才回得到精读。
+   */
+  const writingActions: WritingPanelActions = {
+    route: route.write,
+    onNavigate: (state, opts) =>
+      navigate(writePanelPath(currentSlug, state, route.back ?? ''), { replace: opts?.replace }),
+    // 精读面板里点一条练习历史：从 `/p/intensive` 出发，`back` 必须显式写 `intensive`，
+    // 否则关掉仿写会按 `underFlowPath` 掉回文章主界面（用户报过的那个体验）。
+    onOpenHistory: (recordKey, scope) =>
+      navigate(writePanelPath(currentSlug, { view: 'history', recordKey, scope }, 'intensive')),
+  }
+
   /** 离线词典（ECDICT）：就绪状态 + 三个"纯本地"动作。 */
   const dictTools = useDictTools({
     library,
@@ -700,6 +716,7 @@ export default function ReaderApp() {
     golden,
     goldenActions,
     productionActions,
+    writingActions,
     panels,
     browseFilters,
     articleRouting,

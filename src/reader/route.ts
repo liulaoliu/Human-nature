@@ -78,6 +78,8 @@ export interface ReaderRoute {
   golden?: GoldenRouteState
   /** `/p/production` 的子视图 / 历史筛选；没有 query 时不写这个字段 */
   production?: ProductionRouteState
+  /** `/p/write` 的子视图 / 历史详情定位；没有 query 时不写这个字段 */
+  write?: WriteRouteState
 }
 
 /**
@@ -208,6 +210,60 @@ export function productionPanelPath(slug: string, state: ProductionRouteState = 
   return query ? `${base}?${query}` : base
 }
 
+/**
+ * 仿写训练（`/p/write`）的子视图。
+ *
+ * 为什么历史也要有地址：历史列表和详情是**同一个面板的两半**，以前是组件里的
+ * `useState`，点开某条记录后按「结束」直接 replace 回文章主界面，用户回不到刚才看的那条；
+ * 刷新 / 分享也落不到具体记录。这里照 `GoldenRouteState` 的口径收成一份 parse / build，
+ * 写入方只有一个（`useReaderFlowRouting` / `ReaderApp`），不会互相覆盖 query。
+ */
+export type WriteRouteView = 'history'
+
+export interface WriteRouteState {
+  view?: WriteRouteView
+  /** 稳定记录键：`WritingRecord.recordKey`，不是数组下标 */
+  recordKey?: string
+  /** `article` = 只看本篇，`all` = 全库 */
+  scope?: 'article' | 'all'
+}
+
+/** 解析 `/p/write?wv=history&wr=...&ws=all`。坏值忽略。 */
+export function parseWriteQuery(search: string): WriteRouteState | undefined {
+  const params = new URLSearchParams(search)
+  const view: WriteRouteView | undefined = params.get('wv') === 'history' ? 'history' : undefined
+  const recordKey = params.get('wr')?.trim() || undefined
+  const scopeRaw = params.get('ws')
+  const scope = scopeRaw === 'all' || scopeRaw === 'article' ? scopeRaw : undefined
+  if (!view && !recordKey && !scope) return undefined
+  return {
+    ...(view ? { view } : {}),
+    ...(recordKey ? { recordKey } : {}),
+    ...(scope ? { scope } : {}),
+  }
+}
+
+/**
+ * 生成 `/p/write?...`；记录键做 URL 编码。
+ *
+ * `back` 是「关掉仿写后回哪个布尔面板」——从精读工作流的练习历史点进来时传 `intensive`，
+ * 否则关掉面板会直接掉回文章主界面（用户反馈过的那个体验）。
+ */
+export function writePanelPath(
+  slug: string,
+  state: WriteRouteState = {},
+  back: BooleanPanelName | '' = '',
+): string {
+  const base = panelPath(slug, 'write')
+  const params = new URLSearchParams()
+  if (state.view === 'history') params.set('wv', 'history')
+  if (state.recordKey) params.set('wr', state.recordKey)
+  if (state.scope) params.set('ws', state.scope)
+  if (back) params.set('back', back)
+  const query = params.toString()
+  return query ? `${base}?${query}` : base
+}
+
 const BOOLEAN_PANELS: BooleanPanelName[] = [
   'intensive',
   'speed',
@@ -298,10 +354,14 @@ function withQuery(route: ReaderRoute, search: string): ReaderRoute {
     const back = parseBackPanel(search)
     if (back) next = { ...next, back }
   }
-  if (next.panel !== 'golden' && next.panel !== 'production') return next
+  if (next.panel !== 'golden' && next.panel !== 'production' && next.panel !== 'write') return next
   if (next.panel === 'production') {
     const production = parseProductionQuery(search)
     return production ? { ...next, production } : next
+  }
+  if (next.panel === 'write') {
+    const write = parseWriteQuery(search)
+    return write ? { ...next, write } : next
   }
   const golden = parseGoldenQuery(search)
   return golden ? { ...next, golden } : next

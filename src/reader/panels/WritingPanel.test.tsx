@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { ImitationTask, WritingFeedback, WritingRecord } from '../../core/writing'
 import WritingPanel, { type WritingPanelProps } from './WritingPanel'
+import { recordKeyOf } from './golden/WritingHoverCard'
 
 const task: ImitationTask = {
   task: '仿写一句',
@@ -103,33 +104,77 @@ describe('WritingPanel：任务与批改', () => {
   })
 })
 
-describe('WritingPanel：历史', () => {
-  it('没历史时打开显示占位；不能清空', () => {
-    render(<WritingPanel {...props()} />)
+describe('WritingPanel：历史（URL 驱动）', () => {
+  it('点「历史」把子视图写进地址，不在组件里自己展开', () => {
+    const onNavigateWrite = vi.fn()
+    render(<WritingPanel {...props({ onNavigateWrite })} />)
     fireEvent.click(screen.getByRole('button', { name: '历史（0）' }))
-    expect(screen.getByText(/还没有.*记录/)).toBeTruthy()
-    expect(screen.queryByRole('button', { name: '清空' })).toBeNull()
+    expect(onNavigateWrite).toHaveBeenCalledWith({ view: 'history', scope: 'article' })
   })
 
-  it('点历史记录载入并自动收起；清空走回调', () => {
+  it('地址里是 wv=history 时直接渲染历史；没历史给占位，不能清空', () => {
+    render(<WritingPanel {...props({ writeRoute: { view: 'history' }, onNavigateWrite: vi.fn() })} />)
+    expect(screen.getByText(/还没有.*记录/)).toBeTruthy()
+    expect(screen.queryByRole('button', { name: '清空' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '② 批改' })).toBeNull()
+  })
+
+  it('点一条记录写地址（带 recordKey），不直接灌表单；清空走回调', () => {
     const onLoadRecord = vi.fn()
     const onClearHistory = vi.fn()
-    render(<WritingPanel {...props({ history, onLoadRecord, onClearHistory })} />)
-    fireEvent.click(screen.getByRole('button', { name: '历史（1）' }))
-    fireEvent.click(screen.getByRole('button', { name: /Run fast/ }))
-    expect(onLoadRecord).toHaveBeenCalledWith(history[0])
-    expect(screen.queryByText(/练习历史（1）/)).toBeNull()
+    const onNavigateWrite = vi.fn()
+    const { rerender } = render(
+      <WritingPanel
+        {...props({ history, onLoadRecord, onClearHistory, writeRoute: { view: 'history' }, onNavigateWrite })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /第 1 次/ }))
+    expect(onNavigateWrite).toHaveBeenCalledWith(
+      { view: 'history', recordKey: expect.any(String), scope: 'article' },
+      { replace: false },
+    )
+    expect(onLoadRecord).not.toHaveBeenCalled()
 
-    fireEvent.click(screen.getByRole('button', { name: '历史（1）' }))
     fireEvent.click(screen.getByRole('button', { name: '清空' }))
     expect(onClearHistory).toHaveBeenCalledWith({
       source: 'all',
       scope: 'article',
       articleId: 'doc:1',
     })
+
+    // 地址里带上 recordKey → 直接摊开那一条
+    rerender(
+      <WritingPanel
+        {...props({
+          history,
+          onLoadRecord,
+          writeRoute: { view: 'history', recordKey: recordKeyOf(history[0] as WritingRecord) },
+          onNavigateWrite,
+        })}
+      />,
+    )
+    expect(screen.getByText('I ran.')).toBeTruthy()
   })
 
-  it('拷打造句记录在仿写历史里也有来源标签，能点开回看', () => {
+  it('详情里点「载入到表单继续改」才灌表单，并退回仿写主界面', () => {
+    const onLoadRecord = vi.fn()
+    const onNavigateWrite = vi.fn()
+    render(
+      <WritingPanel
+        {...props({
+          history,
+          onLoadRecord,
+          writeRoute: { view: 'history', recordKey: recordKeyOf(history[0] as WritingRecord) },
+          onNavigateWrite,
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: '载入到表单继续改' }))
+    expect(onLoadRecord).toHaveBeenCalledWith(history[0])
+    expect(onNavigateWrite).toHaveBeenCalledWith({}, { replace: true })
+  })
+
+  it('拷打造句记录在仿写历史里也有来源标签', () => {
     const drill: WritingRecord = {
       at: '2026-11-08T00:00:00.000Z',
       articleId: 'doc:1',
@@ -140,17 +185,28 @@ describe('WritingPanel：历史', () => {
       source: 'drillSentence',
       sentenceId: 'drill:memory:test',
     }
-    const onLoadRecord = vi.fn()
-    render(<WritingPanel {...props({ history: [...history, drill], onLoadRecord })} />)
-    fireEvent.click(screen.getByRole('button', { name: '历史（2）' }))
+    render(
+      <WritingPanel
+        {...props({
+          history: [...history, drill],
+          writeRoute: { view: 'history' },
+          onNavigateWrite: vi.fn(),
+        })}
+      />,
+    )
     expect(screen.getByText('拷打造句')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /拷打造句/ }))
-    expect(onLoadRecord).toHaveBeenCalledWith(drill)
   })
 
   it('结束按钮回调', () => {
     const onClose = vi.fn()
     render(<WritingPanel {...props({ onClose })} />)
+    fireEvent.click(screen.getByRole('button', { name: '结束（Esc）' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('历史子视图里也有「结束」，从精读进来关掉会回到精读（back 由 URL 决定）', () => {
+    const onClose = vi.fn()
+    render(<WritingPanel {...props({ onClose, writeRoute: { view: 'history' }, onNavigateWrite: vi.fn() })} />)
     fireEvent.click(screen.getByRole('button', { name: '结束（Esc）' }))
     expect(onClose).toHaveBeenCalled()
   })

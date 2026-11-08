@@ -73,7 +73,13 @@ export function useReaderFlowRouting(
       open: () => openListeningMode(false),
       close: () => setListenOpen(false),
     },
-    write: { active: writingOpen, open: openWriting, close: () => writingApi.setOpen(false) },
+    write: {
+      active: writingOpen,
+      // 深链接 / 从精读的练习历史点进来时只要把面板打开，不能走 `start()`
+      // （它会清掉正在写的范句、作答和批改结果）。只有「去仿写」才重置表单。
+      open: () => (route.write?.view === 'history' ? writingApi.setOpen(true) : openWriting()),
+      close: () => writingApi.setOpen(false),
+    },
     back: { active: backOpen, open: openBack, close: backApi.close },
     golden: { active: golden.active, open: golden.open, close: golden.close },
     production: {

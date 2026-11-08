@@ -2,7 +2,6 @@ import { useMemo, useState } from 'react'
 import {
   historyPage,
   WRITING_HISTORY_PAGE,
-  writingRecordKey,
   writingRecordLabel,
   type WritingRecord,
 } from '../../core/writing'
@@ -16,6 +15,7 @@ import {
   type WritingHistorySource,
 } from '../../core/writingHistory'
 import GoldenFeedback from './golden/GoldenFeedback'
+import WritingHoverCard, { hoverDataFromRecord, recordKeyOf } from './golden/WritingHoverCard'
 
 export interface WritingHistoryListProps {
   history: WritingRecord[]
@@ -26,23 +26,65 @@ export interface WritingHistoryListProps {
   initialSource?: WritingHistorySource
   initialScope?: WritingHistoryScope
   /**
-   * 有它时，点一行就把记录交给外层（仿写面板载入表单）；
-   * 没有时在列表内展开详情（拷打结算页没有仿写表单可载入）。
+   * 有它时，点一行就把记录交给外层（不展开详情）。**旧行为**，只在没有
+   * `onOpenRecord` 时才用；仿写面板已改为「点开只读详情，再手动载入」。
    */
   onLoadRecord?: (rec: WritingRecord) => void
   /** 只清当前筛选范围；不传则隐藏「清空」。 */
   onClear?: (filter: WritingHistoryFilter) => void
+  /**
+   * 受控范围：给了它（和 `onScopeChange`）就由外层决定本篇/全库。
+   * 仿写面板用 URL 当事实来源，刷新/分享都能回到同一个筛选。
+   */
+  scope?: WritingHistoryScope
+  onScopeChange?: (scope: WritingHistoryScope) => void
+  /**
+   * URL 指定的记录键（`WritingRecord.recordKey`，不是下标）。
+   * 给了它就渲染那一条的详情，并按它在列表里的位置算「上一条/下一条」。
+   */
+  focusRecordKey?: string
+  /** 有它时点行、翻页都交给外层写 URL；没有则在组件内切换。`replace` 用于详情内翻页。 */
+  onOpenRecord?: (recordKey: string, scope: WritingHistoryScope, replace?: boolean) => void
+  /** 详情 → 历史列表；有路由时由外层 replace URL。 */
+  onCloseDetail?: () => void
+  /** 详情里的「载入到表单继续改」：不点它，翻历史不会冲掉正在写的草稿。 */
+  onResumeRecord?: (rec: WritingRecord) => void
+  /** 列表顶部返回上层（回仿写 / 回课程页）；不传则不显示。 */
+  onBack?: () => void
+  backLabel?: string
+  /**
+   * 紧凑模式（嵌在精读工作流里用）：只留范围 / 来源 / 行，不显示标题和「清空」，
+   * 一次少渲染几条。判定与分页仍走同一套 `core/writingHistory` + `historyPage`。
+   */
+  compact?: boolean
+  /** 一页渲染多少条（默认 `WRITING_HISTORY_PAGE`）；紧凑模式传小一点。 */
+  pageSize?: number
 }
 
-function keyOf(rec: WritingRecord): string {
-  return rec.recordKey || writingRecordKey(rec)
+/** 悬浮时给一行摘要（原生 title）：够看出是哪次、写了什么、AI 怎么评。 */
+function hoverSummary(rec: WritingRecord, index: number): string {
+  return [
+    `第 ${index + 1} 次 · ${writingRecordLabel(rec)}`,
+    rec.articleTitle || rec.articleId,
+    rec.text ? `作答：${rec.text}` : '',
+    rec.feedback.max > 0 ? `评分：${rec.feedback.total}/${rec.feedback.max}` : '',
+    rec.feedback.summary ? `总评：${rec.feedback.summary}` : '',
+  ]
+    .filter(Boolean)
+    .join('\n')
+    .slice(0, 500)
 }
 
 /**
- * 仿写 / 拷打造句历史列表：本篇 / 全库 + 来源筛选 + 分页。
+ * 仿写 / 拷打造句历史：本篇 / 全库 + 来源筛选 + 分页 + 悬浮摘要 + 详情翻页。
  *
- * 筛选与清空规则在 `core/writingHistory`，这里只切状态和渲染；金句课记录
- * 由 D老师小课堂自己的「学习历史」展示，不进入这个列表。
+ * 口径（哪些记录能看、怎么按来源分组、清空清哪一段）全在 `core/writingHistory`，
+ * 这里只切状态和渲染；金句课记录由 D老师小课堂自己的「学习历史」展示，不进入这个列表。
+ *
+ * 两种用法：
+ *   - **组件内**（拷打结算页）：不传 `onOpenRecord`，点行在列表里展开详情，范围是本地 state；
+ *   - **URL 驱动**（仿写面板）：传 `focusRecordKey` / `onOpenRecord` / `onCloseDetail`，
+ *     点行与翻页都写地址，刷新 / 分享 / 返回键都能落回同一条记录。
  */
 export default function WritingHistoryList({
   history,
@@ -53,11 +95,24 @@ export default function WritingHistoryList({
   initialScope = 'article',
   onLoadRecord,
   onClear,
+  scope: controlledScope,
+  onScopeChange,
+  focusRecordKey,
+  onOpenRecord,
+  onCloseDetail,
+  onResumeRecord,
+  onBack,
+  backLabel = '回仿写',
+  compact = false,
+  pageSize = WRITING_HISTORY_PAGE,
 }: WritingHistoryListProps) {
-  const [source, setSource] = useState<WritingHistorySource>(initialSource)
-  const [scope, setScope] = useState<WritingHistoryScope>(initialScope)
-  const [pickedKey, setPickedKey] = useState<string | null>(null)
-  const [shown, setShown] = useState(WRITING_HISTORY_PAGE)
+  const [localSource, setLocalSource] = useState<WritingHistorySource>(initialSource)
+  const [localScope, setLocalScope] = useState<WritingHistoryScope>(initialScope)
+  const [localPickedIndex, setLocalPickedIndex] = useState<number | null>(null)
+  const [shown, setShown] = useState(pageSize)
+
+  const source = localSource
+  const scope = controlledScope ?? localScope
 
   const filter = useMemo<WritingHistoryFilter>(
     () => ({ source, scope, articleId }),
@@ -73,32 +128,74 @@ export default function WritingHistoryList({
   const [pageFor, setPageFor] = useState(pageKey)
   if (pageFor !== pageKey) {
     setPageFor(pageKey)
-    setShown(WRITING_HISTORY_PAGE)
+    setShown(pageSize)
   }
-  const page = historyPage(list, shown)
-  const picked = pickedKey ? (list.find((rec) => keyOf(rec) === pickedKey) ?? null) : null
+  const page = historyPage(list, shown, pageSize)
+
+  // URL 指定的那一条优先；找不到（已归档 / 不在当前范围）就退到组件内选中的那一条。
+  const focusIndex = focusRecordKey ? list.findIndex((rec) => recordKeyOf(rec) === focusRecordKey) : -1
+  const effectiveIndex = focusIndex >= 0 ? focusIndex : localPickedIndex
+  const picked = effectiveIndex !== null && effectiveIndex >= 0 ? (list[effectiveIndex] ?? null) : null
+  const missingFocus = !!focusRecordKey && focusIndex < 0
 
   const changeSource = (next: WritingHistorySource) => {
-    setSource(next)
-    setPickedKey(null)
+    setLocalSource(next)
+    setLocalPickedIndex(null)
   }
   const changeScope = (next: WritingHistoryScope) => {
-    setScope(next)
-    setPickedKey(null)
+    setLocalScope(next)
+    setLocalPickedIndex(null)
+    onScopeChange?.(next)
+  }
+  const openRecord = (rec: WritingRecord, index: number) => {
+    if (onOpenRecord) onOpenRecord(recordKeyOf(rec), scope)
+    else if (onLoadRecord) onLoadRecord(rec)
+    else setLocalPickedIndex(index)
+  }
+  const closeDetail = () => {
+    if (onCloseDetail) onCloseDetail()
+    else setLocalPickedIndex(null)
+  }
+  const step = (delta: number) => {
+    if (effectiveIndex === null || effectiveIndex < 0) return
+    const next = Math.max(0, Math.min(list.length - 1, effectiveIndex + delta))
+    if (next === effectiveIndex) return
+    const rec = list[next]
+    if (!rec) return
+    if (onOpenRecord) onOpenRecord(recordKeyOf(rec), scope, true)
+    else setLocalPickedIndex(next)
   }
   const clearCurrent = () => {
     onClear?.(filter)
-    setPickedKey(null)
+    setLocalPickedIndex(null)
   }
 
   if (picked) {
     return (
       <div className="write-history write-history-detail">
         <div className="bar write-history-bar">
-          <button onClick={() => setPickedKey(null)}>← 历史列表</button>
+          <button onClick={closeDetail}>← 历史列表</button>
+          <button onClick={() => step(-1)} disabled={(effectiveIndex ?? 0) <= 0} title="看更早一条">
+            ◀ 上一条
+          </button>
+          <span className="muted">
+            第 {(effectiveIndex ?? 0) + 1}/{list.length} 条 · {new Date(picked.at).toLocaleString()}
+          </span>
+          <button
+            onClick={() => step(1)}
+            disabled={(effectiveIndex ?? 0) >= list.length - 1}
+            title="看更新一条"
+          >
+            下一条 ▶
+          </button>
           <b>{writingRecordLabel(picked)}</b>
-          <span className="muted">{new Date(picked.at).toLocaleString()}</span>
           {picked.articleTitle && <span className="muted">{picked.articleTitle}</span>}
+          {onResumeRecord && (
+            <button className="primary" onClick={() => onResumeRecord(picked)} title="把这条载入仿写表单继续改（会替换表单里的范句和作答）">
+              载入到表单继续改
+            </button>
+          )}
+          {onBack && <button onClick={onBack}>← {backLabel}</button>}
         </div>
         {picked.text && <div className="bt-source">{picked.text}</div>}
         <GoldenFeedback feedback={picked.feedback} model={picked.task?.model || picked.model} />
@@ -107,11 +204,14 @@ export default function WritingHistoryList({
   }
 
   return (
-    <div className="write-history">
+    <div className={'write-history' + (compact ? ' write-history-compact' : '')}>
       <div className="bar write-history-bar">
-        <span className="muted">
-          {title}（{list.length}）
-        </span>
+        {onBack && <button onClick={onBack}>← {backLabel}</button>}
+        {!compact && (
+          <span className="muted">
+            {title}（{list.length}）
+          </span>
+        )}
         <button className={scope === 'article' ? 'primary' : ''} onClick={() => changeScope('article')}>
           本篇（{articleCounts[source]}）
         </button>
@@ -130,39 +230,44 @@ export default function WritingHistoryList({
             </option>
           ))}
         </select>
-        {onClear && list.length > 0 && (
+        {onClear && !compact && list.length > 0 && (
           <button className="danger" onClick={clearCurrent} title="只清空当前筛选范围内的记录">
             清空
           </button>
         )}
       </div>
-      <div className="muted write-history-scope">
-        {scope === 'article' ? `本篇：${articleTitle || articleId || '当前文章'}` : '全库：所有文章'}
-        {' · '}
-        {WRITING_HISTORY_SOURCE_LABEL[source]}
-      </div>
+      {!compact && (
+        <div className="muted write-history-scope">
+          {scope === 'article' ? `本篇：${articleTitle || articleId || '当前文章'}` : '全库：所有文章'}
+          {' · '}
+          {WRITING_HISTORY_SOURCE_LABEL[source]}
+        </div>
+      )}
+
+      {missingFocus && (
+        <div className="write-history-missing">这条记录已归档或不在当前范围；可以换个范围再看。</div>
+      )}
 
       {list.length ? (
         <>
-          {page.rows.map((rec) => (
-            <button
-              key={keyOf(rec)}
-              className="write-hist-row"
-              onClick={() => {
-                if (onLoadRecord) onLoadRecord(rec)
-                else setPickedKey(keyOf(rec))
-              }}
-            >
-              <span className="muted">{new Date(rec.at).toLocaleString()}</span>
-              <span className="ellipsis">
-                {writingRecordLabel(rec)}
-                {rec.model ? ` · ${rec.model}` : ''}
-              </span>
-              {scope === 'all' && (
-                <span className="muted ellipsis">{rec.articleTitle || rec.articleId}</span>
-              )}
-              <b>{rec.feedback.max > 0 ? `${rec.feedback.total}/${rec.feedback.max}` : '—'}</b>
-            </button>
+          {page.rows.map((rec, i) => (
+            <WritingHoverCard key={recordKeyOf(rec)} data={hoverDataFromRecord(rec, i)}>
+              <button
+                className="write-hist-row"
+                onClick={() => openRecord(rec, i)}
+                aria-label={hoverSummary(rec, i)}
+              >
+                <span className="muted">{new Date(rec.at).toLocaleString()}</span>
+                <span className="ellipsis">
+                  {writingRecordLabel(rec)}
+                  {rec.model ? ` · ${rec.model}` : ''}
+                </span>
+                {scope === 'all' && (
+                  <span className="muted ellipsis">{rec.articleTitle || rec.articleId}</span>
+                )}
+                <b>{rec.feedback.max > 0 ? `${rec.feedback.total}/${rec.feedback.max}` : '—'}</b>
+              </button>
+            </WritingHoverCard>
           ))}
           {page.rest > 0 && (
             <button

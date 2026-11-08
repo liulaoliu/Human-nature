@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import type { WritingRecord } from '../../core/writing'
 import WritingHistoryList from './WritingHistoryList'
+import { recordKeyOf } from './golden/WritingHoverCard'
 
 const feedback = {
   version: 2 as const,
@@ -146,5 +147,84 @@ describe('WritingHistoryList：来源 + 本篇/全库筛选', () => {
     expect(screen.getByText('练习历史（101）')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: /显示更多（还有 1 条）/ }))
     expect(screen.queryByRole('button', { name: /显示更多/ })).toBeNull()
+  })
+})
+
+describe('WritingHistoryList：URL 驱动的详情与翻页', () => {
+  // 列表按 at 倒序：drill:A(11-03) → production A(11-02) → ordinary A(11-01)
+  const keyOf = (rec: WritingRecord) => recordKeyOf(rec)
+
+  it('focusRecordKey 直接摊开那一条，并按位置算上一条 / 下一条', () => {
+    const onOpenRecord = vi.fn()
+    // 列表按 at 倒序，本篇三条：drill:A → production A → ordinary A；
+    // 这里聚焦最老的那条（ordinary A），所以是第 3/3 条，只能往回翻。
+    const target = history[0] as WritingRecord
+    render(
+      <WritingHistoryList
+        history={history}
+        articleId="A"
+        articleTitle="文章 A"
+        scope="article"
+        focusRecordKey={keyOf(target)}
+        onOpenRecord={onOpenRecord}
+      />,
+    )
+    expect(screen.getByText(/第 3\/3 条/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: '下一条 ▶' })).toHaveProperty('disabled', true)
+
+    fireEvent.click(screen.getByRole('button', { name: '◀ 上一条' }))
+    expect(onOpenRecord).toHaveBeenCalledWith(keyOf(history[1] as WritingRecord), 'article', true)
+  })
+
+  it('点行、关详情都交给外层写 URL，不在组件里改范围', () => {
+    const onOpenRecord = vi.fn()
+    const onCloseDetail = vi.fn()
+    render(
+      <WritingHistoryList
+        history={history}
+        articleId="A"
+        articleTitle="文章 A"
+        scope="all"
+        onOpenRecord={onOpenRecord}
+        onCloseDetail={onCloseDetail}
+        onResumeRecord={vi.fn()}
+      />,
+    )
+    // 全库第一行是最新的 B 篇造句
+    fireEvent.click(screen.getAllByRole('button', { name: /拷打造句/ })[0] as HTMLElement)
+    expect(onOpenRecord).toHaveBeenCalledWith(keyOf(history[3] as WritingRecord), 'all')
+  })
+
+  it('记录已归档 / 不在当前范围时给提示，不渲染空详情', () => {
+    render(
+      <WritingHistoryList
+        history={history}
+        articleId="A"
+        articleTitle="文章 A"
+        scope="article"
+        focusRecordKey="missing-key"
+        onOpenRecord={vi.fn()}
+      />,
+    )
+    expect(screen.getByText(/这条记录已归档或不在当前范围/)).toBeTruthy()
+    expect(screen.queryByText('得分：8/10')).toBeNull()
+  })
+
+  it('紧凑模式不渲染标题和「清空」，但筛选与行照旧', () => {
+    render(
+      <WritingHistoryList
+        history={history}
+        articleId="A"
+        articleTitle="文章 A"
+        compact
+        pageSize={8}
+        onClear={vi.fn()}
+        onOpenRecord={vi.fn()}
+      />,
+    )
+    expect(screen.queryByText('练习历史（3）')).toBeNull()
+    expect(screen.queryByRole('button', { name: '清空' })).toBeNull()
+    expect(screen.getByRole('button', { name: '本篇（3）' })).toBeTruthy()
+    expect(screen.getAllByRole('button', { name: /仿写|拷打造句|奶牛工棚/ }).length).toBeGreaterThan(0)
   })
 })

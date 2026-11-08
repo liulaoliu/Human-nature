@@ -26,7 +26,7 @@ vi.mock('./useRoutedFlows', () => ({
 
 import { useReaderFlowRouting } from './useReaderFlowRouting'
 
-function setup(ready = true) {
+function setup(ready = true, routeOver: Partial<ReaderRoute> = {}) {
   const startStudy = vi.fn()
   const closeStudy = vi.fn()
   const setQuizSetupOpen = vi.fn()
@@ -85,7 +85,7 @@ function setup(ready = true) {
     close: closeProduction,
   } as unknown as ReturnType<typeof useProductionSession>
 
-  const route: ReaderRoute = { slug: 'my-article', panel: '', overlay: '' }
+  const route: ReaderRoute = { slug: 'my-article', panel: '', overlay: '', ...routeOver }
   renderHook(() =>
     useReaderFlowRouting(route, 'my-article', {
       services,
@@ -199,5 +199,19 @@ describe('useReaderFlowRouting：字段映射', () => {
     flows.quiz.close()
     expect(cancelWarmup).toHaveBeenCalled()
     expect(forceClose).toHaveBeenCalled()
+  })
+
+  it('深链接到仿写历史只开面板，不重置正在写的草稿', () => {
+    const s = setup(true, { panel: 'write', write: { view: 'history', recordKey: 'k1' } })
+    s.flows.write.open()
+    expect(s.writingSetOpen).toHaveBeenCalledWith(true)
+    expect(s.openWriting).not.toHaveBeenCalled()
+  })
+
+  it('正常「去仿写」仍走 start()（换文章/换句要重置表单）', () => {
+    const s = setup()
+    s.flows.write.open()
+    expect(s.openWriting).toHaveBeenCalledOnce()
+    expect(s.writingSetOpen).not.toHaveBeenCalled()
   })
 })

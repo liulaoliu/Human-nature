@@ -209,6 +209,7 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           },
         }}
         writing={writingApi}
+        writingActions={props.writingActions}
         back={props.services.backApi}
         production={props.production}
         productionActions={props.productionActions}
@@ -315,6 +316,11 @@ export default function ReaderBodyZone(props: ReaderScreenProps & { panelScrollK
           onDrillLimitChange: quizApi.setDrillLimit,
           onSiege: startSiege,
           scrollKey: props.panelScrollKey,
+          writingHistory: props.services.writingHistory,
+          articleId: articleIdentity,
+          // 点历史 → 直接开仿写面板的那条详情（URL 带 wv/wr/ws + back=intensive，刷新也回得来）。
+          onOpenWritingHistory: (recordKey, scope) =>
+            props.writingActions.onOpenHistory?.(recordKey, scope),
         }}
         goal={{
           open: goalOpen,

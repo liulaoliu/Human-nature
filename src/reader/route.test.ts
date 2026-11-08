@@ -11,6 +11,8 @@ import {
   parseProductionQuery,
   productionPanelPath,
   parseReaderRoute,
+  parseWriteQuery,
+  writePanelPath,
 } from './route'
 
 /**
@@ -227,6 +229,49 @@ describe('route：production 子视图 / 历史筛选', () => {
     expect(parseProductionQuery('?pm=all')).toEqual({ mode: 'all' })
     expect(parseProductionQuery('?pa=article')).toEqual({ scope: 'article' })
     expect(parseProductionQuery('?ph=0&pm=yogurt')).toEqual({ mode: 'yogurt' })
+  })
+})
+
+describe('route：write 子视图 / 历史详情', () => {
+  it('view / recordKey / scope 往返，记录键会编码', () => {
+    const state = {
+      view: 'history' as const,
+      recordKey: '2026-11-08T04:00:00.000Z|a1|writing|s3|focus|1|abc',
+      scope: 'all' as const,
+    }
+    const path = writePanelPath('my-article', state, 'intensive')
+    expect(path.startsWith('/reader/a/my-article/p/write?')).toBe(true)
+    expect(path).toContain('wv=history')
+    expect(path).toContain('ws=all')
+    expect(path).toContain('back=intensive')
+    expect(parseWriteQuery(path.split('?')[1])).toEqual(state)
+    expect(parseReaderRoute('/reader/a/my-article/p/write', path.split('?')[1])).toMatchObject({
+      panel: 'write',
+      back: 'intensive',
+      write: state,
+    })
+  })
+
+  it('没有 query 时不写 write；别的面板不认这组 query', () => {
+    expect(writePanelPath('x')).toBe('/reader/a/x/p/write')
+    expect(parseWriteQuery('')).toBeUndefined()
+    expect(parseReaderRoute('/reader/p/write')).toEqual({
+      slug: '',
+      panel: 'write',
+      overlay: '',
+    })
+    expect(parseReaderRoute('/reader/p/speed', '?wv=history')).toEqual({
+      slug: '',
+      panel: 'speed',
+      overlay: '',
+    })
+  })
+
+  it('坏值忽略：wv 只认 history，ws 只认 article / all，空白键当没写', () => {
+    expect(parseWriteQuery('?wv=nope&ws=lol&wr=%20%20')).toBeUndefined()
+    expect(parseWriteQuery('?wv=history')).toEqual({ view: 'history' })
+    expect(parseWriteQuery('?ws=article')).toEqual({ scope: 'article' })
+    expect(parseWriteQuery('?wr=k1')).toEqual({ recordKey: 'k1' })
   })
 })
 

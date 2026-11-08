@@ -64,6 +64,7 @@ types ← core ← adapters ← reader
 | 打印/导出的「选哪些条目」 | `src/core/printPlan.ts` | 面板只收集选择 + 渲染 |
 | 仿写批改记录成册（A4 / Markdown） | `src/core/writingExport.ts` | 只做「记录 → 文本」；来源 / 稿次叫什么仍走 `writing.ts` 的 `writingRecordLabel`，别在导出里再写一份 |
 | 仿写历史的来源 / 本篇·全库筛选与清空范围 | `src/core/writingHistory.ts` | 金句课记录由小课堂自己展示；这里只分组 `writing / production / drillSentence`，清空只清当前筛选、永远保留金句课。视图用 `WritingHistoryList`，别在面板里重算来源 |
+| 仿写历史的子视图 / 详情定位 ↔ URL | `src/reader/route.ts` 的 `parseWriteQuery` / `writePanelPath`（`wv` / `wr` / `ws`） | 历史列表与详情都进地址：`/p/write?wv=history&wr=<recordKey>&ws=all`，刷新 / 分享 / 返回键都能落回同一条记录；`WritingPanel` 只渲染、不写 query（`onNavigateWrite` 由 `ReaderApp` 接到 `writePanelPath`）。从精读的「练习历史」点进来要带 `back=intensive`（`WritingPanelActions.onOpenHistory`），否则关掉仿写会掉回文章主界面。点一行**不**直接灌表单，详情里点「载入到表单继续改」才 `loadRecord`，翻历史不冲掉草稿；悬浮摘要 / 上一条·下一条复用 `panels/golden/WritingHoverCard` + `GoldenHistoryView` 的同一套语义 |
 | 统计面板的区间汇总 / 当天明细 | `src/core/statsSummary.ts` | 本周 / 本月 / 累计与「点开某天」共用一套区间判定（逻辑日 04:00 结算）；背词 / 写作 / 复述 / 读完 / 金句 / 练习六份记录只在这里合计，面板只画数字。活动量仍走 `activity.sumCats`，写作字数仍走 `speedRead.wordCount` |
 | A4 打印页的外壳与转义 | `src/core/printHtml.ts` | `escapeHtml` + `a4Document`（页边距 / 字号 / 行高参数化，样式顺序「基础 → 调用方」）；各导出器只写自己的布局样式，别再各抄一份 `<!doctype html>` 和 `@page` |
 | 日期热力图选择器（导出 / 生词浏览共用） | `src/reader/panels/DayHeatmap.tsx` | 日历分档仍走 `core/activity.buildHeatmap`；点格子只回调日期 |
@@ -498,6 +499,14 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 `/reader/a/<slug>/p/quiz?back=intensive`：考试仍占满正文，但页面内退出 / 浏览器返回 /
 深链接打不开时都回到 `/p/intensive`，而不是掉到文章主界面。`back` 只认布尔面板名，
 坏值忽略；它不影响当前渲染哪一页，只决定 `useRoutedFlows` 关闭时 replace 回哪一层。
+
+**子视图（`gv` / `ph` / `wv` 这类 query）只在对应面板里认**：`parseReaderRoute` 只在
+`panel === 'golden' | 'production' | 'write'` 时解析这组键，别的面板一律忽略（避免
+`/p/speed?gv=history` 被误当成小课堂历史）。写回地址的入口同样只有一个——`ReaderApp` 把
+`goldenPanelPath` / `productionPanelPath` / `writePanelPath` 包成 `*Actions.onNavigate` 传进面板，
+面板自己不许 `useSearchParams().set`。**深链接打开子视图不能顺手重置会话**：
+`useReaderFlowRouting` 的 `write.open` 在 `route.write?.view === 'history'` 时只 `setOpen(true)`，
+不走 `useWriting.start()`（那会清掉正在写的范句和作答）。
 
 懒加载面板在 `ReaderOverlaysHost` 里**每个面板各包一层** `PanelBoundary + Suspense`
 （`panels/PanelBoundary.tsx`）：某个 chunk 加载失败或渲染抛错时，只换掉这一块并给「重试 / 关闭」，

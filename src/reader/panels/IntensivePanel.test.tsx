@@ -4,6 +4,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { IntensivePlan } from '../../core/intensive'
 import { DEFAULT_DRILL_LIMITS } from '../../core/intensiveDrill'
 import type { OutputBoard } from '../../core/output'
+import type { WritingRecord } from '../../core/writing'
 import { clearPanelScrollMemory } from '../hooks/usePanelScrollMemory'
 import IntensivePanel, { type IntensivePanelProps } from './IntensivePanel'
 
@@ -299,5 +300,49 @@ describe('IntensivePanel：拷打与复述', () => {
 
     const other = render(<IntensivePanel {...props({ scrollKey: 'another-article' })} />)
     expect((other.container.querySelector('.plan-panel') as HTMLElement).scrollTop).toBe(0)
+  })
+})
+
+describe('IntensivePanel：练习历史', () => {
+  const feedback: WritingRecord['feedback'] = { total: 8, max: 10, scores: [], issues: [] }
+  const history: WritingRecord[] = [
+    {
+      at: '2026-11-05T00:00:00.000Z',
+      articleId: 'a1',
+      articleTitle: 'My article',
+      model: '',
+      text: 'I run every day.',
+      feedback,
+      source: 'drillSentence',
+      sentenceId: 'drill:x',
+    },
+    {
+      at: '2026-11-04T00:00:00.000Z',
+      articleId: 'a2',
+      articleTitle: '别的文章',
+      model: '',
+      text: 'Another one.',
+      feedback,
+    },
+  ]
+
+  it('有历史才渲染折叠区，计数按本篇算（不含别篇）', () => {
+    const { rerender } = render(<IntensivePanel {...props()} />)
+    expect(screen.queryByText(/练习历史/)).toBeNull()
+
+    rerender(<IntensivePanel {...props({ writingHistory: history, articleId: 'a1', onOpenWritingHistory: vi.fn() })} />)
+    expect(screen.getByText('🕘 练习历史（本篇 1 条）')).toBeTruthy()
+  })
+
+  it('点一条历史把记录键与范围交给外层（去开仿写详情页）', () => {
+    const onOpenWritingHistory = vi.fn()
+    render(
+      <IntensivePanel
+        {...props({ writingHistory: history, articleId: 'a1', onOpenWritingHistory })}
+      />,
+    )
+    fireEvent.click(screen.getByText(/练习历史/))
+    fireEvent.click(screen.getByRole('button', { name: /拷打造句/ }))
+    expect(onOpenWritingHistory).toHaveBeenCalledWith(expect.any(String), 'article')
   })
 })

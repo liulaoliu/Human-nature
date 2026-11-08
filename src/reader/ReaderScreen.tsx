@@ -32,6 +32,7 @@ import type { usePregenerate } from './hooks/usePregenerate'
 import type { useGoldenDrill } from './hooks/useGoldenDrill'
 import type { GoldenPanelActions } from './panels/GoldenPanel'
 import type { ProductionPanelActions } from './panels/ProductionPanel'
+import type { WritingPanelActions } from './panels/WritingPanel'
 
 
 type ShellP = ComponentProps<typeof ReaderShell>
@@ -151,6 +152,8 @@ export interface ReaderScreenProps {
   goldenActions: GoldenPanelActions
   /** 奶牛工棚的子视图 / 历史筛选接线（URL 是事实来源，见 `route.ts`）。 */
   productionActions: ProductionPanelActions
+  /** 仿写面板的子视图 / 历史详情接线（URL 是事实来源，见 `route.ts`）。 */
+  writingActions: WritingPanelActions
 
   // ---- 各领域 hook 的完整结果 ----
   workspace: ReturnType<typeof useArticleWorkspace>

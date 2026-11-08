@@ -20,6 +20,7 @@ export interface ReaderAppModel {
   golden: ReaderScreenProps['golden']
   goldenActions: ReaderScreenProps['goldenActions']
   productionActions: ReaderScreenProps['productionActions']
+  writingActions: ReaderScreenProps['writingActions']
   panels: ReturnType<typeof useReaderPanelRouting>['panels']
   browseFilters: ReaderScreenProps['browseFilters']
   articleRouting: ReaderScreenProps['articleRouting']
@@ -164,6 +165,7 @@ export function toReaderScreenProps(app: ReaderAppModel): ReaderScreenProps {
     golden: app.golden,
     goldenActions: app.goldenActions,
     productionActions: app.productionActions,
+    writingActions: app.writingActions,
     ai: app.ai,
     ui: app.ui,
     derived: app.derived,

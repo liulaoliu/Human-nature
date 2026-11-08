@@ -11,6 +11,7 @@ import type { useWriting } from './hooks/useWriting'
 import type { useBackTranslate } from './hooks/useBackTranslate'
 import type { useProductionSession } from './hooks/useProductionSession'
 import type { ProductionPanelActions } from './panels/ProductionPanel'
+import type { WritingPanelActions } from './panels/WritingPanel'
 import StudyPanelFromModel from './panels/StudyPanelFromModel'
 import ProductionPanel from './panels/ProductionPanel'
 import QuizSetupPanel from './panels/QuizSetupPanel'
@@ -54,6 +55,8 @@ export interface SessionHostProps {
     onClose: () => void
   }
   writing: ReturnType<typeof useWriting>
+  /** 仿写面板的子视图 / 历史详情接线（`route.ts` 解析出来的 URL 状态）。 */
+  writingActions: WritingPanelActions
   back: ReturnType<typeof useBackTranslate>
   production: ReturnType<typeof useProductionSession>
   /** 奶牛工棚的子视图 / 历史筛选接线（`route.ts` 解析出来的 URL 状态）。 */
@@ -88,6 +91,7 @@ export default function SessionHost({
   dict,
   listening,
   writing,
+  writingActions,
   back,
   production,
   productionActions,
@@ -313,6 +317,8 @@ export default function SessionHost({
           onTextChange={writing.setText}
           onClearHistory={writing.clearHistory}
           onLoadRecord={writing.loadRecord}
+          writeRoute={writingActions.route}
+          {...(writingActions.onNavigate ? { onNavigateWrite: writingActions.onNavigate } : {})}
         />
       )}
 

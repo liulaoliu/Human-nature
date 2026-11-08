@@ -6,6 +6,9 @@ import type { DrillKind, DrillLimits, QuizDrillKind } from '../../core/intensive
 import type { OutputBoard } from '../../core/output'
 import { usePanelScrollMemory } from '../hooks/usePanelScrollMemory'
 import DrillLauncher from './DrillLauncher'
+import WritingHistoryList from './WritingHistoryList'
+import type { WritingRecord } from '../../core/writing'
+import { writingHistoryCounts } from '../../core/writingHistory'
 
 export interface IntensivePanelProps {
   onClose: () => void
@@ -45,6 +48,15 @@ export interface IntensivePanelProps {
   onSiege: (limit: number) => void
   /** 滚动位置记忆键（文章标识）；不传 = 不记。 */
   scrollKey?: string
+  /** 仿写 / 工棚 / 拷打造句的批改记录（精读面板里的「练习历史」用同一份数据）。 */
+  writingHistory?: WritingRecord[]
+  /** 本篇标识；历史默认只看本篇，可切全库。 */
+  articleId?: string
+  /**
+   * 点一条历史 → 打开仿写面板的那条详情（写 `/p/write?wv=history&wr=…`）。
+   * 不传就不渲染历史块（测试老调用不必跟着改）。
+   */
+  onOpenWritingHistory?: (recordKey: string, scope: 'article' | 'all') => void
 }
 
 const STATUS_TEXT: Record<string, string> = { todo: '未开始', doing: '进行中', done: '已完成' }
@@ -79,6 +91,9 @@ export default function IntensivePanel({
   onDrillLimitChange,
   onSiege,
   scrollKey = '',
+  writingHistory,
+  articleId = '',
+  onOpenWritingHistory,
 }: IntensivePanelProps) {
   const panelRef = useRef<HTMLDivElement>(null)
   usePanelScrollMemory(panelRef, scrollKey)
@@ -241,6 +256,23 @@ export default function IntensivePanel({
             </div>
           ))}
         </div>
+
+        {writingHistory && onOpenWritingHistory && (
+          <details className="ihistory">
+            <summary>
+              🕘 练习历史（本篇 {writingHistoryCounts(writingHistory, 'article', articleId).all} 条）
+              <span className="muted">仿写 / 奶牛工棚 / 拷打造句的批改记录，点一条去回看</span>
+            </summary>
+            <WritingHistoryList
+              history={writingHistory}
+              articleId={articleId}
+              compact
+              pageSize={8}
+              initialScope="article"
+              onOpenRecord={(recordKey, scope) => onOpenWritingHistory(recordKey, scope)}
+            />
+          </details>
+        )}
     </ModalShell>
   )
 }
