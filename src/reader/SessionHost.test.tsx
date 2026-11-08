@@ -91,4 +91,18 @@ describe('SessionHost', () => {
     expect(container.textContent).toContain('quiz-panel')
     expect(container.textContent).not.toContain('quiz-setup')
   })
+
+  it('拷打挂起去背单词：只画背单词，不把两套面板叠在一起', () => {
+    const { container } = render(
+      <SessionHost
+        {...props({
+          study: { ...props().study, api: { queue: [{ id: 'w1' }] } as never },
+          quiz: { setupOpen: false, queue: [{}], index: 1, poolSizes: { unmastered: 0 } } as never,
+        })}
+      />,
+    )
+    const text = container.textContent ?? ''
+    expect(text).toContain('study-panel')
+    expect(text).not.toContain('quiz-panel')
+  })
 })

@@ -16,6 +16,11 @@ export function useQuizRunState() {
   const [setupOpen, setSetupOpen] = useState(false)
   /** 拼写题拼错：判定提示（非空时不许直接切题 / 退出）。 */
   const [spellMiss, setSpellMiss] = useState<QuizSpellMiss | null>(null)
+  /**
+   * 拷打被「从头重学」临时挂起：队列和进度都留着，背单词会话结束后原地接着考。
+   * 挂起期间计时 / 快捷键 / 轮次结算都停，别和背单词会话抢键盘。
+   */
+  const [suspended, setSuspended] = useState(false)
   /** 本轮全部题目（重做错题按 id 从这里取，词/文章通用）。 */
   const allRef = useRef<QuizQuestion[]>([])
 
@@ -40,8 +45,9 @@ export function useQuizRunState() {
     setResult(null)
     setSpellMiss(null)
     setResults([])
+    setSuspended(false)
     recordedRef.current = false
-  }, [setIndex, setInput, setChecked, setResult, setResults])
+  }, [setIndex, setInput, setChecked, setResult, setResults, setSuspended])
 
   return {
     ...snapshot,
@@ -51,6 +57,8 @@ export function useQuizRunState() {
     setSetupOpen,
     spellMiss,
     setSpellMiss,
+    suspended,
+    setSuspended,
     allRef,
     recordedRef,
     clearAdvance,

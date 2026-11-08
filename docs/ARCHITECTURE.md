@@ -119,6 +119,7 @@ types ← core ← adapters ← reader
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` + `src/reader/apply/*` | 六个表格型任务在 core；自动标词（要离线词典）在 `apply/autoVocab`，查词（要来源句）在 `apply/analysis`；`useApplyTaskResult` 只负责保住函数身份 |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` + `src/core/quizHistory.ts` | 范围 × 题型 → 候选词与题量；下一轮只从「没答过」里抽：词级按 `itemId`、文章级按题目 id，新题不够只考剩下的，不拿旧题凑数；全考完后自动清空本轮记录、重新开一轮（不会卡死）。错题重练 / 包围战不过滤 |
 | 考试再来一轮 / 本轮数量 | `src/reader/hooks/useQuizStarts.ts` | 每轮记 `lastRound`（来源 / 范围 / 题型 / 实际题数）；`restart(limit)` 完整复现上一轮、只换数量，文章测验不会掉成词级；结算页先选数量再开 |
+| 拷打拼错 → 从头重学 → 回来继续 | `useQuizSession.ts` 的 `suspended` / `resumeFromRelearn` + `useStudyQuizListen.ts` 的 `onClosed` + `useRoutedFlows.ts` 的 flow→flow replace | 考试不关卷，只挂起（队列 / 指针 / 成绩留着）；挂起期间停表、注销考试快捷键、不结算；背单词点「结束」回调恢复；`SessionHost` 只画最上面一层；两个整页会话直接切换用 replace，别让返回键把已结束的会话再开一轮 |
 | 记忆 / 词块「先看一遍」 | `src/reader/hooks/useDrillWarmup.ts` | 预习状态、候选池、本轮题数都在这里；改数量按同一 track 重抽卡，看完才 `begin()`；结算「再来一轮」重新出预习卡，不直接开考 |
 | 记忆 / 词块拷打结算造句 | `src/core/drillSentence.ts` + `panels/DrillSentenceStage.tsx` | **一条判分结果 = 一道独立造句题**：每个词 / 词块只用自己，不再把多个词硬塞进同一句；素材由 `drillSentencePoints` 从判分结果 + 本轮题目反推（每词条一个点、不截断，词块优先取本场实际考的那条，中文用法笔记不当 `mustUse`），`buildDrillSentenceItems` 逐点出题，`DrillSentenceStage` 用标签切换、每题各挂一份作答 / 批改状态；批改 / 解析 / 粘贴 / 历史复用 `useGoldenImitation` + `GoldenSentenceImitation`，成绩存 `WritingRecord.source='drillSentence'`；`drill` 随考试快照落盘，刷新结算页还能接着写 |
 | 各模块的本轮数量选择器 | `src/reader/panels/RoundSizeSelect.tsx` + `RoundStartPrompt.tsx` | 统一档位文案 / `0 = 全部` / 自定义单位；精读七种拷打（记忆 / 词块在预习页）、考试设置、结算「再来一轮」、听写、听力、背单词的新词配额 / 每组词数共用；各模块只负责状态和「开始」动作 |
@@ -513,6 +514,8 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
   从布尔面板点开的会话在 URL 里带 `?back=<面板>`，退出 / 打开失败回该面板；
   没有 `back` 才退回文章页，别停在空界面。**动作 hook 不要自己先关面板**：
   先 `setIntensiveOpen(false)` 会把历史层换成文章页，`back` 就没了（2026-11-05 用户反馈）。
+  两个整页会话**直接切换**（考试挂起去背单词、学完回考试）时用 `replace`：
+  被替换掉的那一层已经关掉，返回键不该再把它重新开一轮。
 
 **正文槽位**的四种状态由 `screen/bodyMode.ts` 的纯函数判定（`composer` / `loading` / `missing` / `article`）：
 只有用户主动点「新建」才进 Composer；URL 指向文章但索引/正文还没到时显示 loading，

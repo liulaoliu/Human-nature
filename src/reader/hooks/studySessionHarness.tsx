@@ -26,10 +26,12 @@ export function Harness({
   library,
   speak = noop,
   onPersist = noop,
+  onClosed = noop,
 }: {
   library: VocabLibrary
   speak?: (text: string) => void
   onPersist?: (lib: VocabLibrary) => void
+  onClosed?: () => void
 }) {
   setApi(
     useStudySession({
@@ -46,6 +48,7 @@ export function Harness({
       newLimit: 0,
       newToday: 0,
       onBumpNewToday: noop,
+      onClosed,
     }),
   )
   return null

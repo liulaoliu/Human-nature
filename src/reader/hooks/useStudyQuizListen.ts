@@ -78,6 +78,8 @@ export function useStudyQuizListen({
     newLimit,
     newToday,
     onBumpNewToday: bumpNewToday,
+    // 从拷打「从头重学」进来时，考试只是挂起：点「结束」后原地回到那一轮
+    onClosed: () => quizApiRef.current?.resumeFromRelearn(),
   })
   const {
     queue: studyQueue,
@@ -103,7 +105,14 @@ export function useStudyQuizListen({
     addMistake,
     dropMistake,
     onKinds: mergeKindStats,
-    onRelearn: (ids) => studyApi.startRelearn(ids),
+    onRelearn: (ids) => {
+      // 拷打先挂起，别关卷；找不到词时立刻恢复，免得停在一个谁也回不去的挂起态
+      if (!studyApi.startRelearn(ids, { keepQuiz: true })) {
+        quizApiRef.current?.resumeFromRelearn()
+        return
+      }
+      flash('这一轮拷打已挂起：学完点「结束」会原地接着考')
+    },
   })
   quizApiRef.current = quizApi
   const {

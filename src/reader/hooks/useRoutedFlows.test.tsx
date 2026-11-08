@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it, vi } from 'vitest'
 import { act, renderHook, waitFor } from '@testing-library/react'
-import { MemoryRouter, useLocation, useNavigate } from 'react-router-dom'
+import { MemoryRouter, useLocation, useNavigate, useNavigationType } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { FLOW_NAMES, parseReaderRoute } from '../route'
 import { useRoutedFlows, type FlowControls } from './useRoutedFlows'
@@ -25,10 +25,12 @@ function setup(initialPath: string, initialFlows: FlowControls, initialReady = t
   let navigate: ReturnType<typeof useNavigate> | null = null
   let flows = initialFlows
   let ready = initialReady
+  let navType = 'POP' as ReturnType<typeof useNavigationType>
 
   function Probe() {
     const loc = useLocation()
     seen = loc.pathname + loc.search
+    navType = useNavigationType()
     return null
   }
   function NavCapture() {
@@ -52,6 +54,7 @@ function setup(initialPath: string, initialFlows: FlowControls, initialReady = t
   return {
     ...hook,
     path: () => seen,
+    navType: () => navType,
     go: (to: string) => act(() => navigate?.(to)),
     update: (next: FlowControls, nextReady = ready) => {
       flows = next
@@ -91,6 +94,33 @@ describe('useRoutedFlows：状态 → URL', () => {
     h.update(flows)
 
     await waitFor(() => expect(h.path()).toBe('/reader/a/my-article'))
+  })
+})
+
+describe('useRoutedFlows：两个整页会话直接切换', () => {
+  it('考试挂起去背单词 → replace 掉考试那一层，不在历史里留旧会话', async () => {
+    const flows = idle()
+    flows.quiz.active = true
+    const h = setup('/reader/a/my-article/p/quiz?back=intensive', flows)
+
+    flows.study.active = true // 考试仍挂着（队列没清），背单词盖上来
+    h.update(flows)
+
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/study?back=intensive'))
+    expect(h.navType()).toBe('REPLACE')
+  })
+
+  it('学完回到挂起的考试 → 也是 replace，返回键不会把背单词再开一轮', async () => {
+    const flows = idle()
+    flows.study.active = true
+    const h = setup('/reader/a/my-article/p/study?back=intensive', flows)
+
+    flows.quiz.active = true
+    flows.study.active = false
+    h.update(flows)
+
+    await waitFor(() => expect(h.path()).toBe('/reader/a/my-article/p/quiz?back=intensive'))
+    expect(h.navType()).toBe('REPLACE')
   })
 })
 

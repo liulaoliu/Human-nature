@@ -118,22 +118,28 @@ export default function SessionHost({
   // 产出训练是整页会话：打开时只画它，避免和背词 / 考试 / 金句课叠在一起。
   if (production.open) return <ProductionPanel model={production} {...productionActions} />
 
+  // 背单词盖住考试：从拷打「从头重学」进来时考试只是挂起（队列还留着），
+  // 这时只画背单词；点「结束」后考试队列自动接回来。别把两套键盘 / 两个面板同时铺出来。
+  const studyOpen = !!study.api.queue
+
   return (
     <>
-      {study.api.queue && (
+      {studyOpen && (
         <StudyPanelFromModel
           study={study}
           items={items}
           speak={speak}
           onExam={() => {
             study.api.close()
+            // 挂起的拷打不会再回来：要考就开新的设置页，别让旧队列卡在下面
+            quiz.forceClose()
             quiz.setResults([])
             quiz.setSetupOpen(true)
           }}
         />
       )}
 
-      {quiz.setupOpen && !quiz.queue && (
+      {!studyOpen && quiz.setupOpen && !quiz.queue && (
         <QuizSetupPanel
           kinds={quiz.kinds}
           scope={quiz.scope}
@@ -163,7 +169,7 @@ export default function SessionHost({
       )}
 
       {/* 「先学一遍再考」：队列还没开始，先摊开这轮要考的词 */}
-      {quiz.warmup && (
+      {!studyOpen && quiz.warmup && (
         <DrillWarmup
           title={quiz.warmup.title}
           kind={quiz.warmup.kind}
@@ -181,7 +187,7 @@ export default function SessionHost({
         />
       )}
 
-      {!quiz.warmup && quiz.queue && (
+      {!studyOpen && !quiz.warmup && quiz.queue && (
         <QuizPanel
           question={quiz.index < quiz.queue.length ? quiz.queue[quiz.index] : null}
           scope={quiz.scope}

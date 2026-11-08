@@ -135,6 +135,28 @@ describe('useStudySession：会话动作', () => {
   })
 })
 
+describe('useStudySession：结束会话后恢复被挂起的拷打', () => {
+  it('点「结束」真的关掉会话后才回调 onClosed', () => {
+    const onClosed = vi.fn()
+    const { unmount } = render(
+      <Harness
+        library={lib([
+          vocabItem({ id: 'w1', word: 'run', lemma: 'run', meaning: '跑' }),
+          vocabItem({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+        ])}
+        onClosed={onClosed}
+      />,
+    )
+    act(() => api!.startRelearn(['w1'], { keepQuiz: true }))
+    expect(api!.queue).toHaveLength(1)
+
+    act(() => api!.close())
+    expect(api!.queue).toBeNull()
+    expect(onClosed).toHaveBeenCalledTimes(1)
+    unmount()
+  })
+})
+
 describe('useStudySession：卡内编辑暂停计时', () => {
   it('编辑 10 秒两只表都不动，关闭编辑后继续', () => {
     vi.useFakeTimers()

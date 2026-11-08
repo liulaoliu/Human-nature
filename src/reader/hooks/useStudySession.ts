@@ -36,6 +36,8 @@ export interface UseStudySessionParams {
   newLimit: number
   newToday: number
   onBumpNewToday: () => void
+  /** 用户主动结束会话（点「结束」/ Esc / 按 URL 关掉）之后；用来恢复被挂起的拷打。 */
+  onClosed?: () => void
 }
 
 /**
@@ -63,6 +65,7 @@ export function useStudySession(params: UseStudySessionParams) {
     newLimit,
     newToday,
     onBumpNewToday,
+    onClosed,
   } = params
 
   /** 范围 / 牌组 / 新学或复习 / 拼写 / 锤炼阈值 + 候选池。 */
@@ -304,6 +307,7 @@ export function useStudySession(params: UseStudySessionParams) {
     backStep,
     forwardStep,
     recordUnknown: grading.recordUnknown,
+    onClosed,
   })
 
   /** 背单词的键盘映射集中在 `hooks/useStudyHotkeys`（面板按钮上的 kbd 与它一一对应）。 */

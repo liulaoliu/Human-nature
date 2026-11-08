@@ -155,9 +155,13 @@ export function useRoutedFlows(
       }
     } else if (activeChanged) {
       if (active && routeFlow !== active) {
-        // 用户点了按钮 → 新增一层历史（返回键才能回到点之前那一页）
         pendingRef.current = null
-        navigate(openPath(slugRef.current, routePanel, active, route.back))
+        const path = openPath(slugRef.current, routePanel, active, route.back)
+        // 会话 A 直接换成会话 B（考试挂起去背单词、学完回考试）：原地替换，
+        // 别在历史里留下已经关掉的 A —— 否则返回键会把 A 重新开一轮。
+        // 从布尔面板 / 文章点开会话仍是 push（返回键要能回到点它之前那一页）。
+        const fromFlow = !!prevActiveRef.current && routeFlow === prevActiveRef.current
+        navigate(path, fromFlow ? { replace: true } : undefined)
       } else if (!active && routeFlow) {
         // 用户在页面里点了「退出」→ 换掉这一层，别留一个已关掉的面板在历史里。
         // 浮层下面还压着面板（速读里的语言点）就回到那一层；从布尔面板点开的整页会话

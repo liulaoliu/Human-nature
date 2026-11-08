@@ -14,6 +14,8 @@ export interface UseQuizCompletionParams {
   allRef: MutableRefObject<QuizQuestion[]>
   /** 恢复的会话若已完成，别在挂载时把成绩再记一遍。 */
   recordedRef: MutableRefObject<boolean>
+  /** 拷打被「从头重学」挂起：先不结算、不自动鞭打，等回来再算。 */
+  suspended: boolean
   loopWrong: boolean
   recordPractice: (kind: PracticeKind, total: number, correct: number) => void
   onKinds?: (rows: { kind: QuizKind; total: number; correct: number }[]) => void
@@ -44,6 +46,7 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
     results,
     allRef,
     recordedRef,
+    suspended,
     loopWrong,
     recordPractice,
     onKinds,
@@ -92,6 +95,8 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
       recordedRef.current = false
       return
     }
+    // 挂起期间不解算：最后一道题刚好拼错去重学时，别在背单词界面后面偷偷记成绩 / 开鞭打轮
+    if (suspended) return
     if (index >= queue.length && results.length > 0 && !recordedRef.current) {
       recordedRef.current = true
       recordPractice('quiz', results.length, results.filter((r) => r.correct).length)
@@ -121,7 +126,7 @@ export function useQuizCompletion(params: UseQuizCompletionParams): QuizCompleti
         }, 1500)
       }
     }
-  }, [queue, index, results, recordPractice, onKinds, loopWrong, retryWrong, recordedRef, setAutoRun])
+  }, [queue, index, results, suspended, recordPractice, onKinds, loopWrong, retryWrong, recordedRef, setAutoRun])
 
   // 卸载时清掉待触发的鞭打定时器（自动切题由 useQuizAdvance 自己清理）
   useEffect(() => () => clearDrill(), [clearDrill])

@@ -13,6 +13,8 @@ export interface UseStudyNavigationParams {
   backStep: () => void
   forwardStep: () => void
   recordUnknown: (item: VocabItem) => void
+  /** 会话真的关掉之后（恢复被挂起的拷打用）；被拼写判定拦住时不调。 */
+  onClosed?: () => void
 }
 
 /**
@@ -32,6 +34,7 @@ export function useStudyNavigation({
   backStep,
   forwardStep,
   recordUnknown,
+  onClosed,
 }: UseStudyNavigationParams) {
   const close = useCallback(() => {
     // 拼错后必须先确认「判为不认识」，不给直接退出把这次判罚吞掉
@@ -40,7 +43,9 @@ export function useStudyNavigation({
       return
     }
     setQueue(null)
-  }, [spellMiss, flash, setQueue])
+    // 从拷打「从头重学」进来的：这里就是用户点的「结束」，恢复原来那一轮
+    onClosed?.()
+  }, [spellMiss, flash, setQueue, onClosed])
 
   const back = useCallback(() => {
     if (!spellMiss) backStep()

@@ -239,7 +239,45 @@ describe('useQuizSession：拼写错 = 不认识，不许重试 / 直接退出',
     expect(api!.index).toBe(1)
   })
 
-  it('「从头重学」：关掉考试并把词交给背单词会话', () => {
+  it('「从头重学」：考试先挂起（队列留着），学完点结束再接着考', () => {
+    const onRelearn = vi.fn()
+    render(
+      <Harness
+        library={lib([
+          word({ id: 'w1' }),
+          word({ id: 'w2', word: 'walk', lemma: 'walk', meaning: '走' }),
+        ])}
+        onRelearn={onRelearn}
+      />,
+    )
+    act(() => api!.startItems(['w1', 'w2'], ['spell']))
+    const first = api!.queue![0].itemId
+    act(() => api!.setInput('ran'))
+    act(() => api!.check())
+    act(() => api!.relearnSpellMiss())
+
+    expect(onRelearn).toHaveBeenCalledWith([first])
+    expect(api!.queue).not.toBeNull()
+    expect(api!.suspended).toBe(true)
+    // 这一题已经判完，指针先推到下一题；回来时不会又停在这道拼错题上
+    expect(api!.index).toBe(1)
+    expect(api!.spellMiss).toBeNull()
+
+    // 挂起期间键盘归背单词会话：回车 / Esc 都不能偷偷切题或关卷
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(api!.index).toBe(1)
+    expect(api!.queue).not.toBeNull()
+
+    act(() => api!.resumeFromRelearn())
+    expect(api!.suspended).toBe(false)
+    expect(api!.queue).toHaveLength(2)
+    expect(api!.index).toBe(1)
+  })
+
+  it('最后一道拼错去重学：挂起期间不结算，回来才记成绩', () => {
     const onRelearn = vi.fn()
     render(<Harness library={lib([word()])} onRelearn={onRelearn} />)
     act(() => api!.startItems(['w1'], ['spell']))
@@ -247,8 +285,22 @@ describe('useQuizSession：拼写错 = 不认识，不许重试 / 直接退出',
     act(() => api!.check())
     act(() => api!.relearnSpellMiss())
 
-    expect(onRelearn).toHaveBeenCalledWith(['w1'])
+    expect(api!.index).toBe(1) // 已经到卷末
+    expect(recordPractice).not.toHaveBeenCalled()
+
+    act(() => api!.resumeFromRelearn())
+    expect(recordPractice).toHaveBeenCalledWith('quiz', 1, 0)
+  })
+
+  it('没有接背单词会话时「从头重学」仍按旧语义关卷，不留挂起态', () => {
+    render(<Harness library={lib([word()])} />)
+    act(() => api!.startItems(['w1'], ['spell']))
+    act(() => api!.setInput('ran'))
+    act(() => api!.check())
+    act(() => api!.relearnSpellMiss())
+
     expect(api!.queue).toBeNull()
+    expect(api!.suspended).toBe(false)
   })
 
   it('其它题型答错仍是普通错题：不触发拼写判定', () => {

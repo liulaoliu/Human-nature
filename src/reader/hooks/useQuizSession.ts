@@ -86,6 +86,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setSetupOpen,
     spellMiss,
     setSpellMiss,
+    suspended,
+    setSuspended,
     allRef,
     recordedRef,
     queue,
@@ -125,6 +127,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     results,
     allRef,
     recordedRef,
+    suspended,
     loopWrong,
     recordPractice,
     onKinds,
@@ -259,8 +262,9 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setArticleRun(false)
     setDrill(null)
     setSpellMiss(null)
+    setSuspended(false)
     // 各 setter 都是 useState 的，引用恒定。
-  }, [clearAdvance, clearDrill, setQueue, setSetupOpen, setArticleRun, setDrill, setSpellMiss])
+  }, [clearAdvance, clearDrill, setQueue, setSetupOpen, setArticleRun, setDrill, setSpellMiss, setSuspended])
 
   /** 拼写判错未确认时，不允许直接结束把这次判罚吞掉。 */
   const close = useCallback(() => {
@@ -280,21 +284,37 @@ export function useQuizSession(params: UseQuizSessionParams) {
     // `setSpellMiss` 是 useState 的 setter，引用恒定。
   }, [spellMiss, advance, setSpellMiss])
 
-  /** 立即从头重学拼错的词：关掉考试，交给背单词会话走完整流程。 */
+  /**
+   * 立即从头重学拼错的词：先把这一题判完（指针推到下一题），再挂起考试，
+   * 交给背单词会话走完整流程。队列 / 进度都留着，重学结束点「结束」原地接着考。
+   */
   const relearnSpellMiss = useCallback(() => {
     if (!spellMiss) return
     const id = spellMiss.itemId
-    closeSession()
-    onRelearn?.([id])
-  }, [spellMiss, closeSession, onRelearn])
+    if (!onRelearn) {
+      // 没有接背单词会话（旧调用方）：保持原来的「关卷」语义，别留一个谁也恢复不了的挂起态
+      closeSession()
+      return
+    }
+    setSpellMiss(null)
+    advance()
+    setSuspended(true)
+    onRelearn([id])
+  }, [spellMiss, closeSession, onRelearn, setSpellMiss, advance, setSuspended])
 
-  const seconds = useQuizTimer(queue)
+  /** 重学结束：解除挂起，队列从下一题继续（计时 / 快捷键 / 结算一起恢复）。 */
+  const resumeFromRelearn = useCallback(() => {
+    setSuspended((prev) => (prev ? false : prev))
+  }, [setSuspended])
+
+  const seconds = useQuizTimer(queue, suspended)
 
   useQuizHotkeys({
     queue,
     index,
     checked,
     spellMiss,
+    paused: suspended,
     onEscape: close,
     onAckSpellMiss: ackSpellMiss,
     onCheck: check,
@@ -323,6 +343,8 @@ export function useQuizSession(params: UseQuizSessionParams) {
     setResults,
     /** 拼写错判定提示；非空时禁止直接切题 / 结束。 */
     spellMiss,
+    /** 拷打被「从头重学」挂起：队列还在，背单词结束后调 `resumeFromRelearn` 回来。 */
+    suspended,
     seconds,
     /** 「先学一遍再考」的预习卡（有内容时面板先画它，队列还没开始） */
     warmup,
@@ -347,6 +369,7 @@ export function useQuizSession(params: UseQuizSessionParams) {
     forceClose: closeSession,
     ackSpellMiss,
     relearnSpellMiss,
+    resumeFromRelearn,
     retryWrong,
   }
 }

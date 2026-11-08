@@ -49,8 +49,12 @@ export interface StudyStarts {
   switchDeck: (d: StudyDeck) => void
   /** 「本篇全部」：不分新学/复习、忽略新词配额，把这篇文章的生词整套过一遍。 */
   startArticleAll: () => void
-  /** 「从头重学」一批词（考试拼错后立即跳过来）。 */
-  startRelearn: (ids: string[]) => void
+  /**
+   * 「从头重学」一批词（考试拼错后立即跳过来）。
+   * `keepQuiz`：拷打只是挂起，别把它关掉；学完点「结束」还要回到原来那一轮。
+   * 返回是否真的装进了重学队列（找不到词时 false，调用方要负责恢复挂起的会话）。
+   */
+  startRelearn: (ids: string[], opts?: { keepQuiz?: boolean }) => boolean
 }
 
 export function useStudyStarts(params: UseStudyStartsParams): StudyStarts {
@@ -136,15 +140,17 @@ export function useStudyStarts(params: UseStudyStartsParams): StudyStarts {
   }, [blocked, poolFor, deck, flash, setScope, closeQuiz, load])
 
   const startRelearn = useCallback(
-    (ids: string[]) => {
+    (ids: string[], opts?: { keepQuiz?: boolean }) => {
       const set = new Set(ids)
       const items = library.items.filter((it) => set.has(it.id))
       if (!items.length) {
         flash('找不到要重学的词')
-        return
+        return false
       }
-      closeQuiz()
+      // 拷打挂起时不能关卷：队列和进度要留着，学完回来接着考
+      if (!opts?.keepQuiz) closeQuiz()
       load(sortItems(items, 'due'), { retrying: true })
+      return true
     },
     [library.items, flash, closeQuiz, load],
   )

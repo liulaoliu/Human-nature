@@ -6,6 +6,8 @@ export interface UseQuizHotkeysParams {
   index: number
   checked: boolean
   spellMiss: unknown
+  /** 拷打挂起（去重学）：键盘交给背单词会话，别和它抢回车 / Esc。 */
+  paused?: boolean
   onEscape: () => void
   onAckSpellMiss: () => void
   onCheck: (answerOverride?: string) => void
@@ -23,6 +25,7 @@ export function useQuizHotkeys({
   index,
   checked,
   spellMiss,
+  paused = false,
   onEscape,
   onAckSpellMiss,
   onCheck,
@@ -58,7 +61,7 @@ export function useQuizHotkeys({
         }
       }
     },
-    !!queue,
+    !!queue && !paused,
     60,
   )
 }

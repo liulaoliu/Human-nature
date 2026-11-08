@@ -104,11 +104,34 @@ describe('useStudyStarts：组队', () => {
     expect(scopeRef.scope).toBe('article')
   })
 
-  it('「从头重学」：只装给定的词并标 retrying', () => {
+  it('「从头重学」：只装给定的词并标 retrying；默认关掉考试', () => {
     render(<Harness items={[fresh('a'), fresh('b')]} />)
     act(() => api!.startRelearn(['b']))
     expect(load.mock.calls[0][0].map((it: VocabItem) => it.id)).toEqual(['b'])
     expect(load.mock.calls[0][1]).toEqual({ retrying: true })
+    expect(closeQuiz).toHaveBeenCalledTimes(1)
+  })
+
+  it('「从头重学」keepQuiz：考试挂起，不关卷；学完还要能回去', () => {
+    render(<Harness items={[fresh('b')]} />)
+    let ok = false
+    act(() => {
+      ok = api!.startRelearn(['b'], { keepQuiz: true })
+    })
+    expect(ok).toBe(true)
+    expect(closeQuiz).not.toHaveBeenCalled()
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('「从头重学」找不到词：返回 false，不装空队列', () => {
+    render(<Harness items={[fresh('a')]} />)
+    let ok = true
+    act(() => {
+      ok = api!.startRelearn(['nope'])
+    })
+    expect(ok).toBe(false)
+    expect(load).not.toHaveBeenCalled()
+    expect(flash).toHaveBeenCalledWith('找不到要重学的词')
   })
 
   it('拼错未确认时不许重开；换没有词的牌组只提示不动队列', () => {
