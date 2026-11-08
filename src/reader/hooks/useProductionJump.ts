@@ -16,9 +16,22 @@ export interface UseProductionJumpParams {
   grading: boolean
 }
 
-/** 快照和已交标记都按「这句原文」记，不按题号 id —— 题号是位置，改完断句就错位了。 */
-function keyOf(prompt: ProductionPrompt | undefined): string {
-  return prompt?.zh ?? ''
+/**
+ * 快照和已交标记都按「这句原文」记，不按题号 id —— 题号是位置，改完断句就错位了。
+ *
+ * 原文完全一样时（重复句、模板句）再加一个「同文里的第几个」后缀，
+ * 否则两句会共用同一份快照，跳来跳去把答案写串。
+ * 界面标「已交」必须用同一个键，所以导出。
+ */
+export function productionPromptKey(prompts: ProductionPrompt[], at: number): string {
+  const prompt = prompts[at]
+  if (!prompt) return ''
+  const zh = prompt.zh
+  let nth = 0
+  for (let i = 0; i < at; i++) {
+    if (prompts[i]?.zh === zh) nth++
+  }
+  return nth ? `${zh}\u0000${nth}` : zh
 }
 
 /**
@@ -50,10 +63,9 @@ export function useProductionJump({
       if (grading || next === index) return
       const target = prompts[next]
       if (!target) return
-      const current = prompts[index]
-      if (current) cacheRef.current.set(keyOf(current), snapshot())
+      if (prompts[index]) cacheRef.current.set(productionPromptKey(prompts, index), snapshot())
       setIndex(next)
-      const cached = cacheRef.current.get(keyOf(target))
+      const cached = cacheRef.current.get(productionPromptKey(prompts, next))
       if (cached) restore(cached)
       else resetAttempt()
     },

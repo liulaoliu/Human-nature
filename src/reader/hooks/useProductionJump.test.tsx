@@ -2,7 +2,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useState } from 'react'
-import { useProductionJump } from './useProductionJump'
+import { useProductionJump, productionPromptKey } from './useProductionJump'
 import type { ProductionAttemptSnapshot } from './useProductionAttempt'
 import type { ProductionPrompt } from '../../core/production'
 
@@ -92,6 +92,37 @@ describe('useProductionJump：断句列表点选跳题', () => {
       result.current.clear()
     })
     expect(result.current.doneIds.size).toBe(0)
+  })
+
+  it('原文一模一样的两句不共用快照（重复句各存各的）', () => {
+    const prompts: ProductionPrompt[] = [
+      { id: 'a', zh: '同一句。', goal: '', targets: [] },
+      { id: 'b', zh: '同一句。', goal: '', targets: [] },
+    ]
+    const cache = new Map<string, ProductionAttemptSnapshot>()
+    const restored: string[] = []
+    const { result } = renderHook(() => {
+      const [index, setIndex] = useState(0)
+      return {
+        index,
+        ...useProductionJump({
+          prompts,
+          index,
+          setIndex,
+          snapshot: () => cache.get(productionPromptKey(prompts, index)) ?? snap(''),
+          restore: (s) => restored.push(s.answer),
+          resetAttempt: vi.fn(),
+          grading: false,
+        }),
+      }
+    })
+    cache.set(productionPromptKey(prompts, 0), snap('第一句的答案'))
+    act(() => {
+      result.current.jumpTo(1)
+    })
+    // 第 2 句是另一份快照：不该读到第 1 句的答案
+    expect(restored).toEqual([])
+    expect(productionPromptKey(prompts, 0)).not.toBe(productionPromptKey(prompts, 1))
   })
 
   it('越界题号 / 正在批改时不动', () => {

@@ -24,7 +24,7 @@ import { useProductionSessionActions } from './useProductionSessionActions'
 import { useProductionRollup } from './useProductionRollup'
 import { useProductionPacks } from './useProductionPacks'
 import { useProductionYogurtPairs } from './useProductionYogurtPairs'
-import { useProductionJump } from './useProductionJump'
+import { productionPromptKey, useProductionJump } from './useProductionJump'
 import type { ProductionStartPayload } from './productionPackRuns'
 import { useProductionSettings } from './useProductionSettings'
 
@@ -112,12 +112,12 @@ export function useProductionSession({
     articleTitle,
     hasNext: index + 1 < prompts.length,
     onNext: () => {
-      markDoneRef.current(current?.zh ?? '')
+      markDoneRef.current(productionPromptKey(prompts, index))
       setNotice('')
       setIndex((i) => i + 1)
     },
     onDone: () => {
-      markDoneRef.current(current?.zh ?? '')
+      markDoneRef.current(productionPromptKey(prompts, index))
       clearDraftRef.current()
       setStage('done')
     },

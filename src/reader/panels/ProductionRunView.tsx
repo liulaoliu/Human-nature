@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { useProductionSession } from '../hooks/useProductionSession'
 import { useGoldenPasteBox } from '../hooks/useGoldenPasteBox'
+import { productionPromptKey } from '../hooks/useProductionJump'
 import GoldenFeedback from './golden/GoldenFeedback'
 import GoldenPasteBox from './golden/GoldenPasteBox'
 import ProductionHint from './ProductionHint'
@@ -35,6 +36,9 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
   const showPaste = !!model.pasteKind && !(isYogurt && model.pasteKind === 'pack')
   const activeRef = useRef<HTMLLIElement | null>(null)
   const pasteOpen = paste.setOpen
+  /** 两个提交按钮共用同一个「能不能交」判断：题面没挖空、有内容、不在批改 / 出题中。 */
+  const canSubmit =
+    !!model.answer.trim() && !model.answer.includes('_____') && !model.grading && !model.generating
 
   // 没配 AI 时「批改」会退化成复制提示词：这里自动展开粘回框，和本句仿写一致。
   useEffect(() => {
@@ -154,17 +158,13 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
                 model.setAnswer(`${model.answer}${model.answer.trim() ? ' ' : ''}${text}`)
               }
             />
-            <button
-              className="primary"
-              onClick={() => void model.grade()}
-              disabled={!model.answer.trim() || model.answer.includes('_____') || model.grading || model.generating}
-            >
+            <button className="primary" onClick={() => void model.grade()} disabled={!canSubmit}>
               {model.grading ? '批改中…' : model.round === 1 ? '批改这一稿' : '提交重写并批改'}
             </button>
             {model.grading && <button onClick={model.cancelRun}>取消</button>}
             <button
               onClick={() => void model.manualGrade()}
-              disabled={!model.answer.trim() || model.answer.includes('_____') || model.grading || model.generating}
+              disabled={!canSubmit}
               title="不叫 AI：直接复制批改提示词，拿去任何 AI 里跑完，把 JSON 粘回下面"
             >
               复制批改提示词
@@ -240,7 +240,7 @@ export default function ProductionRunView({ model, current }: ProductionRunViewP
         <ol className="production-sentences">
           {rows.map((row) => {
             const on = row.index === model.index
-            const done = model.doneIds.has(model.prompts[row.index]?.zh ?? '')
+            const done = model.doneIds.has(productionPromptKey(model.prompts, row.index))
             return (
               <li key={`${row.index}-${row.label.slice(0, 8)}`} ref={on ? activeRef : null}>
                 <button
