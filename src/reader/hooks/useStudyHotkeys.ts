@@ -156,7 +156,12 @@ export function useStudyHotkeys(ctx: StudyKeyContext, actions: StudyKeyActions):
         }
         actions.grade('good')
       } else if (gradeKeys[e.key]) {
-        if (canGrade) actions.grade(gradeKeys[e.key])
+        if (canGrade) {
+          // 必须吃掉默认动作：评分后可能立刻弹出锤炼 / 组末拼写的 autoFocus 输入框，
+          // 同一个 keypress 会被刚获得焦点的输入框接住（用户报「按 1 认识，输入框里多了个 1」）。
+          e.preventDefault()
+          actions.grade(gradeKeys[e.key])
+        }
       } else if (key === 'u' && ctx.mode !== 'review') {
         // 「不认识」只在卡片摊开时才有（复习模式用「记错了」，见 M）
         if (!ctx.revealed || (ctx.mode === 'learn' && ctx.learnGraded)) return

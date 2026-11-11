@@ -831,3 +831,8 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     `index` 停在最后一张，用户每点一次「认识」就对同一个词再写一次 `reviewState`，
     间隔按 ease 连乘（指数级）。现在空数组直接跳到组末；`retryForgot` 另起队列时把组游标归零。
     `useStudySequence.test` 与 `useStudySession.review.test` 分别钉住回看 / 重练两条路。
+
+71. **评分快捷键必须 `preventDefault`**（2026-11-11）。复习时按 1「认识」会立刻弹出
+    重学补考 / 组末拼写的 `autoFocus` 输入框；旧实现只调 `actions.grade()` 不拦默认动作，
+    浏览器随后的 keypress 会落在新输入框里，用户看到「按 1 认识了，输入框里多出个 1」。
+    全局快捷键里凡是**会切换屏幕**的评分键都要先 `e.preventDefault()`；输入框内明确允许输入的键例外。

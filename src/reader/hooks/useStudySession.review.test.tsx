@@ -289,6 +289,16 @@ describe('useStudySession：快捷键覆盖面板上的每个按钮', () => {
     unmount()
   })
 
+  it('按 1 = 认识时吃掉默认动作：刚弹出的输入框不会同时收到这个 1', () => {
+    const { unmount } = render(<Harness library={lib([reviewed('w1', 'run')])} />)
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+
+    // 最后一张按 1 会进组末拼写，输入框 autoFocus；preventDefault 后浏览器不会再插入 "1"。
+    expect(fireEvent.keyDown(window, { key: '1' })).toBe(false)
+    expect(api!.roundTest).toEqual({ index: 0, total: 1 })
+    unmount()
+  })
+
   it('复习模式：空格 = 看一眼释义（可收起），不会误判成「认识」', () => {
     const { unmount } = render(<Harness library={lib([reviewed('w1', 'run'), reviewed('w2', 'walk')])} />)
     act(() => api!.start({ mode: 'review', scope: 'all' }))
