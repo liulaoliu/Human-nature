@@ -194,6 +194,53 @@ describe('useStudySession：复习模式三键', () => {
     expect(api!.index).toBe(2)
     unmount()
   })
+
+  it('完成页回看最后一词再点「认识」：能推出复习，不原地反复写库', () => {
+    const seen: VocabLibrary[] = []
+    const { unmount } = render(<Harness library={dueLib()} onPersist={(l) => seen.push(l)} />)
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    act(() => api!.answerReview('good'))
+    act(() => api!.answerReview('good'))
+    act(() => api!.onRoundInputChange('run'))
+    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundInputChange('walk'))
+    act(() => api!.onRoundCheck())
+    expect(api!.index).toBe(2)
+
+    // 用户按 Q 回看最后一张；旧实现会 begin([]) 后原地返回，index 一直停在 1。
+    act(() => api!.back())
+    expect(api!.index).toBe(1)
+    act(() => api!.answerReview('good'))
+    expect(api!.index).toBe(2)
+    expect(api!.roundTest).toBeNull()
+    // 只多写了一次（这次回看的重评），不是每按一次都继续累乘。
+    expect(seen).toHaveLength(3)
+    unmount()
+  })
+
+  it('重练忘记的词只有一张：按「认识」能进组末拼写并推到完成页', () => {
+    const { unmount } = render(<Harness library={dueLib()} />)
+    act(() => api!.start({ mode: 'review', scope: 'all' }))
+    act(() => api!.answerReview('good'))
+    act(() => api!.answerReview('again'))
+    act(() => api!.forward()) // 进组末拼写
+    act(() => api!.onRoundInputChange('run'))
+    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundInputChange('walk'))
+    act(() => api!.onRoundCheck())
+    expect(api!.index).toBe(2)
+
+    act(() => api!.retryForgot())
+    expect(api!.index).toBe(0)
+    expect(api!.card?.id).toBe('r2')
+    act(() => api!.answerReview('good'))
+    // 旧游标是上一轮的 2，slice(2, 1) 为空 → 重练卡原地不动；现在从 0 开始拼。
+    expect(api!.roundTest).toEqual({ index: 0, total: 1 })
+    act(() => api!.onRoundInputChange('walk'))
+    act(() => api!.onRoundCheck())
+    expect(api!.index).toBe(1)
+    unmount()
+  })
 })
 
 describe('useStudySession：快捷键覆盖面板上的每个按钮', () => {

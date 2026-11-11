@@ -92,8 +92,19 @@ export function useStudySequence({
       if (from < roundTotal) {
         const end = groupEndOf(from, roundTotal, effectiveGroupSize)
         if (from + 1 >= end) {
+          const words = queue.slice(groupCursorRef.current, end)
+          if (!words.length) {
+            // 组末没有可拼的词（回看已拼过的上一组 / 重练队列的指针还没归零）：
+            // 不能 start 一个空测试后原地返回——index 会停在最后一张，
+            // 用户再点「认识」就会对同一个词反复评 good，复习间隔按 ease 连乘。
+            pendingGroupEndRef.current = null
+            groupCursorRef.current = end
+            resetCardUi()
+            setIndex(end)
+            return
+          }
           pendingGroupEndRef.current = end
-          spellingRound.begin(queue.slice(groupCursorRef.current, end))
+          spellingRound.begin(words)
           return
         }
       }
@@ -157,6 +168,11 @@ export function useStudySequence({
     const keep = new Set(plan.ids)
     const retryItems = items.filter((it) => keep.has(it.id))
     resetLedger()
+    // 重练是另一条队列：组游标必须归零，否则第一个组末会拿到 slice(旧队尾, 1) 空数组，
+    // 重练的词永远推不出去（复习间隔会越点越大）。
+    groupCursorRef.current = 0
+    pendingGroupEndRef.current = null
+    resetSpellingRound()
     setQueue(retryItems)
     setRoundTotal(retryItems.length)
     setRetrying(true)
@@ -168,6 +184,7 @@ export function useStudySequence({
     flash,
     resetCardUi,
     resetLedger,
+    resetSpellingRound,
     getForgotIds,
     setExtraRound,
     setQueue,

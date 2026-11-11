@@ -824,3 +824,10 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     手动重练会把 `queue / results` 换成小轮，所以结算页的造句改用 `sentenceResults` /
     `sentenceQuestions`（本轮第一次答完时的整轮快照），重练后仍是原来的 5 道。
     普通考试没有造句页，自动鞭打保持原样。
+
+70. **组末拼写不能 `begin([])` 后原地返回**（2026-11-11）。复习完成页按 Q 回看最后一词、或
+    「重练忘记的」换成新队列时，`groupCursorRef` 可能还停在上一队的末尾；此时
+    `queue.slice(cursor, end)` 是空数组。旧实现 `spellingRound.begin([])` 后直接 return，
+    `index` 停在最后一张，用户每点一次「认识」就对同一个词再写一次 `reviewState`，
+    间隔按 ease 连乘（指数级）。现在空数组直接跳到组末；`retryForgot` 另起队列时把组游标归零。
+    `useStudySequence.test` 与 `useStudySession.review.test` 分别钉住回看 / 重练两条路。

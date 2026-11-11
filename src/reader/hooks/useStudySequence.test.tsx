@@ -100,6 +100,24 @@ describe('useStudySequence：组末拼写与推进', () => {
     expect(current(hook).spellingRound.test).toBeNull()
   })
 
+  it('回看已拼过的组末再推进：不启动空拼写，直接翻到组末（不原地反复评分）', () => {
+    const hook = renderHook(() => useHarness({ items: words().slice(0, 2), initialIndex: 1, groupSize: 2 }))
+    act(() => current(hook).sequence.advanceFrom(1))
+    act(() => current(hook).spellingRound.setInput('one'))
+    act(() => current(hook).spellingRound.check())
+    act(() => current(hook).spellingRound.setInput('two'))
+    act(() => current(hook).spellingRound.check())
+    expect(current(hook).index).toBe(2)
+
+    // 完成页按 Q 回看最后一张，再评「认识」：旧实现会 begin([]) 后原地返回，
+    // index 停在 1，用户每点一次认识就再写一次 reviewState。
+    act(() => current(hook).sequence.back())
+    expect(current(hook).index).toBe(1)
+    act(() => current(hook).sequence.advanceFrom(1))
+    expect(current(hook).index).toBe(2)
+    expect(current(hook).spellingRound.test).toBeNull()
+  })
+
   it('load 重置账本与指针、清掉未完成的组末，并冻结新的分母', () => {
     const hook = renderHook(() => useHarness({ items: words() }))
     // 先进入组末拼写，再用新队列开一轮：旧组的组末下标不能留到下一轮
@@ -129,6 +147,24 @@ describe('useStudySequence：收尾重练', () => {
     expect(current(hook).roundTotalState).toBe(1)
     expect(current(hook).retrying).toBe(true)
     expect(current(hook).grading.resetLedger).toHaveBeenCalled()
+  })
+
+  it('重练队列从 0 开始拼写，不在旧组末空转', () => {
+    const hook = renderHook(() => useHarness({ items: words().slice(0, 2), initialIndex: 1, groupSize: 2, forgotIds: ['w1'] }))
+    // 先走完第一组的组末，把内部游标推到 2
+    act(() => current(hook).sequence.advanceFrom(1))
+    act(() => current(hook).spellingRound.setInput('one'))
+    act(() => current(hook).spellingRound.check())
+    act(() => current(hook).spellingRound.setInput('two'))
+    act(() => current(hook).spellingRound.check())
+    expect(current(hook).index).toBe(2)
+
+    act(() => current(hook).sequence.retryForgot())
+    expect(current(hook).index).toBe(0)
+    act(() => current(hook).sequence.advanceFrom(0))
+    // 旧游标 2 会让 slice(2, 1) 变成空数组，重练卡永远推不出去；新实现从 0 开始拼。
+    expect(current(hook).spellingRound.test).toEqual({ index: 0, total: 1 })
+    expect(current(hook).spellingRound.card?.id).toBe('w1')
   })
 
   it('每轮只发起一次；第二次给出提示且不再换队列', () => {
