@@ -16,6 +16,7 @@
 |---|---|
 | [`DATA-MODEL.md`](DATA-MODEL.md) | 数据结构与字段口径 |
 | [`STORAGE.md`](STORAGE.md) | SQLite 主存 / IndexedDB 兜底、schema、迁移、备份 |
+| [`IDB-INSPECT.md`](IDB-INSPECT.md) | 浏览器 IndexedDB 词库 / SRS 排查（`tools/inspect-idb.mjs`） |
 | [`PERF-NOTES.md`](PERF-NOTES.md) | 性能踩坑与约束 |
 | [`PIPELINE-PDF.md`](PIPELINE-PDF.md) | PDF 抽取管线 |
 | [`PIPELINE-AUDIO.md`](PIPELINE-AUDIO.md) | 音频/跟读管线 |

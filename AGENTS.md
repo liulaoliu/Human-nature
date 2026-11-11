@@ -27,6 +27,10 @@
     查进程 / 内存用 PowerShell 的 `Get-CimInstance Win32_Process`；
   - 删文件走 node-safe-delete 垫片：**单次批量删超过 50 个会被拒**（`Permission denied`），
     别 `rm -rf` 整棵树，按 ≤40 个一批、每批新起进程。
+  - **查浏览器里的 IndexedDB 不要临时写 CDP 脚本**：先跑 `node tools/inspect-idb.mjs`
+    （默认读 `shadowing-vocab` 的 `library`，支持 `--article` / `--word` / `--snapshots` / `--list`）。
+    它会把 `*.indexeddb.leveldb` **和同名 `.indexeddb.blob`** 一起复制到临时 profile；
+    只拷前者会报 `NotReadableError: Data lost due to missing file`。细节见 `docs/IDB-INSPECT.md`。
 - **dev server 会偶发「模块 0 字节」，页面直接白屏**（2026-10-23 踩过）：
   浏览器报 `does not provide an export named 'xxx'`，但那个文件本身完好（tsc 过、esbuild 能转）。
   真实原因是 **vite 模块图缓存了一份空的 transform 结果**——文件被写到一半（截断态）时

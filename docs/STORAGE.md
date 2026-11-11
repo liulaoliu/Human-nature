@@ -316,6 +316,16 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
   sqlite3 data/xueba.db "SELECT l.sentence_id, t.kind, t.text FROM lang_points l JOIN lang_point_terms t ON t.lang_point_id = l.id;"
   ```
 
+- 浏览器里的真实 IndexedDB（服务没起时的兜底库）不能直接当 SQL 查：
+  ```bash
+  node tools/inspect-idb.mjs --limit 20
+  node tools/inspect-idb.mjs --word commodity
+  node tools/inspect-idb.mjs --article saved:1794319050768
+  ```
+  原理、参数和坑见 [`IDB-INSPECT.md`](IDB-INSPECT.md)。Chrome 的 IndexedDB 由
+  `*.indexeddb.leveldb` + 同名 `*.indexeddb.blob` 两部分组成，**只拷前者**会报
+  `NotReadableError: Data lost due to missing file`。
+
 - 写放大：每次保存会写 JSON + 快照 + 派生表（整库 payload 16MB，压缩后快照约 2MB）。
   快照只留 5 版 + 最大一版；每次保存后 `wal_checkpoint(PASSIVE)`、启动与 `close()` 时 `TRUNCATE`、
   空闲页占比 ≥ 15% 才 `VACUUM`。实测：库 226MB → 51MB，`-wal` 55MB → 0，`data/` 1.4G → 1.2G。
