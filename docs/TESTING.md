@@ -836,3 +836,9 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     重学补考 / 组末拼写的 `autoFocus` 输入框；旧实现只调 `actions.grade()` 不拦默认动作，
     浏览器随后的 keypress 会落在新输入框里，用户看到「按 1 认识了，输入框里多出个 1」。
     全局快捷键里凡是**会切换屏幕**的评分键都要先 `e.preventDefault()`；输入框内明确允许输入的键例外。
+
+72. **文章目录不要按更新时间倒序**（2026-11-19）。已保存列表原来按 `updatedAt` 排，
+    读一篇 / 改一个词就把它顶到最前：目录位置漂移，上一篇 / 下一篇也会跟着换对象。
+    现在目录用 `core/articleOrder`（组名字母序、单篇最后、组内 createdAt 旧→新）；
+    「最近打开」是选择器顶部的独立分组（`core/recentArticles` + `state/recentArticles`），
+    **排序规则只能有一份**，下拉与翻页共用 `core/articleSequence`。

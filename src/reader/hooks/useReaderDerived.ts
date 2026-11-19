@@ -11,6 +11,7 @@ import {
   type StudyDay,
 } from '../../core/vocabStats'
 import { countWritesOnDay, type WritingRecord } from '../../core/writing'
+import { groupSavedArticles } from '../../core/articleOrder'
 import { isWordEntry } from '../../core/entryKind'
 import { lemmaOf, normalizeWord } from '../../core/vocab'
 import type { BatchItem } from '../panels/SidePick'
@@ -97,17 +98,8 @@ export function useReaderDerived(input: ReaderDerivedInput) {
     [items, at],
   )
 
-  /** 已保存文章按「书」分组（EPUB 导入的用书名）。 */
-  const savedGroups = useMemo(() => {
-    const map = new Map<string, SavedArticle[]>()
-    for (const a of saved) {
-      const b = a.book || '单篇'
-      const arr = map.get(b)
-      if (arr) arr.push(a)
-      else map.set(b, [a])
-    }
-    return [...map.entries()]
-  }, [saved])
+  /** 已保存文章按「书」分组（EPUB 导入的用书名）：稳定目录顺序，读/改不会换位置。 */
+  const savedGroups = useMemo(() => groupSavedArticles(saved), [saved])
 
   /** 按文章统计生词产出（Top 10）。 */
   const byArticle = useMemo(() => wordsByArticle(items), [items])

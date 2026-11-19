@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import { fireEvent, render, screen } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import ArticlePicker from './ArticlePicker'
 import type { SavedArticle } from '../core/ports'
+import { clearRecentArticlesMemory } from '../state/recentArticles'
+import { installFakeStorage } from './testStorage'
+
+let restoreStorage: () => void = () => {}
+beforeEach(() => {
+  restoreStorage = installFakeStorage()
+  clearRecentArticlesMemory()
+})
+afterEach(() => restoreStorage())
 
 function saved(id: string, title: string): SavedArticle {
   return {
@@ -31,6 +40,46 @@ function setup(savedList: SavedArticle[] = [saved('s1', 'Alpha saved'), saved('s
   fireEvent.click(screen.getByTitle('选择文章'))
   return { onPick }
 }
+
+describe('ArticlePicker：最近打开', () => {
+  it('置顶单独分组；点它就打开，同一条不会重复', () => {
+    localStorage.setItem('reader:recentArticles', JSON.stringify(['s:s2', 's:s1']))
+    const { onPick } = setup()
+
+    expect(screen.getByText('最近打开（2）')).toBeTruthy()
+    // 最近分组在最上面，目录里仍各有一份（Beta saved 出现两次）
+    expect(screen.getAllByText('Beta saved')).toHaveLength(2)
+    fireEvent.click(screen.getAllByText('Beta saved')[0]!)
+    expect(onPick).toHaveBeenCalledWith('s:s2')
+  })
+
+  it('搜索 / 只看未读同样过滤最近分组；一篇都不匹配就不显示分组', () => {
+    localStorage.setItem('reader:recentArticles', JSON.stringify(['s:s2']))
+    setup()
+    fireEvent.change(screen.getByPlaceholderText('搜索文章标题…'), { target: { value: 'alpha' } })
+    expect(screen.queryByText('最近打开（1）')).toBeNull()
+  })
+
+  it('没有最近记录时不渲染空分组', () => {
+    setup()
+    expect(screen.queryByText(/最近打开/)).toBeNull()
+  })
+
+  it('当前文章一变就记进最近打开', () => {
+    const list = [saved('s1', 'Alpha saved'), saved('s2', 'Beta saved')]
+    render(
+      <ArticlePicker
+        book={{}}
+        saved={list}
+        savedGroups={[['单篇', list]]}
+        builtinKeys={[]}
+        currentValue="s:s2"
+        onPick={vi.fn()}
+      />,
+    )
+    expect(JSON.parse(localStorage.getItem('reader:recentArticles') ?? 'null')).toEqual(['s:s2'])
+  })
+})
 
 describe('ArticlePicker：标题搜索', () => {
   it('按标题过滤内置与已保存列表（不区分大小写）', () => {

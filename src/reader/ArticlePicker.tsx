@@ -4,6 +4,7 @@ import type { SavedArticle } from '../core/ports'
 import { articleOriginLabel } from '../core/articleOrigin'
 import { articleDateKeys } from '../core/articleMeta'
 import { useHotkeys } from './useHotkeys'
+import { useRecentArticles } from './hooks/useRecentArticles'
 
 interface Props {
   book: ArticleBook | null
@@ -34,6 +35,8 @@ export default function ArticlePicker({
   const [hideRead, setHideRead] = useState(false)
   /** 标题搜索：只在本组件内存里，不落 localStorage（关掉下拉即清空）。 */
   const [query, setQuery] = useState('')
+  /** 最近打开：独立分组，不改下面的目录顺序。 */
+  const recentRefs = useRecentArticles(currentValue)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
   const close = () => {
@@ -94,6 +97,16 @@ export default function ArticlePicker({
     ])
     .filter(([, list]) => list.length > 0)
 
+  /** 最近打开（最近的在前）：只留目录里还在的文章，并跟随搜索 / 只看未读过滤。 */
+  const recentItems = recentRefs.flatMap((ref) => {
+    const id = ref.slice(2)
+    if (ref.startsWith('b:')) {
+      return book?.[id] ? [{ ref, id, title: id }] : []
+    }
+    const a = saved.find((x) => x.id === id)
+    return a ? [{ ref, id: a.id, title: a.title }] : []
+  }).filter((x) => matchTitle(x.title) && (!hideRead || !readOf(x.id)))
+
   const readBadge = (id: string) =>
     readOf(id) ? (
       <span className="picker-read" title={`已于 ${readOf(id)} 读完（同一篇不再重复计入）`}>
@@ -136,6 +149,25 @@ export default function ArticlePicker({
               {hideRead ? ` · 未读 ${shownBuiltin.length + shownGroups.reduce((n, [, l]) => n + l.length, 0)} 篇` : ''}
             </span>
           </div>
+
+          {recentItems.length > 0 && (
+            <div className="picker-section">
+              <div className="picker-head as-label">最近打开（{recentItems.length}）</div>
+              {recentItems.map((item) => (
+                <button
+                  key={item.ref}
+                  className={
+                    'picker-item' + (currentValue === item.ref ? ' on' : '') + (readOf(item.id) ? ' read' : '')
+                  }
+                  onClick={() => choose(item.ref)}
+                  title={item.title}
+                >
+                  {item.title}
+                  {readBadge(item.id)}
+                </button>
+              ))}
+            </div>
+          )}
 
           {book && shownBuiltin.length > 0 && (
             <div className="picker-section">

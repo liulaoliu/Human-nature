@@ -80,6 +80,9 @@
   z-index: 1;
 }
 .picker-head:hover { color: var(--fg); }
+/* 不折叠的分组标题（最近打开）：看起来一样，但没有可点的语义。 */
+.picker-head.as-label { cursor: default; }
+.picker-head.as-label:hover { color: var(--dim); }
 .picker-head .caret,
 .picker-sub .caret { transition: transform 0.15s ease; }
 .picker-head .caret.closed,
