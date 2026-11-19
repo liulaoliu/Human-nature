@@ -374,18 +374,6 @@ export default function ReaderApp() {
     setPendingSave,
   } = workspace
 
-  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳（在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）
-  useReaderHotkeys({
-    services,
-    panels,
-    dictQueue,
-    langOpen,
-    listenOpen: services.listenOpen,
-    backOpen: services.backOpen,
-    toggleVocabRef,
-    navVocabRef,
-  })
-
   /** D老师小课堂：一篇文章的金句课（内容在 doc.golden，进度在学习记录） */
   const golden = useGoldenDrill({
     doc,
@@ -406,6 +394,21 @@ export default function ReaderApp() {
   /** 选区所在的句子（默认操作对象）与真正拿去用的文本：规则在 core/pickTarget */
   const sentence = useMemo(() => pickSentence(doc?.sentences, selectedId, exact), [doc, selectedId, exact])
   const target = useMemo(() => pickTarget(exact, useExact, sentence), [exact, useExact, sentence])
+
+  // 键盘 W / 数字 1 切换「选词模式」、A/D 在有生词的句子间跳、R 读选中句（再按停止）
+  // （在输入框里打字时不触发；背单词/听写/考试/快刷时不触发）。朗读与工具栏「读本句」同一套 speak。
+  useReaderHotkeys({
+    services,
+    panels,
+    dictQueue,
+    langOpen,
+    listenOpen: services.listenOpen,
+    backOpen: services.backOpen,
+    toggleVocabRef,
+    navVocabRef,
+    speech: speaking,
+    sentenceText: sentence?.text ?? null,
+  })
 
   /** 选区/划词（逻辑在 hooks/useSelection）。 */
   const selection = useSelection({

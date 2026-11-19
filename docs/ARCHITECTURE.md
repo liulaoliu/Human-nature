@@ -134,7 +134,7 @@ types ← core ← adapters ← reader
 | 有状态的交互流程 | `src/reader/hooks/use*.ts` | 一个 hook 一件事；**同一份状态只允许一个写入方**；新 hook 目标 ≤ 200 行、300 行提醒、硬线 500 行（`check_hook_size`） |
 | URL ↔ 文章导航 | `src/reader/hooks/useReaderRouting.ts`（`useReaderArticleIdentity` / `useReaderPanelRouting`）+ `useReaderArticleNavigation.ts`（路由 / workspace） | ReaderApp 不自己拼 `b:` / `s:` 前缀，也不自己实现「返回就关文章」 |
 | 阅读页语音栈 | `src/reader/hooks/useReaderSpeech.ts` | 引擎探测 / 音色 / 朗读 / 整篇预生成一起收口，组合根只拿结果 |
-| 阅读页全局键盘 | `src/reader/hooks/useReaderHotkeys.ts` + `useHotkeys.ts` | W / 1 / A / D 的启用条件只在这里；禁止再直接 `window.addEventListener('keydown')` |
+| 阅读页全局键盘 | `src/reader/hooks/useReaderHotkeys.ts` + `useHotkeys.ts` | W / 1 / A / D / R 的启用条件只在这里；R 读选中句（再按停止、再按从头读，复用工具栏「读本句」的 speak）；禁止再直接 `window.addEventListener('keydown')` |
 | 正文 / 工具栏可见性 | `src/core/readerView.ts` 的 `readerViewFlags()` | 考试、金句、速读、背词、浏览……统一算 `examActive / readingView`，视图不自己拼布尔 |
 | 面板 / 列表 / 对话框 | `src/reader/panels/*.tsx` | 不准塞领域判断；判断回 core |
 | 词库自动补全（例句/收藏…） | 加进 `src/core/libraryAutoFill.ts` | **不许再写第二个 effect 去读写词库**（见下） |

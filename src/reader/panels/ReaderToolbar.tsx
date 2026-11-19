@@ -339,7 +339,7 @@ export default function ReaderToolbar({
             className="tb-speak"
             onClick={onSpeakSelected}
             disabled={!selectedId}
-            title={selectedId ? '朗读当前选中句（已缓存则秒播）' : '先点一句，再朗读那句'}
+            title={selectedId ? '朗读当前选中句（R；再按停止）' : '先点一句，再朗读那句（R）'}
           >
             {ttsState === 'loading' ? '🔊 合成中…' : ttsState === 'playing' ? '🔊 朗读中' : '🔊 读本句'}
           </button>
