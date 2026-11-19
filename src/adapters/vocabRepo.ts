@@ -448,8 +448,20 @@ export class HybridVocabRepo implements VocabRepoPort {
     // 落盘前把重复的句子原文收进共享表（UI/业务仍然拿 hydrated 的 library）。
     const next = compactSentenceTexts(library)
     if (await this.useSqlite()) {
+      // 读失败后版本号不可信：先补 GET。这里服务端已有数据就直接拒绝，
+      // **不做自动合并**——本地可能只是过期镜像，不能拿来复活旧数据。
+      if (!this.revisionKnown) {
+        try {
+          await this.ensureRevisionKnown()
+        } catch (e) {
+          if (e instanceof StoreConflictError) throw e
+          // 服务端版本都读不到（断网/服务挂了）：按离线处理，本地存一份并置脏。
+          this.hybrid.fail()
+          await this.preserveLocal(next)
+          return
+        }
+      }
       try {
-        if (!this.revisionKnown) await this.ensureRevisionKnown()
         const r = await storeRequest<{ updatedAt?: string }>(
           '/vocab',
           {
@@ -477,12 +489,17 @@ export class HybridVocabRepo implements VocabRepoPort {
         return
       } catch (e) {
         if (e instanceof StoreConflictError) {
-          // 别的地方先写了一版。**不能**当成"服务挂了"降级到 IndexedDB（那才是真丢数据），
-          // 也不能悄悄重试、更不能下次自动保存硬写——先把服务器版本记下来，
-          // 然后本页进入只读（conflict），让界面明确告诉用户刷新。
+          // 别的地方先写了一版。先尝试**合并后重试一次**：
+          // 本页这次的改动不能只留在内存里（2026-11-17 丢过一次生词）。
+          // 合并不等于覆盖：按 lemma/按篇取并集 + 墓碑，再拿新版本号写。
+          if (await this.mergeAfterConflict(next)) return
+
+          // 合并后仍冲突 / 合并失败：本页进入只读（conflict），
+          // 但必须把这份改动落到本地并标脏，刷新后 load 还能合并回来。
           this.revision = e.updatedAt
           this.revisionKnown = true
           this.conflict = e
+          await this.preserveLocal(next)
           throw e
         }
         this.revisionKnown = false
@@ -491,6 +508,51 @@ export class HybridVocabRepo implements VocabRepoPort {
     }
     // 服务端没写成（或服务没起）：本地这份是**未同步**的，必须置脏；
     // 下次启动只有这种标记才允许本机优先。
+    await this.preserveLocal(next)
+  }
+
+  /**
+   * 撞 409 后自动合并一次：GET 服务端最新版 → 与本页改动按 lemma/按篇取并集
+   * → 用新版本号重写。成功返回 true；失败返回 false（调用方进入只读）。
+   *
+   * 不递归调用 `save`，避免 409 循环；这里只重试一次。
+   */
+  private async mergeAfterConflict(next: VocabLibrary): Promise<boolean> {
+    try {
+      const server = await this.loadServerRevision()
+      if (!server.value) return false
+      const serverLib = hydrateSentenceTexts(server.value)
+      const merged = mergeLibrariesForSync(next, serverLib)
+      if (sameLibrary(merged, serverLib)) {
+        // 本页没有服务端缺少的内容（或都已被墓碑删掉）：直接用服务端版本。
+        await this.local.save(serverLib)
+        await this.local.clearDirty?.()
+        return true
+      }
+      const r = await storeRequest<{ updatedAt?: string }>(
+        '/vocab',
+        {
+          method: 'PUT',
+          body: JSON.stringify(compactSentenceTexts(merged)),
+          ...(this.revision ? { headers: { 'X-Vocab-Base': this.revision } } : {}),
+        },
+        undefined,
+        SAVE_TIMEOUT_MS,
+      )
+      if (r?.updatedAt) this.revision = r.updatedAt
+      this.revisionKnown = true
+      await this.local.save(compactSentenceTexts(merged))
+      await this.local.clearDirty?.()
+      console.warn('[词库] 与服务器版本冲突，已自动合并并保存')
+      return true
+    } catch (e) {
+      console.warn('[词库] 冲突自动合并失败，本页转为只读', e)
+      return false
+    }
+  }
+
+  /** 服务端写不成时把这一版留在本地并置脏：刷新后还能合并回来。 */
+  private async preserveLocal(next: VocabLibrary): Promise<void> {
     await this.local.save(next)
     try {
       await this.local.markDirty?.()

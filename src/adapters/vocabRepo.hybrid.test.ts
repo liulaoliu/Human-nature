@@ -81,6 +81,75 @@ describe('HybridVocabRepo：读失败后不许强制覆盖', () => {
   })
 })
 
+describe('HybridVocabRepo：409 后自动合并并重试', () => {
+  const one = (id: string) => ({
+    ...createLibrary(),
+    items: [vocabItem({ id, word: id, lemma: id })],
+  })
+
+  it('把本页的新增与服务端版本合并，带新 base 重写，本地镜像也更新', async () => {
+    const server = one('server')
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-1' })
+    const local = new MemoryVocabRepo()
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+
+    // 本页这次新增 local，但别处已经先写了 server → 409
+    storeRequest.mockRejectedValueOnce(
+      new StoreConflictError('词库已被其它页面改过', { updatedAt: 'srv-2', count: 1 }),
+    )
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-2' })
+    storeRequest.mockResolvedValueOnce({ updatedAt: 'srv-3' })
+
+    await repo.save(one('local'))
+
+    const puts = storeRequest.mock.calls.filter((c) => c[1]?.method === 'PUT')
+    expect(puts).toHaveLength(2)
+    expect((puts[1][1]?.headers as Record<string, string>)?.['X-Vocab-Base']).toBe('srv-2')
+    const body = JSON.parse(String(puts[1][1]?.body)) as { items: { lemma: string }[] }
+    expect(body.items.map((it) => it.lemma).sort()).toEqual(['local', 'server'])
+    expect((await local.load()).items.map((it) => it.lemma).sort()).toEqual(['local', 'server'])
+    expect(await local.isDirty()).toBe(false)
+  })
+
+  it('服务端已经包含本页内容 → 不重复 PUT，直接用服务端版本', async () => {
+    const server = { ...createLibrary(), items: [vocabItem({ id: 'local', word: 'local', lemma: 'local' }), vocabItem({ id: 'server', word: 'server', lemma: 'server' })] }
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-1' })
+    const local = new MemoryVocabRepo()
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+
+    storeRequest.mockRejectedValueOnce(new StoreConflictError('conflict', { updatedAt: 'srv-2', count: 2 }))
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-2' })
+
+    await repo.save(one('local'))
+    const puts = storeRequest.mock.calls.filter((c) => c[1]?.method === 'PUT')
+    expect(puts).toHaveLength(1)
+    expect((await local.load()).items.map((it) => it.lemma).sort()).toEqual(['local', 'server'])
+  })
+
+  it('合并后再次冲突 → 本页只读，但这次改动已落到本地并标脏', async () => {
+    const server = one('server')
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-1' })
+    const local = new MemoryVocabRepo()
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+
+    storeRequest.mockRejectedValueOnce(new StoreConflictError('conflict', { updatedAt: 'srv-2', count: 1 }))
+    storeRequest.mockResolvedValueOnce({ value: server, updatedAt: 'srv-2' })
+    storeRequest.mockRejectedValueOnce(new StoreConflictError('still conflict', { updatedAt: 'srv-3', count: 1 }))
+
+    await expect(repo.save(one('local'))).rejects.toBeInstanceOf(StoreConflictError)
+    expect(await local.isDirty()).toBe(true)
+    expect((await local.load()).items.map((it) => it.lemma)).toContain('local')
+
+    // 冲突后本页停写：下一次自动保存不再发请求
+    storeRequest.mockClear()
+    await expect(repo.save(one('local'))).rejects.toBeInstanceOf(StoreConflictError)
+    expect(storeRequest).not.toHaveBeenCalled()
+  })
+})
+
 describe('HybridVocabRepo：冲突后本页只读', () => {
   it('撞过 409 后，下一次自动保存不许拿新版本号把旧词库写上去', async () => {
     storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-1' })
@@ -91,6 +160,8 @@ describe('HybridVocabRepo：冲突后本页只读', () => {
     storeRequest.mockRejectedValueOnce(
       new StoreConflictError('词库已被其它页面改过', { updatedAt: 'srv-2', count: 5 }),
     )
+    // 自动合并拿不到服务端版本 → 直接进入只读
+    storeRequest.mockResolvedValueOnce({ value: null, updatedAt: null })
     await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
 
     // 第二次（自动补全触发的保存）：绝不能带着 srv-2 去 PUT
@@ -104,6 +175,7 @@ describe('HybridVocabRepo：冲突后本页只读', () => {
     const repo = new HybridVocabRepo(new MemoryVocabRepo())
     await repo.load()
     storeRequest.mockRejectedValueOnce(new StoreConflictError('conflict', { updatedAt: 'srv-2', count: 5 }))
+    storeRequest.mockResolvedValueOnce({ value: null, updatedAt: null })
     await expect(repo.save(lib(3))).rejects.toBeInstanceOf(StoreConflictError)
 
     storeRequest.mockResolvedValueOnce({ value: lib(4), updatedAt: 'srv-2' })

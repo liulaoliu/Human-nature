@@ -65,7 +65,7 @@
    第四条（2026-10-23 补）：**整份覆盖要带版本号**。前端持有整份词库，保存就是全量 PUT；
    写回必须带 `X-Vocab-Base`（读到的那一版 `updatedAt`），服务端对不上回 409。
    测这件事要两头都测：`sqliteStore.saveVocab` 的版本校验（客户端 A/B 交叉写），
-   以及 `HybridVocabRepo` 的接线（带对 header、409 时不降级到 IndexedDB、不镜像本地）。
+   以及 `HybridVocabRepo` 的接线（带对 header；409 先合并重试一次，仍失败才停写并落本地置脏）。
 8. **「只存在于一处」的东西，出事就真没了**。能从别处救回的只有「别处还留着痕迹」的词
    （文章里的 `Sentence.vocab` / 待选清单 `reader:batch` / 错题本 / 以前导出的 JSON）；
    直接从正文点选、只写进词库的那部分救不回。
@@ -754,12 +754,14 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     现在收口在 `hooks/useArticleIdentity`：按「正文签名 → 上次身份」记住，签名没变就沿用原 id
     （`reuseId` 让 `useArticleSave` 用同一个 id 存回），正文换了才允许回退标题；
     `useArticleIdentity.test` 钉住「删保存后同一篇不变身份 / 换正文才回退」。
-57. **版本冲突后必须整页停写，不能“再存一次就覆盖”**（2026-10-29）。`HybridVocabRepo.save` 撞 409 时
-    原来只把 `revision` 换成服务端的新版本号再抛错；可自动补全每改一次都会保存，**下一次**就带着新版本号
-    把本页那份旧词库整库写上去（实测 13:22:18 撞冲突、13:22:21 覆盖成功，合并好的词库被退回导入前状态）。
-    现在冲突后仓储置 `conflict`、宿主置 `conflictBlockRef`：本页只更新界面、不再落盘，提示用户刷新；
-    只有重新 `load()` 才解除。`vocabRepo.hybrid.test`（冲突后第二次 save 不许发 PUT）与
-    `useVocabLibrary.test`（整页停写、`persistNow` 也拒绝）已钉住。
+57. **版本冲突不能“直接覆盖”，也不能“只停写”**（2026-10-29 / 2026-11-19 两次事故）。
+    2026-10-29：`HybridVocabRepo.save` 撞 409 时只把 `revision` 换成服务端新版本号再抛错；
+    自动补全下一次保存就带着新版本号把本页旧词库整库写上去（13:22:18 撞冲突、13:22:21 覆盖成功）。
+    2026-11-19：改成“撞了只停写”后，本页改动只留在内存——页面继续显示、导出 JSON 也有，
+    但刷新就回到服务端旧版（见 #73）。现在两头都堵：
+    **第一次 409 → GET 服务端最新版并 `mergeLibrariesForSync` 合并，带新 base 重试一次**；
+    仍冲突才进入只读，同时把本页这一版写本地并 `markDirty`，刷新后 `load` 还能合并回来。
+    `vocabRepo.hybrid.test` 钉住「自动合并重写」「合并再次冲突 → 本地置脏 + 整页停写」两条。
 58. **源码里别写字面量 NUL 字节，否则 git 把整个文件当二进制**（2026-10-30）。
     `useGoldenImitation.ts` 里拼去重键写成 `[a, b, c].join('^@')`（`^@` = 真的 NUL），
     运行时没问题，但 git 从此只显示 `Bin 5275 -> 8478 bytes`：**这个文件的 diff / blame 全部失效**，
@@ -842,3 +844,11 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     现在目录用 `core/articleOrder`（组名字母序、单篇最后、组内 createdAt 旧→新）；
     「最近打开」是选择器顶部的独立分组（`core/recentArticles` + `state/recentArticles`），
     **排序规则只能有一份**，下拉与翻页共用 `core/articleSequence`。
+
+73. **「导出全部」是前端内存快照，不是 SQLite 落盘证明**（2026-11-19）。用户 11.17 先加生词、
+    再跑 AI；11.19 备份里 `vocab.updated_at` 还停在 11-16 11:30，而那 14 篇的 `updated_at`
+    是 11-17 13:22–14:24。说明**文章写成功了、词库没写成功**；22:27 导出的 JSON 里有生词，
+    只是因为它序列化的是页面内存 / IndexedDB 当前值（这就是当时能救回来的原因）。
+    当时 409 后只停写、不落本地，刷新后旧词库顶上来，再加上 `reader:langCollected`
+    认为“已收过”，生词层看起来就没了。排查时别拿导出 JSON 反推 SQLite 状态，
+    要看 `vocab.updated_at` 与文章 `updated_at` 是否同步。
