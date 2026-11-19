@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import ArticlePicker from '../ArticlePicker'
 import type { ArticleBook } from '../../core/matchArticle'
 import type { SavedArticle } from '../../core/ports'
+import type { ArticleStep } from '../../core/articleSequence'
 import type { VocabLevel } from '../../core/analyzer'
 import { isOfflineTtsVoice, type TtsAccent } from '../../core/ttsVoices'
 import { fmtDur } from '../format'
@@ -30,6 +31,9 @@ export interface ReaderToolbarProps {
   readDays?: Record<string, string>
   currentValue: string
   onPickArticle: (value: string) => void
+  /** 选择器同一序列里的前后一篇；没有就是 null（按钮禁用）。 */
+  prevArticle: ArticleStep | null
+  nextArticle: ArticleStep | null
 
   // 文档 / 操作
   hasDoc: boolean
@@ -125,6 +129,8 @@ export default function ReaderToolbar({
   readDays,
   currentValue,
   onPickArticle,
+  prevArticle,
+  nextArticle,
   hasDoc,
   editing,
   savedId,
@@ -217,6 +223,16 @@ export default function ReaderToolbar({
             ))}
           </select>
         )}
+        {hasDoc && !editing && (
+          <button
+            className="tb-prev"
+            disabled={!prevArticle}
+            onClick={() => prevArticle && onPickArticle(prevArticle.ref)}
+            title={prevArticle ? `上一篇：${prevArticle.title}` : '已经是第一篇'}
+          >
+            ◀ 上一篇
+          </button>
+        )}
         {(book || saved.length > 0) && (
           <ArticlePicker
             book={book}
@@ -227,6 +243,16 @@ export default function ReaderToolbar({
             currentValue={currentValue}
             onPick={onPickArticle}
           />
+        )}
+        {hasDoc && !editing && (
+          <button
+            className="tb-next"
+            disabled={!nextArticle}
+            onClick={() => nextArticle && onPickArticle(nextArticle.ref)}
+            title={nextArticle ? `下一篇：${nextArticle.title}` : '已经是最后一篇'}
+          >
+            下一篇 ▶
+          </button>
         )}
         <button className="tb-save" onClick={onSave} disabled={!hasDoc} title="把这篇（含粘回的翻译/语法）存到本机，刷新后还在">
           保存这篇

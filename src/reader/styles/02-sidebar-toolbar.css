@@ -296,6 +296,8 @@
    宽度不跟着变，才不会把同一行的按钮推来推去。 */
 /* 宽度取「最长文案」实测值 + 余量（14px 字：4 汉字 = 56 + 左右 padding 24） */
 .reader-toolbar .tb-save { width: 78px; }
+.reader-toolbar .tb-prev,
+.reader-toolbar .tb-next { width: 92px; }
 .reader-toolbar .tb-new { width: 96px; }
 .reader-toolbar .tb-del { width: 104px; }
 .reader-toolbar .tb-edit { width: 78px; }

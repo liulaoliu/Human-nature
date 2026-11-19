@@ -128,6 +128,12 @@ describe('ReaderToolbarHost：文章选择与文档动作', () => {
     expect(toolbar.currentValue).toBe('b:a')
   })
 
+  it('上一篇 / 下一篇与选择器同一序列（内置按 key，已保存接在后面）', () => {
+    const { toolbar } = renderHost({ currentValue: 'b:a' })
+    expect(toolbar.prevArticle).toBeNull()
+    expect(toolbar.nextArticle).toEqual({ ref: 'b:b', title: 'b' })
+  })
+
   it('可见性由调用方控制（readingView 为 false 时不渲染）', () => {
     captured = null
     const { container } = render(

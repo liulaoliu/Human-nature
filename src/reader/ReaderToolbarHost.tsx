@@ -1,5 +1,7 @@
+import { useMemo } from 'react'
 import type { ArticleBook } from '../core/matchArticle'
 import type { SavedArticle } from '../types/document'
+import { articleNeighbors, articleSequence } from '../core/articleSequence'
 import type { useReaderDoc } from './hooks/useReaderDoc'
 import ReaderToolbar, { type ReaderToolbarProps } from './panels/ReaderToolbar'
 
@@ -133,6 +135,11 @@ export default function ReaderToolbarHost({
   display,
   confirmDelSave,
 }: ReaderToolbarHostProps) {
+  // 已保存文章的顺序来自选择器（savedGroups），内置按 key——翻页与下拉共用同一条序列。
+  const neighbors = useMemo(
+    () => articleNeighbors(articleSequence(docApi.shownKeys, savedGroups), currentValue),
+    [docApi.shownKeys, savedGroups, currentValue],
+  )
   if (!visible) return null
 
   /** 读选中句：正文里按 id 找原句，避免用可能被截断的选区。 */
@@ -154,6 +161,8 @@ export default function ReaderToolbarHost({
       readDays={readDays}
       currentValue={currentValue}
       onPickArticle={docApi.onPick}
+      prevArticle={neighbors.prev}
+      nextArticle={neighbors.next}
       hasDoc={!!doc}
       editing={editing}
       savedId={savedId}

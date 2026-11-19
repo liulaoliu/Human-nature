@@ -50,6 +50,8 @@ function props(over: Partial<ReaderToolbarProps> = {}): ReaderToolbarProps {
     shownKeys: [],
     currentValue: '',
     onPickArticle: noop,
+    prevArticle: null,
+    nextArticle: null,
     hasDoc: false,
     editing: false,
     savedId: null,
@@ -147,6 +149,33 @@ describe('ReaderToolbar：没有文章', () => {
     rerender(<ReaderToolbar {...props({ book, editions, onEditionChange })} />)
     fireEvent.change(screen.getByTitle('按期次筛选内置文章'), { target: { value: '2021-06-12' } })
     expect(onEditionChange).toHaveBeenCalledWith('2021-06-12')
+  })
+})
+
+describe('ReaderToolbar：上一篇 / 下一篇', () => {
+  it('把相邻文章的 ref 交给 onPickArticle', () => {
+    const onPickArticle = vi.fn()
+    renderInRouter(
+      <ReaderToolbar
+        {...props({
+          hasDoc: true,
+          saved,
+          onPickArticle,
+          prevArticle: { ref: 'b:009 Leaders - Interest-rate caps', title: 'Leaders' },
+          nextArticle: { ref: 's:saved:1', title: 'Saved' },
+        })}
+      />,
+    )
+    fireEvent.click(screen.getByTitle('上一篇：Leaders'))
+    fireEvent.click(screen.getByTitle('下一篇：Saved'))
+    expect(onPickArticle).toHaveBeenNthCalledWith(1, 'b:009 Leaders - Interest-rate caps')
+    expect(onPickArticle).toHaveBeenNthCalledWith(2, 's:saved:1')
+  })
+
+  it('第一篇 / 最后一篇时对应按钮禁用', () => {
+    renderInRouter(<ReaderToolbar {...props({ hasDoc: true, prevArticle: null, nextArticle: null })} />)
+    expect((screen.getByTitle('已经是第一篇') as HTMLButtonElement).disabled).toBe(true)
+    expect((screen.getByTitle('已经是最后一篇') as HTMLButtonElement).disabled).toBe(true)
   })
 })
 
