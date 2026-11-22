@@ -8,8 +8,8 @@ const ARTICLE_INDEX = 'articleKey'
 /**
  * 复读录音的持久化（IndexedDB）。
  *
- * 单开一个库，不和跟读页的 `shadowing` 混：那边的记录按音频文件/块号组织，
- * 生命周期跟着「打开的音频」走；这边按文章 + 句子组织，改正文还要做文本戳校验。
+ * 单开一个库，不和旧的 `shadowing` 混（那边的「音频文件 + 块号」记录已随跟读页下线）：
+ * 复读按「文章 + 句子」组织，改正文还要做文本戳校验。
  *
  * 只留每句最新一条，所以 key 就是 `articleKey + sentenceId`（见 `core/repeatTake`），
  * `put` 天然覆盖旧录音。

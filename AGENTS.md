@@ -125,7 +125,8 @@
 ## 单入口 SPA 与整页路由（硬规则，详见 `docs/ARCHITECTURE.md` §三·八）
 
 - **不得新增 HTML 入口**。全站只有 `index.html` + `src/main.tsx` + 一棵 React 树；
-  新页面是路由，不是新的 `createRoot`。`/` 是跟读，`/reader/**` 是精读。
+  新页面是路由，不是新的 `createRoot`。`/` 直接 replace 到 `/reader`（旧的跟读页已下线），
+  阅读页路由是 `/reader/**`。
 - **凡是占满正文、遮住当前页的界面都必须有 URL**（全屏会话 / 工具页 / 向导 / 编辑器）。
   加之前先问一句：**刷新或把地址发给别人，能不能回到这一页？** 不能就先加路由。
 - 接线只放两个地方：布尔面板 → `src/reader/route.ts` 的 `useRoutedPanels`；

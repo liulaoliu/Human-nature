@@ -294,8 +294,8 @@
 | 每篇生词独立 | 词库里先有几篇生词 → 新建/打开一篇没标过词的文章 | 侧栏「生词本 · 本篇」为空、正文没有编号/高亮；总词库里有的 the / is / are 不自动进来 |
 | 按篇编号 / 删除 | 同一篇依次加 3 个词→删中间一个→重新打开 | 编号按加入顺序 1..n，删除后紧凑重排；删词只从本篇消失，全库/别的篇仍保留 |
 | 按篇打印 | 两个不同篇都收同一个词 → 分别 A4（本篇） | 各自打印自己的清单与编号；打印后只影响当前篇的「已打印」状态 |
-| 录音配额满 | 用 DevTools 把站点存储配额限制到很小 → 录一条 | 出现「录音保存失败…旧录音已保留」；上一块旧 take 仍能回放；控制台无 unhandled rejection |
-| 开麦瞬间中止 | 连续跟读点空格后，在麦克风授权/开麦返回前再按一次空格 | 最终不录音、不生成 take，麦克风指示关闭；再按空格能正常开新一轮 |
+| 录音配额满 | 用 DevTools 把站点存储配额限制到很小 → 在速读复读里录一条 | 出现「录音保存失败…旧录音已保留」；上一句旧录音仍能回放；控制台无 unhandled rejection |
+| 开麦瞬间中止 | 复读连续跟读点空格后，在麦克风授权/开麦返回前再按一次空格 | 最终不录音、不生成录音，麦克风指示关闭；再按空格能正常开新一轮 |
 | 新词配额跨结算点 | 把系统时间调到 03:59，打开阅读页并加入新词 → 等到 04:00（或调时间触发） | `newToday` 当场归零；刷新后仍是新学习日的 0 |
 | 写入失败自动补写 | 停掉后端服务 → 答几题（localStorage 有记录）→ 重新启动服务，**不刷新页面** → 等约 5–10 秒 → 查 SQLite | `data/xueba.db` 的 `practice_records` 等表补上新记录；`localStorage` 的 `reader:learningDirty` 被清掉 |
 | schema 迁移备份 | 用旧版本创建的 `data/xueba.db` 启动新版 | 启动日志有「迁移前备份」；`data/backups/xueba-v<旧版本>-*.db` 存在，保留最近 5 份；同次启动还会生成当天 `xueba-daily-*.db`（保留 7 天） |
@@ -334,9 +334,7 @@
 | **背单词 · 两列布局 / 编辑表单**（2026-10-30 新增） | 进背单词 → 看工具条在左栏、卡片 + 「下一词」同屏 → 点「✎ 编辑」→ 768px 与 900px 高各看一次 | 两种高度下按钮都不被顶出屏幕、右栏不用滚就能到「下一词」；编辑时卡片让高、右栏可滚，「保存 / 取消」常驻右栏底部（sticky），不用 Tab 摸黑找 |
 | **背单词 · 判完停卡三屏**（2026-10-30 新增） | ① 学习模式选错释义 → 点「继续」；② 复习模式按「忘记了」；③ 判完等「下一词」时按 R（释义题 / 看答案高亮页 / 停卡页各按一次） | ①② 都先露出单词卡，不被锤炼当场接管（判完的卡不再过门禁）；③ 三个屏按 R 都出声；拼写未判卷、光标在输入框时不抢 R |
 | **背单词 · 组末拼写**（2026-10-30 新增） | 学完一组（默认 20 词，`reader:studyGroupSize` 可调）→ 进组末拼写 → 故意拼错一个 → 按空格确认 → 照原文重打 | 拼错显示英文原文；输入非空即隐藏原文；重打不改判定（仍算错、进重学）；拼完自动回到队列的下一组，不重复拼同一组 |
-| **跟读页 · 手动撕块**（2026-10-30 新增） | 打开有音频的文章 → 当前块波形按 X → 拖刀口 / 点波形试听 / 滚轮缩放平移 / 空格播放暂停 / Enter 撕开 → 刷新页面 | 刀口按音频时间存；试听从该处开始、到块尾或循环；撕开后两块的时间对得上（不串块）；**刷新后刀口还在**；合并下一块 / 清除正常 |
-| **跟读页 · 录音音色与连续跟读**（2026-10-30 新增） | 录音那行切「原声 / 降噪」、换设备（蓝牙 → 有线/USB）、试录 2.5 秒；再勾「连续跟读」用慢速读完一整句（含句中停顿），峰值约 0.09 | 原声明显不闷、音量够；慢读不被提前掐断（静音判定默认 2.5 秒）；回放响度接近标准音；峰值 < 0.03 时出现「麦克风电平过低」提示 |
-| **跟读页 · 选字定块**（2026-10-30 新增） | 开「选字定块」→ 跨段拖选、双击选词、从整段顶部开始拖 → 看绿（起）/ 红（终）线落点 → 按 `,` `.` 微调 → 刷新 | 锚点落在**精确词位**（不是整段两端）；刷新后进度还在、可分批标完；改别处文字后锚点仍能按原文重新定位；当前块是黄粗 / 天蓝粗 |
+| **速读 · 复读**（2026-11-22 新增） | 速读顶栏点「🎧 复读」→ 右侧控制列播放标准音 / 调语速 / 循环 → 点录音读一句 → 回放 / A-B / 删除 → 开连续跟读走一整句（含句中停顿） | 打开后计时与「读本句」让位，译文与语言点常显；录音读完静音约 2.5 秒自动停；A-B 交替播放；连续跟读回放完自动下一句；关闭复读后速读恢复原样；刷新回到速读（复读默认关） |
 | **听说写 · 一轮闭环**（2026-10-30 新增） | 听写（故意漏写几个词）→ 理解题 → 仿写第一稿与第二稿 → 语言点显示 → 写作历史翻到第 2 页 | 漏写词被标出且能加入待选；理解题判分正确、按篇保存；第二稿能带上一轮问题重练；语言点三处（正文/速读/日志）一致；历史「显示更多」翻页不卡、刷新后仍在 |
 
 ## 五、已经就绪的层 / 还差什么
@@ -546,33 +544,20 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   `LangPhrases` / `VocabBlocks` / `ReaderBody` / `ReaderSidebar` / `ReaderToolbar`（薄容器 `ReaderSidebar`
   用 stub 子面板只测页签接线）。`SidePick` 582 行拆成 `SidePickBatch` / `SidePickDictTools` / `SidePickAiPack`
   （3 + 2 + 6 条），原 10 条面板级测试继续覆盖整块接线。
-- **adapters 11 / 16 有同名测试，其余按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` / `aiRun` /
-  `stateBackup` / `hybridMode` / `vocabRepo` / `sqliteRepo` / `audioPick`；`articleRepo` / `storeApi` 由
-  `server/*.test.js` 间接覆盖；三个脚本/跟读仓储依赖真实浏览器/IndexedDB，走 §4 人工用例
-  （R7 只要求 `core/`，adapters 不强制同名测试）。`browserAudio` 的测试用假 `Audio` / 假 `AudioContext`
-  钉解码、区间播放、录音归一化缓存与 `release` 回收，真实播放/麦克风仍走 §4。
+- **adapters 有同名测试的按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` / `aiRun` /
+  `stateBackup` / `hybridMode` / `vocabRepo` / `sqliteRepo` / `repeatTakeRepo`；`articleRepo` / `storeApi` 由
+  `server/*.test.js` 间接覆盖；`browserAudio` 的测试用假 `Audio` / 假 `AudioContext`
+  钉解码、录音归一化缓存与 `release` 回收，真实播放/麦克风仍走 §4。
 - **`core/vocab` 已按职责拆分**：`word` / `merge` / `analysis` / `library` / `review` 各有同名测试，
   `vocab.test.ts` 只守住 facade 的 re-export 与跨模块流程；原 102 条测试按子模块搬走，未删减。
 - **答题事件（v7）**：`core/answerEvents` 9 条（坏事件丢弃 / 上限 / 从事件重建活动与题型统计）；
   `sqliteStore` 钉住事件落库、迁移基线、`rebuildLearningDerived` 的「baseline + events」口径；
   三个会话 hook 各加一条「每题都追加事件」的接线断言。
-- **跟读模块（旧模块）也有了纯规则测试**：`core/recording`（7：兜底时长夹取 / 自适应阈值）、
-  `core/scriptAlign`（13：比例摊 / 正文起点 / 平移 / 锚点优先 / 锚点解析不出来时退回）、
-  `core/anchorEdits`（14：撕开按比例拆 / 合并并回前一个 / 微调夹在邻居之间）、
-  `core/takeChunk`（15，含 `remapTakes` / `latestTakePerChunk`）、
-  `core/chunkEditLog`（10：撕 = 抵消合并 / 合并 = 撤销撕开 / 容差内不重复记）、
-  `state/calibrationLedger`（11：分篇 / 空数组等于删键 / persist 不写空键）、
-  `state/shadowingPrefs`（8：脏值兜底 / 隐私模式读写不炸）、
-  `state/fishPrefs`（6：按页面分开存 / 脏值回默认 / 写失败不抛）、
-  `state/levelMeter`（6：首拍直发 / 窗口内只发一次且补尾帧 / flush 清定时器）、
-  `state/localActivity`（7：同键累加 / 派发 `reader:local-state` / 坏数据当空库 / 元素级脏数据只丢坏行）、
-  `ui/ScriptPanel`（8：未粘原文 / 原文库失败提示 / 当前块与邻块标记 / 编辑态提交 / 锚定与两步清空）。
-  会话测试按主题拆成五个（共用 `state/sessionDoubles` 的假播放器/录音器/仓库）：
-  `sessionLoad`（10）/ `sessionPlay`（16）/ `sessionRecord`（21）/ `sessionCycle`（22，含 A/B 与整圈时序）/
-  `sessionScript`（55：原文对齐 / 自动带原文 / 偏移 / 撕合 / 改文本）。
-  `state/anchorEditor` 与 `state/cycleRunner` 没有单独文件：它们的行为由 `session*` 五个文件从公开 API 覆盖
-  （拆出去是为了让 store 只剩编排，不是为了少测）。
-  真实播放、录音、撕块波形仍走 §4 人工用例。
+- **复读（速读内）的纯规则测试**：`core/repeatCycle`（8：状态推进 / 乱序事件 / 循环档位文案）、
+  `core/repeatTake`（6：id / 文本戳 / 下载文件名）、`adapters/repeatTakeRepo`（3：IndexedDB 覆盖 / 孤儿清理，`fake-indexeddb`）。
+  UI 侧 `useRepeatSession`（5：空格播放 / 循环 / R 录音落库 / C 连读 / 关着不抢键）、
+  `SpeedRepeatPanel`（6 条渲染与两步删除）、`SpeedReadPanel` 的复读接管用例。
+  真实播放、录音、A-B 响度仍走 §4 人工用例。
 - **覆盖不到的（人工用例见 §4）**：A4 打印版式、TTS 发音、真实 IndexedDB 库、离线词典/例句文件。
 - **覆盖率数字**：接 `@vitest/coverage-v8` 再看（先求「该测的层有测试」，再求百分比）。
 
@@ -619,8 +604,8 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     ③ 深链接打开失败要回落文章页，且失败判定要再渲染一次（`bump()`）——
     只调 `open()` 不一定产生状态变化，不 re-render 就永远判不到失败。
     路由纯函数测试的期望路径都带 `/reader` 前缀（单入口后不再有 `basename`）。
-    另外：阅读页 CSS 必须 `?inline` 注入/卸载，普通懒加载会把 `<link>` 永久留在 head，
-    返回跟读页后全局样式仍被阅读页覆盖（见 `ReaderRoot`）。
+    另外：阅读页 CSS 必须 `?inline` 注入/卸载，普通懒加载会把 `<link>` 永久留在 head；
+    离开阅读页后阅读页的全局样式必须被移除（见 `ReaderRoot`），否则会盖住 `src/global.css`。
 35. **打开文章不是改动，别让自动保存顶掉日期**（2026-10-24）。`useReaderDoc` 的自动落盘
     effect 依赖 `doc` / `savedId`，点一下文章列表就会触发；以前 900ms 后无条件写库，
     `updatedAt` 变新，列表里 10-01 建立的文章会变成「今天更新」。

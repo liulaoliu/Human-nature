@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { installFakeStorage } from '../reader/testStorage'
+import { installFakeStorage } from './testStorage'
 import FishLayer from './FishLayer'
 
 /** 装饰鱼：滚轮缩放 / 图片拖动，同时保留两个手柄与双击复位。 */

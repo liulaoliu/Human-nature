@@ -52,7 +52,7 @@
   - dev：Vite 插件中间件提供 `GET /fish`（清单）与 `GET /fish/<name>`；
   - static：`server/httpApp.ts` 同样处理；
   - 前端 `fetch('/fish/manifest.json')` → 随机取一个 → `<img src="/fish/<name>">`。
-  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.ts`、`src/ui/FishLayer.tsx`
+  - `tools/vite-fish-endpoint.mjs`、`server/httpApp.ts`、`src/reader/FishLayer.tsx`
 - **教训**：
   1. **`import` 的资源会被打包；要"随便放多少都行"的素材，走静态目录 + 运行时 URL。**
   2. 素材放哪、怎么给，是**构建**问题，不是 **import** 问题。

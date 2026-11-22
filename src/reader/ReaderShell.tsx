@@ -1,5 +1,5 @@
 import { useRef, type MouseEvent, type ReactNode, type RefObject } from 'react'
-import FishLayer from '../ui/FishLayer'
+import FishLayer from './FishLayer'
 import { useReadingScroll } from './hooks/useReadingScroll'
 
 /**

@@ -1,9 +1,8 @@
 import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import AppRoutes from './AppRoutes'
-import { applyLocalState, loadProjectSeed, localStateIsEmpty } from './adapters/stateBackup'
 import { normalizeLegacyUrl } from './core/legacyUrl'
-import './ui/styles.css'
+import './global.css'
 
 /**
  * 单入口 SPA：
@@ -22,14 +21,8 @@ function migrateLegacyUrl() {
   if (next) history.replaceState(null, '', next)
 }
 
-async function boot() {
+function boot() {
   migrateLegacyUrl()
-  // 新电脑第一次打开：localStorage 还空着就用项目里的种子文件初始化
-  // （public/shadowing-state.json，由「存入项目」生成）
-  if (localStateIsEmpty()) {
-    const seed = await loadProjectSeed()
-    if (seed) applyLocalState(seed.data)
-  }
   createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <AppRoutes />

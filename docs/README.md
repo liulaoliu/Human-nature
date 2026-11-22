@@ -19,7 +19,6 @@
 | [`IDB-INSPECT.md`](IDB-INSPECT.md) | 浏览器 IndexedDB 词库 / SRS 排查（`tools/inspect-idb.mjs`） |
 | [`PERF-NOTES.md`](PERF-NOTES.md) | 性能踩坑与约束 |
 | [`PIPELINE-PDF.md`](PIPELINE-PDF.md) | PDF 抽取管线 |
-| [`PIPELINE-AUDIO.md`](PIPELINE-AUDIO.md) | 音频/跟读管线 |
 | [`新特性开发要求.md`](新特性开发要求.md) | 需求原文与早期设计（历史凭证） |
 | [`HANDOFF.md`](HANDOFF.md) | 换机 / 交接步骤 |
 

@@ -25,18 +25,12 @@ src/reader/      React 视图层
   ReaderApp.tsx  组装：状态总线 + 把 hooks/panels 接起来
   reader.css     样式入口：只按固定顺序 @import styles/ 下 8 个分片
   styles/        按功能拆的样式分片（基础 / 侧栏顶栏 / 选词与 AI / 背单词 / 语言点与计划 / 选择器 / 主题与考试 / 速读与编辑）
-src/ui/          跟读练习（旧模块，独立于精读词库）
-  App.tsx         页面装配：建 store、挂本机偏好、全局快捷键，其余交给下面六个区块
-  ChunkList.tsx   左侧块列表（含自动滚到当前块；计数/✂ 查表）
-  AppBanners.tsx  顶部提示条（notice / 麦克风电平低 / 解码中 / 打不开）
-  CycleRow.tsx    连续跟读：开关 + 说完静音多久 + 本轮状态
-  TransportBar.tsx 播放控制：上一块/播放/下一块、语速、切块档位、撕开开关；另出 AbCompareRow
-  AlignmentRow.tsx 对齐校准：正文起点 + 文字整体偏移
-  RecorderPanel.tsx 录制区：录音按钮 + 电平表 + 麦克风/音质/回放放大
-  ScriptPanel.tsx 原文面板（整篇摊开、当前块高亮、选字定块、锚点微调）
-  AppBits.tsx     空状态 / 备份条 / 录音导出与列表 / 时间格式化
-  ChunkSplitter.tsx 波形撕块面板；FishLayer.tsx 背景动效
+  FishLayer.tsx   装饰鱼（拖拽 / 缩放；布局规则在 core/fishLayout，读写在本机偏好）
+src/global.css    全局基础样式（变量 / body / 按钮 / 滚动条）；阅读页自己的 base 在 styles/01-base.css
 ```
+
+> 旧的跟读页（`src/ui`）已于 2026-11-22 下线：项目从「跟读 + 精读两套页面」
+> 收敛成只有一个阅读页，速读里的「🎧 复读」接替了原来的跟读练习场景。
 
 **依赖只能单向往里收**（由 `tool/check_architecture.mjs` 的 R1/R2 保证）：
 
@@ -103,12 +97,9 @@ types ← core ← adapters ← reader
 | D老师小课堂：错因复盘 / 历史详情 | `GoldenErrorsView.tsx` + `GoldenHistoryView.tsx` + `route.ts` | 从错因「去练」进 `fill`，不混用错因卡 SRS；历史详情用 `recordKey` query 定位，返回键回错因 |
 | 错因复习：到期 / 随机 / 全部 + 回车 / 跳过练过 / AI 批改 | `GoldenErrorsView.tsx` + `GoldenErrorReview.tsx` + `ErrorFixAi.tsx` + `core/writingErrorProgress.ts` | 三种入口共用当前 scope / since 的 `allCards`：到期走 `dueCardsFromProgress`，随机 `randomWritingErrorCards`（最多 20 张），全部走 `reviewableWritingErrorCards`（不看 due，仍跳过 paused）；判完焦点落在结果块，Enter 走下一个；「练过的不练」按 `reviews/lastAt` 过滤，「对的不练」按 `lastCorrect/streak` 过滤（上次答错的仍保留）；AI 批改复用 `useGoldenImitation`，记录 `source='goldenError'`，不改变本地判定的 SRS，也不反哺错因趋势 |
 | 金句课历史定位 / 悬浮摘要 | `src/reader/route.ts` + `WritingHoverCard.tsx` + `GoldenRecordDrawer.tsx` | `parseGoldenQuery` / `goldenPanelPath` 只做 URL 纯函数；历史行和错因行共用 `WritingHoverCard`；「看批改」抽屉复用 `GoldenFeedback`，「历史 ↗」走路由 |
-| 跟读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 store 里塞魔数 |
-| 跟读：原文怎么摊到块上、锚点怎么解析 | `src/core/scriptAlign.ts` | 「有锚点用锚点，否则跳过引子按比例摊」这条选择规则只在这一次 |
-| 跟读：锚点随撕开 / 合并怎么变、微调夹取 | `src/core/anchorEdits.ts` | 纯算术，界面只回传 `edge/delta` |
-| 跟读：录音与块的对应 | `src/core/takeChunk.ts` | 块号会变，一律按音频时间重算（`remapTakes`） |
-| 跟读：每篇的手动校准账本 | `src/state/calibrationLedger.ts` | 空数组 = 删键；`persist` 里空的键不写（保持老记录形状） |
-| 跟读：本机偏好（显示模式 / 麦克风 / 静音时长） | `src/state/shadowingPrefs.ts` | 读写都兜底；`ui/` 里不许再碰 localStorage（R3） |
+| 复读：录音时长 / 电平阈值 / 说完静音判定 | `src/core/recording.ts` | 纯函数（`recordCapMs` / `voiceThreshold`）；别再往 hook 里塞魔数 |
+| 复读：标准音 → 录音 → 回放 → 下一句 | `src/core/repeatCycle.ts` | 纯状态机；步骤一变由 effect 执行，别写一串互相调用的回调 |
+| 复读：录音属于哪一句 / 改正文后还算不算 | `src/core/repeatTake.ts` + `adapters/repeatTakeRepo.ts` | key = 文章标识 + 句 id，另带 `sentenceText` 文本戳；改一句只失效那一句 |
 | 顶栏按钮区多宽 | `src/core/toolbarWidth.ts` | 默认 `fit-content`（按钮多宽就多宽）+ 800 下限 + 视窗上限；档位 auto/窄/宽/铺满 存本机（`reader:toolbarWidth`），展示层只拿算好的 style |
 | 顶栏按钮区分几行 | `src/core/toolbarRows.ts` | 四组控件（文章 / 视图 / 动作 / 统计）→ 4 / 3 / 2 行：从尾部并（统计最矮，跟动作并）。`ReaderToolbar` 只按 plan 铺行，不改顺序；合并行插 `.tb-sep` 竖线，档位存 `reader:toolbarRows` |
 | 文章键（「同一篇」怎么认） | `src/core/docSignature.ts` 的 `articleKey` = `标识@正文签名` | 签名只由句子文本算（djb2，句间有分隔）。**凡按文章记东西，键里都要带它**：标识可能是书名 / 空标题 / 「未命名」。滚动进度 / 速读游标与本页清单 / 听写游标 / 听力题缓存**一律用 `articleKey`**，不许各自拼 |
@@ -445,18 +436,21 @@ HTML 规定 `<p>` 只能装 phrasing content（`span` / `b` / `button`…），*
 `src/main.tsx` 建 **根 BrowserRouter（没有 basename）**，`src/AppRoutes.tsx` 切两段：
 
 ```
-/                   跟读练习（src/ui/App，StrictMode）
+/                   replace 到 /reader（旧的跟读页已下线，`/` 不再画页面）
 /reader/**          精读 / 生词本（src/reader/ReaderRoot，按路由 lazy 加载）
-*                   认不出的地址 → 回 /
+*                   认不出的地址 → 回 /reader
 ```
 
 > 以前是 `index.html` + `reader.html` 两个入口、两个 `createRoot`，互跳整页重载，
 > 阅读页面板也拿不到跨文档的历史。现在合并成一个入口；**代码仍然 code-split**：
 > `ReaderRoot` 用 `lazy()`，词典 / PDF / 面板只在进 `/reader` 时才下载。
 >
+> 跟读页下线后，`/reader/**` 这层前缀**保留**：收藏夹、旧链接、`panelPath()`
+> 生成的地址都还指着它；`/` 只做一次 replace 跳转，不留在历史里。
+>
 > 阅读页 CSS（`src/reader/reader.css`）用 `?inline` 字符串在 `ReaderRoot` 挂载时注入、
 > 卸载时删掉。不能改成普通 `import './reader.css'`：那样 Vite 会把 `<link>` 留在 head，
-> 从 `/reader` 返回 `/` 后，阅读页的全局 `body` / `button` / `::selection` 规则会继续污染跟读页。
+> 阅读页的全局 `body` / `button` / `::selection` 规则会一直挂着（`src/global.css` 才是全局基线）。
 
 阅读页的路径（`route.ts` 构造，**都带 `/reader` 前缀**）：
 
@@ -749,9 +743,10 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 
 ## 三·十一、速读里的复读（音频复读）
 
-跟读页（`src/ui`）的「复读」不搬过来：那边一半复杂度是**外部音频 ↔ 文本对齐**
-（导入音频 / VAD 切块 / 波形撕开 / 锚点校准）。D 老师的音频是按句子文本现生成的，
-`sentence` 天然就是块，所以只复刻「练」的那半：**标准音 → 录音 → 回放 → 下一句**。
+旧的跟读页已经下线，但它的「复读」只在速读里保留了一条轻量版本：不复刻
+**外部音频 ↔ 文本对齐**（导入音频 / VAD 切块 / 波形撕开 / 锚点校准）。
+D 老师的音频是按句子文本现生成的，`sentence` 天然就是块，所以只做「练」的那半：
+**标准音 → 录音 → 回放 → 下一句**。
 
 - **入口是速读里的模式开关**，不是新的 URL 面板：速读本身已经是 `/p/speed`
   的布尔面板，复读只是它里面的一列。默认关闭；关着时页面与原来完全一致。
@@ -765,9 +760,9 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
 - **录音按文章 + 句子存**：`adapters/repeatTakeRepo`（IndexedDB `reader-repeat`），
   key = `articleKey + sentenceId`，带 `sentenceText` 文本戳。`articleKey` 用文章标识
   **不是**正文签名：改一句只应让那一句失效，不该把整篇录音全作废。
-- **不复用跟读页的录音记录**：那边的 `Take` 属于「某个音频文件的第几块」；
-  复读的 `RepeatTake` 属于「某篇文章的某一句」。共享只发生在 `core/` 与 `adapters/`，
-  视图层（`src/ui` 与 `src/reader`）互不 import。
+- **录音记录独立**：`RepeatTake` 属于「某篇文章的某一句」，key 与文本戳见下；
+  不要为了复用去借旧跟读页的 `Take`/`TakeRepo`（那两个已随模块删除）。共享只发生在
+  `core/` 与 `adapters/`，视图层不要再出现 `src/ui` 的引用。
 - 播放器懒建：复读关着时不创建 `<audio>`；无 `src` 的元素不调 `pause()`
   （jsdom 里 `pause` 未实现，测试会刷错误）。
 
@@ -811,27 +806,17 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
   导出 / 打印 / 备份导入在 `hooks/exportApi`，内部按 `exportFiles` / `backupIO` / `printActions` 三块普通 factory 分开；
   AI 结果落地规则在 `core/aiApply`、服务端跑批客户端在 `adapters/aiRun`，
   软上限 800 行（上帝文件门禁的线）。
-- **展示层已经不再直接读写 localStorage**：`ui/App` 的偏好搬去 `state/shadowingPrefs`、
-  `ui/FishLayer` 的布局搬去 `state/fishPrefs`（规则在 `core/fishLayout`），
-  `ReaderShell` 的正文滚动位置搬去 `state/scrollPrefs`（规则在 `core/scrollProgress`，
-  节流与恢复在 `hooks/useReadingScroll`）。R3 的存量豁免
-  现在只剩 `core/stateBackup` 那条 R6（备份文件名里的 UTC 日期，故意的）。
-- **跟读模块的「规则」和「偏好」不再住在页面里**（2026-10 拆的）：
-  - 录音判定与兜底时长 → `core/recording`（说完静多久、最多录多久、电平阈值）
-  - 原文摊到块上的选择规则 → `core/scriptAlign`（有锚点用锚点，否则跳过正文前的引子再按比例摊）
-  - 锚点随撕开/合并怎么变 → `core/anchorEdits`
-  - 录音挂哪一块 / 每块留最新一条 → `core/takeChunk`
-  - 每篇手动校准的账本（平移/起点/锚点/撕合 + 持久化形状）→ `state/calibrationLedger`
-  - 本机偏好（显示模式/麦克风/静音时长/回放放大）→ `state/shadowingPrefs`
-  - 锚点的增删改（选字定块 / 微调 / 撕开的拆分 / 合并的并回）→ `state/anchorEditor`
-  - 「撕 = 抵消合并、合并 = 撤销撕开」与 0.02s 容差 → `core/chunkEditLog`
-  - 连续跟读那一轮（轮次号 / 录音定时器 / 说完收工 / 提前收尾）→ `state/cycleRunner`
-  - 电平表节流（原始值判说话、节流值给 UI）→ `state/levelMeter`
-  - 「说」记进学习统计（同一个 `reader:activity` 键 + 事件）→ `state/localActivity`
-  `state/session` 只剩编排（状态机、播放/录音时序、竞态守卫），732 行；`ui/App` 只剩装配。
-- **`calibrationRepo` / `scriptEditRepo` 仍走 localStorage**：一篇几个数字/几十 KB、接口是同步的；
-  不是为了省事才不迁 SQLite——浏览器里上 SQLite 要 WASM 运行时，为这点数据不划算。
-  真要迁，先改端口为异步，再走服务端 SQLite。
+- **展示层不直接读写 localStorage**：`FishLayer` 的布局在 `state/fishPrefs`（规则在 `core/fishLayout`），
+  `ReaderShell` 的正文滚动位置在 `state/scrollPrefs`（规则在 `core/scrollProgress`，
+  节流与恢复在 `hooks/useReadingScroll`）。R3 的存量豁免只剩 `core/stateBackup` 那条 R6
+  （备份文件名里的 UTC 日期，故意的）。
+- **旧跟读模块已于 2026-11-22 删除**：`src/ui`、`state/session*`、`state/calibrationLedger`、
+  `state/{anchorEditor,chunkEditor,cycleRunner,levelMeter,localActivity,playbackController,recordingController,shadowingPrefs}`、
+  `adapters/{takeRepo,scriptRepo,scriptEditRepo,calibrationRepo,audioPick}`、
+  `core/{alignText,aligner,anchorEdits,chunkEdits,chunkEditLog,pickWords,scriptAlign,shadowingState,takeChunk,vad}`
+  一并下线（含对应测试）。保留的只有复读真正用到的 `core/recording`、`core/loudness`、
+  `core/wav`、`core/lru`、`core/fishLayout`，以及 `core/ports` 里阅读页还在用的部分。
+  练习场景由速读里的「🎧 复读」承接，不再恢复「外部音频 + 切块/对齐」那一套。
 - **离线词典/例句加载器已搬到 `adapters/`**：`adapters/dictionary.ts`、`adapters/tatoeba.ts`；
   `core/dictionary.ts` 只保留纯断词判断（不碰 fetch）。
 

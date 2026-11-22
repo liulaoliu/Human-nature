@@ -23,7 +23,6 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 |---|---|---|---|
 | 词库（生词 / 语言点 / 复习状态） | `data/xueba.db` 的 `vocab` + `vocab_snapshots` | IndexedDB `shadowing-vocab` | 唯一资产，优先迁 |
 | 已保存文章（正文 / 句子 / 翻译） | `data/xueba.db` 的 `articles` | IndexedDB `shadowing-reader` | 文本，第二优先 |
-| 跟读录音 | IndexedDB `shadowing` | 无 | 音频 blob，体积大；下一阶段改成 `data/takes/` 文件 + SQLite 元数据 |
 | 速读复读录音 | IndexedDB `reader-repeat` | 无 | 每句只留最新一条；key = 文章标识 + 句 id，带 `sentenceText` 文本戳；**不进整库备份**，需要时单条下载 |
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
 | **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 回译 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
@@ -40,7 +39,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 可重建的缓存 / 派生统计 | `reader:kindStats`、`reader:newToday`、`reader:langCollected`、`reader:batch` | localStorage / IndexedDB | 能从词库、文章、事件重算；不要当事实来源 |
 | **用户学习记录** | 背词事件、练习成绩、读完 / 精读进度、错题、写作历史、回译存档、复述记录 | **SQLite 规范化表** | 换浏览器/清缓存不能丢；要按天、按篇、按词查询 |
 | 结构化资产 | 词库、文章、翻译、语言点、词在文章里的位置 | **SQLite**（已落地） | 同上，且需要 JOIN / 统计 |
-| 大二进制 | 跟读录音、音频缓存 | 文件 / IndexedDB + SQLite 元数据 | 不适合塞进词库 JSON 或 localStorage |
+| 大二进制 | 复读录音、TTS 音频缓存 | 文件 / IndexedDB + SQLite 元数据 | 不适合塞进词库 JSON 或 localStorage |
 
 结论：
 
@@ -257,7 +256,7 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，
   历史无法逐题重算的部分就是基线；之后 `POST /api/store/learning/rebuild-derived`
   （或直接调用 `sqliteLearning.rebuildLearningDerived`）按「baseline + events」只重建
-  `kind_stats`。`activity_days` 保持现有聚合不动：背单词 / 快刷 / 阅读 / 写作 / 跟读只写聚合、
+  `kind_stats`。`activity_days` 保持现有聚合不动：背单词 / 快刷 / 阅读 / 写作 / 朗读只写聚合、
   不产生 `answer_events`，删表重算会把它们静默抹掉；重建结果只用于和本机对账。纯函数口径在 `core/answerEvents.ts`，
   活动日一律用 `core/activity.dayKeyLocal`（事件写入时已落 `day`，服务端不另算日期）。
 - v4 迁移：旧词条的 `source.articleId` 存的是文章标题，按 `articles.title` 唯一匹配后换成

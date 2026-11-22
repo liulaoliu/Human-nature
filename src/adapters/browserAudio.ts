@@ -172,16 +172,16 @@ export class BrowserPlayer implements AudioPlayerPort {
       await this.playBlob(norm.blob, rate, norm.from, norm.to)
     } catch (e) {
       if (norm.blob !== take.blob) {
-        console.warn('[shadowing] 归一化录音回放失败，退回原始录音重试', e)
+        console.warn('[复读录音] 归一化录音回放失败，退回原始录音重试', e)
         try {
           await this.playBlob(take.blob, rate, norm.from, norm.to)
           return
         } catch (e2) {
-          console.warn('[shadowing] 原始录音回放也失败', e2)
+          console.warn('[复读录音] 原始录音回放也失败', e2)
           return
         }
       }
-      console.warn('[shadowing] 录音回放失败', e)
+      console.warn('[复读录音] 录音回放失败', e)
     }
   }
 
@@ -283,7 +283,7 @@ export class BrowserPlayer implements AudioPlayerPort {
       this.takeBlobs.set(take.id, entry)
       return entry
     } catch (e) {
-      console.warn('[shadowing] 录音解码失败，退回原始音频', e)
+      console.warn('[复读录音] 录音解码失败，退回原始音频', e)
       return fallback
     }
   }
