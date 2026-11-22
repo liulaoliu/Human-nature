@@ -1,4 +1,4 @@
-import type { AudioPlayerPort, MicOptions, RecorderPort } from '../core/ports'
+import type { MicOptions, RecorderPort } from '../core/ports'
 import { applyGain, matchGain, peakSafeGain, speechBounds, speechRms } from '../core/loudness'
 import { floatToWav } from '../core/wav'
 import { Lru } from '../core/lru'
@@ -67,7 +67,7 @@ async function decodeAudio(ctx: AudioContext, blob: Blob, ms = 5000): Promise<Au
   }
 }
 
-export class BrowserPlayer implements AudioPlayerPort {
+export class BrowserPlayer {
   private el: HTMLAudioElement
   private takeEl: HTMLAudioElement
   private objectUrl: string | null = null

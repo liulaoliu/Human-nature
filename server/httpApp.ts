@@ -1,4 +1,4 @@
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, readFileSync, readdirSync } from 'node:fs'
+import { createReadStream, existsSync, statSync, readFileSync, readdirSync } from 'node:fs'
 import type { IncomingMessage, ServerResponse } from 'node:http'
 import { dirname, join } from 'node:path'
 import { gzipSync } from 'node:zlib'
@@ -10,7 +10,6 @@ import { allowLocalRequest } from './sameOrigin.ts'
 
 const DATA_FILES = new Set([
   'articles.json',
-  'shadowing-state.json',
   'ecdict.tsv',
   'ecdict-forms.tsv',
   'ecdict-near.tsv',
@@ -118,8 +117,7 @@ function isSpaFallback(pathname: string): boolean {
 /**
  * 请求处理器（可单测）：
  *  - GET  /api/status            → { ok, pid, uptime, time }
- *  - POST /__state               → 写 public/shadowing-state.json（「存入项目」）
- *  - articles.json / shadowing-state.json 优先 public（重新生成不必 rebuild）
+ *  - articles.json 优先 public（重新生成不必 rebuild）
  *  - 其余静态文件来自 dist/
  */
 export interface RequestHandlerOptions {
@@ -141,8 +139,7 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
     const guarded =
       pathname.startsWith('/api/store') ||
       pathname.startsWith('/api/ai/') ||
-      pathname.startsWith('/api/tts') ||
-      pathname === '/__state'
+      pathname.startsWith('/api/tts')
     if (guarded && !allowLocalRequest(req)) {
       res.statusCode = 403
       res.setHeader('Content-Type', 'text/plain; charset=utf-8')
@@ -215,25 +212,6 @@ export function createRequestHandler({ distDir, publicDir, fishDir, startedAt = 
       }
       res.statusCode = 404
       res.end('not found')
-      return
-    }
-
-    if (pathname === '/__state' && req.method === 'POST') {
-      let body = ''
-      req.on('data', (chunk) => {
-        body += chunk
-        if (body.length > 8 * 1024 * 1024) req.destroy()
-      })
-      req.on('end', () => {
-        try {
-          JSON.parse(body)
-          mkdirSync(publicDir, { recursive: true })
-          writeFileSync(join(publicDir, 'shadowing-state.json'), body, 'utf8')
-          sendJson(res, 200, { ok: true })
-        } catch {
-          sendJson(res, 400, { ok: false })
-        }
-      })
       return
     }
 

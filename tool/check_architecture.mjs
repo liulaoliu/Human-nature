@@ -26,9 +26,7 @@ import { join, relative } from 'node:path'
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'public', 'build'])
 
 /** 存量违规（路径 → 理由）。能修就修，登记只是让门禁先能上线。 */
-const EXCEPTIONS = {
-  'src/core/stateBackup.ts': 'R6：备份文件名里的日期（UTC），不是学习日，故意不动',
-}
+const EXCEPTIONS = {}
 
 /** core 里没有同名测试的模块（纯数据 / 纯类型 / 测试夹具 / 待补测试的债）。 */
 const NO_TEST_OK = new Set([

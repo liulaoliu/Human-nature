@@ -34,7 +34,7 @@
 | **D 口径** | 日期键、类型、打印/导出、统计、学习记录 | 日期只用 `core/activity`；词条类型只用 `core/entryKind`；打印范围只用 `core/printPlan`；统计的「今天/连续/累计」是否同源；学习记录 section 前后端是否同一份清单；导出文件名/时间戳是否同一时区口径 | `rg -n "toISOString\\(\\)\\.slice\\(0, ?10\\)" src server`、`rg -n "lastPrintedAt|KIND_ORDER|dayKeyLocal" src/reader` |
 | **E 工程** | 并发、性能、容错、时间 | 全局 keydown 是否重复注册/互相抢；timer/订阅是否清理；热路径是否 O(N²)；每次交互是否整库重建；错误是否被 `catch {}` 吞掉；离线/服务重启后是否自愈；AI 轮询是否有上限和取消 | `rg -n "addEventListener\\('keydown'" src`、`rg -n "setInterval|setTimeout" src/reader`、`rg -n "catch \\{\\}" src server` |
 | **F UI** | 组件拆分、交互、可访问性、空态/溢出 | 面板是否只收 props；巨型渲染是否拆；键盘操作是否集中；空态/加载/失败三态是否齐全；长文本/窄屏是否溢出；颜色是否走 CSS 变量 | `wc -l src/reader/panels/*`、`rg -n "onClick" src/reader`、`rg -n "aria-|role=|tabIndex" src/reader` |
-| **G 安全** | 本地服务、密钥、隐私、发布产物 | 写接口是否校验同源（`/api/store` 之外的 `/api/ai`、`/api/tts`、`/__state` 也要）；密钥是否只从环境/gitignore 文件读；GET 是否暴露整库；DB/备份权限；日志是否打印敏感内容；静态服务路径穿越 | `rg -n "sameOrigin|Origin|apiKey|createReadStream|safeJoin" server tools`、`git check-ignore -v config.local.json data` |
+| **G 安全** | 本地服务、密钥、隐私、发布产物 | 写接口是否校验同源（`/api/store` 之外的 `/api/ai`、`/api/tts` 也要）；密钥是否只从环境/gitignore 文件读；GET 是否暴露整库；DB/备份权限；日志是否打印敏感内容；静态服务路径穿越 | `rg -n "sameOrigin|Origin|apiKey|createReadStream|safeJoin" server tools`、`git check-ignore -v config.local.json data` |
 
 ## 四、严重程度
 

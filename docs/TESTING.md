@@ -545,7 +545,7 @@ TTS 逐词时间对齐在 `core/ttsTiming`（归一化对齐 / 缺词兜底 / �
   用 stub 子面板只测页签接线）。`SidePick` 582 行拆成 `SidePickBatch` / `SidePickDictTools` / `SidePickAiPack`
   （3 + 2 + 6 条），原 10 条面板级测试继续覆盖整块接线。
 - **adapters 有同名测试的按需补**：已覆盖 `dictionary` / `tatoeba` / `ttsCache` / `browserAudio` / `learningRepo` / `aiRun` /
-  `stateBackup` / `hybridMode` / `vocabRepo` / `sqliteRepo` / `repeatTakeRepo`；`articleRepo` / `storeApi` 由
+  `hybridMode` / `vocabRepo` / `sqliteRepo` / `repeatTakeRepo`；`articleRepo` / `storeApi` 由
   `server/*.test.js` 间接覆盖；`browserAudio` 的测试用假 `Audio` / 假 `AudioContext`
   钉解码、录音归一化缓存与 `release` 回收，真实播放/麦克风仍走 §4。
 - **`core/vocab` 已按职责拆分**：`word` / `merge` / `analysis` / `library` / `review` 各有同名测试，

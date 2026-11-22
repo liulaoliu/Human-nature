@@ -107,7 +107,7 @@ types ← core ← adapters ← reader
 | 阅读页滚动到哪 | `src/core/scrollProgress.ts`（比例口径、脏值兜底）+ `src/state/scrollPrefs.ts`（`articleKey` 存，内存优先） | 存比例不存像素：换字号/衬线/译文后还能回到同一段；`ReaderShell` 只拿 hook，不碰 localStorage（R3） |
 | 精读面板滚动到哪 | `src/reader/hooks/usePanelScrollMemory.ts` | 去考试 / 速读再回来还停在原位；只存内存、按 `articleKey` 分开，卸载保存 / 挂载恢复，不挂 scroll 监听、不写 localStorage；最多记 20 篇（淘汰最久没用） |
 | 速读「读到第几句」 | `src/core/speedRead.ts` 的 `speedCursorKey(articleKey)` | 只按标识存会串篇（空标题 / 同名 / 「未命名」共用一个标识）；读完最后一句退出即清零 |
-| 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势；R3 存量豁免只剩 `core/stateBackup` 一条 |
+| 装饰鱼放哪 / 多大 | `src/core/fishLayout.ts`（范围夹取、脏值兜底）+ `src/state/fishPrefs.ts`（按页面存/读） | 视图只管拖拽手势 |
 | 需要读写存储/网络 | `src/core/ports.ts` 定义端口 → `src/adapters/*` 实现 | 内存兜底实现放同文件（隐私模式） |
 | AI 结果落地（解析表格 → 写库 + 回执） | `src/core/aiApply.ts` + `src/reader/apply/*` | 六个表格型任务在 core；自动标词（要离线词典）在 `apply/autoVocab`，查词（要来源句）在 `apply/analysis`；`useApplyTaskResult` 只负责保住函数身份 |
 | 考试「考哪些词 / 每词出几题」 | `src/core/quizPool.ts` + `src/core/quizHistory.ts` | 范围 × 题型 → 候选词与题量；下一轮只从「没答过」里抽：词级按 `itemId`、文章级按题目 id，新题不够只考剩下的，不拿旧题凑数；全考完后自动清空本轮记录、重新开一轮（不会卡死）。错题重练 / 包围战不过滤 |
@@ -808,8 +808,8 @@ D 老师的音频是按句子文本现生成的，`sentence` 天然就是块，�
   软上限 800 行（上帝文件门禁的线）。
 - **展示层不直接读写 localStorage**：`FishLayer` 的布局在 `state/fishPrefs`（规则在 `core/fishLayout`），
   `ReaderShell` 的正文滚动位置在 `state/scrollPrefs`（规则在 `core/scrollProgress`，
-  节流与恢复在 `hooks/useReadingScroll`）。R3 的存量豁免只剩 `core/stateBackup` 那条 R6
-  （备份文件名里的 UTC 日期，故意的）。
+  节流与恢复在 `hooks/useReadingScroll`）。R3 没有存量豁免（旧的 `stateBackup`
+  已随跟读页删除，备份走 SQLite / 文章包那套）。
 - **旧跟读模块已于 2026-11-22 删除**：`src/ui`、`state/session*`、`state/calibrationLedger`、
   `state/{anchorEditor,chunkEditor,cycleRunner,levelMeter,localActivity,playbackController,recordingController,shadowingPrefs}`、
   `adapters/{takeRepo,scriptRepo,scriptEditRepo,calibrationRepo,audioPick}`、

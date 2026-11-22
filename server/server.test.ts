@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { createServer, request } from 'node:http'
 import type { IncomingHttpHeaders, IncomingMessage, Server } from 'node:http'
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { gunzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
@@ -252,7 +252,7 @@ describe('status.getPort', () => {
 })
 
 describe('httpApp 请求处理', () => {
-  it('status / __state / 静态 / 404', async () => {
+  it('status / 静态 / 404', async () => {
     const dist = mkdtempSync(join(tmpdir(), 'sa-dist-'))
     const pub = mkdtempSync(join(tmpdir(), 'sa-pub-'))
     mkdirSync(join(dist, 'assets'), { recursive: true })
@@ -265,23 +265,8 @@ describe('httpApp 请求处理', () => {
       expect(st.ok).toBe(true)
       expect(st.pid).toBe(process.pid)
 
-      const body = JSON.stringify({ hello: 'world' })
-      const put = await fetch(`http://127.0.0.1:${port}/__state`, { method: 'POST', body })
-      expect(put.status).toBe(200)
-      expect(JSON.parse(readFileSync(join(pub, 'shadowing-state.json'), 'utf8'))).toEqual({ hello: 'world' })
-
       const idx = await fetch(`http://127.0.0.1:${port}/`).then((r) => r.text())
       expect(idx).toContain('<title>t</title>')
-
-      const bad = await fetch(`http://127.0.0.1:${port}/__state`, { method: 'POST', body: 'not json' })
-      expect(bad.status).toBe(400)
-
-      const evilState = await fetch(`http://127.0.0.1:${port}/__state`, {
-        method: 'POST',
-        headers: { Origin: 'http://evil.test' },
-        body,
-      })
-      expect(evilState.status).toBe(403)
 
       const evilAi = await fetch(`http://127.0.0.1:${port}/api/ai/run`, {
         method: 'POST',

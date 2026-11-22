@@ -1,8 +1,6 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-// 这个插件用 node:fs 写文件，放在 .mjs 里避免把 Node 类型塞进前端 tsconfig
-// @ts-expect-error .mjs 没有类型声明
-import { projectStatePlugin } from './tools/vite-state-endpoint.mjs'
+// 这些插件用 node:fs 写文件，放在 .mjs 里避免把 Node 类型塞进前端 tsconfig
 // @ts-expect-error .mjs 没有类型声明
 import { fishStaticPlugin } from './tools/vite-fish-endpoint.mjs'
 // @ts-expect-error .mjs 没有类型声明
@@ -38,7 +36,6 @@ export default defineConfig({
   plugins: [
     react(),
     spaRoutePlugin(),
-    projectStatePlugin(),
     fishStaticPlugin(),
     ttsEndpointPlugin(),
     aiEndpointPlugin(),
@@ -62,7 +59,7 @@ export default defineConfig({
     // data/ 里是 SQLite 的 db/wal/shm，写一次就变；不忽略会让 Vite 以为源码变了，
     // 页面自动刷新 → 自动保存 → 再刷新。data/tts 是 TTS 缓存（以前在 public 下，被拷进 dist），同理。
     watch: {
-      ignored: ['**/data/**', '**/public/shadowing-state.json'],
+      ignored: ['**/data/**'],
       // **关键**：等文件写完再通知，别在「截断 / 写一半」的中间态就触发。
       //
       // 少了这一条会这样：某个 .ts 文件被改成空/半截状态的那一刻，chokidar 立刻发 change，

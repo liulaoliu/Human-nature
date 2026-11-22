@@ -218,7 +218,7 @@
 
 ### 换电脑怎么把数据带走
 
-`data/`、`public/articles.json`、`public/shadowing-state.json` 都被 gitignore，**不会随 git 过去**。
+`data/`、`public/articles.json` 都被 gitignore，**不会随 git 过去**。
 
 - **最稳（整库）**：先停服务，把整个 `data/`（至少 `data/xueba.db`）拷到新机器同路径。
   首次打开会自动迁移到 schema v7 并生成当天备份。

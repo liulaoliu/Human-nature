@@ -7,7 +7,6 @@ import type { IncomingMessage } from 'node:http'
  * `http://localhost:5173/api/...` 发简单请求：
  *   - POST `/api/ai/run`（花 API 额度）
  *   - GET `/api/tts`（写缓存 / 吃 CPU）
- *   - POST `/__state`（写文件）
  * 所以所有「有副作用」的入口都要过这一层。
  *
  * 规则：
