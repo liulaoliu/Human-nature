@@ -119,7 +119,7 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
     expect(new Headers(second?.init?.headers as HeadersInit).get('X-Vocab-Base')).toBe('v2')
   })
 
-  it('别处先写过：409 就报错、不镜像本地；之后本页只读，重新 load 才放行', async () => {
+  it('别处先写过：409 自动合并一次并写回，本页改动不丢', async () => {
     const local = new MemoryVocabRepo()
     await local.save(lib(9))
     let rejected = 0
@@ -128,7 +128,7 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
       '/api/store/vocab': (init) => {
         if (init?.method === 'PUT') {
           rejected++
-          // 第一次冲突；对齐版本号之后（刷新页面重新 load）才放行
+          // 第一次冲突；合并重试带新 base 再写就放行
           return rejected === 1
             ? jsonResponse({ ok: false, error: '词库已被其它页面改过', updatedAt: 'v2', count: 12 }, 409)
             : jsonResponse({ ok: true, updatedAt: 'v3' })
@@ -139,18 +139,46 @@ describe('HybridVocabRepo：SQLite 优先，IndexedDB 兜底', () => {
 
     const repo = new HybridVocabRepo(local)
     await repo.load()
-    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
-    // 关键：冲突不能把词库镜像到 IndexedDB（那才是真丢数据）
-    expect((await local.load()).items).toHaveLength(9)
+    await repo.save(lib(4))
+    // 首次 409 + 合并后重试一次（见 HybridVocabRepo.mergeAfterConflict）
+    expect(rejected).toBe(2)
+    // 合并结果落回本地：本页新增的词条没有因为冲突丢掉
+    expect((await local.load()).items).toHaveLength(4)
+  })
 
-    // 再存一次也不再发 PUT：本页这份是旧版本，继续写就等于用旧版覆盖服务端新版
-    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
-    expect(rejected).toBe(1)
+  it('409 且合并重试仍冲突：本页只读、本地保留改动，重新 load 才放行', async () => {
+    const local = new MemoryVocabRepo()
+    await local.save(lib(9))
+    let rejected = 0
+    mockStore({
+      '/api/store/health': () => jsonResponse({ ok: true }),
+      '/api/store/vocab': (init) => {
+        if (init?.method === 'PUT') {
+          rejected++
+          // 前两次都冲突：首次写 + 合并重试都失败 → 进入只读
+          return rejected <= 2
+            ? jsonResponse({ ok: false, error: '词库已被其它页面改过', updatedAt: `v${rejected + 1}`, count: 12 }, 409)
+            : jsonResponse({ ok: true, updatedAt: 'v4' })
+        }
+        return jsonResponse({ ok: true, value: lib(3), updatedAt: 'v1' })
+      },
+    })
 
-    // 只有重新读一次（用户刷新页面）才解除只读
+    const repo = new HybridVocabRepo(local)
+    await repo.load()
+    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
+    // 冲突不丢改动：本地留下这一版并置脏，刷新后还能合并回来
+    expect((await local.load()).items).toHaveLength(4)
+    expect(await local.isDirty?.()).toBe(true)
+
+    // 本页只读：再存不再发 PUT
+    await expect(repo.save(lib(4))).rejects.toThrow(/改过/)
+    expect(rejected).toBe(2)
+
+    // 重新 load 拿到服务端版本后放行
     await repo.load()
     await repo.save(lib(4))
-    expect(rejected).toBe(2)
+    expect(rejected).toBe(3)
   })
 
   it('服务不可用时完全回退 IndexedDB', async () => {
