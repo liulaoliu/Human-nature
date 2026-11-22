@@ -24,6 +24,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 | 词库（生词 / 语言点 / 复习状态） | `data/xueba.db` 的 `vocab` + `vocab_snapshots` | IndexedDB `shadowing-vocab` | 唯一资产，优先迁 |
 | 已保存文章（正文 / 句子 / 翻译） | `data/xueba.db` 的 `articles` | IndexedDB `shadowing-reader` | 文本，第二优先 |
 | 跟读录音 | IndexedDB `shadowing` | 无 | 音频 blob，体积大；下一阶段改成 `data/takes/` 文件 + SQLite 元数据 |
+| 速读复读录音 | IndexedDB `reader-repeat` | 无 | 每句只留最新一条；key = 文章标识 + 句 id，带 `sentenceText` 文本戳；**不进整库备份**，需要时单条下载 |
 | 校准 / 改过的正文 | localStorage | 无 | 一篇几个数字 / 几十 KB，同步接口更简单，暂不迁 |
 | **学习记录**（练习 / 错题 / 读完 / 精读 / 写作 / 回译 / 复述 / 活动统计 / 背词记录） | SQLite `data/xueba.db` 的 `learning_*` 表；localStorage 同步缓存 | `adapters/learningRepo` + `useLearningSync` | 换浏览器/清缓存可恢复；偏好/会话仍留 localStorage |
 | 目标 / 备忘等偏好 | localStorage | 无 | `readGoal` / `goalMemo` 是设置，不是学习记录 |

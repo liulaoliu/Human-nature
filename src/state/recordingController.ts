@@ -8,7 +8,13 @@
  * 判定「说完没有」用原始电平（本类的 `noteLevel` 返回阈值，由调用方交给 CycleRunner）；
  * 给 UI 看的电平走 `LevelMeter` 的节流，两条路不能混。
  */
-import { NOISE_FLOOR_INIT, VOICE_LEVEL, voiceThreshold } from '../core/recording'
+import {
+  LOW_PEAK,
+  MIN_TAKE_SEC,
+  NOISE_FLOOR_INIT,
+  VOICE_LEVEL,
+  voiceThreshold,
+} from '../core/recording'
 import type { AudioPlayerPort, Chunk, RecorderPort, Take, TakeRepoPort } from '../core/ports'
 import type { LevelMeter } from './levelMeter'
 import type { SessionState } from './sessionConfig'
@@ -33,11 +39,6 @@ export interface RecordingHost {
   /** 回放一条录音（试录用） */
   playTake(take: Take): Promise<void>
 }
-
-/** 手滑/没说话的下限：短于这个时长直接丢，不占存储也不弹提示 */
-const MIN_TAKE_SEC = 0.2
-/** 峰值低于这个值就认为麦克风增益太小（0..1） */
-const LOW_PEAK = 0.03
 
 export class RecordingController {
   /** 噪声底：录音期间见过的最低电平，用来自适应说话阈值（不同麦克风增益差很多） */

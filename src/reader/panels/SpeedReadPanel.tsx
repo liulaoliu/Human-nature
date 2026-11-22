@@ -1,9 +1,11 @@
-import { useMemo, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import type { Sentence } from '../../types/document'
 import { articleKey } from '../../core/docSignature'
 import { useSpeedReadSession } from '../hooks/useSpeedReadSession'
 import { useSpeedReadWords } from '../hooks/useSpeedReadWords'
+import { useRepeatSession } from '../hooks/useRepeatSession'
 import SpeedReadSentence from './SpeedReadSentence'
+import SpeedRepeatPanel from './SpeedRepeatPanel'
 import SpeedReadBasket, { SpeedReadDone } from './SpeedReadBasket'
 
 export interface SpeedReadPanelProps {
@@ -38,6 +40,12 @@ export interface SpeedReadPanelProps {
   onOpenLang: (sentence: Sentence) => void
   /** 语言点编辑器是否在速读之上打开（打开时不抢键盘）。 */
   langEditorOpen: boolean
+  /** 复读：播一句并拿到结束回调（带语速）。 */
+  playSentence: (text: string, opts?: { onEnd?: () => void; rate?: number }) => void
+  /** 复读：停掉 TTS（录音前必须静音）。 */
+  stopSpeech: () => void
+  /** 复读：预热当前句和后续句。 */
+  warmTexts?: (texts: string[]) => void
 }
 
 /**
@@ -46,9 +54,11 @@ export interface SpeedReadPanelProps {
  *
  * 会话状态机在 `useSpeedReadSession`，选词/本页清单在 `useSpeedReadWords`；这里只做渲染装配。
  */
-export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, onCopyText, wordsInSentence, onRemoveWord, vocabMode, onToggleVocabMode, onOpenLang, langEditorOpen }: SpeedReadPanelProps) {
+export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, ttsState, onAddItems, isKnown, wordMeaning, onFinishRead, onAddPhrases, onHint, onCopyText, wordsInSentence, onRemoveWord, vocabMode, onToggleVocabMode, onOpenLang, langEditorOpen, playSentence, stopSpeech, warmTexts }: SpeedReadPanelProps) {
   /** 本机「按文章」键：标识 + 正文签名，游标与本页清单一处算好、两处共用。 */
   const articleKeyOf = useMemo(() => articleKey(docKey, sentences), [docKey, sentences])
+  /** 复读开关：默认关；打开后速读的计时/拷打让位，键盘也交给复读。 */
+  const [repeatOn, setRepeatOn] = useState(false)
   /** 读完进度 / 阶段 / 计时 / 拷打 / 快捷键（数据与操作都在 hook，面板只负责渲染）。 */
   const {
     n,
@@ -76,7 +86,7 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     chooseDrill,
     restart,
     close,
-  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, onSpeak, langEditorOpen, onToggleVocabMode })
+  } = useSpeedReadSession({ sentences, docKey: articleKeyOf, onClose, onFinishRead, onSpeak, langEditorOpen, onToggleVocabMode, repeatOn })
 
   /** 选词 / 加词 / 本页清单（数据与操作都在这里，面板只负责渲染）。 */
   const {
@@ -110,6 +120,21 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
     wordsInSentence,
     onAddItems,
     onRemoveWord,
+  })
+
+  /** 复读：只借速读的「当前句 + 翻句」，不另存一套游标。 */
+  const repeat = useRepeatSession({
+    open: repeatOn,
+    sentences,
+    index,
+    sentence,
+    articleKey: docKey,
+    go,
+    onExit: () => setRepeatOn(false),
+    playSentence,
+    stopSpeech,
+    warmTexts,
+    langEditorOpen,
   })
 
   /** 渲染带词级点选的句子（保留标点/空格）。 */
@@ -157,9 +182,9 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
   }, [sentence, spans, isSel, toggleSel, isKnown, wordMeaning, addDirect, vocabMode, onHint])
 
   return (
-    <div className="study speed">
+    <div className={'study speed' + (repeatOn ? ' repeat-on' : '')}>
       <div className="bar study-bar">
-        <button onClick={close}>结束（Esc）</button>
+        <button onClick={close}>{repeatOn ? '结束速读' : '结束（Esc）'}</button>
         <span className="speed-nav">
           <button onClick={() => go(-1)} disabled={index <= 0} title="上一句（A / ←）">
             ‹
@@ -169,21 +194,25 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
             ›
           </button>
         </span>
-        <label className="check-inline" title="目标阅读速度：低于这个速度就算「不太理解」">
-          速度
-          <select value={String(wpm)} onChange={(e) => setWpm(Number(e.target.value))}>
-            <option value="80">80 词/分</option>
-            <option value="100">100</option>
-            <option value="120">120</option>
-            <option value="150">150</option>
-            <option value="180">180（快）</option>
-            <option value="220">220（很快）</option>
-          </select>
-        </label>
-        <label className="check-inline" title="超时就先来一道四选一再继续">
-          <input type="checkbox" checked={autoDrill} onChange={(e) => setAutoDrill(e.target.checked)} />
-          超时拷打
-        </label>
+        {!repeatOn && (
+          <>
+            <label className="check-inline" title="目标阅读速度：低于这个速度就算「不太理解」">
+              速度
+              <select value={String(wpm)} onChange={(e) => setWpm(Number(e.target.value))}>
+                <option value="80">80 词/分</option>
+                <option value="100">100</option>
+                <option value="120">120</option>
+                <option value="150">150</option>
+                <option value="180">180（快）</option>
+                <option value="220">220（很快）</option>
+              </select>
+            </label>
+            <label className="check-inline" title="超时就先来一道四选一再继续">
+              <input type="checkbox" checked={autoDrill} onChange={(e) => setAutoDrill(e.target.checked)} />
+              超时拷打
+            </label>
+          </>
+        )}
         <button
           className={'tb-vocab' + (vocabMode ? ' primary' : '')}
           onClick={() => {
@@ -202,7 +231,22 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         >
           语言点
         </button>
-        <span className="muted">平均 {summary.avgWpm} 词/分 · 超时 {summary.slow}</span>
+        <button
+          className={'tb-repeat' + (repeatOn ? ' primary' : '')}
+          onClick={() => {
+            if (repeatOn) {
+              repeat.exit()
+              return
+            }
+            stopSpeech()
+            setRepeatOn(true)
+          }}
+          aria-pressed={repeatOn}
+          title="音频复读：标准音 → 录音 → 回放 → 下一句；打开后 R 改为录音、空格改为播放/停"
+        >
+          🎧 复读{repeatOn ? ' · 开' : ''}
+        </button>
+        {!repeatOn && <span className="muted">平均 {summary.avgWpm} 词/分 · 超时 {summary.slow}</span>}
       </div>
 
       <div className="speed-progress" title="整篇进度">
@@ -219,46 +263,61 @@ export default function SpeedReadPanel({ sentences, docKey, onClose, onSpeak, tt
         onTapDelete={tapDelete}
       />
 
-      {done ? (
-        <SpeedReadDone summary={summary} onRestart={restart} onClose={close} />
-      ) : (
-        sentence && (
-          <SpeedReadSentence
-            sentence={sentence}
-            phase={phase}
-            sentenceParts={sentenceParts}
-            over={over}
-            words={words}
-            target={target}
-            elapsed={elapsed}
-            pace={pace}
-            pickMode={vocabMode}
-            vocabMode={vocabMode}
-            autoDrill={autoDrill}
-            drill={drill}
-            picked={picked}
-            drillOk={drillOk}
-            readMs={readMs}
-            slow={slow}
-            selWords={selWords}
-            addedWord={addedWord}
-            wordDraft={wordDraft}
-            knownWords={knownWords}
-            confirmDel={confirmDel}
-            ttsState={ttsState}
-            onAddPhrases={onAddPhrases}
-            addSelected={addSelected}
-            mergePhrase={mergePhrase}
-            setWordDraft={setWordDraft}
-            addCustom={addCustom}
-            tapRemove={tapRemove}
-            advance={advance}
-            onClose={onClose}
-            onSpeak={onSpeak}
-            onCopyText={onCopyText}
-            chooseDrill={chooseDrill}
-          />
-        )
+      <div className="speed-main">
+        {done ? (
+          <SpeedReadDone summary={summary} onRestart={restart} onClose={close} />
+        ) : (
+          sentence && (
+            <SpeedReadSentence
+              sentence={sentence}
+              phase={phase}
+              sentenceParts={sentenceParts}
+              over={over}
+              words={words}
+              target={target}
+              elapsed={elapsed}
+              pace={pace}
+              pickMode={vocabMode}
+              vocabMode={vocabMode}
+              autoDrill={autoDrill}
+              drill={drill}
+              picked={picked}
+              drillOk={drillOk}
+              readMs={readMs}
+              slow={slow}
+              selWords={selWords}
+              addedWord={addedWord}
+              wordDraft={wordDraft}
+              knownWords={knownWords}
+              confirmDel={confirmDel}
+              ttsState={ttsState}
+              repeatOn={repeatOn}
+              onAddPhrases={onAddPhrases}
+              addSelected={addSelected}
+              mergePhrase={mergePhrase}
+              setWordDraft={setWordDraft}
+              addCustom={addCustom}
+              tapRemove={tapRemove}
+              advance={advance}
+              onClose={onClose}
+              onSpeak={onSpeak}
+              onCopyText={onCopyText}
+              chooseDrill={chooseDrill}
+            />
+          )
+        )}
+      </div>
+
+      {repeatOn && (
+        <SpeedRepeatPanel
+          api={repeat}
+          sentence={sentence}
+          index={index}
+          total={n}
+          ttsState={ttsState}
+          onPrev={() => go(-1)}
+          onNext={() => go(1)}
+        />
       )}
     </div>
   )

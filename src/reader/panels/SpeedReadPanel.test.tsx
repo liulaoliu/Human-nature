@@ -18,6 +18,9 @@ function props(over: Partial<SpeedReadPanelProps> = {}): SpeedReadPanelProps {
     docKey: 'doc:1',
     onClose: noop,
     onSpeak: noop,
+    playSentence: noop,
+    stopSpeech: noop,
+    warmTexts: noop,
     ttsState: 'idle',
     onAddItems: noop,
     isKnown: () => false,
@@ -249,6 +252,33 @@ describe('SpeedReadPanel：键盘与空数据', () => {
     render(<SpeedReadPanel {...props({ sentences: [] })} />)
     expect(screen.getByText('完成')).toBeTruthy()
     expect(screen.queryByText('读完了（空格）')).toBeNull()
+  })
+})
+
+describe('SpeedReadPanel：复读模式', () => {
+  it('默认关闭；打开后出现控制列、隐藏「读本句」与速读计时', () => {
+    render(<SpeedReadPanel {...props()} />)
+    expect(screen.queryByLabelText('复读')).toBeNull()
+    expect(screen.getByTitle('朗读本句（R；已缓存则秒播）')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('button', { name: /🎧 复读/ }))
+    expect(screen.getByLabelText('复读')).toBeTruthy()
+    expect(screen.queryByTitle('朗读本句（R；已缓存则秒播）')).toBeNull()
+    // 速读的「读完」/计时让位给复读
+    expect(screen.queryByText('读完了（空格）')).toBeNull()
+    expect(screen.queryByText(/在配速内/)).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /🎧 复读 · 开/ }))
+    expect(screen.queryByLabelText('复读')).toBeNull()
+    expect(screen.getByTitle('朗读本句（R；已缓存则秒播）')).toBeTruthy()
+  })
+
+  it('打开复读后空格改为播放标准音，不再推进速读阶段', () => {
+    const playSentence = vi.fn()
+    render(<SpeedReadPanel {...props({ playSentence })} />)
+    fireEvent.click(screen.getByRole('button', { name: /🎧 复读/ }))
+    fireEvent.keyDown(window, { key: ' ' })
+    expect(playSentence).toHaveBeenCalledWith('Run fast.', expect.anything())
   })
 })
 

@@ -747,6 +747,34 @@ curl -s -H 'Accept-Encoding: gzip' -o /dev/null -w "%{size_download}B %{time_tot
    再用契约测试钉死（`server/learningContract.test.ts`、`src/core/learningSections.contract.test.ts`）；
    需要同时 import 两侧的断言，放在 `src/` 那一侧（bundler 解析两边都能读）。
 
+## 三·十一、速读里的复读（音频复读）
+
+跟读页（`src/ui`）的「复读」不搬过来：那边一半复杂度是**外部音频 ↔ 文本对齐**
+（导入音频 / VAD 切块 / 波形撕开 / 锚点校准）。D 老师的音频是按句子文本现生成的，
+`sentence` 天然就是块，所以只复刻「练」的那半：**标准音 → 录音 → 回放 → 下一句**。
+
+- **入口是速读里的模式开关**，不是新的 URL 面板：速读本身已经是 `/p/speed`
+  的布尔面板，复读只是它里面的一列。默认关闭；关着时页面与原来完全一致。
+- **打开后速读让位**：计时暂停（`useSpeedReadState` 的 `paused`）、超时拷打不触发、
+  译文与语言点常显、`🔊 读本句` 隐藏；空格 / R / B / C / A / D 交给复读。
+  两个 hook 都注册在 **priority 25**（同优先级会同时收到事件），所以
+  `useSpeedReadSession` 用 `isRepeatHotkey` 显式让开 —— 新增复读键必须同时改这里。
+- **当前句只有一份**：复读用速读的 `index` / `go`，不另存游标；复读翻句就是速读翻句。
+- **连续跟读是纯状态机**：`core/repeatCycle`（`start → refEnd → recEnd → takeEnd → next/stop`），
+  步骤一变由 effect 执行，别再写一串互相调用的回调（停不掉 / 停两次都是那么来的）。
+- **录音按文章 + 句子存**：`adapters/repeatTakeRepo`（IndexedDB `reader-repeat`），
+  key = `articleKey + sentenceId`，带 `sentenceText` 文本戳。`articleKey` 用文章标识
+  **不是**正文签名：改一句只应让那一句失效，不该把整篇录音全作废。
+- **不复用跟读页的录音记录**：那边的 `Take` 属于「某个音频文件的第几块」；
+  复读的 `RepeatTake` 属于「某篇文章的某一句」。共享只发生在 `core/` 与 `adapters/`，
+  视图层（`src/ui` 与 `src/reader`）互不 import。
+- 播放器懒建：复读关着时不创建 `<audio>`；无 `src` 的元素不调 `pause()`
+  （jsdom 里 `pause` 未实现，测试会刷错误）。
+
+新增文件：`core/repeatCycle.ts`、`core/repeatTake.ts`、`adapters/repeatTakeRepo.ts`、
+`reader/hooks/useRepeatSession.ts`、`useRepeatRecorder.ts`、`useRepeatTakes.ts`、
+`reader/panels/SpeedRepeatPanel.tsx`、`reader/repeatKeys.ts`。
+
 ## 四、有意为之的例外（别当违规修）
 
 - **单词和语言点共用一份词库存储**（`VocabItem.kind` 区分）。

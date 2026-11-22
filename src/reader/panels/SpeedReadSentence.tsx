@@ -29,6 +29,8 @@ export interface SpeedReadSentenceProps {
   knownWords: string[]
   confirmDel: string | null
   ttsState: 'idle' | 'loading' | 'playing'
+  /** 复读模式：隐藏速读的计时/拷打/朗读入口，译文与语言点常显。 */
+  repeatOn?: boolean
   onAddPhrases?: (items: string[], sentence: Sentence) => void
   addSelected: () => void
   mergePhrase: () => void
@@ -51,25 +53,30 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
     confirmDel, ttsState, onAddPhrases, addSelected, mergePhrase, setWordDraft, addCustom,
     tapRemove, advance, onClose, onSpeak, onCopyText, chooseDrill,
   } = props
+  const repeatOn = props.repeatOn ?? false
 
   return (
     <>
             <div className="study-card speed-card">
-              <div className="bar speed-meta">
-                <span className={over ? 'speed-pace over' : 'speed-pace ok'}>{over ? '⏱ 超时' : '⚡ 在配速内'}</span>
-                <span className="muted">
-                  {words} 词 · 目标 {(target / 1000).toFixed(1)}s · 已用 {(elapsed / 1000).toFixed(1)}s
-                </span>
-              </div>
-              <div className="speed-timebar">
-                <div className={over ? 'over' : ''} style={{ width: `${pace}%` }} />
-              </div>
+              {!repeatOn && (
+                <div className="bar speed-meta">
+                  <span className={over ? 'speed-pace over' : 'speed-pace ok'}>{over ? '⏱ 超时' : '⚡ 在配速内'}</span>
+                  <span className="muted">
+                    {words} 词 · 目标 {(target / 1000).toFixed(1)}s · 已用 {(elapsed / 1000).toFixed(1)}s
+                  </span>
+                </div>
+              )}
+              {!repeatOn && (
+                <div className="speed-timebar">
+                  <div className={over ? 'over' : ''} style={{ width: `${pace}%` }} />
+                </div>
+              )}
 
               {/* 拷打时隐藏原文文字，但保留 div 占位，避免布局跳动 */}
               <div className="speed-sentence-slot">
               {/* 捕获阶段处理 Alt 点击：词 span 自己会 stopPropagation，冒泡阶段收不到 */}
               <div
-                className={'speed-sentence' + (phase === 'drill' ? ' is-hidden' : '')}
+                className={'speed-sentence' + (phase === 'drill' && !repeatOn ? ' is-hidden' : '')}
                 style={{ userSelect: pickMode || vocabMode ? 'none' : 'text' }}
                 onClickCapture={(e) => {
                   if (!e.altKey) return
@@ -81,19 +88,26 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
               >
                 {sentenceParts}
               </div>
-                {phase === 'drill' && (
+                {phase === 'drill' && !repeatOn && (
                   <div className="speed-hidden-overlay">原文已隐藏 —— 只看挖空句，从选项里选</div>
                 )}
               </div>
 
-              {phase === 'read' && (
+              {phase === 'read' && !repeatOn && (
                 <div className="speed-hint muted">
                   先自己读一遍 → 按 <kbd>R</kbd> 朗读，<kbd>空格</kbd> 看释义与语言点；
                   <kbd>W</kbd>/<kbd>S</kbd> 上下翻页，<kbd>A</kbd>/<kbd>D</kbd> 换句；<kbd>Alt</kbd> + 点击可复制整句
                 </div>
               )}
 
-              {(phase === 'reveal' || phase === 'drill-answer') && (
+              {repeatOn && (
+                <div className="speed-hint muted">
+                  复读模式：右侧控制标准音 / 录音 / A-B。<kbd>空格</kbd> 播放或停，<kbd>R</kbd> 录音，
+                  <kbd>C</kbd> 连续跟读。
+                </div>
+              )}
+
+              {(repeatOn || phase === 'reveal' || phase === 'drill-answer') && (
                 <div className="speed-reveal">
                   {sentence.translation && <div className="speed-tr">{sentence.translation}</div>}
                   {getSentenceLanguages(sentence).map((L, li) => (
@@ -106,12 +120,12 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
                     </div>
                   ))}
                   {sentence.collocations.length > 0 && <div className="muted">搭配：{sentence.collocations.join('；')}</div>}
-                  {readMs > 0 && (
+                  {readMs > 0 && !repeatOn && (
                     <div className="muted">
                       本句速度 {Math.round((words / readMs) * 60000)} 词/分{slow ? '（超时）' : ''}
                     </div>
                   )}
-                  {slow && (
+                  {slow && !repeatOn && (
                     <div className="speed-banner">
                       {autoDrill && drill ? '⏱ 超时了，先来一道再继续' : '⏱ 这句超时了（没题可练，直接继续）'}
                     </div>
@@ -119,7 +133,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
                 </div>
               )}
 
-              {(phase === 'drill' || phase === 'drill-answer') && drill && (
+              {(phase === 'drill' || phase === 'drill-answer') && drill && !repeatOn && (
                 <div className="speed-drill">
                   <div className="speed-drill-title">
                     拷打：把空填回来
@@ -209,20 +223,22 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
               )}
 
               <div className="bar study-actions">
-                <button onClick={() => onSpeak(sentence.text)} title="朗读本句（R；已缓存则秒播）">
-                  {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
-                </button>
-                {phase === 'read' && (
+                {!repeatOn && (
+                  <button onClick={() => onSpeak(sentence.text)} title="朗读本句（R；已缓存则秒播）">
+                    {ttsState === 'loading' ? '🔊 合成中…' : '🔊 读本句'}
+                  </button>
+                )}
+                {!repeatOn && phase === 'read' && (
                   <button className="primary" onClick={advance}>
                     读完了（空格）
                   </button>
                 )}
-                {phase === 'reveal' && (
+                {!repeatOn && phase === 'reveal' && (
                   <button className="primary" onClick={advance}>
                     {slow && autoDrill && drill ? '来一道（空格）' : '下一句（空格）'}
                   </button>
                 )}
-                {phase === 'drill-answer' && (
+                {!repeatOn && phase === 'drill-answer' && (
                   <button className="primary" onClick={advance}>
                     下一句（空格）
                   </button>

@@ -1,4 +1,4 @@
-import type { AudioPlayerPort, MicOptions, RecorderPort, Take } from '../core/ports'
+import type { AudioPlayerPort, MicOptions, RecorderPort } from '../core/ports'
 import { applyGain, matchGain, peakSafeGain, speechBounds, speechRms } from '../core/loudness'
 import { floatToWav } from '../core/wav'
 import { Lru } from '../core/lru'
@@ -17,6 +17,17 @@ interface NormalizedTake {
   blob: Blob
   from: number
   to?: number
+}
+
+/**
+ * 回放一条录音所需的最小形状：跟读页的 `Take` 与 D 老师复读的 `RepeatTake`
+ * 都满足，播放器不用为了复读再抄一份 Take 字段。
+ */
+export interface PlayableTake {
+  id: string
+  blob: Blob
+  speechFrom?: number
+  speechTo?: number
 }
 
 /**
@@ -152,7 +163,7 @@ export class BrowserPlayer implements AudioPlayerPort {
     this.takeBlobs.clear() // 增益变了，缓存的重编码要作废
   }
 
-  async playTake(take: Take, rate: number): Promise<void> {
+  async playTake(take: PlayableTake, rate: number): Promise<void> {
     this.pause()
     // 先把「我的录音」缩放到和标准音一样响，重编码成 WAV 再播。
     // 归一化那份播不了就退回原始录音再试一次（重建 object URL），实在不行才放弃。
@@ -236,7 +247,7 @@ export class BrowserPlayer implements AudioPlayerPort {
    * 结果进 LRU 缓存：每条 WAV 几百 KB，练一整篇（几十块）就是几十 MB，
    * 而实际同时只会用到最近几条。
    */
-  private async normalizedTake(take: Take): Promise<NormalizedTake> {
+  private async normalizedTake(take: PlayableTake): Promise<NormalizedTake> {
     const cached = this.takeBlobs.get(take.id)
     if (cached) return cached
     const fallback: NormalizedTake = {
@@ -278,8 +289,10 @@ export class BrowserPlayer implements AudioPlayerPort {
   }
 
   pause(): void {
-    this.el.pause()
-    this.takeEl.pause()
+    // 没有 src 的元素没在播（复读的播放器懒建、多数时候还没载过录音）；
+    // 不碰它既省事，也让 jsdom 测试不再报 "pause not implemented"。
+    if (this.el.src) this.el.pause()
+    if (this.takeEl.src) this.takeEl.pause()
     cancelAnimationFrame(this.raf)
     this.endPending?.()
     this.endPending = null

@@ -111,6 +111,20 @@ export function useTtsPlayback({ voice, onFallback }: UseTtsPlaybackOptions) {
     [playText, timingsCache],
   )
 
+  /**
+   * 播一句并拿到结束回调（复读用）。
+   * `speak` 不带回调，整篇连播又只管整篇；复读要「播完这句再录音」，
+   * 所以单独开一个入口，语义和 `speak` 一样（会先停掉整篇连播）。
+   */
+  const playSentence = useCallback(
+    (text: string, opts?: { onEnd?: () => void; rate?: number }) => {
+      readAllRef.current = false
+      setReadingAll(false)
+      playText(text, opts?.onEnd, opts?.rate ?? 1)
+    },
+    [playText],
+  )
+
   /** 逐句朗读整篇。 */
   const startReadAll = useCallback(
     (sentences: Sentence[]) => {
@@ -137,6 +151,7 @@ export function useTtsPlayback({ voice, onFallback }: UseTtsPlaybackOptions) {
     speak,
     speakFromWord,
     speakRange,
+    playSentence,
     startReadAll,
     stopReadAll,
     resetSpeech,

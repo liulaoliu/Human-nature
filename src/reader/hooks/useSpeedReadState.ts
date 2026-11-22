@@ -20,13 +20,15 @@ export interface UseSpeedReadStateOptions {
   docKey: string
   /** 这篇过完（推到结尾）时回调一次（「读完」目标记一笔）。 */
   onFinishRead?: () => void
+  /** 复读模式下暂停速读计时（否则一直在「超时」，配速条也没意义）。 */
+  paused?: boolean
 }
 
 /**
  * 速读的「状态与计时」：偏好、游标、阶段、本轮成绩、当前句与派生。
  * 动作（读→揭示→拷打→下一句、翻句、重开）在 `useSpeedReadFlow`。
  */
-export function useSpeedReadState({ sentences, docKey, onFinishRead }: UseSpeedReadStateOptions) {
+export function useSpeedReadState({ sentences, docKey, onFinishRead, paused = false }: UseSpeedReadStateOptions) {
   const n = sentences.length
   const [wpm, setWpm] = useLocalStorageState('reader:speedWpm', DEFAULT_WPM, persistentNumber)
   const [autoDrill, setAutoDrill] = useLocalStorageState('reader:speedAutoDrill', true, persistentBoolTrue)
@@ -92,12 +94,15 @@ export function useSpeedReadState({ sentences, docKey, onFinishRead }: UseSpeedR
   }, [key, n])
 
   useEffect(() => {
-    if (phase !== 'read' || done) return
+    if (paused || phase !== 'read' || done) {
+      setElapsed(0)
+      return
+    }
     t0.current = Date.now()
     setElapsed(0)
     const id = window.setInterval(() => setElapsed(Date.now() - t0.current), 250)
     return () => window.clearInterval(id)
-  }, [phase, index, done])
+  }, [paused, phase, index, done])
 
   // 卸载时清掉自动下一句的定时器
   useEffect(() => {
@@ -106,8 +111,8 @@ export function useSpeedReadState({ sentences, docKey, onFinishRead }: UseSpeedR
     }
   }, [])
 
-  const pace = target > 0 ? Math.min(100, Math.round((elapsed / target) * 100)) : 0
-  const over = elapsed > target
+  const pace = paused || target === 0 ? 0 : Math.min(100, Math.round((elapsed / target) * 100))
+  const over = !paused && elapsed > target
 
   return {
     api: {

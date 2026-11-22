@@ -91,3 +91,14 @@ export function persistentEnum<T extends string>(allowed: readonly T[], fallback
     serialize: (value) => value,
   }
 }
+
+/** 从一组候选数字里取值：坏值 / NaN 一律回落，别让界面显示 NaN。 */
+export function persistentNumberIn(allowed: readonly number[], fallback: number): PersistentOptions<number> {
+  return {
+    parse: (raw) => {
+      const n = Number(raw)
+      return allowed.includes(n) ? n : fallback
+    },
+    serialize: (value) => String(value),
+  }
+}

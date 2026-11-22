@@ -852,3 +852,20 @@ npm run gates                 # 全量收尾门禁（提交前 / CI 必跑）
     当时 409 后只停写、不落本地，刷新后旧词库顶上来，再加上 `reader:langCollected`
     认为“已收过”，生词层看起来就没了。排查时别拿导出 JSON 反推 SQLite 状态，
     要看 `vocab.updated_at` 与文章 `updated_at` 是否同步。
+
+74. **复读与速读同优先级，必须显式让键**（2026-11-22）。复读是速读里的模式，
+    两个 hook 都注册在 priority 25；`hotkeys.ts` 的规则是「同优先级会同时收到事件」，
+    不是「后者覆盖前者」。所以 `useSpeedReadSession` 在 `repeatOn` 时用
+    `isRepeatHotkey` 提前 return，否则一次空格既播标准音又推进速读阶段。
+    新增复读键（`reader/repeatKeys.ts`）时必须同步这条让键清单。
+
+75. **复读关着时不要碰媒体/存储**（2026-11-22）。`useRepeatSession` 随速读面板常驻，
+    默认是关的：播放器懒建（关着不 `new Audio()`）、`useRepeatTakes(enabled)` 不读 IndexedDB、
+    `useRepeatRecorder(enabled)` 不枚举麦克风。否则每个速读测试都会多出异步 `setState`
+    的 act 警告。另一个 jsdom 坑：`HTMLMediaElement.prototype.pause` 未实现，
+    `BrowserPlayer.pause()` 现在只对**有 src** 的元素调 `pause`（没载过就没在播）。
+
+76. **循环次数不能在重播路径上被重置**（2026-11-22）。`playRef` 原来既起播又设
+    `loopLeft = loop`；`onEnd` 再调 `playRef` 就把计数重置回 N，「循环 3 遍」永远停不下来
+    （测试里 3 遍变 4 遍）。现在拆成 `playRefOnce`（只播，不动计数）与 `playRef`
+    （设计数再播），连续跟读的 ref 步也一样在 effect 内递归重播，不重置。

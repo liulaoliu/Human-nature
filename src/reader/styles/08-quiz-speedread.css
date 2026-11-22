@@ -351,7 +351,7 @@
   background: var(--bg);
   border-bottom: 1px solid var(--line-soft);
 }
-.study.speed > .speed-foot {
+.study.speed .speed-foot {
   position: sticky;
   bottom: 0;
   z-index: 25;
@@ -364,8 +364,8 @@
   gap: 8px;
 }
 /* 这两块以前各自带边距/分割线，收进 footer 后统一交给 .speed-foot */
-.study.speed > .speed-foot .speed-addword { margin-top: 0; padding-top: 0; border-top: 0; }
-.study.speed > .speed-foot .study-actions {
+.study.speed .speed-foot .speed-addword { margin-top: 0; padding-top: 0; border-top: 0; }
+.study.speed .speed-foot .study-actions {
   /* .bar 默认 margin-bottom:16px：不抹掉的话吸底时下面会漏一条正文 */
   margin: 0;
 }
@@ -422,3 +422,64 @@
 .drill-warm-ex { margin-top: 6px; color: var(--dim); font-size: 12.5px; }
 .drill-warm-foot { margin-top: 4px; }
 .drill-warm-empty { padding: 10px 0 16px; }
+
+/* ── 速读 · 复读模式：正文 + 右侧控制列 ────────────────────────────
+   只在 `.repeat-on` 时变两列；关着仍是原来的 760 单列，速读本身不受影响。
+   右侧列 sticky 在 `.reader-main` 里，跟着正文滚但不滚走；窄屏折到正文下方。 */
+.study.speed.repeat-on {
+  max-width: 1180px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  align-items: start;
+  column-gap: 18px;
+}
+.study.speed.repeat-on > .study-bar,
+.study.speed.repeat-on > .speed-progress { grid-column: 1 / -1; }
+.speed-main { min-width: 0; }
+
+.speed-repeat {
+  position: sticky;
+  top: 58px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.speed-repeat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.speed-repeat-head button { padding: 2px 8px; font-size: 12px; }
+.speed-repeat-nav { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.speed-repeat-nav button { padding: 2px 10px; }
+.speed-repeat-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.speed-repeat-row > button { flex: 1 1 auto; }
+.speed-repeat-row .check-inline { flex: 1 1 120px; }
+.speed-repeat-sep { height: 1px; margin: 2px 0; background: var(--line-soft); }
+.speed-repeat-hint { color: var(--dim); font-size: 12px; }
+.speed-repeat-keys { margin-top: 2px; font-size: 11px; line-height: 1.6; }
+.speed-repeat-settings { border-top: 1px solid var(--line-soft); padding-top: 8px; }
+.speed-repeat-settings summary { cursor: pointer; color: var(--dim); font-size: 12px; }
+.speed-repeat-settings .check-inline { display: flex; margin-top: 6px; }
+
+.speed-rec,
+.speed-cycle { width: 100%; padding: 9px 10px; font-weight: 700; }
+.speed-level {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--panel-3);
+  overflow: hidden;
+}
+.speed-level > div {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-2), var(--accent));
+  transition: width 0.06s linear;
+}
+
+@media (max-width: 1080px) {
+  .study.speed.repeat-on { display: block; max-width: 760px; }
+  .speed-repeat { position: static; margin-top: 12px; }
+}

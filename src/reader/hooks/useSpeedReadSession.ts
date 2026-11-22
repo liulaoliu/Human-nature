@@ -1,5 +1,6 @@
 import type { Sentence } from '../../types/document'
 import { hasModifier, isComposing, isEditableTarget } from '../hotkeys'
+import { isRepeatHotkey } from '../repeatKeys'
 import { useHotkeys } from '../useHotkeys'
 import { useSpeedReadFlow } from './useSpeedReadFlow'
 import { useSpeedReadState } from './useSpeedReadState'
@@ -17,6 +18,8 @@ export interface UseSpeedReadSessionOptions {
   langEditorOpen: boolean
   /** 数字 1：切换「选词模式」（阅读页 / 速读页共用同一个状态）。 */
   onToggleVocabMode?: () => void
+  /** 复读模式开着：计时暂停，键盘交给复读（空格/R/A/D 等不再走速读）。 */
+  repeatOn?: boolean
 }
 
 /**
@@ -33,8 +36,9 @@ export function useSpeedReadSession({
   onSpeak,
   langEditorOpen,
   onToggleVocabMode,
+  repeatOn = false,
 }: UseSpeedReadSessionOptions) {
-  const state = useSpeedReadState({ sentences, docKey, onFinishRead })
+  const state = useSpeedReadState({ sentences, docKey, onFinishRead, paused: repeatOn })
   const { advance, go, chooseDrill, restart, close } = useSpeedReadFlow({ state, onClose })
   const { phase, sentence, drill } = state.api
 
@@ -43,6 +47,8 @@ export function useSpeedReadSession({
       // 正在输入框里打字时，不要触发空格翻页 / 数字选项
       if (langEditorOpen || isComposing(e)) return
       if (isEditableTarget(e.target) || hasModifier(e)) return
+      // 复读模式接管的键让给 `useRepeatSession`（同优先级会同时收到事件）
+      if (repeatOn && isRepeatHotkey(e)) return
       /**
        * 翻页滚动：速读的正文可以很长，只手够鼠标太别扭。
        * W/S 与 ↑/↓/PageUp/PageDown 都走这里 —— **滚的是 `.reader-main`**（真正的滚动容器，

@@ -61,3 +61,9 @@ export function recordCapMs(chunkSec: number): number {
 export function voiceThreshold(noiseFloor: number, minLevel = VOICE_LEVEL): number {
   return Math.max(minLevel, noiseFloor + VOICE_MARGIN)
 }
+
+/** 短于这个时长的录音算手滑，不保存（跟读页与复读共用同一口径）。 */
+export const MIN_TAKE_SEC = 0.2
+
+/** 峰值低于这个值，多半是麦克风增益没调起来，UI 要提示。 */
+export const LOW_PEAK = 0.03
