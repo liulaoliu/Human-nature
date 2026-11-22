@@ -109,6 +109,9 @@ export function useRepeatRecorder({ onAutoStop, enabled = true }: UseRepeatRecor
   const start = useCallback(
     async (opts: { capSec: number; autoStop: boolean }): Promise<boolean> => {
       if (recordingRef.current) return true
+      // 上一次 stop 还没收完（MediaRecorder 还在 teardown）：等它结束再开，
+      // 否则同一个实例上 start/stop 交叠，录出来的 blob 可能是空的。
+      if (stoppingRef.current) return false
       setError(null)
       setLowMic(false)
       const token = ++tokenRef.current

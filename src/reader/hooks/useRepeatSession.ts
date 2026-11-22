@@ -17,8 +17,6 @@ import { persistentBoolTrue, persistentNumberIn, useLocalStorageState } from './
 import { useRepeatRecorder } from './useRepeatRecorder'
 import { useRepeatTakes } from './useRepeatTakes'
 
-export type RepeatMode = 'single' | 'ab' | 'cycle'
-
 export interface UseRepeatSessionOptions {
   /** 复读开关（面板里的「🎧 复读」）。 */
   open: boolean
@@ -37,7 +35,7 @@ export interface UseRepeatSessionOptions {
 }
 
 /**
- * 速读里的复读会话：播放标准音 / 录音 / 回放 / A-B / 连续跟读。
+ * 速读里的复读会话：播放标准音 / 录音 / 回放 / 连续跟读。
  *
  * 「当前练哪一句」不归这里管——用速读的 `index` 和 `go`，一套游标两处共用，
  * 复读翻句就是速读翻句，退出再进来进度也一致。
@@ -63,12 +61,11 @@ export function useRepeatSession({
   const [autoNext, setAutoNext] = useLocalStorageState('reader:repeatAutoNext', true, persistentBoolTrue)
   const [boost, setBoost] = useLocalStorageState('reader:repeatBoost', 1.5, persistentNumberIn([1, 1.5, 2], 1.5))
 
-  const [abLoop, setAbLoop] = useState(false)
   const [playing, setPlaying] = useState<'ref' | 'take' | null>(null)
   const [cycle, setCycle] = useState<RepeatState>(REPEAT_IDLE)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  const { take, loading: loadingTake, save, remove } = useRepeatTakes({ articleKey, sentence, enabled: open })
+  const { take, loading: loadingTake, save } = useRepeatTakes({ articleKey, sentence, enabled: open })
   const stopRecRef = useRef<() => Promise<void>>(async () => {})
   const recorder = useRepeatRecorder({ onAutoStop: () => void stopRecRef.current(), enabled: open })
 
@@ -102,7 +99,6 @@ export function useRepeatSession({
   playSentenceRef.current = playSentence
   const hasNextRef = useRef(index < sentences.length - 1)
   hasNextRef.current = index < sentences.length - 1
-  const modeRef = useRef<RepeatMode>('single')
   const loopLeftRef = useRef(1)
   const cycleRef = useRef(cycle)
   cycleRef.current = cycle
@@ -112,7 +108,6 @@ export function useRepeatSession({
     stopSpeechRef.current()
     playerRef.current?.pause()
     // 作废还在路上的 onEnd（浏览器语音 cancel 后可能还会回调一次）
-    modeRef.current = 'single'
     setPlaying(null)
   }, [])
 
@@ -121,72 +116,46 @@ export function useRepeatSession({
   const stopAll = useCallback(() => {
     stopAudio()
     void cancelRecording()
-    setAbLoop(false)
-    modeRef.current = 'single'
     setCycle(REPEAT_IDLE)
   }, [cancelRecording, stopAudio])
 
-  // ── 手动播放（单句 / A-B） ─────────────────────────────────────────
-  const playRefOnceRef = useRef<(mode: RepeatMode) => void>(() => {})
-  const playTakeRef = useRef<(mode?: RepeatMode) => void>(() => {})
+  // ── 手动播放（单句） ───────────────────────────────────────────────
+  const playRefOnceRef = useRef<() => void>(() => {})
 
-  /** 一次播放结束：A-B 接着放我的；还在循环里就再来一遍；否则停。 */
+  /** 一次播放结束：还在循环里就再来一遍；否则停。 */
   const onRefEnd = useCallback(() => {
-    if (modeRef.current === 'ab') {
-      playTakeRef.current('ab')
-      return
-    }
     if (loopLeftRef.current > 1) {
       loopLeftRef.current -= 1
-      playRefOnceRef.current('single')
+      playRefOnceRef.current()
       return
     }
     setPlaying(null)
   }, [])
 
   /** 播一次，不动循环计数（重播走这里，别把计数重置回起点）。 */
-  const playRefOnce = useCallback(
-    (mode: RepeatMode) => {
-      const s = sentenceRef.current
-      if (!s) return
-      modeRef.current = mode
-      setAbLoop(mode === 'ab')
-      stopSpeechRef.current()
-      getPlayer().pause()
-      setPlaying('ref')
-      playSentenceRef.current(s.text, { rate: rateRef.current, onEnd: onRefEnd })
-    },
-    [getPlayer, onRefEnd],
-  )
+  const playRefOnce = useCallback(() => {
+    const s = sentenceRef.current
+    if (!s) return
+    stopSpeechRef.current()
+    getPlayer().pause()
+    setPlaying('ref')
+    playSentenceRef.current(s.text, { rate: rateRef.current, onEnd: onRefEnd })
+  }, [getPlayer, onRefEnd])
   playRefOnceRef.current = playRefOnce
 
-  const playRef = useCallback(
-    (mode: RepeatMode = 'single') => {
-      if (cycleRef.current.step !== 'idle') setCycle(REPEAT_IDLE)
-      loopLeftRef.current = loopRef.current === 0 ? Infinity : loopRef.current
-      playRefOnce(mode)
-    },
-    [playRefOnce],
-  )
+  const playRef = useCallback(() => {
+    if (cycleRef.current.step !== 'idle') setCycle(REPEAT_IDLE)
+    loopLeftRef.current = loopRef.current === 0 ? Infinity : loopRef.current
+    playRefOnce()
+  }, [playRefOnce])
 
-  const playTake = useCallback(
-    (mode: RepeatMode = 'single') => {
-      const t = takeRef.current
-      if (!t) return
-      modeRef.current = mode
-      stopSpeechRef.current()
-      setPlaying('take')
-      void getPlayer().playTake(t, rateRef.current).then(() => {
-        if (modeRef.current === 'ab') {
-          playRefOnce('ab')
-          return
-        }
-        setPlaying(null)
-      })
-    },
-    [getPlayer, playRefOnce],
-  )
-  playTakeRef.current = playTake
+  const playTake = useCallback(() => {
+    const t = takeRef.current
+    if (!t) return
+    stopSpeechRef.current()
+    setPlaying('take')
+    void getPlayer().playTake(t, rateRef.current).then(() => setPlaying(null))
+  }, [getPlayer])
 
   // ── 录音 ───────────────────────────────────────────────────────────
   const startRec = useCallback(async () => {
@@ -239,7 +208,6 @@ export function useRepeatSession({
   useEffect(() => {
     if (cycle.step !== 'ref') return
     let alive = true
-    modeRef.current = 'cycle'
     loopLeftRef.current = loopRef.current === 0 ? Infinity : loopRef.current
     const play = () => {
       const s = sentenceRef.current
@@ -290,7 +258,6 @@ export function useRepeatSession({
       setCycle(REPEAT_IDLE)
       return
     }
-    modeRef.current = 'cycle'
     setPlaying('take')
     void getPlayer().playTake(t, rateRef.current).then(() => {
       setPlaying(null)
@@ -318,8 +285,6 @@ export function useRepeatSession({
     }
     stopAudio()
     void cancelRecording()
-    setAbLoop(false)
-    modeRef.current = 'single'
     setCycle(REPEAT_IDLE)
   }, [cancelRecording, open, sentence?.id, stopAudio])
 
@@ -353,22 +318,11 @@ export function useRepeatSession({
   }, [open, index, sentences, warmTexts])
 
   // ── 按钮动作 ───────────────────────────────────────────────────────
-  const toggleAb = useCallback(() => {
-    if (abLoop) {
-      setAbLoop(false)
-      stopAudio()
-      return
-    }
-    if (!takeRef.current) return
-    playRef('ab')
-  }, [abLoop, playRef, stopAudio])
-
   const toggleCycle = useCallback(() => {
     if (cycleRef.current.step !== 'idle') {
       stopAll()
       return
     }
-    setAbLoop(false)
     stopAudio()
     setCycle((c) => repeatNext(c, 'start', { hasNext: hasNextRef.current }).state)
   }, [stopAll, stopAudio])
@@ -379,15 +333,9 @@ export function useRepeatSession({
       return
     }
     stopAudio()
-    setAbLoop(false)
     setCycle(REPEAT_IDLE)
     void startRec()
   }, [recorder.recording, startRec, stopAudio, stopRec])
-
-  const removeTake = useCallback(() => {
-    if (playing === 'take') stopAudio()
-    void remove()
-  }, [playing, remove, stopAudio])
 
   const exit = useCallback(() => {
     stopAll()
@@ -405,10 +353,9 @@ export function useRepeatSession({
         if (recorder.recording) return void stopRec()
         if (playing) return stopAudio()
         if (cycleRef.current.step !== 'idle') return stopAll()
-        return playRef('single')
+        return playRef()
       }
       if (k === 'r') return toggleRecord()
-      if (k === 'b') return toggleAb()
       if (k === 'c') return toggleCycle()
       if (k === 'arrowleft' || k === 'a') {
         stopAll()
@@ -435,7 +382,6 @@ export function useRepeatSession({
     setAutoNext,
     boost,
     setBoost,
-    abLoop,
     playing,
     cycleStep: cycle.step,
     cycleLabel: repeatStepLabel(cycle.step),
@@ -453,10 +399,8 @@ export function useRepeatSession({
     setRaw: recorder.setRaw,
     playRef,
     playTake,
-    toggleAb,
     toggleCycle,
     toggleRecord,
-    removeTake,
     stop: stopAll,
     exit,
   }

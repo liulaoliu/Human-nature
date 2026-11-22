@@ -64,11 +64,5 @@ export function useRepeatTakes({ articleKey, sentence, enabled = true, repo }: U
     [store],
   )
 
-  const remove = useCallback(async () => {
-    if (!take) return
-    await store.remove(take.id)
-    setTake(null)
-  }, [store, take])
-
-  return { take, loading, save, remove }
+  return { take, loading, save }
 }

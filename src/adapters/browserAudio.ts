@@ -28,6 +28,11 @@ export interface PlayableTake {
   blob: Blob
   speechFrom?: number
   speechTo?: number
+  /**
+   * 录音落盘时间。**同句重录时 `id` 不变**，归一化缓存必须带上它，
+   * 否则回放的是上一次那条旧录音（2026-11-22 修的 bug）。
+   */
+  createdAt?: number
 }
 
 /**
@@ -248,7 +253,8 @@ export class BrowserPlayer {
    * 而实际同时只会用到最近几条。
    */
   private async normalizedTake(take: PlayableTake): Promise<NormalizedTake> {
-    const cached = this.takeBlobs.get(take.id)
+    const cacheKey = `${take.id}:${take.createdAt ?? 0}`
+    const cached = this.takeBlobs.get(cacheKey)
     if (cached) return cached
     const fallback: NormalizedTake = {
       blob: take.blob,
@@ -280,7 +286,7 @@ export class BrowserPlayer {
         from: trimmed ? bounds.from : 0,
         to: trimmed ? bounds.to : undefined,
       }
-      this.takeBlobs.set(take.id, entry)
+      this.takeBlobs.set(cacheKey, entry)
       return entry
     } catch (e) {
       console.warn('[复读录音] 录音解码失败，退回原始音频', e)

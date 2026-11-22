@@ -102,7 +102,7 @@ export default function SpeedReadSentence(props: SpeedReadSentenceProps) {
 
               {repeatOn && (
                 <div className="speed-hint muted">
-                  复读模式：右侧控制标准音 / 录音 / A-B。<kbd>空格</kbd> 播放或停，<kbd>R</kbd> 录音，
+                  复读模式：右侧控制标准音 / 录音。 <kbd>空格</kbd> 播放或停，<kbd>R</kbd> 录音，
                   <kbd>C</kbd> 连续跟读。
                 </div>
               )}

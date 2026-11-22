@@ -71,6 +71,7 @@ beforeEach(() => {
 afterEach(() => {
   restoreStorage()
   vi.clearAllMocks()
+  vi.restoreAllMocks()
 })
 
 describe('useRepeatSession：播放与循环', () => {
@@ -114,6 +115,25 @@ describe('useRepeatSession：录音与连续跟读', () => {
     fireEvent.keyDown(window, { key: 'r' })
     await waitFor(() => expect(result.current.take?.sentenceId).toBe('s1'))
     expect(result.current.take?.sentenceText).toBe('Run fast.')
+  })
+
+  it('再录一次会覆盖同一句的旧录音（新的 createdAt）', async () => {
+    let now = 1000
+    vi.spyOn(Date, 'now').mockImplementation(() => now)
+    const { result } = renderHook(() => useRepeatSession(options()))
+
+    fireEvent.keyDown(window, { key: 'r' })
+    await waitFor(() => expect(result.current.recording).toBe(true))
+    fireEvent.keyDown(window, { key: 'r' })
+    await waitFor(() => expect(result.current.take?.createdAt).toBe(1000))
+
+    now = 2000
+    fireEvent.keyDown(window, { key: 'r' })
+    await waitFor(() => expect(result.current.recording).toBe(true))
+    fireEvent.keyDown(window, { key: 'r' })
+    await waitFor(() => expect(result.current.take?.createdAt).toBe(2000))
+    // 同一句只有一条：id 不变，内容换成新的
+    expect(result.current.take?.sentenceId).toBe('s1')
   })
 
   it('C 连续跟读：先播标准音，播完自动开录', async () => {

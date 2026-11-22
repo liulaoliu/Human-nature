@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import type { Sentence } from '../../types/document'
 import type { RepeatSessionApi } from '../hooks/useRepeatSession'
 import { loopLabel } from '../../core/repeatCycle'
@@ -14,10 +13,13 @@ export interface SpeedRepeatPanelProps {
 }
 
 /**
- * 速读右侧的复读控制列：标准音 / 语速 / 循环 / 录音 / A-B / 连续跟读。
+ * 速读右侧的复读控制列：标准音 / 语速 / 循环 / 录音 / 连续跟读。
  *
  * 纯展示：状态与动作都在 `useRepeatSession`，这里只把视图模型摊成按钮。
  * 当前句不在这里选——翻句走速读的 `go`，一套游标两处共用。
+ *
+ * 录音只有「录」一个状态：每按一次就重新录一条、覆盖这一句的上一次录音；
+ * 不做 A/B 和删除（再录一遍就是最直接的「删掉重来」）。
  */
 export default function SpeedRepeatPanel({
   api,
@@ -28,9 +30,6 @@ export default function SpeedRepeatPanel({
   onPrev,
   onNext,
 }: SpeedRepeatPanelProps) {
-  const [confirmDel, setConfirmDel] = useState(false)
-  useEffect(() => setConfirmDel(false), [api.take?.id])
-
   const busy = api.playing === 'ref' && ttsState === 'loading'
   const refLabel = api.playing === 'ref' ? (busy ? '合成中…' : '■ 停止') : '▶ 标准音'
 
@@ -58,7 +57,7 @@ export default function SpeedRepeatPanel({
       <div className="speed-repeat-row">
         <button
           className={api.playing === 'ref' ? 'primary' : ''}
-          onClick={() => (api.playing === 'ref' ? api.stop() : api.playRef('single'))}
+          onClick={() => (api.playing === 'ref' ? api.stop() : api.playRef())}
           disabled={!sentence}
           title="播放这一句的 TTS 标准音（空格）"
         >
@@ -98,9 +97,9 @@ export default function SpeedRepeatPanel({
         className={'speed-rec' + (api.recording ? ' danger' : '')}
         onClick={api.toggleRecord}
         disabled={!sentence}
-        title="录这一句（R）；读完停一下会自动结束"
+        title="录这一句（R）；读完停一下自动结束；再按一次会覆盖上一次录音"
       >
-        {api.recording ? '■ 停止录音' : api.take ? '● 重录' : '● 录音'}
+        {api.recording ? '■ 停止录音' : '● 录音'}
       </button>
       <div className="speed-level" title="输入电平">
         <div style={{ width: `${Math.min(100, Math.round(api.level * 400))}%` }} />
@@ -109,31 +108,17 @@ export default function SpeedRepeatPanel({
 
       {api.take ? (
         <div className="speed-repeat-row">
-          <button onClick={() => api.playTake('single')} title="回放我这一句（空格停止）">
+          <button onClick={() => api.playTake()} title="回放我这一句（空格停止）">
             ▶ 我的
           </button>
-          <button
-            className={api.abLoop ? 'primary' : ''}
-            onClick={api.toggleAb}
-            title="标准音 ↔ 我的录音 交替播放（B）"
-          >
-            A/B
-          </button>
-          <button
-            className={confirmDel ? 'danger' : ''}
-            onClick={() => {
-              if (!confirmDel) {
-                setConfirmDel(true)
-                return
-              }
-              api.removeTake()
-              setConfirmDel(false)
-            }}
-            title="删除这一句的录音"
-          >
-            {confirmDel ? '确认删除' : '删除'}
-          </button>
-          <span className="muted">{api.take.durationSec.toFixed(1)}s</span>
+          <span className="muted">
+            {api.take.durationSec.toFixed(1)}s ·{' '}
+            {new Date(api.take.createdAt).toLocaleTimeString('zh-CN', {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            })}
+          </span>
         </div>
       ) : (
         <div className="speed-repeat-hint">{api.loadingTake ? '读取录音…' : '这一句还没有录音'}</div>
@@ -186,7 +171,7 @@ export default function SpeedRepeatPanel({
 
       {api.error && <div className="speed-banner">{api.error}</div>}
       <div className="speed-repeat-keys muted">
-        空格 播放/停 · R 录音 · B 对比 · C 连读 · Esc 退出复读
+        空格 播放/停 · R 录音 · C 连读 · Esc 退出复读
       </div>
     </aside>
   )

@@ -161,6 +161,27 @@ describe('BrowserPlayer：录音回放', () => {
     expect(decodeAudioData.mock.calls.length).toBe(decodes)
   })
 
+  it('同句重录（id 相同、createdAt 不同）必须重新解码，不能回放上一次的缓存', async () => {
+    const p = new BrowserPlayer()
+    await p.load(fakeBlob())
+    const takeEl = FakeAudio.instances[1]
+    const oldTake = { id: 'same', blob: fakeBlob('old'), createdAt: 1 } as never
+    const newTake = { id: 'same', blob: fakeBlob('new'), createdAt: 2 } as never
+
+    const first = p.playTake(oldTake, 1)
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    takeEl.onended?.()
+    await first
+    const decodes = decodeAudioData.mock.calls.length
+
+    const second = p.playTake(newTake, 1)
+    for (let i = 0; i < 5; i++) await Promise.resolve()
+    takeEl.onended?.()
+    await second
+    // 重录换了 blob：缓存 key 必须带 createdAt，否则这里会复用旧 WAV
+    expect(decodeAudioData.mock.calls.length).toBeGreaterThan(decodes)
+  })
+
   it('playTake：按 speechFrom/speechTo 从说话处起播，到说话尾就停', async () => {
     const p = new BrowserPlayer()
     await p.load(fakeBlob()) // 建立参考响度

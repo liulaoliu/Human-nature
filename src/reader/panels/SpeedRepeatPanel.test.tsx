@@ -19,7 +19,6 @@ function api(over: Partial<RepeatSessionApi> = {}): RepeatSessionApi {
     setAutoNext: vi.fn(),
     boost: 1.5,
     setBoost: vi.fn(),
-    abLoop: false,
     playing: null,
     cycleStep: 'idle',
     cycleLabel: '',
@@ -37,10 +36,8 @@ function api(over: Partial<RepeatSessionApi> = {}): RepeatSessionApi {
     setRaw: vi.fn(),
     playRef: vi.fn(),
     playTake: vi.fn(),
-    toggleAb: vi.fn(),
     toggleCycle: vi.fn(),
     toggleRecord: vi.fn(),
-    removeTake: vi.fn(),
     stop: vi.fn(),
     exit: vi.fn(),
     ...over,
@@ -79,7 +76,7 @@ describe('SpeedRepeatPanel：复读控制列', () => {
   it('标准音按钮走 playRef；播放中显示停止', () => {
     const a = renderPanel()
     fireEvent.click(screen.getByRole('button', { name: /标准音/ }))
-    expect(a.playRef).toHaveBeenCalledWith('single')
+    expect(a.playRef).toHaveBeenCalledWith()
 
     renderPanel({ playing: 'ref' })
     expect(screen.getAllByRole('button', { name: '■ 停止' }).length).toBeGreaterThan(0)
@@ -100,20 +97,17 @@ describe('SpeedRepeatPanel：复读控制列', () => {
     expect(screen.getByText(/麦克风声音偏小/)).toBeTruthy()
   })
 
-  it('有录音时能回放 / A-B / 两步删除', () => {
+  it('有录音时显示时长；只有「录音」，没有重录 / A-B / 删除', () => {
     const a = renderPanel({ take })
-    expect(screen.getByText('2.4s')).toBeTruthy()
+    expect(screen.getByText(/2\.4s/)).toBeTruthy()
 
     fireEvent.click(screen.getByRole('button', { name: /▶ 我的/ }))
-    expect(a.playTake).toHaveBeenCalledWith('single')
+    expect(a.playTake).toHaveBeenCalledWith()
 
-    fireEvent.click(screen.getByRole('button', { name: 'A/B' }))
-    expect(a.toggleAb).toHaveBeenCalled()
-
-    fireEvent.click(screen.getByRole('button', { name: '删除' }))
-    expect(a.removeTake).not.toHaveBeenCalled()
-    fireEvent.click(screen.getByRole('button', { name: '确认删除' }))
-    expect(a.removeTake).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: '● 录音' })).toBeTruthy()
+    expect(screen.queryByText(/重录/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'A/B' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /删除/ })).toBeNull()
   })
 
   it('连续跟读开关与关闭复读', () => {
