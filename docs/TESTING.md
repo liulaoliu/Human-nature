@@ -270,6 +270,13 @@
    「范句：run（跑）」，AI 会以为要仿写这串东西。现在 `buildWritingFeedbackPrompt` 在 `model`
    为空时只输出「要求用上」，题面自己说明用哪些词；新增没有范句的写作题照这个口径，
    别在视图里另拼一份提示词。
+42. **「只对新库生效」的迁移 DDL 等于没写**（2026-11-23）。`answer_events` 的唯一索引写在 v7 的
+   `CREATE TABLE` 旁边，但老库 `user_version` 早就越过 7，那条 `CREATE UNIQUE INDEX IF NOT EXISTS`
+   从来没跑过；`INSERT OR IGNORE` 于是变成纯追加，1209 条事件被写成 48 万条。
+   规矩：① 老库要修的东西放**新的 schema 版本**（v14 先去重再建索引），并在迁移后断言索引存在；
+   ② append-only 表必须有唯一约束，否则 `OR IGNORE` 不起作用；
+   ③ 整库级的活（`quick_check` / `VACUUM` / 每日备份）**不许在请求路径同步跑**（node:sqlite 是同步 API），
+   一律走 `server/sqliteMaintenance.ts` 的 worker；首个请求只做必须同步的 schema 迁移。
 
 ## 四、人工用例（自动化覆盖不到的，登记在此）
 

@@ -26,11 +26,53 @@ function backupsDir(dbPath: string): string {
 
 /** 导出只为测试（保留策略 / 压缩策略都要能单测）。 */
 export function pruneBackups(dir: string, pattern: RegExp, keep: number): void {
+  // `numeric: true` 让版本号按**数字**比：「xueba-v13-…」字典序排在「xueba-v6-…」前面，
+  // 直接 sort 会把刚做的 v13 迁移前备份当成最旧的删掉（2026-11-23 踩过）。
   const files = readdirSync(dir)
     .filter((name) => pattern.test(name))
-    .sort()
+    .sort((a, b) => a.localeCompare(b, 'en', { numeric: true }))
   for (const name of files.slice(0, Math.max(0, files.length - keep))) {
-    rmSync(join(dir, name), { force: true })
+    const file = join(dir, name)
+    rmSync(file, { force: true })
+    rmSync(`${file}.verified`, { force: true })
+  }
+}
+
+/**
+ * 「这份备份已经校验过」的侧标（`<file>.verified`，内容是「大小:mtime」）。
+ *
+ * 为什么要有：校验一份 128MB 的备份 = `PRAGMA quick_check` 扫全库，慢盘上十几秒。
+ * 以前**每次启动**都要把当天那份重新校验一遍，等于白扫 128MB。
+ * 现在只在校验通过时记一笔；文件没被换过（大小/mtime 没变）就不重复扫。
+ */
+function markerPath(file: string): string {
+  return `${file}.verified`
+}
+
+function fileStamp(file: string): string | null {
+  try {
+    const st = statSync(file)
+    return `${st.size}:${Math.round(st.mtimeMs)}`
+  } catch {
+    return null
+  }
+}
+
+function recordVerified(file: string): void {
+  const stamp = fileStamp(file)
+  if (!stamp) return
+  try {
+    writeFileSync(markerPath(file), stamp, { mode: 0o600 })
+  } catch {
+    // 写不了侧标就退回「每次都校验」，不影响正确性
+  }
+}
+
+function alreadyVerified(file: string): boolean {
+  try {
+    return readFileSync(markerPath(file), 'utf8').trim() === fileStamp(file)
+  } catch {
+    return false
   }
 }
 
@@ -50,10 +92,12 @@ function verifyBackup(file: string, DatabaseSync: DatabaseSyncCtor | null): void
       // ignore
     }
   }
+  recordVerified(file)
 }
 
 function vacuumInto(db: DatabaseSync, file: string, DatabaseSync: DatabaseSyncCtor | null): void {
   const target = file.replace(/'/g, "''")
+  rmSync(markerPath(file), { force: true })
   db.exec(`VACUUM INTO '${target}'`)
   try {
     chmodSync(file, 0o600)
@@ -61,6 +105,7 @@ function vacuumInto(db: DatabaseSync, file: string, DatabaseSync: DatabaseSyncCt
     // Windows 忽略权限位
   }
   try {
+    // verifyBackup 成功时会顺手记下 .verified 侧标，下次启动不用再扫
     verifyBackup(file, DatabaseSync)
   } catch (e) {
     // 校验失败的备份没有保留价值，删掉让下次重试，别让它占着“当天已有备份”的位置。
@@ -99,6 +144,7 @@ export function compressOldBackups(dir: string, today: string): string | null {
     // 先写 .gz 再删原文件：压缩中途失败也不会两边都没有
     writeFileSync(`${file}.gz`, gzipSync(readFileSync(file), { level: BACKUP_GZIP_LEVEL }))
     rmSync(file, { force: true })
+    rmSync(markerPath(file), { force: true })
     return `${file}.gz`
   } catch (e) {
     console.warn('[sqlite] 旧备份压缩失败（保留原文件）：', e instanceof Error ? e.message : e)
@@ -142,6 +188,9 @@ export function backupDaily(
   const day = localDayKey()
   const file = join(dir, `xueba-daily-${day}.db`)
   if (existsSync(file)) {
+    // 校验过且文件没被换过就不再扫：128MB 的 quick_check 在慢盘上要十几秒，
+    // 以前每次启动都白扫一遍。
+    if (alreadyVerified(file)) return null
     try {
       // 已有的当天备份也要验；磁盘写坏/拷坏时重新做一份，不能因为文件名在就跳过。
       verifyBackup(file, DatabaseSync)
@@ -149,6 +198,7 @@ export function backupDaily(
     } catch (e) {
       console.warn('[sqlite] 当天备份校验失败，重新生成：', e instanceof Error ? e.message : e)
       rmSync(file, { force: true })
+      rmSync(markerPath(file), { force: true })
     }
   }
   vacuumInto(db, file, DatabaseSync)

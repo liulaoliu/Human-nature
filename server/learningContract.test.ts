@@ -1,7 +1,7 @@
 import { createRequire } from 'node:module'
 import type { DatabaseSync as SqliteDatabase } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { loadLearning, writeLearning } from './sqliteLearning.ts'
+import { loadLearning, writeLearning, ANSWER_EVENT_CLIENT_CAP } from './sqliteLearning.ts'
 import { ensureSchema } from './sqliteStore.ts'
 
 /**
@@ -16,6 +16,14 @@ import { ensureSchema } from './sqliteStore.ts'
  * 前端再加来源时，把新值补进这个数组，测试就会立刻告诉你服务端还没认。
  */
 const FRONTEND_SOURCES = ['writing', 'goldenSentence', 'goldenExam', 'goldenError', 'production', 'drillSentence'] as const
+
+/**
+ * 前端的答题事件缓存上限（`src/core/answerEvents.ts` 的 `ANSWER_EVENT_CAP`）。
+ *
+ * 服务端 `GET /learning` 只回这么多条；两边必须一致，否则：
+ * 前端上限更小 = 白传（首屏慢）；服务端更小 = 前端以为数据丢了。
+ */
+const FRONTEND_ANSWER_EVENT_CAP = 5000
 
 const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
   DatabaseSync: new (path: string) => SqliteDatabase
@@ -56,5 +64,11 @@ describe('写作来源白名单：前端与数据库一致', () => {
     })
     expect(loadLearning(db).writingHistory[0]?.source).toBeUndefined()
     db.close()
+  })
+})
+
+describe('答题事件：前端缓存上限与回包条数一致', () => {
+  it('服务端回客户端的条数上限 = 前端 localStorage 上限', () => {
+    expect(ANSWER_EVENT_CLIENT_CAP).toBe(FRONTEND_ANSWER_EVENT_CAP)
   })
 })

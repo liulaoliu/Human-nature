@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { readdirSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { closeAllStores, SCHEMA_VERSION } from './sqliteStore.ts'
+import { runMaintenance } from './sqliteMaintenance.ts'
 import { mustOpen, openDb, vocab, at, firstItem, tempDb } from './legacyTestKit.ts'
 
 afterEach(() => {
@@ -520,7 +521,11 @@ describe('sqliteStore：v1 → v7 迁移', () => {
     const backups = readdirSync(join(dirname(path), 'backups'))
     const migrationBackups = backups.filter((name) => /^xueba-v1-.*\.db$/.test(name))
     expect(migrationBackups).toHaveLength(1)
-    expect(backups.some((name) => /^xueba-daily-.*\.db$/.test(name))).toBe(true)
+    // 每日整库备份不在这条路径上（打开库不许同步扫/写整库），由后台维护补。
+    runMaintenance(path)
+    expect(
+      readdirSync(join(dirname(path), 'backups')).some((name) => /^xueba-daily-.*\.db$/.test(name)),
+    ).toBe(true)
     const saved = firstItem(vocab(store).items)
     expect(saved.source?.articleId).toBe('a1')
     expect(saved.examples?.[0]?.articleId).toBe('a1')

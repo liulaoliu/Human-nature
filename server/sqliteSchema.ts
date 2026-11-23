@@ -5,10 +5,11 @@
  * 旧库打开时由 sqliteStore 自动迁移：v2 派生表 + articles 查询列，v3 学习记录，
  * v4 旧词条文章 id，v7 答题事件与聚合基线，v8 回译存档；
  * v5（学习记录快照）/ v6（文章上一版）已退役，只保留版本号；
- * v12 重新引入**节流版**学习记录快照（见 `SCHEMA_V12`）；v13 加奶牛工棚目标块进度。
+ * v12 重新引入**节流版**学习记录快照（见 `SCHEMA_V12`）；v13 加奶牛工棚目标块进度；
+ * v14 补答题事件去重索引（老库从没建过，导致每次整份同步都重复追加）。
  */
 
-export const SCHEMA_VERSION = 13
+export const SCHEMA_VERSION = 14
 
 export const SCHEMA_V1 = `
 CREATE TABLE IF NOT EXISTS vocab (
@@ -500,4 +501,27 @@ CREATE INDEX IF NOT EXISTS idx_production_progress_due
   ON production_progress(due_at);
 CREATE INDEX IF NOT EXISTS idx_production_progress_updated
   ON production_progress(updated_at DESC);
+`
+
+/**
+ * v14：答题事件的唯一键。
+ *
+ * 症状：`GET /api/store/learning` 一次返回 48 万条答题事件（约 69MB JSON），
+ * 首屏要等十几秒；库文件涨到 135MB，启动检查/备份也跟着变慢。
+ * 根因：`answer_events` 设计成 append-only（`INSERT OR IGNORE` + 从不清表），
+ * 但 v7 建唯一索引的语句**只对新建库生效**——老库 `user_version` 早已越过 7，
+ * 于是唯一索引一直不存在，`OR IGNORE` 每次同步都真的插一遍（实测 1209 条真事件被写成 484895 条）。
+ *
+ * 先去重（同一内容只留最早一条 id），再补唯一索引；顺序不能反，否则建索引会失败。
+ * `question_id` 可空，SQLite 的唯一索引不认为两个 NULL 相等，所以统一按空串比。
+ */
+export const SCHEMA_V14 = `
+DELETE FROM answer_events
+WHERE id NOT IN (
+  SELECT MIN(id) FROM answer_events
+  GROUP BY at, article_id, source, kind, cat, correct, COALESCE(question_id, '')
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_answer_events_key ON answer_events(
+  at, article_id, source, kind, cat, correct, COALESCE(question_id, '')
+);
 `

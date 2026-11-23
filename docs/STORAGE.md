@@ -102,7 +102,7 @@ SQLite 解决的是这些**运维和演进问题**，不是“加了 SQLite 就�
 ## 四、数据库长什么样
 
 文件：`data/xueba.db`（可用 `XUEBA_DB` 覆盖），目录随项目，已被 `.gitignore` 忽略。
-schema 版本：`PRAGMA user_version = 13`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态，v12 恢复**节流版**学习记录快照，v13 加奶牛工棚目标块进度；v5 的旧快照表当时退役，v6 的文章上一版也退役，只保留版本号）。
+schema 版本：`PRAGMA user_version = 14`（v3 建学习记录表，v4 修旧词条的标题式文章 id，v7 加答题事件与聚合基线，v8 加回译存档，v9 加 D老师小课堂进度，v10 给 `writing_records` 补 `source / sentence_id / exam_id`，v11 加错因复习状态，v12 恢复**节流版**学习记录快照，v13 加奶牛工棚目标块进度，v14 去重老库 `answer_events` 并补上唯一索引 `idx_answer_events_key`；v5 的旧快照表当时退役，v6 的文章上一版也退役，只保留版本号）。
 
 ### 4.1 事实来源（JSON 快照）
 
@@ -206,6 +206,8 @@ skimmed_articles(article_id)                                              -- 精
 kind_stats(article_id, kind, total, correct)                              -- 按篇/题型正确率
 answer_events(id, at, day, article_id, source, kind, cat, correct,
               question_id)                                                -- 每题对错（v7，append-only）
+-- v14 唯一索引：同一内容只存一条（question_id 可空，按 COALESCE(question_id,'') 比）
+-- CREATE UNIQUE INDEX idx_answer_events_key ON answer_events(at, article_id, source, kind, cat, correct, COALESCE(question_id,''))
 golden_drill_records(id PK, at, article_id, article_title, sentence_id,
                      drill_key, fill_first, assemble_first, recall_first,
                      fill_tries, assemble_tries, recall_tries, summary_seen,
@@ -251,6 +253,9 @@ production_progress(key PK, kind, text, attempts, hits, misses, streak, due_at) 
 - `reader:activity` / `reader:kindStats` 仍照常写聚合值（兼容现有 UI）；同时每题追加一条
   `answer_events`，字段含 `at / day / articleId / source / kind / cat / correct / questionId`。
   `answer_events` 是 append-only：重复同步按内容 `INSERT OR IGNORE`，整份保存也不会删除已有事件。
+  去重靠 v14 的**唯一索引**（老库从没建过索引，导致每次同步全量重插，见 `docs/PERF-NOTES.md` §12）；
+  回客户端只带最近 5000 条（`ANSWER_EVENT_CLIENT_CAP`，与前端 `ANSWER_EVENT_CAP` 一致），
+  导出 / 重建派生统计仍读全量。
   `back_translation_records` 同样是 append-only 的长期学习资产：按 `id` 去重、`INSERT OR REPLACE`，
   整份保存不会清空历史；记录自包含（中文题干 + 答案 + 原句 + 批改），文章删了也能回看。
   v7 迁移时把当时的 `activity` / `kindStats` 存进 `learning_derived_baseline`，

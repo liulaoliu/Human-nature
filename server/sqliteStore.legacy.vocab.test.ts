@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { existsSync, readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { closeAllStores, SCHEMA_VERSION } from './sqliteStore.ts'
+import { runMaintenance } from './sqliteMaintenance.ts'
 import { mustOpen, openDb, vocab, mustArticle, firstItem, lib, tempDb } from './legacyTestKit.ts'
 import type { ArticleData } from './legacyTestKit.ts'
 
@@ -93,7 +94,7 @@ describe('sqliteStore：词库', () => {
     expect(store.listSnapshots().length).toBeGreaterThan(0)
   })
 
-  it('重新打开同一个文件，数据和 schema 版本都在', async () => {
+  it('重新打开同一个文件，数据和 schema 版本都在；备份由后台维护做，不在打开时做', async () => {
     const path = tempDb()
     const first = mustOpen(path)
     await first.saveVocab(lib(2))
@@ -102,6 +103,11 @@ describe('sqliteStore：词库', () => {
     const second = mustOpen(path)
     expect(vocab(second).items).toHaveLength(2)
     expect(Number(second.db.prepare('PRAGMA user_version').get().user_version)).toBe(SCHEMA_VERSION)
+    // 打开库不再同步做整库备份（135MB 的库会堵住事件循环）；后台维护负责。
+    expect(existsSync(join(dirname(path), 'backups'))).toBe(false)
+
+    const report = runMaintenance(path)
+    expect(report.ok).toBe(true)
     const daily = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -111,11 +117,12 @@ describe('sqliteStore：词库', () => {
     expect(Object.values(check.prepare('PRAGMA quick_check').get())[0]).toBe('ok')
     check.close()
 
-    // 同一天再打开不重复做整库备份；但已有的当天备份坏了要重新做。
+    // 同一天再维护不重复做整库备份；但已有的当天备份坏了要重新做。
     second.close()
     writeFileSync(dailyPath, 'not a sqlite file')
     const third = mustOpen(path)
     expect(vocab(third).items).toHaveLength(2)
+    runMaintenance(path)
     const repaired = readdirSync(join(dirname(path), 'backups')).filter((name) =>
       /^xueba-daily-.*\.db$/.test(name),
     )
@@ -126,26 +133,26 @@ describe('sqliteStore：词库', () => {
     recheck.close()
   })
 
-  it('长开进程跨天后会自动补当天备份（不用重启）', async () => {
-    vi.useFakeTimers()
+  it('长开进程跨天后，下一次维护会补当天备份（不用重启）', async () => {
     const path = tempDb()
     const first = mustOpen(path)
     await first.saveVocab(lib(1))
     first.close()
     const store = mustOpen(path)
     const dir = join(dirname(path), 'backups')
+    runMaintenance(path)
     const daily = readdirSync(dir).find((name) => /^xueba-daily-.*\.db$/.test(name))
     expect(daily).toBeTruthy()
     if (!daily) throw new Error('没有当天备份')
     unlinkSync(join(dir, daily))
 
-    await vi.advanceTimersByTimeAsync(30 * 60 * 1000)
+    // 30 分钟一跳的后台维护：跨过午夜 / 备份被删后靠它补
+    runMaintenance(path)
     const recreated = readdirSync(dir).find((name) => /^xueba-daily-.*\.db$/.test(name))
     expect(recreated).toBeTruthy()
     if (!recreated) throw new Error('当天备份没有补上')
     expect(existsSync(join(dir, recreated))).toBe(true)
     store.close()
-    vi.useRealTimers()
   })
 
   it('派生表：词条 / 用法 / 例句 / 语境 / 易混项都能 SQL 查', async () => {

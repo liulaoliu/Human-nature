@@ -509,7 +509,23 @@ export function rebuildLearningDerived(db: DatabaseSync): LearningDayActivity[] 
   return loadLearning(db).activity
 }
 
-export function loadLearning(db: DatabaseSync): LearningOut {
+/**
+ * 一次最多回给客户端多少条答题事件。
+ *
+ * **必须与前端 `src/core/answerEvents.ts` 的 `ANSWER_EVENT_CAP` 保持一致**
+ * （前端 localStorage 也只缓存这么多）。`server/learningContract.test.ts` 会钉死。
+ */
+export const ANSWER_EVENT_CLIENT_CAP = 5000
+
+export interface LoadLearningOptions {
+  /**
+   * 只回最近 N 条答题事件（按时间正序）。不传 = 全量。
+   * 客户端首屏用 `ANSWER_EVENT_CLIENT_CAP`；导出 / 重建派生统计要全量。
+   */
+  answerEventLimit?: number
+}
+
+export function loadLearning(db: DatabaseSync, opts: LoadLearningOptions = {}): LearningOut {
   const out = emptyLearning()
 
   out.practice = db
@@ -658,24 +674,36 @@ export function loadLearning(db: DatabaseSync): LearningOut {
     }
   }
 
-  out.answerEvents = db
-    .prepare(
-      'SELECT at, day, article_id, source, kind, cat, correct, question_id FROM answer_events ORDER BY at ASC, id ASC',
-    )
-    .all()
-    .map((r): LearningAnswerEvent => {
-      const ev: LearningAnswerEvent = {
-        at: String(r.at),
-        day: String(r.day ?? ''),
-        articleId: String(r.article_id ?? ''),
-        source: String(r.source),
-        kind: String(r.kind),
-        cat: String(r.cat),
-        correct: Number(r.correct) !== 0,
-      }
-      if (r.question_id !== null && r.question_id !== undefined) ev.questionId = String(r.question_id)
-      return ev
-    })
+  // 首屏只回最近 N 条：`answer_events` 是 append-only 审计表，真能涨到几十万条
+  // （2026-11-23 实测 48 万条 ≈ 69MB JSON，前端 localStorage 本来也只留 5000 条）。
+  // 导出 / 重建派生统计不传 limit，仍然读全量。
+  const eventLimit = Math.floor(opts.answerEventLimit ?? 0)
+  const eventRows =
+    eventLimit > 0
+      ? db
+          .prepare(
+            'SELECT at, day, article_id, source, kind, cat, correct, question_id FROM answer_events ORDER BY at DESC, id DESC LIMIT ?',
+          )
+          .all(eventLimit)
+          .reverse()
+      : db
+          .prepare(
+            'SELECT at, day, article_id, source, kind, cat, correct, question_id FROM answer_events ORDER BY at ASC, id ASC',
+          )
+          .all()
+  out.answerEvents = eventRows.map((r): LearningAnswerEvent => {
+    const ev: LearningAnswerEvent = {
+      at: String(r.at),
+      day: String(r.day ?? ''),
+      articleId: String(r.article_id ?? ''),
+      source: String(r.source),
+      kind: String(r.kind),
+      cat: String(r.cat),
+      correct: Number(r.correct) !== 0,
+    }
+    if (r.question_id !== null && r.question_id !== undefined) ev.questionId = String(r.question_id)
+    return ev
+  })
 
   out.goldenDrills = db
     .prepare(

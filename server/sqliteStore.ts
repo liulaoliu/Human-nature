@@ -14,11 +14,13 @@ import {
   SCHEMA_V11,
   SCHEMA_V12,
   SCHEMA_V13,
+  SCHEMA_V14,
   SCHEMA_VERSION,
 } from './sqliteSchema.ts'
-import { backupBeforeMigration, backupDaily, startDailyBackup } from './sqliteBackup.ts'
+import { backupBeforeMigration } from './sqliteBackup.ts'
 import {
   archiveLegacyLearningSnapshots,
+  ANSWER_EVENT_CLIENT_CAP,
   hasLearningRows,
   LEARNING_SECTIONS,
   listLearningSnapshots,
@@ -323,6 +325,12 @@ export function ensureSchema(db: DatabaseSync): number {
     tx(db, () => { db.exec(SCHEMA_V13); db.exec('PRAGMA user_version = 13') })
     version = 13
   }
+  if (version < 14) {
+    // 老库的 answer_events 没有唯一索引，每次整份同步都在重复追加：
+    // 先去重再建索引。这一步只在老库第一次打开时做，跑完 user_version=14 就不再进来。
+    tx(db, () => { db.exec(SCHEMA_V14); db.exec('PRAGMA user_version = 14') })
+    version = 14
+  }
   return version
 }
 
@@ -346,9 +354,10 @@ function pruneSnapshots(db: DatabaseSync): void {
  * 关掉进程也不 checkpoint，`-wal` 会一直留着（本库实测 55MB）。
  *
  * 只在空闲页占比明显时才 VACUUM —— 226MB 的库全量重写要几秒，不能每次启动都干。
+ * 后台维护线程调用（server/sqliteMaintenance.ts）；不要在请求路径里跑。
  */
 const VACUUM_MIN_FREE_PAGES = 2000
-function reclaimSpace(db: DatabaseSync): void {
+export function reclaimSpace(db: DatabaseSync): void {
   try {
     db.exec('PRAGMA wal_checkpoint(TRUNCATE)')
   } catch {
@@ -371,8 +380,9 @@ function reclaimSpace(db: DatabaseSync): void {
  *
  * 一次性成本（本库 9 版 × 16MB 明文 → 6 版 × 约 2MB），之后每次启动只做一次 count 查询。
  * 幂等：`typeof payload === 'string'` 才算待转换，转过的读出来是 BLOB。
+ * 后台维护线程调用（server/sqliteMaintenance.ts）；不要在请求路径里跑。
  */
-function maintainSnapshots(db: DatabaseSync): void {
+export function maintainSnapshots(db: DatabaseSync): void {
   try {
     pruneSnapshots(db)
     const legacy = db
@@ -391,7 +401,8 @@ function maintainSnapshots(db: DatabaseSync): void {
   }
 }
 
-function assertDatabaseHealthy(db: DatabaseSync): void {
+/** 后台维护线程调用：整库 `quick_check` 要扫所有页，别放在请求路径上。 */
+export function assertDatabaseHealthy(db: DatabaseSync): void {
   const row = db.prepare('PRAGMA quick_check').get()
   const result = row ? Object.values(row)[0] : 'ok'
   if (String(result).toLowerCase() !== 'ok') {
@@ -452,7 +463,8 @@ export function openStore(dbPath: string): Store | null {
     // 学习记录是用户资产：断电/系统崩溃时宁可慢一点，也别丢最后一笔提交。
     db.exec('PRAGMA synchronous = FULL')
     db.exec('PRAGMA busy_timeout = 3000')
-    assertDatabaseHealthy(db)
+    // 完整性检查 / 每日备份 / 清理快照 / 回收空间都不在这里做：它们要扫整个库，同步跑会
+    // 堵住事件循环（本库 135MB 能把首屏堵几十秒）；现在走后台维护线程，见 sqliteMaintenance.ts。
     const currentVersion = Number(db.prepare('PRAGMA user_version').get()?.user_version ?? 0)
     try {
       const backup = backupBeforeMigration(db, dbPath, currentVersion, DatabaseSyncCtor)
@@ -462,28 +474,16 @@ export function openStore(dbPath: string): Store | null {
       throw new Error(`迁移前备份失败：${e instanceof Error ? e.message : e}`)
     }
     ensureSchema(db)
-    // 先整理历史快照，再回收空间：备份是 VACUUM INTO 的整库副本，库里的空格子会一起被复制。
-    maintainSnapshots(db)
-    reclaimSpace(db)
-    try {
-      const daily = backupDaily(db, dbPath, currentVersion, DatabaseSyncCtor)
-      if (daily) console.info(`[sqlite] 每日备份：${daily}`)
-    } catch (e) {
-      // 每日备份失败不挡启动；迁移备份失败才挡（见上面）。
-      console.warn('[sqlite] 每日备份失败：', e instanceof Error ? e.message : e)
-    }
     try {
       chmodSync(dbPath, 0o600)
     } catch {
       // Windows 忽略权限位
     }
-    const stopDailyBackup = startDailyBackup(db, dbPath, DatabaseSyncCtor)
 
     const store: Store = {
       path: dbPath,
       db,
       close() {
-        stopDailyBackup()
         try {
           // 走之前把 WAL 并回主库并截断：PASSIVE checkpoint 只「并」不「缩」，
           // 一次保存就是 16MB，留着一次就是几十 MB（本库实测 51MB）。
@@ -640,7 +640,9 @@ export function openStore(dbPath: string): Store | null {
         })
       },
       loadLearning() {
-        return loadLearning(db)
+        // 客户端视图只回最近 5000 条答题事件（前端本来也只留这么多）；
+        // 导出 / 重建派生统计走 loadLearning(db) 全量。
+        return loadLearning(db, { answerEventLimit: ANSWER_EVENT_CLIENT_CAP })
       },
       /** 用 baseline + 答题事件重建题型聚合；活动聚合保留（不碰其它学习记录）。 */
       rebuildLearningDerived() {
@@ -692,9 +694,10 @@ export function openStore(dbPath: string): Store | null {
        */
       migrateLearning(data) {
         return tx(db, () => {
-          if (hasLearningRows(db)) return { migrated: false, value: loadLearning(db) }
+          const view = () => loadLearning(db, { answerEventLimit: ANSWER_EVENT_CLIENT_CAP })
+          if (hasLearningRows(db)) return { migrated: false, value: view() }
           writeLearning(db, data)
-          return { migrated: true, value: loadLearning(db) }
+          return { migrated: true, value: view() }
         })
       },
       listArticles() {
@@ -751,7 +754,8 @@ export function openStore(dbPath: string): Store | null {
             .all()
             .map((r) => ({ at: String(r.at), count: Number(r.item_count), library: parsePayload(unpackPayload(r.payload)) })),
           articles: this.listArticles(),
-          learning: this.loadLearning(),
+          // 导出是整库备份，答题事件要全量（客户端视图才有 5000 条上限）
+          learning: loadLearning(db),
         }
       },
       checkpoint() {

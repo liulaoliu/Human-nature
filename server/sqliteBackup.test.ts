@@ -42,6 +42,37 @@ describe('pruneBackups：保留最近 N 份', () => {
       'xueba-daily-2026-10-07.db.gz',
     ])
   })
+
+  it('版本号按数字比：v13 的迁移前备份不能被当成「最旧」删掉', () => {
+    const d = dir()
+    for (const name of [
+      'xueba-v6-2026-10-20T06-09-43-541Z.db.gz',
+      'xueba-v7-2026-10-26T01-56-27-873Z.db.gz',
+      'xueba-v8-2026-10-28T00-05-08-743Z.db.gz',
+      'xueba-v9-2026-11-02T00-54-47-378Z.db.gz',
+      'xueba-v12-2026-11-20T00-00-00-000Z.db.gz',
+      'xueba-v13-2026-11-23T00-00-00-000Z.db',
+    ]) {
+      touch(d, name)
+    }
+
+    pruneBackups(d, /^xueba-v\d+-.*\.db(\.gz)?$/, 5)
+
+    const left = readdirSync(d).sort()
+    expect(left).toContain('xueba-v13-2026-11-23T00-00-00-000Z.db')
+    expect(left).not.toContain('xueba-v6-2026-10-20T06-09-43-541Z.db.gz')
+  })
+
+  it('删备份时连 .verified 侧标一起删（别留孤儿文件）', () => {
+    const d = dir()
+    touch(d, 'xueba-daily-2026-10-01.db')
+    touch(d, 'xueba-daily-2026-10-02.db')
+    touch(d, 'xueba-daily-2026-10-01.db.verified')
+
+    pruneBackups(d, /^xueba-daily-.*\.db(\.gz)?$/, 1)
+
+    expect(readdirSync(d).sort()).toEqual(['xueba-daily-2026-10-02.db'])
+  })
 })
 
 describe('compressOldBackups：只压旧的，当天的不动', () => {

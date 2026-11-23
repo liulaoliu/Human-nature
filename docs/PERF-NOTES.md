@@ -130,6 +130,38 @@
 
 ---
 
+## 12. 答题事件重复 400 倍 + 整库维护卡在请求路径：网页「打不开」（2026-11-23）
+
+- **症状**：打开阅读页越来越慢，最后干脆打不开（`curl http://127.0.0.1:5173/` 也超时）；
+  dev server 进程一直是 `D` 状态、`read_bytes` 蹭蹭涨，磁盘 20MB/s 左右。
+- **根因（两条，叠加放大）**：
+  1. **`answer_events` 每次同步都在重复追加**。它设计成 append-only（`INSERT OR IGNORE`、永不清表），
+     去重全靠 v7 里的唯一索引 `idx_answer_events_key`——但那条 DDL 只对**新建库**生效，
+     老库 `user_version` 早已越过 7，索引一直不存在（`sqlite_master` 里只有两个普通索引）。
+     结果：1209 条真事件被写成 **484895 条**（301k 条集中在一天，一次同步多一轮），
+     表 + 两个索引 82MB，占整个 135MB 库的 2/3。
+  2. **`GET /api/store/learning` 把所有事件一次性回给浏览器**（约 69MB JSON），
+     前端 `storeRequest` 只等 2 秒，必然超时退回 IndexedDB——每次打开都白传、白解析。
+  3. `openStore` 在**首个 /api/store 请求**里同步跑 `PRAGMA quick_check`（扫全库）
+     + `VACUUM INTO` 当日备份（再写 128MB）+ 校验备份（再扫 128MB）。node:sqlite 是同步 API，
+     事件循环一堵，连 `GET /` 都排队——这就是「打不开」。
+- **修法**：
+  1. **v14 迁移**（`SCHEMA_V14`）：先去重（同内容留最早一条）再补唯一索引；
+     `question_id` 可空，按 `COALESCE(question_id,'')` 比，NULL 不参与唯一性。
+     实测 484895 → 1209 条，整库 135MB → 54MB。
+  2. 服务端回客户端只带最近 `ANSWER_EVENT_CLIENT_CAP`（5000，和前端 `ANSWER_EVENT_CAP` 一致）；
+     导出 / 重建派生统计仍然读全量。
+  3. 完整检查 / 快照整理 / `VACUUM` / 每日备份全部挪进 **worker 线程**（`server/sqliteMaintenance.ts`），
+     首个请求只做必须同步的 schema 迁移；备份多了 `.verified` 侧标（大小 + mtime），
+     文件没换过就不再重复 `quick_check`。
+- **教训**：
+  1. **「只对新库生效」的 DDL 等于没写**——写迁移就要考虑老库，并在迁移后断言索引存在。
+  2. **append-only 表必须有唯一约束**，否则 `OR IGNORE` 是句废话，每次同步都是全量重插。
+  3. **同步 IO 不许出现在请求路径上**：node:sqlite 没有异步 API，整库级别的活一律进 worker。
+  4. 回给浏览器的数据要有**上限**（前端缓存多少就传多少），别把审计表当索引表全量吐出去。
+
+---
+
 ## 一句话总结
 
 > **交互热路径上，绝不允许出现随「词库规模 × 文档规模」增长的计算；派生计算要分层（随文档变 / 随词库变），大集合先索引成 `Set`/`Map`；重资产走静态服务，不进 bundle。**

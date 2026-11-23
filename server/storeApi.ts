@@ -4,6 +4,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { resolveDbPath, openStore, SCHEMA_VERSION, VocabConflictError } from './sqliteStore.ts'
+import { startBackgroundMaintenance } from './sqliteMaintenance.ts'
 import { allowLocalRequest } from './sameOrigin.ts'
 import { localDayKey } from './localDate.ts'
 import { gzip } from 'node:zlib'
@@ -129,11 +130,15 @@ export async function handleStoreApi(
     return
   }
 
-  const store = openStore(dbPath || resolveDbPath(root || process.cwd()))
+  const storePath = dbPath || resolveDbPath(root || process.cwd())
+  const store = openStore(storePath)
   if (!store) {
     sendJson(res, 503, { ok: false, error: 'SQLite 不可用（需要 Node 22.5+）' })
     return
   }
+  // 完整性检查 / 快照整理 / 每日备份都在后台线程里跑（只调度一次）。
+  // 以前它们在 openStore 里同步跑，135MB 的库能把 dev server 堵几分钟，首屏直接打不开。
+  startBackgroundMaintenance(storePath)
 
   try {
     if (path === '/health') {
