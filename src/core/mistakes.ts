@@ -35,9 +35,7 @@ export interface MistakeEntry {
   text?: string
 }
 
-function normText(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, ' ')
-}
+import { normalizeTextKey } from './textKey'
 
 export function vocabMistake(itemId: string, label: string, at: string): MistakeEntry {
   return { id: `vocab:${itemId}`, kind: 'vocab', at, count: 1, label, itemId }
@@ -45,7 +43,7 @@ export function vocabMistake(itemId: string, label: string, at: string): Mistake
 export function listenMistake(articleId: string, q: ListeningQuestion, at: string): MistakeEntry {
   // id 用「题号 + 题干」，不带文章：错题本重练时文章可能不同，也能对上
   return {
-    id: `listen:${q.id}:${normText(q.stem)}`,
+    id: `listen:${q.id}:${normalizeTextKey(q.stem)}`,
     kind: 'listen',
     at,
     count: 1,
@@ -55,7 +53,7 @@ export function listenMistake(articleId: string, q: ListeningQuestion, at: strin
   }
 }
 export function dictMistake(text: string, at: string): MistakeEntry {
-  return { id: `dict:${normText(text)}`, kind: 'dict', at, count: 1, label: text, text }
+  return { id: `dict:${normalizeTextKey(text)}`, kind: 'dict', at, count: 1, label: text, text }
 }
 
 /** 加入 / 累加一条错题（同 id 合并，新的在前，按上限截断）。纯函数。 */

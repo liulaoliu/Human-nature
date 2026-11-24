@@ -1,5 +1,6 @@
 import { isObject, normalizeGoldenTargets, str, strList, type GoldenTextMeta } from './golden'
 import { normalizeGoldenExam, pruneGoldenExam } from './goldenExam'
+import { normalizeTextKey } from './textKey'
 import type {
   GoldenExtraPoint,
   GoldenLesson,
@@ -11,7 +12,7 @@ import type {
 const EXTRA_KINDS = ['chunk', 'pattern', 'collocation', 'idiom', 'usage'] as const
 
 function extraKey(sentenceId: string, en: string): string {
-  return `${sentenceId}\u0000${en.replace(/\s+/g, ' ').trim().toLowerCase()}`
+  return `${sentenceId}\u0000${normalizeTextKey(en)}`
 }
 
 /**

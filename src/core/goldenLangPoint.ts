@@ -1,6 +1,7 @@
 import type { Sentence } from '../types/document'
 import { getSentenceLanguages } from './language'
 import { splitGlossText } from './langPoints'
+import { normalizeTextKey } from './textKey'
 
 /**
  * 「语言点造句」的可选项：本句语言点里的**词块**（phrases / idioms）。
@@ -20,7 +21,7 @@ export interface LangPointChoice {
   done: boolean
 }
 
-const keyOf = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
+const keyOf = normalizeTextKey
 
 /** 本句可单练的语言点，按语言点出现顺序去重；没有就返回空数组。 */
 export function langPointChoices(

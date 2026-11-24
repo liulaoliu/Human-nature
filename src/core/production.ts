@@ -1,6 +1,7 @@
 import type { Sentence, VocabItem } from '../types/document'
 import { poolFor, studyableItems } from './quizPool'
 import { kindOf } from './entryKind'
+import { normalizeTextKey } from './textKey'
 
 /**
  * 「D老师奶牛工棚」：用已经学过的词 / 词组 / 习语做**主动产出**。
@@ -11,6 +12,11 @@ import { kindOf } from './entryKind'
 
 export type ProductionScope = 'article' | 'all' | 'recent' | 'weak' | 'due' | 'mistakes' | 'theme'
 export type ProductionTargetKind = 'word' | 'phrase' | 'idiom'
+
+/** 目标块的身份键：`kind + 归一化文本`；产出/历史/进度都用它对齐。 */
+export function productionTargetKey(kind: ProductionTargetKind, text: string): string {
+  return `${kind}:${normalizeTextKey(text)}`
+}
 /**
  * 三种吃法：
  * - full（全脂）：不设主题，按配置随机抽词块，AI 随机出情境；
@@ -249,7 +255,7 @@ export function productionTargetCandidates(
   const out: ProductionTarget[] = []
   for (const item of studyableItems(items)) {
     for (const target of targetsOfItem(item, typeSet)) {
-      const key = `${target.kind}:${target.text.trim().toLowerCase().replace(/\s+/g, ' ')}`
+      const key = productionTargetKey(target.kind, target.text)
       if (!target.text || seen.has(key)) continue
       seen.add(key)
       out.push(target)
@@ -354,7 +360,7 @@ export function buildProductionTargets(opts: BuildProductionTargetsOptions): Pro
   const allRaw: ProductionTarget[] = []
   for (const item of scopePool) {
     for (const t of targetsOfItem(item, types)) {
-      const key = `${t.kind}:${t.text.trim().toLowerCase().replace(/\s+/g, ' ')}`
+      const key = productionTargetKey(t.kind, t.text)
       if (!t.text || seen.has(key)) continue
       seen.add(key)
       allRaw.push(t)
@@ -365,7 +371,7 @@ export function buildProductionTargets(opts: BuildProductionTargetsOptions): Pro
   const progress = new Map((opts.progress ?? []).map((p) => [p.key, p]))
   const nowIso = opts.nowIso ?? new Date().toISOString()
   const now = Date.parse(nowIso)
-  const targetKey = (t: ProductionTarget) => `${t.kind}:${t.text.trim().toLowerCase().replace(/\s+/g, ' ')}`
+  const targetKey = (t: ProductionTarget) => productionTargetKey(t.kind, t.text)
   const themeTokens = (opts.theme ?? '')
     .toLowerCase()
     .split(/\s+/)

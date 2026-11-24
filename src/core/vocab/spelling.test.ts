@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { markSpellingMiss, spellingMatches } from './spelling'
+import { markSpellingMiss, normalizeSpelling, spellingMatches } from './spelling'
 import { createLibrary } from './library'
 import { vocabItem } from '../testFixtures'
 
@@ -9,6 +9,11 @@ describe('拼写比对', () => {
   it('大小写 / 首尾空格 / 连续空格不敏感', () => {
     expect(spellingMatches(' Run ', 'run')).toBe(true)
     expect(spellingMatches('bad   temperedly', 'bad temperedly')).toBe(true)
+  })
+
+  it('归一化口径只此一份（锤炼写搭配也复用）', () => {
+    expect(normalizeSpelling('  Bad   TEMPEREDLY ')).toBe('bad temperedly')
+    expect(normalizeSpelling('')).toBe('')
   })
 
   it('拼错一个字母就是错（不做词形兜底）', () => {

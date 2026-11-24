@@ -1,4 +1,5 @@
 import { dayKeyLocal } from './activity'
+import { productionTargetKey } from './production'
 import type {
   ProductionMode,
   ProductionTarget,
@@ -128,9 +129,7 @@ export interface ProductionHistoryFilter {
   topic?: string
 }
 
-export function productionTargetKey(kind: ProductionTargetKind, text: string): string {
-  return `${kind}:${text.trim().toLowerCase().replace(/\s+/g, ' ')}`
-}
+export { productionTargetKey }
 
 export function productionRecords(history: readonly WritingRecord[]): WritingRecord[] {
   return history.filter((r) => r.source === 'production')

@@ -1,4 +1,5 @@
 import type { VocabLibrary } from '../../types/document'
+import { normalizeTextKey } from '../textKey'
 import { reviewItem } from './review'
 
 /**
@@ -13,12 +14,19 @@ import { reviewItem } from './review'
 export const SPELLING_MISS_TAG = '不认识'
 
 /**
+ * 拼写比对用的归一化：忽略大小写与首尾 / 连续空格，**不忽略字母错误**。
+ * 锤炼里的「拼写 / 写搭配」也用它，别再各写一份 `trim().toLowerCase()...`。
+ */
+export function normalizeSpelling(s: string): string {
+  return normalizeTextKey(s)
+}
+
+/**
  * 拼写比对：忽略大小写与首尾/连续空格，**不忽略字母错误**。
  * 不用 `lemmaOf` 兜底：拼成别的词形（ran / run）在拼写题里就是错。
  */
 export function spellingMatches(input: string, word: string): boolean {
-  const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
-  return norm(input) === norm(word)
+  return normalizeSpelling(input) === normalizeSpelling(word)
 }
 
 /**

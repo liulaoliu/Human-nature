@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import { useHotkeys } from '../useHotkeys'
-import { canQuizMeaning, displayMeaning, meaningOptions, normalizePos, type DrillReason } from '../../core/vocab'
+import { canQuizMeaning, displayMeaning, meaningOptions, normalizePos, normalizeSpelling, type DrillReason } from '../../core/vocab'
 
-const norm = (s: string) => s.trim().toLowerCase().replace(/\s+/g, ' ')
 /** 去掉首尾标点，便于搭配比对。 */
 const stripPunct = (s: string) => s.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, '').trim()
 
@@ -229,12 +228,12 @@ export default function DrillBoard({
     if (cur.kind === 'spell') {
       // 拼写只判一次：对 → 下一步；错 → 外层直接判「不认识」并重排，
       // 不再把输入框留着让人反复试（那会退化成抄写）。
-      if (norm(text) === norm(card.word)) next()
+      if (normalizeSpelling(text) === normalizeSpelling(card.word)) next()
       else onSpellMiss(text)
     } else if (cur.kind === 'usage') {
       const ok = collocationsOf(card).some((u) => {
-        const n = norm(stripPunct(u))
-        return n.length >= 3 && (norm(text) === n || norm(text).includes(n))
+        const n = normalizeSpelling(stripPunct(u))
+        return n.length >= 3 && (normalizeSpelling(text) === n || normalizeSpelling(text).includes(n))
       })
       if (ok) next()
       else setWrong(true)

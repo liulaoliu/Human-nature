@@ -14,6 +14,7 @@
 import type { GoldenExamItem, VocabItem } from '../types/document'
 import { splitGlossText } from './langPoints'
 import type { QuizQuestion } from './quiz'
+import { normalizeTextKey } from './textKey'
 
 export type DrillSentenceKind = 'memory' | 'chunk'
 
@@ -40,10 +41,8 @@ export interface DrillSentencePoint {
 const CJK_RE = /[\u3400-\u9fff]/
 const HAS_LATIN_RE = /[a-z]/i
 
-const keyOf = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase()
-
 function slugOf(text: string): string {
-  return keyOf(text)
+  return normalizeTextKey(text)
     .replace(/[^a-z0-9]+/g, '-')
     .replace(/^-+|-+$/g, '')
 }
@@ -87,7 +86,7 @@ export function drillSentencePoints(
 
   /** 返回是否真的收下：重复文本会跳过，让词块继续试下一条。 */
   const push = (item: VocabItem, en: string, zh: string | undefined): boolean => {
-    const key = keyOf(en)
+    const key = normalizeTextKey(en)
     if (!key || seenText.has(key)) return false
     seenText.add(key)
     out.push({
@@ -155,7 +154,7 @@ export function drillSentencePoints(
 /** 一轮的稳定身份：同一组词 / 词块（顺序无关）落在同一条历史里。 */
 export function drillSentenceId(kind: DrillSentenceKind, points: ReadonlyArray<DrillSentencePoint>): string {
   const signature = points
-    .map((p) => keyOf(p.en))
+    .map((p) => normalizeTextKey(p.en))
     .sort()
     .join('|')
   let h = 5381
