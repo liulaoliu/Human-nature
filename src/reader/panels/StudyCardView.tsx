@@ -1,4 +1,4 @@
-import { useEffect, useState, type MutableRefObject } from 'react'
+import type { MutableRefObject } from 'react'
 import type { VocabItem } from '../../types/document'
 import {
   cleanGloss,
@@ -11,6 +11,7 @@ import {
   type StudyMode,
 } from '../../core/vocab'
 import { fmtDue, fmtInterval } from '../format'
+import { useSpellingDraft } from '../hooks/useSpellingDraft'
 import VocabBlocks from './VocabBlocks'
 import { MeaningQuiz, type MeaningReveal } from './StudyDrill'
 
@@ -87,11 +88,7 @@ export default function StudyCardView({
   const correct = spellingMatches(input, card.word)
   const learnQuizOn = learnPhase || !!learnReveal
   /** 拼写草稿留在本地：状态抬高到会话根组件会让整页每次按键都重渲染。 */
-  const [draft, setDraft] = useState('')
-  useEffect(() => {
-    setDraft('')
-    draftRef.current = ''
-  }, [card.id, spelling, draftRef])
+  const { draft, change } = useSpellingDraft(`${card.id}:${spelling}`, draftRef)
 
   if (learnQuizOn) {
     return (
@@ -149,10 +146,7 @@ export default function StudyCardView({
             autoFocus
             placeholder="拼出这个英文单词，回车检查"
             value={draft}
-            onChange={(e) => {
-              setDraft(e.target.value)
-              draftRef.current = e.target.value
-            }}
+            onChange={(e) => change(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()

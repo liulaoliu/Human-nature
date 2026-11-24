@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import type { VocabItem } from '../../types/document'
 import { normalizePos } from '../../core/vocab'
+import { useSpellingDraft } from '../hooks/useSpellingDraft'
 import type { SpellingRoundMiss } from '../hooks/useStudySpellingRound'
 
 export interface StudySpellingRoundProps {
@@ -31,9 +32,8 @@ export default function StudySpellingRound({
   onSpeak,
 }: StudySpellingRoundProps) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const [draft, setDraft] = useState('')
+  const { draft, change, clear } = useSpellingDraft(`${card.id}:${index}`)
   useEffect(() => {
-    setDraft('')
     inputRef.current?.focus()
   }, [card.id])
 
@@ -42,7 +42,7 @@ export default function StudySpellingRound({
   const submit = () => {
     onCheck(draft)
     // 不论对错都清空：对 → 下一词从空开始；错 → 原文重新显示，按提示再打一遍。
-    setDraft('')
+    clear()
   }
 
   return (
@@ -84,7 +84,7 @@ export default function StudySpellingRound({
           autoFocus
           placeholder={miss ? '凭记忆再拼一遍，回车检查' : '拼出这个英文单词，回车检查'}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => change(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
