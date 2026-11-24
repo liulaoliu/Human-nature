@@ -35,7 +35,6 @@ describe('useStudySpellingRound：序列与推进', () => {
     act(() => api!.begin(group()))
     expect(api!.test).toEqual({ index: 0, total: 3 })
     expect(api!.card?.word).toBe('apple')
-    expect(api!.input).toBe('')
     expect(api!.miss).toBeNull()
   })
 
@@ -43,8 +42,7 @@ describe('useStudySpellingRound：序列与推进', () => {
     render(<Harness />)
     act(() => api!.begin(group()))
     for (const [i, w] of ['apple', 'banana', 'cherry'].entries()) {
-      act(() => api!.setInput(w))
-      act(() => api!.check())
+      act(() => api!.check(w))
       if (i < 2) {
         expect(api!.test).toEqual({ index: i + 1, total: 3 })
         expect(api!.miss).toBeNull()
@@ -59,8 +57,7 @@ describe('useStudySpellingRound：序列与推进', () => {
   it('大小写 / 空格差异不算错（与 core 口径一致）', () => {
     render(<Harness />)
     act(() => api!.begin(group()))
-    act(() => api!.setInput('  APPLE '))
-    act(() => api!.check())
+    act(() => api!.check('  APPLE '))
     expect(api!.test).toEqual({ index: 1, total: 3 })
     expect(missed).toHaveLength(0)
   })
@@ -70,21 +67,18 @@ describe('useStudySpellingRound：拼错与重打', () => {
   it('拼错：onMiss 落库一次 + 显示原文；输入为空才展示（组件约定），重打对了放行且不改判定', () => {
     render(<Harness />)
     act(() => api!.begin(group()))
-    act(() => api!.setInput('aple'))
-    act(() => api!.check())
+    act(() => api!.check('aple'))
     expect(missed).toHaveLength(1)
     expect(missed[0].word).toBe('apple')
     expect(api!.miss).toMatchObject({ typed: 'aple', word: 'apple' })
     expect(api!.test).toEqual({ index: 0, total: 3 })
 
     // 重打：先错一次（原文重新显示），再照原文打对 → 放行，onMiss 不再涨
-    act(() => api!.setInput('aplpe'))
-    act(() => api!.check())
+    act(() => api!.check('aplpe'))
     expect(missed).toHaveLength(1)
     expect(api!.miss).toMatchObject({ typed: 'aplpe' })
 
-    act(() => api!.setInput('apple'))
-    act(() => api!.check())
+    act(() => api!.check('apple'))
     expect(missed).toHaveLength(1)
     expect(api!.miss).toBeNull()
     expect(api!.test).toEqual({ index: 1, total: 3 })
@@ -94,20 +88,17 @@ describe('useStudySpellingRound：拼错与重打', () => {
   it('begin 会清掉上一轮的输入与判错卡', () => {
     render(<Harness />)
     act(() => api!.begin(group()))
-    act(() => api!.setInput('aple'))
-    act(() => api!.check())
+    act(() => api!.check('aple'))
     expect(api!.miss).not.toBeNull()
     act(() => api!.begin(group()))
     expect(api!.miss).toBeNull()
-    expect(api!.input).toBe('')
     expect(api!.test).toEqual({ index: 0, total: 3 })
   })
 
   it('reset 清空一切，onDone 不触发', () => {
     render(<Harness />)
     act(() => api!.begin(group()))
-    act(() => api!.setInput('aple'))
-    act(() => api!.check())
+    act(() => api!.check('aple'))
     act(() => api!.reset())
     expect(api!.test).toBeNull()
     expect(api!.miss).toBeNull()

@@ -70,7 +70,6 @@ export function toStudyPanelModel({ study, items, speak, onExam }: StudyPanelFro
       spellMiss: api.spellMiss,
       roundTest: api.roundTest,
       roundMiss: api.roundMiss,
-      roundInput: api.roundInput,
       navLocked: api.navLocked,
     },
     edit: {
@@ -91,7 +90,6 @@ export function toStudyPanelModel({ study, items, speak, onExam }: StudyPanelFro
       onSpellingChange: api.changeSpelling,
       onGroupSizeChange: api.setGroupSize,
       onReveal: () => api.setRevealed(true),
-      onInputChange: api.setInput,
       onCheckSpelling: api.checkSpelling,
       onSpeak: speak,
       onOpenEdit: api.openEdit,
@@ -105,7 +103,6 @@ export function toStudyPanelModel({ study, items, speak, onExam }: StudyPanelFro
       onMarkUnknown: api.markUnknown,
       onDrillCleared: api.clearDrill,
       onMeaningCleared: api.clearMeaningGate,
-      onRoundInputChange: api.onRoundInputChange,
       onRoundCheck: api.onRoundCheck,
       onLearnReveal: api.revealLearnAnswer,
       onLearnPick: api.answerLearn,

@@ -69,11 +69,17 @@ export function useStudySpelling({
   }, [spellMiss, spellGate, resetCardUi, setIndex])
 
   /** 拼写模式的「检查」：对 → 解锁评分；错 → 立即判不认识（不提供第二次输入）。 */
-  const checkSpelling = useCallback(() => {
-    if (!queue || !card || checked) return
-    setChecked(true)
-    spellGate.check(input)
-  }, [queue, card, checked, input, spellGate, setChecked])
+  const checkSpelling = useCallback(
+    (typed?: string) => {
+      if (!queue || !card || checked) return
+      // 输入草稿在卡片组件里，提交时才把值抬到会话（供结果展示与判卷）。
+      const value = typed ?? input
+      setChecked(true)
+      setInput(value)
+      spellGate.check(value)
+    },
+    [queue, card, checked, input, spellGate, setChecked, setInput],
+  )
 
   /** 锤炼板拼写步的拼错回调：与正面拼写同一条判定与落库路径。 */
   const applySpellingMiss = useCallback((typed: string) => spellGate.check(typed), [spellGate])

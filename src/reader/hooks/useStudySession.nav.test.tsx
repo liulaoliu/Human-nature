@@ -34,10 +34,8 @@ describe('useStudySession：单词之间切换', () => {
     expect(api!.roundTest).toEqual({ index: 0, total: 2 })
     expect(api!.index).toBe(1)
 
-    act(() => api!.onRoundInputChange('one'))
-    act(() => api!.onRoundCheck())
-    act(() => api!.onRoundInputChange('two'))
-    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundCheck('one'))
+    act(() => api!.onRoundCheck('two'))
     expect(api!.roundTest).toBeNull()
     expect(api!.index).toBe(2) // 拼完 = 本轮完成页
 

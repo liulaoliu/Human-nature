@@ -52,7 +52,6 @@ export default function StudyPanel({ model }: StudyPanelProps) {
     spellMiss,
     roundTest,
     roundMiss,
-    roundInput,
     navLocked,
   } = modes
   const { editOpen, draft, delArmed, gradeInfo } = edit
@@ -68,7 +67,6 @@ export default function StudyPanel({ model }: StudyPanelProps) {
     onSpellingChange,
     onGroupSizeChange,
     onReveal,
-    onInputChange,
     onCheckSpelling,
     onSpeak,
     onOpenEdit,
@@ -82,7 +80,6 @@ export default function StudyPanel({ model }: StudyPanelProps) {
     onMarkUnknown,
     onDrillCleared,
     onMeaningCleared,
-    onRoundInputChange,
     onRoundCheck,
     onLearnReveal,
     onLearnPick,
@@ -94,6 +91,13 @@ export default function StudyPanel({ model }: StudyPanelProps) {
     onRetryForgot,
     onRestart,
   } = actions
+
+  /**
+   * 拼写草稿只在卡片/输入框里（`StudyCardView`），父级用 ref 取「提交那一刻」的值。
+   * 不要把草稿放回会话状态：那会让每次按键都重渲染整个阅读页。
+   */
+  const spellDraftRef = useRef('')
+  const checkTypedSpelling = () => onCheckSpelling(spellDraftRef.current)
 
   const reviewMode = mode === 'review'
   /** 复习模式看见单词就能评分；其它模式仍要「翻面」或「判完拼写」。 */
@@ -166,9 +170,7 @@ export default function StudyPanel({ model }: StudyPanelProps) {
             card={card}
             index={roundTest.index}
             total={roundTest.total}
-            input={roundInput}
             miss={roundMiss}
-            onInputChange={onRoundInputChange}
             onCheck={onRoundCheck}
             onSpeak={onSpeak}
           />
@@ -195,8 +197,8 @@ export default function StudyPanel({ model }: StudyPanelProps) {
                 gradeable={canGrade}
                 onSpeak={onSpeak}
                 onReveal={onReveal}
-                onInputChange={onInputChange}
-                onCheckSpelling={onCheckSpelling}
+                draftRef={spellDraftRef}
+                onCheckSpelling={checkTypedSpelling}
                 onMarkUnknown={onMarkUnknown}
                 onLearnPick={onLearnPick}
                 onLearnReveal={onLearnReveal}
@@ -246,7 +248,7 @@ export default function StudyPanel({ model }: StudyPanelProps) {
               onReviewChoice={onReviewChoice}
               onGrade={onGrade}
               onReviewAnswer={onReviewAnswer}
-              onCheckSpelling={onCheckSpelling}
+              onCheckSpelling={checkTypedSpelling}
               onReveal={onReveal}
             />
           </>

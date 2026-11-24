@@ -384,8 +384,6 @@ export function useStudySession(params: UseStudySessionParams) {
     /** 组末拼写测试（学习模式每组结束）：非空时整页显示它，`card` 已换成测试里的词。 */
     roundTest: spellingRound.test,
     roundMiss: spellingRound.miss,
-    roundInput: spellingRound.input,
-    onRoundInputChange: spellingRound.setInput,
     onRoundCheck: spellingRound.check,
     dueCount,
     newCount,

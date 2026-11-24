@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { VocabItem } from '../../types/document'
 import { normalizePos } from '../../core/vocab'
 import type { SpellingRoundMiss } from '../hooks/useStudySpellingRound'
@@ -8,32 +8,42 @@ export interface StudySpellingRoundProps {
   /** 组内进度（1 起） */
   index: number
   total: number
-  input: string
   /** 拼错的卡：显示原文 + 你写的；重打对才放行。 */
   miss: SpellingRoundMiss | null
-  onInputChange: (v: string) => void
-  onCheck: () => void
+  /** 回车 / 点「检查」：由会话判定这一次输入。 */
+  onCheck: (typed: string) => void
   onSpeak: (text: string) => void
 }
 
-/** 组末拼写测试（学习模式每组结束）：本组学了多少就拼多少，不封顶。 */
+/**
+ * 组末拼写测试（学习模式每组结束）：本组学了多少就拼多少，不封顶。
+ *
+ * 输入草稿是**本组件的本地状态**，不放到会话 hook 里：
+ * 状态在 `ReaderApp` 根部时，每敲一个字都会重渲染整个阅读页（侧栏五个面板 + 正文），
+ * 词库一大就明显卡顿；判卷只需要「提交那一刻」的值。
+ */
 export default function StudySpellingRound({
   card,
   index,
   total,
-  input,
   miss,
-  onInputChange,
   onCheck,
   onSpeak,
 }: StudySpellingRoundProps) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const [draft, setDraft] = useState('')
   useEffect(() => {
+    setDraft('')
     inputRef.current?.focus()
   }, [card.id])
 
   /** 原文只在「还没有开始重新输入」时显示：一打字就消失，逼你凭记忆打完。 */
-  const showAnswer = !!miss && input.trim() === ''
+  const showAnswer = !!miss && draft.trim() === ''
+  const submit = () => {
+    onCheck(draft)
+    // 不论对错都清空：对 → 下一词从空开始；错 → 原文重新显示，按提示再打一遍。
+    setDraft('')
+  }
 
   return (
     <div className="study-card spelling-round">
@@ -73,17 +83,17 @@ export default function StudySpellingRound({
           className="study-input"
           autoFocus
           placeholder={miss ? '凭记忆再拼一遍，回车检查' : '拼出这个英文单词，回车检查'}
-          value={input}
-          onChange={(e) => onInputChange(e.target.value)}
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
               e.preventDefault()
-              onCheck()
+              submit()
             }
           }}
         />
       </div>
-      <button className="primary" onClick={onCheck}>
+      <button className="primary" onClick={submit}>
         {miss ? '再检查（回车）' : '检查（回车）'}
       </button>
     </div>

@@ -186,10 +186,8 @@ describe('useStudySession：复习模式三键', () => {
     expect(api!.roundTest).toEqual({ index: 0, total: 2 })
     expect(api!.index).toBe(1)
 
-    act(() => api!.onRoundInputChange('run'))
-    act(() => api!.onRoundCheck())
-    act(() => api!.onRoundInputChange('walk'))
-    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundCheck('run'))
+    act(() => api!.onRoundCheck('walk'))
     expect(api!.roundTest).toBeNull()
     expect(api!.index).toBe(2)
     unmount()
@@ -201,10 +199,8 @@ describe('useStudySession：复习模式三键', () => {
     act(() => api!.start({ mode: 'review', scope: 'all' }))
     act(() => api!.answerReview('good'))
     act(() => api!.answerReview('good'))
-    act(() => api!.onRoundInputChange('run'))
-    act(() => api!.onRoundCheck())
-    act(() => api!.onRoundInputChange('walk'))
-    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundCheck('run'))
+    act(() => api!.onRoundCheck('walk'))
     expect(api!.index).toBe(2)
 
     // 用户按 Q 回看最后一张；旧实现会 begin([]) 后原地返回，index 一直停在 1。
@@ -224,10 +220,8 @@ describe('useStudySession：复习模式三键', () => {
     act(() => api!.answerReview('good'))
     act(() => api!.answerReview('again'))
     act(() => api!.forward()) // 进组末拼写
-    act(() => api!.onRoundInputChange('run'))
-    act(() => api!.onRoundCheck())
-    act(() => api!.onRoundInputChange('walk'))
-    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundCheck('run'))
+    act(() => api!.onRoundCheck('walk'))
     expect(api!.index).toBe(2)
 
     act(() => api!.retryForgot())
@@ -236,8 +230,7 @@ describe('useStudySession：复习模式三键', () => {
     act(() => api!.answerReview('good'))
     // 旧游标是上一轮的 2，slice(2, 1) 为空 → 重练卡原地不动；现在从 0 开始拼。
     expect(api!.roundTest).toEqual({ index: 0, total: 1 })
-    act(() => api!.onRoundInputChange('walk'))
-    act(() => api!.onRoundCheck())
+    act(() => api!.onRoundCheck('walk'))
     expect(api!.index).toBe(1)
     unmount()
   })

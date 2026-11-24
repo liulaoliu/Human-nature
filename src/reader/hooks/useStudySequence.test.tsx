@@ -81,10 +81,8 @@ describe('useStudySequence：组末拼写与推进', () => {
     expect(current(hook).spellingRound.test).toEqual({ index: 0, total: 2 })
     expect(current(hook).spellingRound.card?.id).toBe('w1')
 
-    act(() => current(hook).spellingRound.setInput('one'))
-    act(() => current(hook).spellingRound.check())
-    act(() => current(hook).spellingRound.setInput('two'))
-    act(() => current(hook).spellingRound.check())
+    act(() => current(hook).spellingRound.check('one'))
+    act(() => current(hook).spellingRound.check('two'))
 
     expect(current(hook).index).toBe(2)
     expect(current(hook).spellingRound.test).toBeNull()
@@ -103,10 +101,8 @@ describe('useStudySequence：组末拼写与推进', () => {
   it('回看已拼过的组末再推进：不启动空拼写，直接翻到组末（不原地反复评分）', () => {
     const hook = renderHook(() => useHarness({ items: words().slice(0, 2), initialIndex: 1, groupSize: 2 }))
     act(() => current(hook).sequence.advanceFrom(1))
-    act(() => current(hook).spellingRound.setInput('one'))
-    act(() => current(hook).spellingRound.check())
-    act(() => current(hook).spellingRound.setInput('two'))
-    act(() => current(hook).spellingRound.check())
+    act(() => current(hook).spellingRound.check('one'))
+    act(() => current(hook).spellingRound.check('two'))
     expect(current(hook).index).toBe(2)
 
     // 完成页按 Q 回看最后一张，再评「认识」：旧实现会 begin([]) 后原地返回，
@@ -153,10 +149,8 @@ describe('useStudySequence：收尾重练', () => {
     const hook = renderHook(() => useHarness({ items: words().slice(0, 2), initialIndex: 1, groupSize: 2, forgotIds: ['w1'] }))
     // 先走完第一组的组末，把内部游标推到 2
     act(() => current(hook).sequence.advanceFrom(1))
-    act(() => current(hook).spellingRound.setInput('one'))
-    act(() => current(hook).spellingRound.check())
-    act(() => current(hook).spellingRound.setInput('two'))
-    act(() => current(hook).spellingRound.check())
+    act(() => current(hook).spellingRound.check('one'))
+    act(() => current(hook).spellingRound.check('two'))
     expect(current(hook).index).toBe(2)
 
     act(() => current(hook).sequence.retryForgot())

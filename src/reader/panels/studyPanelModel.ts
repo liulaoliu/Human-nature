@@ -81,7 +81,6 @@ export interface StudyModesView {
   /** 组末拼写测试（学习模式每组结束）：非空时整页显示它，`card` 已换成测试里的当前词。 */
   roundTest: SpellingRoundTest | null
   roundMiss: SpellingRoundMiss | null
-  roundInput: string
   /** 判定提示期间锁住导航（结束 / 上一个 / 下一个）。 */
   navLocked: boolean
 }
@@ -107,8 +106,8 @@ export interface StudyPanelActions {
   onSpellingChange: (on: boolean) => void
   onGroupSizeChange: (n: number) => void
   onReveal: () => void
-  onInputChange: (value: string) => void
-  onCheckSpelling: () => void
+  /** 判这一次拼写：给了 typed 就用它（输入草稿在卡片里），否则用会话里最后一次提交值。 */
+  onCheckSpelling: (typed?: string) => void
   onSpeak: (word: string) => void
   onOpenEdit: () => void
   onDelete: () => void
@@ -121,8 +120,7 @@ export interface StudyPanelActions {
   onMarkUnknown: () => void
   onDrillCleared: () => void
   onMeaningCleared: () => void
-  onRoundInputChange: (v: string) => void
-  onRoundCheck: () => void
+  onRoundCheck: (typed: string) => void
   /** 学习模式「看答案」：判不认识并高亮正确项。 */
   onLearnReveal: () => void
   /** 学习模式选了某一项：判定 + 写库（选错会停在高亮页等「继续」）。 */

@@ -1,3 +1,4 @@
+import { useEffect, useState, type MutableRefObject } from 'react'
 import type { VocabItem } from '../../types/document'
 import {
   cleanGloss,
@@ -40,7 +41,8 @@ export interface StudyCardViewProps {
 
   onSpeak: (word: string) => void
   onReveal: () => void
-  onInputChange: (value: string) => void
+  /** 拼写草稿：本组件持有输入值，父级只读 ref（避免每次按键重渲染整页）。 */
+  draftRef: MutableRefObject<string>
   onCheckSpelling: () => void
   onMarkUnknown: () => void
   onLearnPick: (index: number, correct: boolean) => void
@@ -72,7 +74,7 @@ export default function StudyCardView({
   gradeable,
   onSpeak,
   onReveal,
-  onInputChange,
+  draftRef,
   onCheckSpelling,
   onMarkUnknown,
   onLearnPick,
@@ -84,6 +86,12 @@ export default function StudyCardView({
   const spellingFront = spelling && !checked && !relearning
   const correct = spellingMatches(input, card.word)
   const learnQuizOn = learnPhase || !!learnReveal
+  /** 拼写草稿留在本地：状态抬高到会话根组件会让整页每次按键都重渲染。 */
+  const [draft, setDraft] = useState('')
+  useEffect(() => {
+    setDraft('')
+    draftRef.current = ''
+  }, [card.id, spelling, draftRef])
 
   if (learnQuizOn) {
     return (
@@ -140,8 +148,11 @@ export default function StudyCardView({
             className="study-input"
             autoFocus
             placeholder="拼出这个英文单词，回车检查"
-            value={input}
-            onChange={(e) => onInputChange(e.target.value)}
+            value={draft}
+            onChange={(e) => {
+              setDraft(e.target.value)
+              draftRef.current = e.target.value
+            }}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault()

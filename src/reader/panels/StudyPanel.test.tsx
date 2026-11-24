@@ -56,8 +56,6 @@ function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
     onLearnContinue: noop,
     roundTest: null,
     roundMiss: null,
-    roundInput: '',
-    onRoundInputChange: noop,
     onRoundCheck: noop,
     groupSize: 0,
     onGroupSizeChange: noop,
@@ -75,7 +73,6 @@ function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
     onDrillAfterChange: noop,
     onSpellingChange: noop,
     onReveal: noop,
-    onInputChange: noop,
     onCheckSpelling: noop,
     onSpeak: noop,
     onOpenEdit: noop,
@@ -145,7 +142,6 @@ function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
       spellMiss: p.spellMiss,
       roundTest: p.roundTest,
       roundMiss: p.roundMiss,
-      roundInput: p.roundInput,
       navLocked: p.navLocked,
     },
     edit: {
@@ -166,7 +162,6 @@ function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
       onSpellingChange: p.onSpellingChange,
       onGroupSizeChange: p.onGroupSizeChange,
       onReveal: p.onReveal,
-      onInputChange: p.onInputChange,
       onCheckSpelling: p.onCheckSpelling,
       onSpeak: p.onSpeak,
       onOpenEdit: p.onOpenEdit,
@@ -180,7 +175,6 @@ function panelModel(over: Partial<StudyPanelFlat> = {}): StudyPanelModel {
       onMarkUnknown: p.onMarkUnknown,
       onDrillCleared: p.onDrillCleared,
       onMeaningCleared: p.onMeaningCleared,
-      onRoundInputChange: p.onRoundInputChange,
       onRoundCheck: p.onRoundCheck,
       onLearnReveal: p.onLearnReveal,
       onLearnPick: p.onLearnPick,
@@ -233,14 +227,18 @@ describe('StudyPanel：卡片与评分', () => {
 
   it('拼写模式：输入回车检查，checked 后显示对错并能评分', () => {
     const onCheckSpelling = vi.fn()
-    const onInputChange = vi.fn()
-    const { rerender } = render(
-      <StudyPanel model={panelModel({ spelling: true, onCheckSpelling, onInputChange })} />,
-    )
-    fireEvent.change(screen.getByPlaceholderText(/拼出这个英文单词/), { target: { value: 'run' } })
-    expect(onInputChange).toHaveBeenCalledWith('run')
-    fireEvent.keyDown(screen.getByPlaceholderText(/拼出这个英文单词/), { key: 'Enter' })
-    expect(onCheckSpelling).toHaveBeenCalled()
+    const { rerender } = render(<StudyPanel model={panelModel({ spelling: true, onCheckSpelling })} />)
+    const input = screen.getByPlaceholderText(/拼出这个英文单词/)
+    fireEvent.change(input, { target: { value: 'run' } })
+    // 输入草稿留在卡片里：每次按键不再回调会话（否则整页重渲染）
+    expect(onCheckSpelling).not.toHaveBeenCalled()
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onCheckSpelling).toHaveBeenCalledWith('run')
+
+    // 底部「检查」按钮也读同一份草稿（不靠 input state）
+    fireEvent.change(input, { target: { value: 'run' } })
+    fireEvent.click(screen.getByRole('button', { name: /检查/ }))
+    expect(onCheckSpelling).toHaveBeenLastCalledWith('run')
 
     rerender(<StudyPanel model={panelModel({ spelling: true, checked: true, input: 'run', revealed: false })} />)
     expect(screen.getByText('✔ 正确')).toBeTruthy()
